@@ -103,9 +103,12 @@ Permissions-Policy: camera=(), microphone=(), geolocation=(), usb=(), payment=()
 Cache-Control: no-store                (the page's own files: public, immutable, versioned with ?v=)
 ```
 
-The page (`src/web/page/`: one HTML file, `app.css`, `app.js` in plain JavaScript, the icon, the manifest, the two
+The page (`src/web/page/`: one HTML file, `app.css`, `app.js` and its feature scripts in plain JavaScript, the icon, the manifest, the two
 Barlow faces) is compiled in (`assets.rs`). It loads nothing from elsewhere, has no inline script or style, and puts
-every text from the Pocket into the page with `textContent`. The log names method, route, status and time, never a
+every text from the Pocket into the page with `textContent`. Every text of its own goes through `t("…")` (`texts.rs`, `GET /api/texts`) and its dates,
+numbers and sizes through `Intl` in the Pocket's language (`locale()`), so the page speaks the language set on the Pocket;
+`tests/web_page_texts.js` walks every view in a marked language and fails on English that skipped `t()`. Texts the
+server writes (its error lines, PortMaster's instructions) are still English. The log names method, route, status and time, never a
 query, a cookie, a code or an address.
 
 ## Endpoints
@@ -115,7 +118,8 @@ owner's device; every `POST` also needs the CSRF token and passes the origin che
 
 | Method and path | Auth | While a game runs | What it does |
 |---|---|---|---|
-| `GET /`, `/index.html`, `/app.css`, `/app.js`, `/icon.svg`, `/favicon.ico`, `/manifest.webmanifest`, `/fonts/body.ttf`, `/fonts/title.ttf` | no | yes | The page. Any other path needs auth and then is `404` |
+| `GET /`, `/index.html`, `/app.css`, `/app.js`, `/cover-diagnostics.js`, `/icon.svg`, `/favicon.ico`, `/manifest.webmanifest`, `/fonts/body.ttf`, `/fonts/title.ttf` | no | yes | The page. Any other path needs auth and then is `404` |
+| `GET /api/texts` | no | yes | The page's texts in the language set on the Pocket: `{"lang", "texts": {English: translation}}`. `texts.rs` reads every `t("…")` literal of the page's scripts (`texts::SOURCES`) and translates it with the Pocket's own tables (`assets/i18n/*.tsv`, `{n}`/`{s}` placeholders as there); what a table lacks stays English. Made once per language |
 | `GET /api/session` | no | yes | `signedIn`, `via` (`paired`/`tailscale`), the name, the CSRF token; without auth only the version and whether a game runs |
 | `POST /api/pair` `{"code"}` | no (origin check) | yes | A right code: the cookie. Wrong, or no code showing: the same `403` (`api::NOT_PAIRED`); one answer a second |
 | `POST /api/logout` | yes | no | Forgets this paired browser and clears the cookie |
@@ -124,13 +128,32 @@ owner's device; every `POST` also needs the CSRF token and passes the origin che
 | `GET /api/library` | yes | no | Systems with counts and colours, favourites count, stickers (with counts), smart shelves, limits |
 | `GET /api/games?system=` \| `favorites=1` \| `sticker=<id>` \| `shelf=<index>` \| `q=<text>` [`&offset=`] | yes | no | A list (600 per answer; search: 80 characters, 200 hits) |
 | `GET /api/game?id=` | yes | no | One game: the list row, note, file name, gamedb facts, `shots` (the times of its screenshots), Curator's versions |
-| `GET /api/shot?id=&at=` | yes | no | One of the game's screenshots (HOME + A in a game, `src/screenshot.rs`) as PNG, read only: `at` is the time part of the file name (`YYYY-MM-DD HH-MM-SS`, optional ` (n)`) as `/api/game` lists it in `shots` (newest 60); anything else is `404`, so no path or other file can be asked for. 16 MB at most, PNG only. The folder is `Roots::screenshots` (`/storage/roms/screenshots/<system>/<game> <at>.png`) |
+| `GET /api/shot?id=&at=[&download=1]` | yes | no | One of the game's screenshots (HOME + A in a game, `src/screenshot.rs`) as PNG, or `&shelf=1` for a shelf picture: `at` is the time part of the file name (`YYYY-MM-DD HH-MM-SS`, optional ` (n)`); anything else is `404`. `download=1` adds `Content-Disposition: attachment`. 16 MB at most, PNG only |
+| `GET /api/album` | yes | no | All album photos (`<data>/album/…`, JPEG + `album.tsv`), game screenshots and shelf pictures across the library, newest first, with `albumOn` and translated moment notes; no paths |
+| `GET /api/album/photo?id=&file=[&download=1]` | yes | no | One verified album photo JPEG for the library game `id` (`file` must match an entry of `album.tsv`, plain file, JPEG magic, 4 MB max); `download=1` adds `Content-Disposition: attachment` |
+| `GET /api/media/zip[?id=&scope=all\|album\|shots]` | yes | no | Streams an uncompressed (stored) ZIP (`Transfer-Encoding: chunked`) of all (or one game's) album photos, `album.tsv` and screenshots/shelf pictures; stops if a game starts or the companion turns off; no secrets |
+| `POST /api/album/delete` `{id,file}` | yes | no | Deletes one verified album photo on the App thread (`Edit::DeleteAlbumPhoto`) |
+| `POST /api/shot/delete` `{id,at}` \| `{shelf:true,at}` | yes | no | Deletes one verified game or shelf screenshot on the App thread (`Edit::DeleteScreenshot`) |
+| `GET /api/update` | yes | no | Current version, available signed release (`current`, `available`, `summary`, `notes`, `size`), install step/progress, low-battery warning and last message |
+| `POST /api/update/check` `{}` | yes | no | Starts a signed-channel update check on the App thread (`Edit::CheckUpdate`), never while a game runs |
+| `POST /api/update/install` `{version}` | yes | no | Starts installing the offered signed release on the App thread (`Edit::InstallUpdate`) through the existing signed channel, never while a game runs |
 | `GET /api/cover?id=[&kind=snap\|title]` | yes | no | The game's cover PNG from the covers folder (8 MB at most, PNG only); `kind=snap` or `title` the screenshot or title screen from the `snaps/` or `titles/` folder instead (404 for any other kind, and with Settings → Games → Box art & downloads → Game pictures on Box art only). `/api/game` lists the kinds the game has as `pictures` |
+| `POST /api/cover/change?id=` | yes | no | Send a raw PNG (8 MB, up to 1024 pixels per side). The App saves a custom cover for this game and keeps the previous one |
+| `POST /api/cover/reset?id=` | yes | no | Moves the custom cover to the backup folder and returns to automatic cover selection |
+| `GET /api/diagnostics/status` | yes | no | App version, known model name and whether the export has any log events |
+| `GET /api/diagnostics` | yes | no | ZIP attachment with `system.txt` and `pocket-ui.log`. Log entries use fixed names of recognised events |
 | `GET /api/stats` | yes | no | Totals from `library.json` and `recents.json`: time, sessions, games played, per system, the top 30, and `history` (below), with every path removed |
 | `GET /api/battery` | yes | no | `battery_history`'s last 48 hours |
 | `GET /api/uploads` | yes | no | Where uploads may go: systems (with extensions), BIOS needs, ports waiting for files, free space, limits |
 | `POST /api/upload/check?kind=…&size=` | yes | no | The name and place an upload would get, whether it exists, or why not (a check may make the target's folder) |
 | `POST /api/upload?kind=rom&system=&name=` \| `kind=bios&name=[&sub=dc]` \| `kind=port&dir=&rel=&name=` [`&overwrite=1`] | yes | no (a running one pauses) | The body is the file (`Content-Length`) |
+| `GET /api/saves?id=` | yes | no | The game's saves (`kind`: save, clock, card) and states (`slot`: continue, undo, slot with `n`; `picture`), by name, size and time (`saves.rs`). Which files are the game's: `game_files::saves_of`/`states_of`, as "Delete from the card" decides; on the Brick and dArkOS below `POCKET_CORE_SAVE_DIR` (`Roots::saves`) |
+| `GET /api/saves/file?id=&name=` | yes | no | One of them as it is: `name` must be one the list names, else `404`; streamed, `Content-Disposition: attachment` |
+| `GET /api/saves/zip[?id=][&states=1]` | yes | no | One ZIP (`zip.rs`: stored, data descriptors, no ZIP64, so at most 4 GB, else `413`): every save of the card as Settings' saves backup takes them (`backup_saves::on_card`), with `states=1` the states too, or with `id` everything of one game. Paths inside are the card's (`roms/gba/Game.srm`). Streamed with `Transfer-Encoding: chunked`; a game starting or the companion stopping cuts it off without the last chunk, so the browser reports a failed download |
+| `GET /api/saves/all` | yes | no | Counts and sizes of the card's saves and states, whether each ZIP fits, how many saves backups there are |
+| `POST /api/saves/check?id=&name=&size=` | yes | no | Where a file sent as `name` would go and what it would replace (`replaces`: name, size, time) |
+| `POST /api/saves/upload?id=&name=[&replace=1]` | yes | no, and a game starting ends it | The body is the save or state. The place comes from the game, never the request: a save type (`game_files::SAVE_EXTS`) becomes `<game>.<type>` beside the game (the spelling of one there kept), a state's ending (`game_files::is_state_of`) `<game><ending>` in `<states>/<system>/`; the folder resolved inside the ROMs, states or saves folder. It arrives in the uploads folder; then the file in its place, if any, is copied into a saves backup (`backup_saves::create`, `Reason::BeforeRestore`, in `roms/backup/pocket-ui-saves`), and only then renamed into place. Without `replace=1` an existing file is `409`; a backup that fails changes nothing. 64 MB per save, 512 MB per state |
+| `GET /api/pockets` | yes | no | Pocket Sync, read only (`pockets.rs`): on or off, each paired Pocket's name and `last` (synced, asked, failed, unreachable, busy, unpaired, bad, never) with `okAt`/`downSince`, the last 20 saves that came and went (game id and name when the library has it, the file name, the other Pocket's name), and the saves with an open question (`versions.json`, `Rec::asking`). From `peers.json` only names are read: no key, address or Pocket id leaves. Nothing pairs or syncs from here |
 | `POST /api/game/favorite` `{id,on}`, `/api/game/status` `{id,status}`, `/api/game/note` `{id,note}`, `/api/game/rating` `{id,rating}` (0–5, 0 takes it away), `/api/game/sticker` `{id,sticker,on}`, `/api/game/preferred` `{id}` | yes | no | An edit, applied by the App |
 | `POST /api/stickers/new` `{name[,id]}`, `/api/stickers/rename` `{sticker,name}`, `/api/stickers/delete` `{sticker}` | yes | no | Stickers, as Settings → Games → Curator's sticker pages do them |
 | `POST /api/shelves/rename` `{index,was,name}`, `/api/shelves/delete` `{index,was}` | yes | no | Smart shelves, by place and old name (a shelf changed on the Pocket meanwhile is refused) |
@@ -227,8 +250,14 @@ Done endpoint by endpoint against the code above, with a test for each property 
   read-only; ids are hashes looked up in the library, never paths; query text bounded; responses carry no paths
   (only the file name of a game) and `no-store`. The play history inside `/api/stats` comes with full paths and
   leaves without them (`without_paths`, reviewed 2026-10-23 when the history was wired).
-- **`/api/cover`**: the path is built by `covers::cover_path` (or `game_pictures::path` for the two kinds it knows) from a library game, never from the query; PNG only,
-  8 MB at most.
+- **`/api/cover`** uses the library game to locate its PNG and prefers the custom cover when present.
+  The custom file name is a digest of system and ROM path. The browser's file name is discarded. Cover edits pass
+  the ordinary CSRF checks and reach the App via `Edit::Cover`. The App checks that the game still exists and that
+  no game is running before saving. It keeps each previous custom image under `covers/.custom/backups/`.
+- **`/api/diagnostics`** exports the app version, a known model name and up to 200 recognised events from the
+  last 256 KiB of the current app log. Each event is written as a fixed identifier such as `game.started`. The export drops the original
+  text, timestamps and values. Settings, account files and pairing state
+  are outside the package. The attachment uses `Cache-Control: no-store`.
 - **`/api/screenshot`**: authenticated; `grim` started without a shell, 3 s limit, one per 10 s; a page of another
   site can't trigger it in a modern browser (origin check) and can't read it in any.
 - **`/api/uploads`**: read-only.

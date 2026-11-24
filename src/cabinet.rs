@@ -67,7 +67,7 @@ impl FormFactor {
             // The PC Engine's HuCard goes in like a cartridge.
             | "pcengine" | "tg16" | "supergrafx" => ConsoleCart,
             "ps2" | "gamecube" | "wii" | "wiiware" | "wiiu" | "xbox" | "ps3" => DvdCase,
-            "psp" | "pspockets" => UmdCase,
+            "psp" | "pspminis" => UmdCase,
             "nds" | "ndsiware" | "3ds" | "n3ds" | "psvita" => CardBox,
             _ => JewelCase,
         }

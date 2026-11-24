@@ -60,17 +60,33 @@ fn nothing_on_the_shelf_looks_row_floats_or_stands_inside_another() {
     let _guard = tempfile::tempdir().unwrap();
     let tmp = _guard.path().to_path_buf();
     let stub = wayland(&tmp);
-    let mut wrong = Vec::new();
+    // Set once before spawning worker threads; every child inherits it.
+    std::env::set_var("POCKETUI_SNAPSHOT_FROZEN", "all");
+    let mut jobs = Vec::new();
     for size in ["640x480", "1024x768", "1280x720", "720x720"] {
         for row in ["snes", "favorites", "n64"] {
             for lived in [true, false] {
-                let (frames, faults) = rests(&tmp, &stub, lived, "shelf", size, row);
-                assert!(frames > 0, "{row} at {size}: no frame checked");
-                wrong.extend(faults);
+                jobs.push((size, row, lived));
             }
         }
     }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let wrong = std::sync::Mutex::new(Vec::new());
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get().min(4));
+    std::thread::scope(|s| {
+        for _ in 0..threads {
+            let (tmp, stub, next, wrong, jobs) = (&tmp, &stub, &next, &wrong, &jobs);
+            s.spawn(move || loop {
+                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some(&(size, row, lived)) = jobs.get(i) else { break };
+                let (frames, faults) = rests(tmp, stub, lived, "shelf", size, row);
+                assert!(frames > 0, "{row} at {size}: no frame checked");
+                wrong.lock().unwrap().extend(faults);
+            });
+        }
+    });
     drop(stub);
+    let wrong = wrong.into_inner().unwrap();
     assert!(wrong.is_empty(), "{} faults:\n{}", wrong.len(), wrong.iter().take(60).cloned().collect::<Vec<_>>().join("\n"));
 }
 
@@ -156,25 +172,24 @@ fn the_window_is_taken_off_and_nothing_floats() {
     let _guard = tempfile::tempdir().unwrap();
     let tmp = _guard.path().to_path_buf();
     let stub = wayland(&tmp);
+    // The other shelf/cabinet tests already sweep every panel size; here verify across all four skies and seasons
+    // (at 1280x720, where the window stood in Shelf and Cabinet) that nothing floats and no window object is recorded.
     let mut wrong = Vec::new();
     for (time, month) in [("07:00", "4"), ("12:00", "7"), ("19:00", "10"), ("23:30", "1")] {
         std::env::set_var("POCKETUI_ROOM_TIME", time);
         std::env::set_var("POCKETUI_ROOM_MONTH", month);
-        for (theme, size) in [("shelf", "640x480"), ("shelf", "1024x768"), ("shelf", "1280x720"), ("shelf", "720x720"), ("cabinet", "640x480"), ("cabinet", "1280x720")] {
+        for theme in ["shelf", "cabinet"] {
             let row = if theme == "cabinet" { "snes" } else { "n64" };
-            let (frames, faults) = rests(&tmp, &stub, true, theme, size, row);
+            let what = if theme == "cabinet" { "rests-cabinet" } else { "rests" };
+            let (out, _) = run_in(&tmp, &stub, Some(true), theme, "1280x720", &format!("bench-playful:{row}:{what}"));
+            let seen = out.lines().find_map(|l| l.strip_prefix("rests seen: ")).unwrap_or_default().to_string();
+            for n in ["the window", "the piece on the window's sill", "surface: the window's sill"] {
+                assert!(!seen.split(" | ").any(|k| k == n), "{theme} ({time} m={month}): \"{n}\" is still recorded; seen: {seen}");
+            }
+            let line = out.lines().find(|l| l.starts_with("rests frames=")).unwrap_or_else(|| panic!("no rests line for {theme} ({time}):\n{out}"));
+            let frames: u64 = line.split_whitespace().find_map(|w| w.strip_prefix("frames=")).unwrap().parse().unwrap();
             assert!(frames > 0);
-            wrong.extend(faults);
-        }
-    }
-    // Not there at all: in the Cabinet at 1280 x 720 and beside the N64 row at 1280 x 720 (the outcome of the run above).
-    for theme in ["shelf", "cabinet"] {
-        let row = if theme == "cabinet" { "snes" } else { "n64" };
-        let what = if theme == "cabinet" { "rests-cabinet" } else { "rests" };
-        let (out, _) = run_in(&tmp, &stub, Some(true), theme, "1280x720", &format!("bench-playful:{row}:{what}"));
-        let seen = out.lines().find_map(|l| l.strip_prefix("rests seen: ")).unwrap_or_default().to_string();
-        for n in ["the window", "the piece on the window's sill", "surface: the window's sill"] {
-            assert!(!seen.split(" | ").any(|k| k == n), "{theme}: \"{n}\" is still recorded; seen: {seen}");
+            wrong.extend(out.lines().filter_map(|l| l.strip_prefix("rests fault: ")).map(|f| format!("{theme} ({time} m={month}): {f}")));
         }
     }
     std::env::remove_var("POCKETUI_ROOM_TIME");
@@ -244,6 +259,30 @@ fn nothing_in_the_crate_floats_or_stands_inside_another_nor_while_two_games_swap
         let frames: u64 = line.split_whitespace().find_map(|w| w.strip_prefix("frames=")).unwrap().parse().unwrap();
         assert!(frames > 300, "crate at {size}: only {frames} frames checked");
         wrong.extend(out.lines().filter_map(|l| l.strip_prefix("rests fault: ")).map(|f| format!("crate at {size}: {f}")));
+    }
+    drop(stub);
+    assert!(wrong.is_empty(), "{} faults:\n{}", wrong.len(), wrong.iter().take(60).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+/// Shelf space's crate on Home in the Shelf look stands on the board as a cardboard box, not as one more case among the
+/// games (19.11.2026: "Crate" was a plain case's spine): its place in the row is wider than it is high, and nothing on Home
+/// floats or stands inside another at any selection, the crate's too.
+#[test]
+fn the_crate_on_home_is_a_box_on_the_board() {
+    let _guard = tempfile::tempdir().unwrap();
+    let tmp = _guard.path().to_path_buf();
+    let stub = wayland(&tmp);
+    let mut wrong = Vec::new();
+    for size in ["640x480", "1240x1080", "1280x720"] {
+        let (out, _) = run_in(&tmp, &stub, Some(false), "shelf", size, "crate:0:home-rests");
+        let line = out.lines().find(|l| l.starts_with("rests frames=")).unwrap_or_else(|| panic!("no rests line at {size}:\n{out}"));
+        let frames: u64 = line.split_whitespace().find_map(|w| w.strip_prefix("frames=")).unwrap().parse().unwrap();
+        assert!(frames > 20, "home at {size}: only {frames} frames checked");
+        let (bw, bh) = out.lines().find_map(|l| l.strip_prefix("home crate ")).and_then(|s| s.split_once('x'))
+            .map(|(a, b)| (a.parse::<i32>().unwrap(), b.parse::<i32>().unwrap()))
+            .unwrap_or_else(|| panic!("the crate was never recorded on Home at {size}:\n{out}"));
+        assert!(bw > bh, "home at {size}: the crate stands {bw}x{bh}, a case's shape, not a box's");
+        wrong.extend(out.lines().filter_map(|l| l.strip_prefix("rests fault: ")).map(|f| format!("home at {size}: {f}")));
     }
     drop(stub);
     assert!(wrong.is_empty(), "{} faults:\n{}", wrong.len(), wrong.iter().take(60).cloned().collect::<Vec<_>>().join("\n"));

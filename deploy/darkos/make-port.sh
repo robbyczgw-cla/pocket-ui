@@ -43,4 +43,6 @@ case ${UPDATE_CHANNEL:-darkos} in
   *) echo "UPDATE_CHANNEL must be darkos or darkos-test" >&2; exit 1 ;;
 esac
 (cd "$OUT/ports" && rm -f "../pocket-ui-darkos-$VERSION.zip" && python3 -I -m zipfile -c "../pocket-ui-darkos-$VERSION.zip" pocket-ui.sh pocket-ui)
+# Our cores have their system files; dArkOS's own cores' needs are printed as a device check (scripts/package-complete.py).
+python3 -I "$REPO/scripts/package-complete.py" darkos "$OUT/pocket-ui-darkos-$VERSION.zip" || { echo "make-port: the port is incomplete" >&2; exit 1; }
 echo "$OUT/ports and $OUT/pocket-ui-darkos-$VERSION.zip"

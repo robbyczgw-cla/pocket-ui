@@ -1481,7 +1481,7 @@ pub fn demo(case: &str) -> Option<(Report, Known)> {
                 wanted: 2,
                 frames: 0,
                 pending: false,
-                off: "Run-ahead is off: too slow for this game".into(),
+                off: "Run-ahead off: too heavy for this game".into(),
             };
             r.live = Live {
                 secs: 5.0,
@@ -1636,7 +1636,7 @@ mod tests {
         assert_eq!(p.overall, Grade::Compromised);
         assert_eq!(grade_of("compromised", Kind::Display), Grade::Compromised, "13 late pictures");
         assert_eq!(grade_of("compromised", Kind::Audio), Grade::Compromised, "3 underruns in the window");
-        assert!(p.stages[5].line.contains("too slow"), "run-ahead says why it is off: {}", p.stages[5].line);
+        assert!(p.stages[5].line.contains("too heavy"), "run-ahead says why it is off: {}", p.stages[5].line);
     }
 
     #[test]

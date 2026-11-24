@@ -252,9 +252,32 @@ fn tick_params() -> (u16, u16) {
                 let (a, b) = v.split_once(',')?;
                 Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
             })
-            .unwrap_or((TICK_MS, TICK_STRENGTH))
+            .unwrap_or_else(|| tick_default(dark_os()))
     })
 }
+
+/// The dArkOS port (`darkos::host`; that module is the `brick` build's).
+fn dark_os() -> bool {
+    #[cfg(feature = "brick")]
+    return crate::darkos::host();
+    #[cfg(not(feature = "brick"))]
+    false
+}
+
+/// A tick when nothing tunes it: the Mini V2's haptics chip feels 22 ms at 55 %. dArkOS's pads drive a plain motor
+/// through a PWM (`singleadcjoy.c` on the RG353M and the other RK3566 boards, `odroidgo3_joypad` on the RK3326 ones: FF_RUMBLE,
+/// the strong channel sets the duty cycle): at 55 % for 22 ms it doesn't spin up, and a dArkOS player with an RG353M felt
+/// nothing with Haptics on (21.11.2026). There the tick is a full-power pulse, a little longer than the Brick's medium one
+/// (its motor is a pin, on or off: `brick_hw::pulse_ms`).
+fn tick_default(dark_os: bool) -> (u16, u16) {
+    if dark_os {
+        (DARKOS_TICK_MS, u16::MAX)
+    } else {
+        (TICK_MS, TICK_STRENGTH)
+    }
+}
+
+const DARKOS_TICK_MS: u16 = 30;
 
 fn haptics_file(data_dir: &std::path::Path) -> std::path::PathBuf {
     data_dir.join("haptics.json")
@@ -329,6 +352,35 @@ pub fn set_menu_step(data_dir: &std::path::Path, step: u8) {
     // Let the new strength be felt at once, whatever the gap since the last tick.
     LAST_TICK_MS.store(0, Ordering::Relaxed);
     tick();
+}
+
+/// Whether `look_for_motor` found something to vibrate: 0 not looked yet, 1 found, 2 nothing.
+static MOTOR_FOUND: AtomicU8 = AtomicU8::new(0);
+
+/// What `look_for_motor` found: `None` until it has looked.
+pub fn motor_found() -> Option<bool> {
+    match MOTOR_FOUND.load(Ordering::Relaxed) {
+        1 => Some(true),
+        2 => Some(false),
+        _ => None,
+    }
+}
+
+/// Looks once, on a thread of its own, for the device the menu ticks and port 0 would rumble (`Haptics::open`, the
+/// worker's choice). For a handheld whose kernel may have no motor at all (the dArkOS port: `darkos::hides` leaves out
+/// Haptics then). Opening and closing the event nodes takes the kernel up to 45 ms each: never on the UI thread.
+pub fn look_for_motor() {
+    if MOTOR_FOUND.load(Ordering::Relaxed) != 0 {
+        return;
+    }
+    let _ = std::thread::Builder::new().name("rumble-probe".into()).spawn(|| {
+        let found = Haptics::open();
+        match found.as_ref() {
+            Some(h) => eprintln!("[rumble] motor: {} ({}), {:?}", h.name, h.path, h.kind),
+            None => eprintln!("[rumble] motor: no force-feedback device on this handheld"),
+        }
+        MOTOR_FOUND.store(if found.is_some() { 1 } else { 2 }, Ordering::Relaxed);
+    });
 }
 
 /// The menu moved: a very short, soft buzz, if menu haptics are on.
@@ -887,6 +939,24 @@ pub fn selftest(args: &[String]) -> i32 {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    /// A dArkOS player with an RG353M (0.6.0, 21.11.2026): Haptics on, and the menus never shook. dArkOS's RK3566 pad
+    /// (`singleadcjoy.c`) offers FF_RUMBLE and sets its motor's PWM from the strong channel alone; the tick was the Mini V2's,
+    /// 22 ms at 55 %, too little for a plain motor to spin up. Missed because the tick was tuned on one device and only its
+    /// bytes were tested, never what it is on another motor. On dArkOS: full power on the strong channel, at least as long as
+    /// the Brick's medium pulse (its plain motor, `brick_hw::pulse_ms`); elsewhere as it was.
+    #[test]
+    fn the_menu_tick_on_dark_os_is_a_full_power_pulse_on_the_strong_channel() {
+        let (ms, magnitude) = tick_default(true);
+        assert_eq!(magnitude, u16::MAX);
+        assert!((22..=40).contains(&ms), "{ms} ms");
+        #[cfg(feature = "brick")]
+        assert!(ms >= crate::brick_hw::pulse_ms(2), "{ms} ms: shorter than the Brick's medium pulse");
+        let b = effect_bytes(Kind::Rumble, -1, magnitude, ms);
+        assert_eq!(u16::from_ne_bytes([b[16], b[17]]), u16::MAX, "the strong channel, the one the driver reads");
+        assert_eq!(u16::from_ne_bytes([b[10], b[11]]), ms, "the replay length: ff-memless stops it");
+        assert_eq!(tick_default(false), (TICK_MS, TICK_STRENGTH), "the Mini V2 keeps its tick");
+    }
 
     #[test]
     fn strength_scales_the_cores_request() {

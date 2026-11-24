@@ -34,6 +34,7 @@ status-file page identifiers belong in `skip.txt`, and the literal hostname `poc
 | `assets/i18n/pt.tsv` | `English<TAB>Brazilian Portuguese` (language code `pt`, shown as "Português (Brasil)"), the same lines and placeholders; any `pt` locale starts it. |
 | `assets/i18n/fr.tsv` | `English<TAB>French` (language code `fr`, shown as "Français"; "tu", « guillemets » and `? ! : ; %` after a no-break space U+00A0, which `Text::wrap` never breaks at), the same lines and placeholders; any `fr` locale starts it. `brick-de.tsv`, `brick-es.tsv`, `brick-pt.tsv` and `brick-fr.tsv` hold the few lines only the Brick build adds |
 | `assets/i18n/it.tsv` | `English<TAB>Italian` (language code `it`, shown as "Italiano"; "tu"), the same lines and placeholders; any `it` locale starts it. `brick-it.tsv` holds its Brick-only lines |
+| `assets/i18n/ko.tsv` | `English<TAB>Korean` (language code `ko`, shown as "한국어"), started empty: `Lang::Ko` is on the row with `complete: false`, so every line it lacks is English and the checks that want every line in every language (`Lang::complete`, `SHIPPED` in `src/i18n.rs`) leave it out until it is translated; set `complete: true` then: the completeness checks (`shipped` in `src/i18n.rs`) and the Korean text-fit matrix (`tests/text_size.rs`, with `ko.tsv`'s lines; `KO_PLACEHOLDER_MATRIX=1` runs it with placeholder lines before) take it by themselves. Until then it is not offered (`Lang::offered`: not on the Language row, the welcome's pills or Android's first start, and a Korean system or phone starts in English); `POCKETUI_LANG_PREVIEW=1` or `POCKETUI_I18N_TABLE=ko:<file>` show it. `brick-ko.tsv` for its Brick-only lines |
 | `assets/i18n/keep.txt` | Strings shown in English on purpose: names, brands, addresses; `re:` lines are patterns (`^` `$` `.*`, `\d` digits, `\` for a literal character) |
 | `assets/i18n/skip.txt` | Strings the extraction script finds that are never painted on their own: log lines, keys of other programs' files, pieces of longer strings the table translates whole |
 | `scripts/i18n-extract.py` | Lists the strings of `src/` that read like words for a person and the ones without a German line (`--stub`: as table lines to fill in; `--summary`: only the numbers; `--check`: exit 1 if one is missing, and a warning for lines `de.tsv` has and `es.tsv`/`pt.tsv`/`fr.tsv`/`it.tsv` lack; `--stale`: table lines whose English the source no longer has) |
@@ -85,3 +86,17 @@ same string's width takes 360-420 ns). Only the first sight of a string that is 
 patterns, 6-9 µs, once per painter (`i18n::Cache`). The table is compiled in; when German is chosen it is read on a
 thread (1.2-1.3 ms), so the first frame doesn't wait for it. The Mini V2 is slower; measure there before relying on
 these numbers.
+
+## Korean letters (and later Japanese and Chinese)
+
+Barlow, Departure Mono and Pixelify have no hangul. `src/text_fallback.rs` ships two Korean fonts, compiled in and read with
+ttf-parser one glyph at a time (never loaded whole through fontdue): **Galmuri11** for the Retro style (both letter sets:
+whole screen pixels per Galmuri pixel, the syllable on the baseline, one pixel down next to Departure Mono's capitals) and
+**Noto Sans KR** for Barlow and store themes (fitted to the capitals like the system's CJK font). Both are cut to the 2,350
+syllables of KS X 1001, the jamo and a few marks by `scripts/korean-fonts.py` (474 + 265 KB). A Korean letter goes to them
+before the system's CJK font, so it looks the same on every handheld; a syllable outside the set falls back to the system
+font, else to Latin letters (`latinise`). Their glyphs share the fallback cache's limit (`FALLBACK_BYTES`, 8 MB).
+
+Lines break between words (`line_units` in `src/text.rs`), and a word wider than the line between letters. Japanese and
+Chinese need a break between any two letters with kinsoku (no line starting with 。、」 or ending with 「): that goes into
+`line_units`, and their fonts next to the Korean ones by Unicode block (`is_korean`).

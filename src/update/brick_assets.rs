@@ -88,9 +88,10 @@ fn from_json(
     let mut entries = Vec::new();
     let mut reused = Vec::new();
     let mut needed = 32u64 << 20;
+    // One check of what the card already has, not one for every part: the page says it once.
+    cancel.set_phase(super::WorkerPhase::CheckingAssets);
     for asset in assets.assets {
         if cancel.is_cancelled() { return Err("Download cancelled.".into()); }
-        cancel.set_phase(super::WorkerPhase::CheckingAssets); progress(0);
         if safe_old(card, &asset) {
             reused.push(asset.path.clone());
             entries.push((asset, None));
@@ -102,6 +103,8 @@ fn from_json(
         }
     }
     if let Some(avail) = free(card).filter(|n| *n < needed) { return Err(super::brick::card_full(needed - avail)); }
+    // One bar for the app archive and every part it still needs (`Cancel::files_known`).
+    cancel.files_known(entries.iter().filter(|(_, a)| a.is_some()).map(|(asset, _)| asset.package.size).sum());
     // Every package is complete and verified before stage() creates any destination on the card.
     for (asset, archive) in &entries {
         if let Some(archive) = archive { download_checked(tools, &asset.package, manifest_url, archive, cancel, progress)?; }
@@ -278,6 +281,65 @@ cp "${{url#file://}}" "$out"
         assert_eq!(std::fs::read(staging.join("bios-data/b.dat")).unwrap(), b"data B");
         assert_eq!(std::fs::read(card.join("app/RELEASE")).unwrap(), b"old");
     }
+    /// Alex, 20.11. (Brick update to 0.6.0): "Connecting to update server" flashed for every small part. The real parts path
+    /// with many changed parts, looked at as the page does while they come: one rising bar, one sentence, never "Connecting".
+    #[test]
+    fn many_changed_parts_download_under_one_rising_bar_without_connecting_between_them() {
+        let dir = TestDir::new("asset-download-one-bar");
+        let card = dir.join("card");
+        std::fs::create_dir_all(card.join("app")).unwrap();
+        let mut assets = Vec::new();
+        for i in 0..12 {
+            let data = format!("core {i} ").repeat(4000);
+            let path = format!("cores/c{i}.so");
+            let package = package(&dir.join(format!("p{i}")), &path, data.as_bytes());
+            assets.push(serde_json::json!({"path": path, "size": data.len(), "sha256": store::sha256_hex(data.as_bytes()), "package": package}));
+        }
+        let json = serde_json::json!({"format": 1, "assets": assets});
+        // A slow line: every part comes in two halves.
+        let curl = dir.join("curl");
+        crate::testutil::write_executable(&curl, r#"#!/bin/sh
+while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; url=$1; shift; done
+f=${url#file://}; n=$(wc -c < "$f"); h=$((n / 2))
+head -c "$h" "$f" > "$out"; sleep 0.25; tail -c "+$((h + 1))" "$f" >> "$out"; sleep 0.15
+"#);
+        let tools = Tools { curl: curl.to_str().unwrap(), ..TOOLS };
+        let cancel = Cancel::new();
+        // As install_folder_with: the app archive is down before its parts are known.
+        cancel.more_files_may_follow();
+        cancel.begin_file(50_000);
+        cancel.set_phase(super::super::WorkerPhase::Connecting);
+        cancel.bytes(0);
+        cancel.bytes(50_000);
+        cancel.file_done();
+        let running = std::sync::atomic::AtomicBool::new(true);
+        let seen = std::thread::scope(|s| {
+            let sampler = s.spawn(|| {
+                let mut seen = Vec::new();
+                while running.load(Ordering::SeqCst) {
+                    if let Some(phase) = cancel.phase() { seen.push((phase, cancel.download())); }
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                seen
+            });
+            let mut ram = super::super::brick_io::Ram::new(&card).unwrap();
+            let plan = from_json(&tools, &card, Some(&serde_json::to_vec(&json).unwrap()), &mut ram,
+                "file:///channel.json", &cancel, &|_| {}, &|_| Some(u64::MAX));
+            running.store(false, Ordering::SeqCst);
+            assert_eq!(plan.unwrap().entries.len(), 12);
+            sampler.join().unwrap()
+        });
+        assert!(seen.len() > 100, "{}", seen.len());
+        for (phase, d) in &seen {
+            let line = d.line(*phase);
+            assert!(line.starts_with("Step 1 of 4: Downloading the update… "), "{phase:?} {d:?}: {line:?}");
+        }
+        for pair in seen.windows(2) { assert!(pair[1].1.part >= pair[0].1.part, "the bar went back: {pair:?}"); }
+        let percents: std::collections::BTreeSet<u32> = seen.iter().map(|(_, d)| d.percent()).collect();
+        assert!(percents.len() >= 12 && *percents.first().unwrap() >= 50, "{percents:?}");
+        assert_eq!(cancel.download().percent(), 100);
+    }
+
     #[test]
     fn unchanged_core_moves_without_a_server_and_has_a_durable_way_back() {
         let dir = TestDir::new("asset-reuse");
@@ -339,7 +401,7 @@ cp "${{url#file://}}" "$out"
         let offline = Tools { curl: "/missing-curl", ..TOOLS };
         inventory(&staging, "cores/core.so", data, &rel);
         let err = super::super::card::with_file(&file, "app", || prepare(&offline, &card, &staging, "file:///u.json", &Cancel::new(), &|_| {}, &|_| Some(u64::MAX))).unwrap();
-        assert_eq!(err.unwrap_err(), super::super::card::NEEDS_MORE);
+        assert_eq!(err.unwrap_err(), super::super::card::needs_more(crate::device::no_wifi_chip()));
         std::fs::write(file.join("assets/darkos-asset-1234.tar.gz"), &bytes).unwrap();
         super::super::card::with_file(&file, "app", || prepare(&offline, &card, &staging, "file:///u.json", &Cancel::new(), &|_| {}, &|_| Some(u64::MAX))).unwrap().unwrap();
         assert_eq!(std::fs::read(staging.join("cores/core.so")).unwrap(), data);

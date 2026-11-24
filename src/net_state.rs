@@ -287,11 +287,9 @@ impl Lane {
                     g = mine.cv.wait(g).unwrap_or_else(|e| e.into_inner());
                 }
             };
-            // One job that panics must not end the worker for the rest of the run (`NetState::run` also puts the
-            // snapshot right again).
-            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)).is_err() {
-                eprintln!("net: a job panicked; the worker goes on");
-            }
+            // No `catch_unwind` here: the shipped build has `panic = "abort"`, so a panic ends pocket-ui whatever this
+            // says. What can go wrong in a job comes back as a value (`NetState::run_at`).
+            job();
             locked(&mine.inner).running = false;
             mine.cv.notify_all();
         }
@@ -486,27 +484,12 @@ impl NetState {
         self.run_at(key, false, job);
     }
 
-    /// A job on the worker. If it panics, the worker goes on and the snapshot no longer says a switch or scan is under way.
+    /// A job on the worker (or here, inline). What can go wrong in one comes back as a value and leaves the snapshot
+    /// right (a switch: a notice and `switching` cleared; a scan: `Scan::Failed`; a connect: `exclusive`'s `Err`). Never
+    /// a panic for that: the shipped build has `panic = "abort"`, where a panic ends pocket-ui (tests: `as_shipped`).
     fn run_at(self: &Arc<Self>, key: &'static str, ahead_of_scans: bool, job: impl FnOnce() + Send + 'static) {
         match &self.lane {
-            Some(lane) => {
-                let me = self.clone();
-                lane.submit_at(
-                    key,
-                    Box::new(move || {
-                        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)).is_err() {
-                            eprintln!("net: a job ({key:?}) panicked; Wi-Fi is looked at again");
-                            locked(&me.inner).epoch += 1;
-                            locked(&me.inner).switches_waiting = 0;
-                            me.commit(None, |g| {
-                                g.snap.switching = None;
-                                g.snap.scanning = false;
-                            });
-                        }
-                    }),
-                    ahead_of_scans,
-                );
-            }
+            Some(lane) => lane.submit_at(key, Box::new(job), ahead_of_scans),
             None => job(),
         }
     }
@@ -896,8 +879,9 @@ impl NetState {
     }
 
     /// Runs `job` after everything asked for before, and before anything asked for after: a connect, a forget, a change
-    /// of country. The generation goes up before and after, so looks that straddle it are dropped; a scan follows.
-    pub fn exclusive(self: &Arc<Self>, what: &'static str, job: impl FnOnce() + Send + 'static) {
+    /// of country. The generation goes up before and after, so looks that straddle it are dropped; a scan follows, also
+    /// after a job that did not work (`Err`: logged; the job has told its page itself).
+    pub fn exclusive(self: &Arc<Self>, what: &'static str, job: impl FnOnce() -> Result<(), String> + Send + 'static) {
         if self.frozen.load(Ordering::SeqCst) {
             return;
         }
@@ -906,9 +890,12 @@ impl NetState {
         let me = self.clone();
         self.run("", move || {
             println!("net: {what}");
-            job();
+            let done = job();
             locked(&me.inner).epoch += 1;
-            println!("net: {what}: done");
+            match &done {
+                Ok(()) => println!("net: {what}: done"),
+                Err(why) => println!("net: {what}: did not work: {why}"),
+            }
             me.request_scan();
         });
     }
@@ -1318,7 +1305,7 @@ mod tests {
         let gate = Gate::new();
         let g = gate.clone();
         net.poll();
-        net.exclusive("connect", move || g.pass());
+        net.exclusive("connect", move || Ok(g.pass()));
         net.toggle();
         assert_eq!(net.snapshot().switching, Some(false));
         net.toggle();
@@ -1515,10 +1502,11 @@ mod tests {
         net.exclusive("connect", move || {
             g1.pass();
             f1.script().log.push("connected".into());
+            Ok(())
         });
         net.set_enabled(false);
         let f2 = fake.clone();
-        net.exclusive("forget", move || f2.script().log.push("forgot".into()));
+        net.exclusive("forget", move || Ok(f2.script().log.push("forgot".into())));
         gate.open();
         net.wait_idle();
         let log = fake.log();
@@ -1535,7 +1523,7 @@ mod tests {
         let net = NetState::new(fake);
         let gate = Gate::new();
         let g = gate.clone();
-        net.exclusive("connect", move || g.pass());
+        net.exclusive("connect", move || Ok(g.pass()));
         let called = Arc::new(AtomicBool::new(false));
         let c = called.clone();
         net.reconnect(move |_| c.store(true, Ordering::SeqCst));
@@ -1632,57 +1620,92 @@ mod tests {
         assert!(!fake.log().iter().any(|l| l == "set_radio true"), "{:?}", fake.log());
     }
 
-    #[test]
-    fn a_panicking_job_does_not_end_the_worker_or_leave_switching_stuck() {
-        let fake = FakeNet::new(Radio::On);
-        let net = NetState::new(fake.clone());
-        net.poll();
-        net.exclusive("boom", || panic!("a job that goes wrong"));
-        net.toggle();
-        net.wait_idle();
-        let s = net.snapshot();
-        assert_eq!((s.radio, s.switching), (Radio::Off(Cause::Soft), None), "the switch after the panic was done");
-        assert!(!s.scanning, "no scan stuck on");
-        // And the worker still takes scans.
-        net.request_scan();
-        net.wait_idle();
-        assert!(!net.snapshot().scanning);
+    /// The shipped build's `panic = "abort"` (Cargo.toml `[profile.release]`) where tests unwind (`[profile.gate]`): `body`
+    /// runs in a child of this test binary whose panic hook aborts, as the device does once `crash::install` has logged the
+    /// panic. A recovery that leans on catching a panic ends the child, so the test fails the way the device would crash.
+    fn as_shipped(test: &str, body: impl FnOnce()) {
+        const CHILD: &str = "POCKETUI_NET_AS_SHIPPED";
+        if std::env::var(CHILD).as_deref() == Ok(test) {
+            std::panic::set_hook(Box::new(|info| {
+                eprintln!("as shipped, this ends pocket-ui: {info}");
+                std::process::abort();
+            }));
+            body();
+            return;
+        }
+        let out = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", &format!("net_state::tests::{test}"), "--nocapture", "--test-threads=1"])
+            .env(CHILD, test)
+            .output()
+            .unwrap();
+        let said = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+        assert!(out.status.success() && said.contains("1 passed"), "as shipped ({:?}):\n{said}", out.status);
     }
 
+    /// A connect, forget or country change that did not work (2026-11-19: this used to be a panic, caught with
+    /// `catch_unwind`, which the shipped `panic = "abort"` never reaches): the worker goes on, a scan follows, nothing
+    /// is left switching or scanning. As shipped.
     #[test]
-    fn a_panic_in_a_switch_clears_the_busy_flag() {
-        struct Boom(Arc<FakeNet>);
-        impl NetOps for Boom {
-            fn radio(&self) -> Radio {
-                self.0.radio()
+    fn a_job_that_did_not_work_does_not_end_the_worker_or_leave_switching_stuck() {
+        as_shipped("a_job_that_did_not_work_does_not_end_the_worker_or_leave_switching_stuck", || {
+            let fake = FakeNet::new(Radio::On);
+            let net = NetState::new(fake.clone());
+            net.poll();
+            net.exclusive("connect", || Err("nmcli: Secrets were required, but not provided".into()));
+            net.toggle();
+            net.wait_idle();
+            let s = net.snapshot();
+            assert_eq!((s.radio, s.switching), (Radio::Off(Cause::Soft), None), "the switch after the failed connect was done");
+            assert!(!s.scanning, "no scan stuck on");
+            // And the worker still takes scans.
+            net.request_scan();
+            net.wait_idle();
+            assert!(!net.snapshot().scanning);
+        });
+    }
+
+    /// Every kind of job on the worker going wrong, one after the other, as shipped: a switch that fails, a radio that
+    /// does not follow, a scan that fails, a connect, a forget and a change of country that fail, a background reconnect.
+    /// Each says so as a value; the worker ends with nothing under way and with the radio's last word in the snapshot.
+    #[test]
+    fn every_job_that_goes_wrong_leaves_the_worker_going_as_shipped() {
+        as_shipped("every_job_that_goes_wrong_leaves_the_worker_going_as_shipped", || {
+            let fake = off_by_choice();
+            let net = NetState::new(fake.clone());
+            net.poll();
+            fake.script().switch_result = Err("wifictl enable exited with 1".into());
+            net.set_enabled(true);
+            net.wait_idle();
+            let s = net.snapshot();
+            assert_eq!((s.switching, s.notice.as_ref().map(|n| n.kind)), (None, Some(NoticeKind::Switch)), "the failed switch: a notice");
+            {
+                let mut f = fake.script();
+                f.switch_result = Ok(());
+                f.moves = false;
             }
-            fn set_radio(&self, _on: bool) -> Result<(), String> {
-                panic!("the radio code panicked")
+            net.toggle();
+            net.wait_idle();
+            assert_eq!(net.snapshot().switching, None, "a radio that did not follow: not stuck switching");
+            {
+                let mut f = fake.script();
+                f.moves = true;
+                f.scans = VecDeque::from([failure(10, "No Wi-Fi device found")]);
             }
-            fn wanted(&self) -> Option<bool> {
-                self.0.wanted()
+            net.set_enabled(true);
+            net.wait_idle();
+            let s = net.snapshot();
+            assert!(matches!(s.scan, Scan::Failed(_)) && !s.scanning, "the failed scan is shown, not stuck: {:?}", s.scan);
+            for what in ["connect", "connect saved", "forget", "country"] {
+                net.exclusive(what, move || Err(format!("{what} failed")));
             }
-            fn persist_wanted(&self, on: bool) -> bool {
-                self.0.persist_wanted(on)
-            }
-            fn saving(&self, stop: &AtomicBool) -> (Saving, String) {
-                self.0.saving(stop)
-            }
-            fn address(&self) -> Option<String> {
-                None
-            }
-            fn scan(&self, stop: &AtomicBool) -> Result<Vec<Network>, ScanError> {
-                self.0.scan(stop)
-            }
-        }
-        let net = NetState::new(Arc::new(Boom(off_by_choice())));
-        net.set_enabled(true);
-        net.wait_idle();
-        let s = net.snapshot();
-        assert_eq!((s.switching, s.scanning), (None, false), "not stuck on");
-        net.request_scan();
-        net.wait_idle();
-        assert!(!net.snapshot().scanning, "the worker still runs");
+            net.reconnect(|_stop| {});
+            net.wait_idle();
+            let s = net.snapshot();
+            assert_eq!((s.radio, s.switching, s.scanning), (Radio::On, None, false), "after everything went wrong");
+            net.toggle();
+            net.wait_idle();
+            assert_eq!(net.snapshot().radio, Radio::Off(Cause::Soft), "the worker still switches");
+        });
     }
 
     #[test]
@@ -1708,7 +1731,7 @@ mod tests {
         let gate = Gate::new();
         let net = NetState::new(fake.clone());
         let g = gate.clone();
-        net.exclusive("connect", move || g.pass());
+        net.exclusive("connect", move || Ok(g.pass()));
         net.request_scan();
         net.set_enabled(false);
         gate.open();

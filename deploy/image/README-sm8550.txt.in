@@ -2,7 +2,7 @@
 ================================================================
 
 pocket-ui is a game launcher with its own libretro frontend. This card (pocket-ui @VERSION@) starts it when the
-handheld boots from it. This card does not flash anything to the handheld, and takes nothing off its internal storage.
+handheld boots from the microSD card.
 
 @OS_NAME@ is built on ROCKNIX @ROCKNIX_TAG@ (https://rocknix.org): its kernel, system and emulators are
 ROCKNIX's. pocket-ui is not made or endorsed by the ROCKNIX team; please report problems with this card to
@@ -16,23 +16,33 @@ Before you start: which card, and how it starts
 Which card: a Pocket 6 with the left stick above the D-pad takes the -rp6 card, a Pocket 6 with the D-pad on top the
 -rp6-top-dpad card, a Nova the -nova card. With the wrong Pocket 6 card the sticks work the wrong way round.
 
-Nothing needs flashing. Newer Retroid firmware has its own way to start a card: hold Volume Down while you switch on, and
+First try it without flashing anything. Newer Retroid firmware has its own way to start a card: hold Volume Down while you switch on, and
 Retroid's menu offers "UEFI" next to Android. This card is made for that (step 2 of Install). Retroid's own UEFI start has
 worked for one tester with another Linux card; nobody has started this card that way yet. If your menu has no "UEFI",
 update Android first (Settings, System update). If it shows a Secure Boot setting, it has to be off.
 
-If your handheld falls back to the boot menu instead, set up OpenABL once as ROCKNIX's guide for your model says
-(https://rocknix.org/devices/retroid/): back up first with backup_abl.sh, then flash_abl.sh, both as root in Android.
-Android and its data stay. Then start this card from OpenABL's menu (hold Volume Down while you switch on).
+If your handheld falls back to the boot menu instead, it needs OpenABL once. Risk: OpenABL overwrites the bootloader
+(abl_a and abl_b). An interrupted or bad flash can stop the handheld from starting and may require EDL recovery.
+You need a computer for the cards and the backup.
+This card does not carry the flashing scripts. They are in the openabl folder of ROCKNIX's SM8550 image (20261101 or
+newer): write that image to a microSD card, start Android with it, copy its openabl folder to /sdcard/openabl, battery
+above 50%, run backup_abl.sh as root exactly once before flashing. Running it again after flashing overwrites the original backup
+on the handheld. Check that abl_a.img and abl_b.img are in /sdcard/openabl and not empty, and copy both to your computer.
+Then run flash_abl.sh as root and don't switch off while it runs (the script checks
+nothing). Restart holding Volume Down, set your exact Device model, Start: ROCKNIX should boot. Then write this card,
+hold Volume Down while you switch on, set Boot mode: Linux and Boot source: SD card, Start.
+Back to Android with OpenABL: Boot mode: Android in its menu, or hold Volume Up while you switch on. Undo: run
+restore_backup_abl.sh from /sdcard/openabl as root in Android; that only works while the handheld still starts Android.
+ROCKNIX's guides ("Flashing OpenABL"):
+https://rocknix.org/devices/retroid/retroid-pocket-6/ and https://rocknix.org/devices/retroid/retroid-pocket-nova/
 
 Already set up for ROCKNIX? The card starts the ways you know too. With ROCKNIX's boot helper (its "ABL", flashed once from
 Android with root rights) it starts as ROCKNIX does: pick your handheld under "Set device model" in its menu. With OpenABL it
-starts this card's own entry. This card does not flash a boot helper, does not carry one, and never changes the bootloader.
+can start the card's own entry. This card does not flash a boot helper or carry one.
 
-Started through "UEFI" or OpenABL, the card hides the handheld's internal storage from the system, so Android and anything
-on it stay untouched. That also goes for ROCKNIX installed onto the internal storage: this card starts instead. Through
-ROCKNIX's boot helper the internal ROCKNIX wins (it finds its partitions by name, and the internal ones have the same names);
-add pocket-ui to it with its install package there.
+The bundled GRUB and OpenABL entries disable internal UFS. If the bootloader starts /KERNEL directly or falls back
+to it, Linux can see internal UFS and ROCKNIX can mount a qualifying partition read-write. An internal ROCKNIX
+install can then take precedence over this card. Add pocket-ui to that system with the install package.
 
 
 #else
@@ -45,13 +55,15 @@ ABL comes without a stated licence and without source). If your handheld already
 helper and it's set up: skip to Install.
 
 If not, follow ROCKNIX's own guide for your model at https://rocknix.org. In short, from ROCKNIX's official image for this
-family (ROCKNIX-SM8550, folder rocknix_abl on its first partition, README inside): back up the current helper and flash the
+family (ROCKNIX-SM8550 20261001, the version this card is built on: folder rocknix_abl on its first partition, README
+inside; newer ROCKNIX images carry OpenABL instead, untested with this card): back up the current helper and flash the
 new one from Android, then restart while holding Volume Down to get its menu. There, pick "Set device model" and choose
 your handheld, then "Switch boot mode", and start. This changes the handheld's bootloader, so read their guide first;
 done wrong it can stop the handheld from starting, and it's at your own risk. pocket-ui never does this for you and never
 changes the bootloader afterwards.
 
 
+This card starts through /KERNEL, which leaves internal UFS enabled. ROCKNIX can mount a qualifying partition read-write.
 If you installed ROCKNIX onto the handheld's internal storage, this card won't take over: ROCKNIX looks for its partitions
 by name, and the internal ones have the same names and win. The handheld starts your internal system as before and only
 sees this card as a games card. Nothing is lost, but you won't get pocket-ui this way: add pocket-ui to your internal system

@@ -64,7 +64,12 @@ no code is showing.**) for wrong, expired or inactive codes. Just generate a fre
   tile when there is none), facts from the offline game list, time played, status, your rating and note.
   Status, rating (five stars; tap the stars you gave again to take the rating away), note and favourite
   change on the Pocket at once, as if you had pressed the buttons there. A game hidden on the Pocket
-  ([Hide or delete](library.md#hide-or-delete-a-game)) is not listed; shown again, it is back at the next page.
+  ([Hide from the shelf](library.md#hide-or-delete-a-game)) is not listed; shown again, it is back at the next page.
+- **Delete a game.** At the end of a game's page, **Delete from the card** says how many files and how much space it
+  takes; tick **Delete its saves and states too** if you want them gone as well (they stay otherwise). **Delete…** asks
+  once more with the game's name and the space it frees. It goes as from the Pocket's card ([Hide or delete a
+  game](library.md#hide-or-delete-a-game)): every disc, its pictures and gamelist entry. Not while a game is running,
+  not in Kids mode, and not offered where the Pocket can't delete games (dArkOS, Android).
 - **Box art.** Open a game and tap **Choose cover…**. Pick a picture from your phone or computer. Your browser
   shrinks it to at most 1024 pixels on the longest side and sends a PNG of up to 8 MB. **Reset to automatic**
   brings back the Pocket’s usual cover, if it has one. The Pocket keeps a copy of a replaced or reset custom cover.

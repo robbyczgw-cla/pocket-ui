@@ -46,7 +46,9 @@ pub fn choices(boot_menu: bool) -> Vec<Choice> {
     let darkos = crate::darkos::host();
     #[cfg(not(feature = "brick"))]
     let darkos = false;
-    choices_for(boot_menu, darkos)
+    // A board without Android beside ROCKNIX: its reboot-mode may know "bootloader" (Rockchip's loader, R36S hand test
+    // 20.11.2026 #15a), but there is no Switch boot mode to choose there (`device::Device::android_beside`).
+    choices_for(boot_menu && crate::device::current().android_beside(), darkos)
 }
 
 fn choices_for(boot_menu: bool, darkos: bool) -> Vec<Choice> {
@@ -89,15 +91,15 @@ impl Choice {
     pub fn hint(self, ctx: Context) -> &'static str {
         match self {
             Choice::Sleep if crate::device::current().screen_off_only() => crate::sleep_settings::NO_SLEEP,
-            Choice::Sleep if ctx.game => "Saves the game. The power button wakes it. Uses a few percent of the battery an hour.",
-            Choice::Sleep => "The power button wakes it. Uses a few percent of the battery an hour.",
+            Choice::Sleep if ctx.game => "Saves your game and sleeps. Power button wakes it (~a few % battery/hr).",
+            Choice::Sleep => "Power button wakes it. Uses a few % battery per hour.",
             Choice::Restart if ctx.ram_booted => "Started from a computer: this goes back to Android.",
             Choice::Restart if ctx.game => "Saves the game, then restarts the Pocket.",
             Choice::Restart => "Restarts the whole Pocket.",
-            Choice::PowerOff if ctx.game => "Saves the game, then switches off.",
-            Choice::PowerOff => "Switches the Pocket off.",
-            Choice::RestartUi if ctx.game => "Saves the game. Only pocket-ui starts again.",
-            Choice::RestartUi => "Only pocket-ui starts again, in seconds.",
+            Choice::PowerOff if ctx.game => "Saves your game, then powers off.",
+            Choice::PowerOff => "Powers the Pocket off.",
+            Choice::RestartUi if ctx.game => "Saves your game and restarts pocket-ui only.",
+            Choice::RestartUi => "Restarts pocket-ui only, in seconds.",
             Choice::BootMenu => BOOT_MENU_HINT,
             Choice::BackToEs => crate::rescue::BACK_QUICK_HELP,
         }
@@ -110,15 +112,15 @@ impl Choice {
             // The Brick's real sleep: its drain is not measured yet, so no battery figure.
             Choice::Sleep if crate::sleep_settings::power_sleeps() && ctx.game => "Saves the game. The power button wakes it.",
             Choice::Sleep if crate::sleep_settings::power_sleeps() => "The power button wakes it.",
-            Choice::Sleep if ctx.game => "Saves the game. The power button wakes it. Uses a few percent of the battery an hour.",
-            Choice::Sleep => "The power button wakes it. Uses a few percent of the battery an hour.",
+            Choice::Sleep if ctx.game => "Saves your game and sleeps. Power button wakes it (~a few % battery/hr).",
+            Choice::Sleep => "Power button wakes it. Uses a few % battery per hour.",
             Choice::Restart if ctx.ram_booted => "Started from a computer: this goes back to Android.",
             Choice::Restart if ctx.game => "Saves the game, then restarts the Pocket.",
             Choice::Restart => "Restarts the whole Pocket.",
-            Choice::PowerOff if ctx.game => "Saves the game, then switches off.",
-            Choice::PowerOff => "Switches the Pocket off.",
-            Choice::RestartUi if ctx.game => "Saves the game. Only pocket-ui starts again.",
-            Choice::RestartUi => "Only pocket-ui starts again, in seconds.",
+            Choice::PowerOff if ctx.game => "Saves your game, then powers off.",
+            Choice::PowerOff => "Powers the Pocket off.",
+            Choice::RestartUi if ctx.game => "Saves your game and restarts pocket-ui only.",
+            Choice::RestartUi => "Restarts pocket-ui only, in seconds.",
             Choice::BootMenu => BOOT_MENU_HINT,
             Choice::BackToEs => crate::rescue::BACK_QUICK_HELP,
         }
@@ -222,11 +224,11 @@ mod tests {
         assert_eq!(marks.len(), 5);
         // In a game the game is saved first, and the lines say so; on the shelf they don't promise a save.
         for c in [Choice::Sleep, Choice::Restart, Choice::PowerOff, Choice::RestartUi] {
-            assert!(c.hint(GAME).contains("Saves the game"), "{c:?}");
+            assert!(c.hint(GAME).contains("Saves"), "{c:?}");
             assert!(!c.hint(SHELF).contains("Saves"), "{c:?}");
         }
         assert!(Choice::Restart.hint(Context { game: true, ram_booted: true }).contains("Android"));
-        assert!(Choice::RestartUi.hint(SHELF).contains("Only pocket-ui"));
+        assert!(Choice::RestartUi.hint(SHELF).contains("pocket-ui only"));
     }
 
     #[test]

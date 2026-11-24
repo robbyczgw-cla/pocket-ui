@@ -1058,7 +1058,9 @@ impl<'a> Explorer<'a> {
         loop {
             std::thread::sleep(Duration::from_millis(100));
             let Ok(g) = self.press(&[]) else { return false };
-            if g.same(&f) {
+            // Wait until any asynchronous page load (`@busy`, e.g. Remote access reading sshd) has finished:
+            // two identical frames while still loading do not mean the page has settled.
+            if !g.busy && g.same(&f) {
                 break;
             }
             if Instant::now() > until {
@@ -1753,7 +1755,7 @@ fn web_companion_page(profile: Profile) {
         if on {
             assert!(text.contains("Waiting for Wi-Fi") || text.contains("Not listening"), "{}: on, without a network: {text}", profile.name);
         } else {
-            assert!(text.contains("same Wi-Fi") && !text.contains("Needs Tailscale"), "{}: the Off page names the Wi-Fi: {text}", profile.name);
+            assert!(text.replace('\n', " ").contains("your Wi-Fi") && !text.contains("Needs Tailscale"), "{}: the Off page names the Wi-Fi: {text}", profile.name);
         }
         let mut seen = vec![page.focused().unwrap_or_default()];
         let mut f = page;
@@ -1939,7 +1941,7 @@ fn every_category_and_row_by_the_pad_in_android_s_handheld_view() {
 #[test]
 fn the_updates_page_in_android_s_handheld_view_by_the_pad_in_every_language() {
     let languages = [
-        ("en", "Updates", "Install pocket-ui 99.0.0", "Install now", "Open"),
+        ("en", "Updates", "Install pocket-ui 99.0.0", "Install now", "Reopen"),
         ("de", "Updates", "pocket-ui 99.0.0 installieren", "Jetzt installieren", "Öffne"),
         ("es", "Actualizaciones", "Instalar pocket-ui 99.0.0", "Instalar ahora", "Ábrelo"),
         ("fr", "Mises à jour", "Installer pocket-ui 99.0.0", "Installer maintenant", "Rouvre-le"),

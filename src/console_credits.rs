@@ -110,7 +110,7 @@ pub const ROCKNIX_SYSTEMS: &[&str] = &[
     "ps2",
     "ps3",
     "psp",
-    "pspockets",
+    "pspminis",
     "psvita",
     "psx",
     "satellaview",

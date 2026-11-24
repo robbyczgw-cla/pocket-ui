@@ -214,14 +214,14 @@ pub const SYSTEM_IDS: [&str; 28] = [
 /// emulator app's. Used by the Game check: another type in its folder won't start.
 pub fn takes(id: &str) -> &'static [&'static str] {
     match id {
-        "gb" | "gbc" => &["gb", "gbc", "zip"],
-        "gba" => &["gba", "gb", "gbc", "zip"],
-        "nes" => &["nes", "zip"],
-        "snes" => &["sfc", "smc", "zip"],
-        "mastersystem" | "gamegear" => &["sms", "gg", "bin", "zip"],
-        "megadrive" => &["md", "gen", "bin", "zip"],
-        "n64" => &["z64", "n64", "v64", "zip"],
-        "nds" => &["nds", "zip"],
+        "gb" | "gbc" => &["gb", "gbc", "zip", "7z"],
+        "gba" => &["gba", "gb", "gbc", "zip", "7z"],
+        "nes" => &["nes", "zip", "7z"],
+        "snes" => &["sfc", "smc", "zip", "7z"],
+        "mastersystem" | "gamegear" => &["sms", "gg", "bin", "zip", "7z"],
+        "megadrive" => &["md", "gen", "bin", "zip", "7z"],
+        "n64" => &["z64", "n64", "v64", "zip", "7z"],
+        "nds" => &["nds", "zip", "7z"],
         "ps2" => &["iso", "chd", "cso", "bin", "m3u"],
         "psp" => &["iso", "cso", "pbp", "chd"],
         "psx" => &["cue", "chd", "pbp", "iso", "bin", "m3u"],
@@ -232,18 +232,18 @@ pub fn takes(id: &str) -> &'static [&'static str] {
         "saturn" => &["cue", "chd", "iso", "m3u"],
         "dreamcast" => &["gdi", "cue", "chd", "cdi", "m3u"],
         "segacd" => &["cue", "chd", "iso", "bin", "m3u"],
-        "pcengine" => &["pce", "cue", "chd", "zip"],
-        "wonderswan" | "wonderswancolor" => &["ws", "wsc", "zip"],
-        "ngp" | "ngpc" => &["ngp", "ngc", "ngpc", "zip"],
-        "atarilynx" => &["lnx", "zip"],
-        "atari2600" => &["a26", "bin", "zip"],
+        "pcengine" => &["pce", "cue", "chd", "zip", "7z"],
+        "wonderswan" | "wonderswancolor" => &["ws", "wsc", "zip", "7z"],
+        "ngp" | "ngpc" => &["ngp", "ngc", "ngpc", "zip", "7z"],
+        "atarilynx" => &["lnx", "zip", "7z"],
+        "atari2600" => &["a26", "bin", "zip", "7z"],
         "neogeo" => &["zip"],
         _ => &[],
     }
 }
 /// A file type the shelf lists at all.
 pub fn shelf_type(ext: &str) -> bool {
-    matches!(ext, "gb" | "gbc" | "gba" | "nes" | "sfc" | "smc" | "sms" | "gg" | "md" | "gen" | "z64" | "n64" | "v64" | "nds" | "zip" | "iso" | "chd" | "cue" | "gdi" | "cdi" | "m3u" | "pbp" | "cso" | "rvz" | "gcm" | "3ds" | "cci" | "cxi" | "3dsx" | "vpk" | "ngp" | "ngc" | "ngpc" | "lnx" | "pce" | "bin" | "ws" | "wsc" | "a26")
+    matches!(ext, "gb" | "gbc" | "gba" | "nes" | "sfc" | "smc" | "sms" | "gg" | "md" | "gen" | "z64" | "n64" | "v64" | "nds" | "zip" | "7z" | "iso" | "chd" | "cue" | "gdi" | "cdi" | "m3u" | "pbp" | "cso" | "rvz" | "gcm" | "3ds" | "cci" | "cxi" | "3dsx" | "vpk" | "ngp" | "ngc" | "ngpc" | "lnx" | "pce" | "bin" | "ws" | "wsc" | "a26")
 }
 fn extension(path: &str) -> String {
     Path::new(path).extension().unwrap_or_default().to_string_lossy().to_ascii_lowercase()
@@ -565,6 +565,16 @@ mod tests {
                 assert!(shelf_type(ext), "{id} takes .{ext}, which the shelf doesn't list");
             }
         }
+    }
+    /// Android lists a 7z in a cartridge system's folder as that system's game, as a zip (pocket-core unpacks both,
+    /// `seven_zip`). Red before: a 7z was no shelf type.
+    #[test]
+    fn a_7z_in_a_system_folder_is_its_game_as_a_zip_is() {
+        let games = scan(vec![doc("a", "gba/Pocket Demo (World).7z", ""), doc("b", "snes/Pocket Demo.zip", ""), doc("c", "Pocket Demo.7z", "")]);
+        let mut found: Vec<_> = games.iter().map(|g| (g.relative.as_str(), g.system_id)).collect();
+        found.sort();
+        assert_eq!(found, [("gba/Pocket Demo (World).7z", "gba"), ("snes/Pocket Demo.zip", "snes")], "a 7z outside a system folder says no system");
+        assert!(takes("gba").contains(&"7z") && !takes("neogeo").contains(&"7z"), "arcade sets stay zips");
     }
     fn sized(id: &str, path: &str, sheet: &str, size: i64) -> Document {
         Document { size, ..doc(id, path, sheet) }

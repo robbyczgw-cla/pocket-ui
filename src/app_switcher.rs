@@ -140,7 +140,7 @@ impl App {
     }
 
     fn switcher_entry(&self, system: &str, name: &str, path: &std::path::Path, meta: String) -> Entry {
-        let mut cover = pocket_ui::covers::cover_path(&self.data_dir, system, path);
+        let mut cover = pocket_ui::covers::active_cover_path(&self.data_dir, system, path);
         // No box art of its own: the picture in the player's EmulationStation gamelist (`app_gamelist`).
         if !cover.exists() {
             cover = self.gamelist_cover(system, path).unwrap_or(cover);

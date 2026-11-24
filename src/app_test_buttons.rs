@@ -225,7 +225,12 @@ impl App {
         let (left, right) = (NU_PAD, c.w - NU_PAD);
         if test.pads().is_empty() {
             let (x, base) = (left + NU_BTN_PAD, top + 60 + pocket_ui::type_scale::grow(37));
-            let line = "Pair one in Settings › Connections › Bluetooth, or plug one into the USB-C port. This handheld's own buttons show up here too.";
+            // The dArkOS port has no Bluetooth row (dArkOS pairs, `darkos::LEAVES_OUT`).
+            let line = if pocket_ui::device::darkos_port() {
+                "Pair one in dArkOS, or plug one into the USB-C port. This handheld's own buttons show up here too."
+            } else {
+                "Pair one in Settings › Connections › Bluetooth, or plug one into the USB-C port. This handheld's own buttons show up here too."
+            };
             pocket_ui::kit::empty_state(c, &mut self.text, Some(pocket_ui::ui_art::Art::Search), (x, right - NU_BTN_PAD - x), top + 8, base, bottom - 12, "No controller found", line);
             return;
         }

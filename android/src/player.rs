@@ -1286,6 +1286,20 @@ impl Player {
                 _ => None,
             }
         };
+        // Continue, Options and Save & quit: the paused game in the window, as on Linux (`pause_page::shows_game`); the
+        // row's line goes under it, else how long this game ran (the player has no log of the day's other games).
+        let kind = match item {
+            Some(pause_list::Item::Continue) => pocket_ui::pause_page::RowKind::Continue,
+            Some(pause_list::Item::Options) => pocket_ui::pause_page::RowKind::Options,
+            Some(pause_list::Item::Quit) => pocket_ui::pause_page::RowKind::Quit,
+            _ => pocket_ui::pause_page::RowKind::Other,
+        };
+        let (window, note) = if window.is_none() && pocket_ui::pause_page::shows_game(kind, false, self.frame.is_some()) {
+            let line = note.unwrap_or_else(|| pocket_ui::pause_page::paused_here(None, self.clock.elapsed().as_secs()));
+            (Some(ListWindow { picture: self.frame.clone(), empty: "No picture", note: line, slots: false }), None)
+        } else {
+            (window, note)
+        };
         if item == Some(pause_list::Item::Disc) {
             step = Some("Disc");
         }
@@ -2400,7 +2414,7 @@ impl Player {
             self.timeline_capture(pocket_ui::timeline::Moment::Quiet);
         }
     }
-    fn frame(&mut self, w: i32, h: i32, density: f32, insets: [i32; 4], font_scale: f32) -> i32 {
+    fn frame(&mut self, w: i32, h: i32, density: f32, insets: [i32; 4], hole: [i32; 4], font_scale: f32) -> i32 {
         if self.quit {
             self.timeline.wait();
             return 2;
@@ -2416,13 +2430,14 @@ impl Player {
         let inset = (left, bottom, (w - left - right).max(1), (h - top - bottom).max(1));
         self.game_view = inset;
         // The handhelds' pause menu fills the panel as Linux's does (its own 30 px margins), not the safe insets Android
-        // reports round the Mini V2's corners (60/48/60/64 px: the menu stood shrunk in the middle, 17.11.); the game and
-        // the touch controls keep them.
+        // reports round the Mini V2's corners (60/48/60/64 px: the menu stood shrunk in the middle, 17.11.); only a
+        // phone's camera hole is kept clear (`menu_view`, 19.11.). The game and the touch controls keep the safe insets.
         let menu = self.paused && self.list_menu;
-        let view = if menu { (0, 0, w.max(1), h.max(1)) } else { inset };
-        self.top = if menu { 0 } else { top };
+        let (view, menu_top) = pocket_ui::scaled_layout::menu_view((w, h), hole);
+        let view = if menu { view } else { inset };
+        self.top = if menu { menu_top } else { top };
         if self.view != view {
-            log::info!("player viewport: physical={w}x{h} insets={insets:?} density={density} menu={menu}");
+            log::info!("player viewport: physical={w}x{h} insets={insets:?} hole={hole:?} density={density} menu={menu}");
         }
         self.view = view;
         self.window = (w.max(0) as u32, h.max(0) as u32);
@@ -2497,7 +2512,7 @@ impl Player {
             let (held, pulses, stick) = if self.speed.home_held() { (0, 0, 0) } else { (self.buttons, self.pulses, self.stick_buttons) };
             let ds = if self.speed.home_held() {
                 self.ds_pad.suppress(self.buttons | self.pulses | self.stick_buttons);
-                pocket_ui::ds_pad::Frame { raw: 0, buttons: 0, axes: self.axes, changed: None }
+                pocket_ui::ds_pad::Frame::plain(0, self.axes)
             } else { self.ds_pad.apply(&self.system, &self.pad_page.mapping, held | pulses | stick, self.axes) };
             let (mut buttons, sticks) = pocket_ui::controls::pad_input(&self.pad_page.mapping, ds.raw, 0, 0, touch, ds.axes);
             self.core.set_analog(sticks.unwrap_or(ds.axes));
@@ -2505,6 +2520,14 @@ impl Player {
                 self.held.clear(); self.overlay_size = None;
                 self.note = vec![pocket_ui::i18n::tr(if stylus { "Stylus mode" } else { "D-pad mode" })];
                 self.note_until = None;
+            }
+            // A tap on the layout button: the two DS screens change places (`ds_pad::swap_options`).
+            if ds.swap {
+                for (key, value) in pocket_ui::ds_pad::swap_options(|k| self.core.option_value(k)) {
+                    self.core.set_option(&key, value);
+                    // Options shows the swapped value, as the core has it now.
+                    if let Some(o) = self.options.iter_mut().find(|o| o.key == key) { o.current = value.into(); }
+                }
             }
             self.pulses = 0;
             self.touch_pulses = 0;
@@ -2964,6 +2987,7 @@ impl Player {
                         rows: &rows,
                         sel,
                         footer: footer.as_deref(),
+                        description_above_hints: false,
                         explanation,
                         accent: pocket_ui::bezel::system_colour(&self.system),
                         corner: &corner,
@@ -3548,7 +3572,7 @@ pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeCreate(
     let prefs: serde_json::Value = serde_json::from_str(&pocket_ui::platform::android::string("playerSettings"))
         .unwrap_or_else(|_| pocket_ui::android_games::load_preferences(&pocket_ui::platform::data_dir()));
     // As `Preferences::chosen_language`: the choice, or what an older version wrote, or the phone's.
-    let language = prefs["language"].as_str().map(pocket_ui::i18n::Lang::from_locale).or(prefs["german"].as_bool().map(|g| if g { pocket_ui::i18n::Lang::De } else { pocket_ui::i18n::Lang::En })).unwrap_or_else(|| pocket_ui::i18n::Lang::from_locale(&pocket_ui::platform::android::string("language")));
+    let language = prefs["language"].as_str().map(pocket_ui::i18n::Lang::from_locale).or(prefs["german"].as_bool().map(|g| if g { pocket_ui::i18n::Lang::De } else { pocket_ui::i18n::Lang::En })).unwrap_or_else(|| pocket_ui::i18n::Lang::from_system_locale(&pocket_ui::platform::android::string("language")));
     pocket_ui::i18n::set(language);
     let font_scale = pocket_ui::platform::android::string("fontScale").parse::<f32>().unwrap_or(1.0);
     pocket_ui::type_scale::set_system_scale(font_scale);
@@ -3635,10 +3659,14 @@ pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeFrame(
     top: jint,
     right: jint,
     bottom: jint,
+    hole_left: jint,
+    hole_top: jint,
+    hole_right: jint,
+    hole_bottom: jint,
 ) -> jint {
     PLAYER.with(|slot| {
         let mut slot = slot.borrow_mut();
-        let result = slot.as_mut().map_or(2, |p| p.frame(w, h, density, [left, top, right, bottom], font_scale));
+        let result = slot.as_mut().map_or(2, |p| p.frame(w, h, density, [left, top, right, bottom], [hole_left, hole_top, hole_right, hole_bottom], font_scale));
         if let Some(p) = slot.as_mut() {
             let nodes = p.semantic_nodes();
             if nodes != p.semantics {

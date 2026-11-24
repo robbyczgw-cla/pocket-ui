@@ -44,6 +44,9 @@ pub enum Lang {
     Pt,
     Fr,
     It,
+    /// Korean: the interface's lines come from `ko.tsv`, its letters
+    /// from the Korean fonts pocket-ui ships (`text_fallback::korean`).
+    Ko,
 }
 
 /// What differs by language besides the words. A new language is a line here, one in `Lang`, and its table.
@@ -56,20 +59,24 @@ struct Traits {
     accept_language: &'static str,
     /// The game search's keyboard has y and z the German way round.
     qwertz: bool,
+    /// Its table has every line the others have (`Lang::complete`): false while a language is being translated; its
+    /// missing lines are painted in English, and the checks that every line is there leave it out until it is true.
+    complete: bool,
 }
 
 /// In the order of `Lang`.
-const TRAITS: [Traits; 6] = [
-    Traits { code: "en", name: "English", accept_language: "Accept-Language: en,de;q=0.5", qwertz: false },
-    Traits { code: "de", name: "Deutsch", accept_language: "Accept-Language: de,en;q=0.8", qwertz: true },
-    Traits { code: "es", name: "Español", accept_language: "Accept-Language: es,en;q=0.8", qwertz: false },
-    Traits { code: "pt", name: "Português (Brasil)", accept_language: "Accept-Language: pt-BR,pt;q=0.9,en;q=0.7", qwertz: false },
-    Traits { code: "fr", name: "Français", accept_language: "Accept-Language: fr-FR,fr;q=0.9,en;q=0.7", qwertz: false },
-    Traits { code: "it", name: "Italiano", accept_language: "Accept-Language: it,en;q=0.8", qwertz: false },
+const TRAITS: [Traits; 7] = [
+    Traits { code: "en", name: "English", accept_language: "Accept-Language: en,de;q=0.5", qwertz: false, complete: true },
+    Traits { code: "de", name: "Deutsch", accept_language: "Accept-Language: de,en;q=0.8", qwertz: true, complete: true },
+    Traits { code: "es", name: "Español", accept_language: "Accept-Language: es,en;q=0.8", qwertz: false, complete: true },
+    Traits { code: "pt", name: "Português (Brasil)", accept_language: "Accept-Language: pt-BR,pt;q=0.9,en;q=0.7", qwertz: false, complete: true },
+    Traits { code: "fr", name: "Français", accept_language: "Accept-Language: fr-FR,fr;q=0.9,en;q=0.7", qwertz: false, complete: true },
+    Traits { code: "it", name: "Italiano", accept_language: "Accept-Language: it,en;q=0.8", qwertz: false, complete: true },
+    Traits { code: "ko", name: "한국어", accept_language: "Accept-Language: ko-KR,ko;q=0.9,en;q=0.7", qwertz: false, complete: true },
 ];
 
 impl Lang {
-    pub const ALL: [Lang; 6] = [Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It];
+    pub const ALL: [Lang; 7] = [Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko];
 
     fn traits(self) -> &'static Traits {
         &TRAITS[self as usize]
@@ -80,14 +87,42 @@ impl Lang {
         self.traits().name
     }
 
-    /// The next language (A or Right on the row), round to the first after the last.
+    /// The next language on the row (A or Right; `row`), round to the first after the last.
     pub fn next(self) -> Lang {
-        Lang::ALL[(self as usize + 1) % Lang::ALL.len()]
+        step_in(&Lang::row_with(self), self, true)
     }
 
     /// The one before (Left on the row).
     pub fn previous(self) -> Lang {
-        Lang::ALL[(self as usize + Lang::ALL.len() - 1) % Lang::ALL.len()]
+        step_in(&Lang::row_with(self), self, false)
+    }
+
+    /// Whether a player is offered it (the welcome's pills, Settings' Language row, Android's first start, the system's
+    /// language at a first start): a complete language (`complete`); one still being translated only to a developer,
+    /// `POCKETUI_LANG_PREVIEW=1` (every language) or `POCKETUI_I18N_TABLE=<code>:<file>` (that one); Korean was, until it
+    /// was translated.
+    pub fn offered(self) -> bool {
+        static PREVIEW: OnceLock<(bool, Option<String>)> = OnceLock::new();
+        let (all, table) = PREVIEW.get_or_init(|| {
+            let all = std::env::var("POCKETUI_LANG_PREVIEW").is_ok_and(|v| matches!(v.trim(), "1" | "on" | "true"));
+            (all, std::env::var("POCKETUI_I18N_TABLE").ok())
+        });
+        self.offered_with(*all, table.as_deref())
+    }
+
+    /// `offered` with the developer's switches given.
+    fn offered_with(self, all: bool, table: Option<&str>) -> bool {
+        offered_if(self.complete(), self.traits().code, all, table)
+    }
+
+    /// The languages to choose from, in `ALL`'s order: the offered ones, and the one in use if it is not (a developer's
+    /// Korean), so the row can always show and leave it.
+    pub fn row() -> Vec<Lang> {
+        Lang::row_with(current())
+    }
+
+    fn row_with(now: Lang) -> Vec<Lang> {
+        Lang::ALL.into_iter().filter(|l| l.offered() || *l == now).collect()
     }
 
     /// The header line a web page is asked in this language with.
@@ -100,23 +135,35 @@ impl Lang {
         self.traits().qwertz
     }
 
+    /// Its table is complete (`Traits::complete`): what the tests that want a language's own line for every string ask.
+    pub fn complete(self) -> bool {
+        self.traits().complete
+    }
+
     /// Its table of translations; English has none. Read on first use (`set` starts that on a thread).
     pub fn table(self) -> Option<&'static Table> {
-        let (slot, src, file) = match self {
-            Lang::En => return None,
-            Lang::De => (&GERMAN, DE, "de.tsv"),
-            Lang::Es => (&SPANISH, ES, "es.tsv"),
-            Lang::Pt => (&PORTUGUESE, PT, "pt.tsv"),
-            Lang::Fr => (&FRENCH, FR, "fr.tsv"),
-            Lang::It => (&ITALIAN, IT, "it.tsv"),
-        };
+        let (slot, src, file) = self.source()?;
         Some(slot.get_or_init(|| {
+            let (src, file) = override_table(std::env::var("POCKETUI_I18N_TABLE").ok(), self).unwrap_or((src, file));
             let (table, errors) = Table::parse(src);
             for e in &errors {
                 eprintln!("i18n: {file} {e}");
             }
             table
         }))
+    }
+
+    /// Its table: where it is kept once read, its lines as compiled in, its file's name; English has none.
+    fn source(self) -> Option<(&'static OnceLock<Table>, &'static str, &'static str)> {
+        Some(match self {
+            Lang::En => return None,
+            Lang::De => (&GERMAN, DE, "de.tsv"),
+            Lang::Es => (&SPANISH, ES, "es.tsv"),
+            Lang::Pt => (&PORTUGUESE, PT, "pt.tsv"),
+            Lang::Fr => (&FRENCH, FR, "fr.tsv"),
+            Lang::It => (&ITALIAN, IT, "it.tsv"),
+            Lang::Ko => (&KOREAN, KO, "ko.tsv"),
+        })
     }
 
     /// The language of a locale name as ROCKNIX writes it (`system.language=de_DE`, `LANG=es_MX.UTF-8`) or Android
@@ -142,9 +189,47 @@ impl Lang {
     /// install with neither, or with a language pocket-ui doesn't have, starts in English.
     fn from_system(lang: Option<&str>, system_language: impl FnOnce() -> Option<String>) -> Lang {
         match lang.filter(|l| !l.is_empty()) {
-            Some(lang) => Lang::from_locale(lang),
-            None => system_language().map_or(Lang::En, |l| Lang::from_locale(&l)),
+            Some(lang) => Lang::from_system_locale(lang),
+            None => system_language().map_or(Lang::En, |l| Lang::from_system_locale(&l)),
         }
+    }
+
+    /// The language of the system's or the phone's locale as a start value: `from_locale`, but English for one that is not
+    /// offered yet (a Korean phone gets English, not a Korean row with English lines).
+    pub fn from_system_locale(locale: &str) -> Lang {
+        Some(Lang::from_locale(locale)).filter(|l| l.offered()).unwrap_or_default()
+    }
+}
+
+/// `Lang::offered` of a language with the code `code`, `complete` or not, and the developer's switches.
+fn offered_if(complete: bool, code: &str, all: bool, table: Option<&str>) -> bool {
+    complete || all || table.and_then(|t| t.split_once(':')).is_some_and(|(c, _)| c == code)
+}
+
+/// `POCKETUI_I18N_TABLE=<code>:<file>`: the table of language `code` read from `file` instead of the one compiled in, once
+/// per process. For the layout matrix of a language still being translated (`tests/text_size.rs` paints Korean
+/// placeholder lines with it) and for a translator who wants to see a table without a build. Not set: nothing changes.
+fn override_table(value: Option<String>, lang: Lang) -> Option<(&'static str, &'static str)> {
+    let value = value?;
+    let (code, path) = value.split_once(':')?;
+    if code != lang.traits().code {
+        return None;
+    }
+    match std::fs::read_to_string(path) {
+        Ok(src) => Some((Box::leak(src.into_boxed_str()), Box::leak(path.to_string().into_boxed_str()))),
+        Err(e) => {
+            eprintln!("i18n: POCKETUI_I18N_TABLE {path}: {e}, using the built-in table");
+            None
+        }
+    }
+}
+
+/// The language after (`forward`) or before `now` in `row`, round at the ends; the first if `now` is not on it.
+fn step_in(row: &[Lang], now: Lang, forward: bool) -> Lang {
+    let n = row.len().max(1);
+    match row.iter().position(|l| *l == now) {
+        Some(i) => row[if forward { (i + 1) % n } else { (i + n - 1) % n }],
+        None => row.first().copied().unwrap_or_default(),
     }
 }
 
@@ -163,7 +248,7 @@ thread_local! {
 }
 
 /// Switches the whole interface at once: the next frame is painted in it (no restart, nothing to reload).
-/// `POCKETUI_LANG` (`de`, `es`, `pt`, `fr` or `en`) overrides it, for snapshots and tests. On a thread with a language of its own
+/// `POCKETUI_LANG` (`de`, `es`, `pt`, `fr`, `it`, `ko` or `en`) overrides it, for snapshots and tests. On a thread with a language of its own
 /// (`for_this_thread`) only that thread's language changes.
 pub fn set(lang: Lang) {
     let lang = std::env::var("POCKETUI_LANG").ok().map_or(lang, |l| Lang::from_locale(&l));
@@ -228,6 +313,10 @@ const FR: &str = concat!(include_str!("../assets/i18n/fr.tsv"), include_str!("..
 const IT: &str = include_str!("../assets/i18n/it.tsv");
 #[cfg(feature = "brick")]
 const IT: &str = concat!(include_str!("../assets/i18n/it.tsv"), include_str!("../assets/i18n/brick-it.tsv"));
+#[cfg(not(feature = "brick"))]
+const KO: &str = include_str!("../assets/i18n/ko.tsv");
+#[cfg(feature = "brick")]
+const KO: &str = concat!(include_str!("../assets/i18n/ko.tsv"), include_str!("../assets/i18n/brick-ko.tsv"));
 
 /// FNV-1a: the keys are short, and SipHash's protection against crafted keys buys nothing here.
 #[derive(Default, Clone, Copy)]
@@ -675,6 +764,7 @@ static SPANISH: OnceLock<Table> = OnceLock::new();
 static PORTUGUESE: OnceLock<Table> = OnceLock::new();
 static FRENCH: OnceLock<Table> = OnceLock::new();
 static ITALIAN: OnceLock<Table> = OnceLock::new();
+static KOREAN: OnceLock<Table> = OnceLock::new();
 
 type NameSet = HashSet<Box<str>, BuildHasherDefault<Fnv>>;
 
@@ -732,22 +822,68 @@ pub fn tr(s: &str) -> String {
 /// [`tr`] in `lang`.
 pub fn tr_in(lang: Lang, s: &str) -> String {
     let text = lang.table().and_then(|t| t.translate(s)).map_or_else(|| s.to_string(), Cow::into_owned);
-    if is_name(s) { text } else { device_text(Tr::Same(&text)).to_string() }
+    if is_name(s) { text } else { device_text_for(s, Tr::Same(&text)).to_string() }
 }
+
+/// Pocket Sync's lines (Settings › Connections › Pocket Sync, its row there, the pairing view): "Pocket" there is any
+/// handheld with pocket-ui (docs/user/sync.md, "Which Pockets"), so they keep the word on the TrimUI handhelds, where
+/// `brick_words` makes "the Pocket" the device itself. A Brick said "Keep saves the same on your other Bricks" and "Pair a
+/// Brick" though it pairs an RG35XX Plus or a phone as well (Neon polish 21.11.2026). Nothing else on these lines changes
+/// on a TrimUI (no HOME, no fan).
+pub fn sync_line(s: &str) -> bool {
+    SYNC_LINES.contains(&s) || (s.starts_with("Valid for ") && s.ends_with(" more, for one Pocket."))
+}
+
+/// The lines `sync_line` knows, as the code has them in English (`pocket_sync_page`, `app_pocket_sync`, Settings'
+/// Connections list). `sync_lines_with_pocket_are_all_known` checks the files for one it doesn't.
+pub const SYNC_LINES: &[&str] = &[
+    "Keep saves the same on your other Pockets, without a computer.",
+    "Sync with my Pockets",
+    "Pair a Pocket",
+    "Syncs saves with your other Pockets. No account.",
+    "Open on both Pockets, then enter the pairing code.",
+    "Which Pockets",
+    "Pockets with pocket-ui OS, pocket-ui on the TrimUI Brick and on dArkOS, and pocket-ui for Android, on the same Wi-Fi or in your Tailscale.",
+    "Each Pocket",
+    "Paired Pockets show by model. Played on both? Nothing gets overwritten: you choose.",
+    "Pockets with pocket-ui OS, pocket-ui on the TrimUI Brick and on dArkOS, and pocket-ui for Android.",
+    "That Pocket did not answer.",
+    "Off. Turn it on for every Pocket you want to sync.",
+    "No Pocket paired yet. Open Pair a Pocket on both devices.",
+    "Direct sync over your Wi-Fi or Tailscale. No cloud.",
+    "This Pocket's code",
+    "Pockets nearby showing a code",
+    "Searching… Open Pair a Pocket on the other Pocket on the same Wi-Fi.",
+    "Pick the other Pocket, enter its code.",
+];
 
 /// Printed button names follow the hardware, after translation and before measuring/wrapping. Names of games
 /// bypass this in the caller; raw manual prose uses it too. Other devices keep their HOME key.
 pub fn device_text(text: Tr<'_>) -> Tr<'_> {
+    device_text_for("", text)
+}
+
+/// `device_text` for the line `s` as the code has it (English): Pocket Sync's lines keep their "Pocket" (`brick_line`).
+pub fn device_text_for<'a>(s: &str, text: Tr<'a>) -> Tr<'a> {
     #[cfg(feature = "brick")]
     if matches!(crate::device::current().model, Some(crate::device::Model::Brick(_)))
         && (text.contains("HOME") || text.contains("Pocket") || FANLESS_NAMES.iter().any(|(long, _)| text.contains(long)))
     {
-        return Tr::Shared(Arc::from(brick_text(&text)));
+        return Tr::Shared(Arc::from(brick_line(s, &text)));
     }
+    #[cfg(not(feature = "brick"))]
+    let _ = s;
     if crate::device::no_fan() && FANLESS_NAMES.iter().any(|(long, _)| text.contains(long)) {
         return Tr::Shared(Arc::from(fanless_text(&text)));
     }
     text
+}
+
+/// What the line `s` (as the code has it, in English) says on the Brick, from its translation: `brick_text`, but Pocket
+/// Sync's lines keep "Pocket" (`sync_line`).
+#[cfg(feature = "brick")]
+pub fn brick_line(s: &str, translated: &str) -> String {
+    if sync_line(s) { fanless_text(&translated.replace("HOME", "MENU")) } else { brick_text(translated) }
 }
 
 /// What a line says on the Brick: MENU for HOME, Brick for the handheld's "Pocket" (`brick_words`), its page names.
@@ -1072,8 +1208,12 @@ mod tests {
         t
     }
 
-    /// Every language's table, by its file's name.
-    const SHIPPED: [(&str, &str); 5] = [("de.tsv", DE), ("es.tsv", ES), ("pt.tsv", PT), ("fr.tsv", FR), ("it.tsv", IT)];
+    /// Every complete language's table (`Lang::complete`), by its file's name: what the checks below hold to every line. A
+    /// language still being translated (Korean) joins by itself the day it is set `complete: true` (nightly 22.11.2026:
+    /// the list was written by hand).
+    fn shipped() -> Vec<(&'static str, &'static str)> {
+        Lang::ALL.into_iter().filter(|l| l.complete()).filter_map(Lang::source).map(|(_, src, file)| (file, src)).collect()
+    }
 
     /// A table's lines: the English side as it is written, the rest of the line.
     fn lines_of(src: &'static str) -> Vec<(&'static str, &'static str)> {
@@ -1082,7 +1222,7 @@ mod tests {
 
     #[test]
     fn the_shipped_tables_parse_cleanly() {
-        for (file, src) in SHIPPED {
+        for (file, src) in shipped() {
             let (t, errors) = Table::parse(src);
             assert!(errors.is_empty(), "assets/i18n/{file}:\n{}", errors.join("\n"));
             assert!(!t.is_empty());
@@ -1101,7 +1241,7 @@ mod tests {
             h
         };
         let mut bad = missing_lines("de.tsv");
-        for (file, src) in SHIPPED {
+        for (file, src) in shipped() {
             for (en, tr) in lines_of(src) {
                 if tr.trim().is_empty() {
                     bad.push(format!("{file}: an empty line for {en:?}"));
@@ -1119,14 +1259,14 @@ mod tests {
     #[test]
     #[ignore = "release check: every language complete (scripts/release-check.sh)"]
     fn every_language_has_every_line() {
-        let bad: Vec<String> = SHIPPED.iter().flat_map(|(file, _)| missing_lines(file)).collect();
+        let bad: Vec<String> = shipped().into_iter().flat_map(|(file, _)| missing_lines(file)).collect();
         assert!(bad.is_empty(), "{} lines missing:\n{}", bad.len(), bad.join("\n"));
     }
 
     /// The lines some shipped table has and `file` has not.
     fn missing_lines(file: &str) -> Vec<String> {
-        let all: BTreeSet<&str> = SHIPPED.iter().flat_map(|(_, src)| lines_of(src)).map(|(en, _)| en).collect();
-        let src = SHIPPED.iter().find(|(f, _)| *f == file).unwrap().1;
+        let all: BTreeSet<&str> = shipped().into_iter().flat_map(|(_, src)| lines_of(src)).map(|(en, _)| en).collect();
+        let src = shipped().into_iter().find(|(f, _)| *f == file).unwrap().1;
         let has: BTreeSet<&str> = lines_of(src).into_iter().map(|(en, _)| en).collect();
         all.into_iter().filter(|en| !has.contains(en)).map(|en| format!("{file} has no line for {en:?}")).collect()
     }
@@ -1143,7 +1283,7 @@ mod tests {
     #[test]
     fn the_names_kept_in_english_stay_english() {
         let keep = include_str!("../assets/i18n/keep.txt");
-        for (file, src) in SHIPPED {
+        for (file, src) in shipped() {
             let (t, _) = Table::parse(src);
             let changed: Vec<String> = keep
                 .lines()
@@ -1155,6 +1295,9 @@ mod tests {
                 .filter(|l| !(file == "pt.tsv" && (*l == "‹ Warm ›" || *l == "‹ Scanlines ›" || l.starts_with("Code "))))
                 .filter(|l| !(file == "fr.tsv" && (*l == "‹ Warm ›" || *l == "‹ Scanlines ›" || l.starts_with("Code "))))
                 .filter(|l| !(file == "it.tsv" && (*l == "‹ Warm ›" || *l == "‹ Normal ›" || *l == "‹ Scanlines ›" || l.starts_with("Code "))))
+                // Korean says Home, Auto, Max, Original and Metroidvania in its own words (홈, 자동, 최대, 오리지널, 메트로배니아), as
+                // Korean menus do.
+                .filter(|l| !(file == "ko.tsv" && (["Home", "Auto", "Max", "‹ Warm ›", "‹ Normal ›", "‹ Scanlines ›", "‹ Original ›", "Metroidvania"].contains(l) || l.starts_with("Code "))))
                 .filter_map(|name| t.translate(name).filter(|g| g != name).map(|g| format!("{name:?} -> {g:?}")))
                 .collect();
             assert!(changed.is_empty(), "{file}: {} names the table changes:\n{}", changed.len(), changed.join("\n"));
@@ -1172,7 +1315,7 @@ mod tests {
     #[test]
     fn a_translated_line_is_never_looked_up_as_english_again() {
         // `Text::fit` returns the translation, which its caller then draws: it must come back as it is.
-        for (file, src) in SHIPPED {
+        for (file, src) in shipped() {
             let (t, _) = Table::parse(src);
             let bad: Vec<String> = t
                 .entries()
@@ -1403,16 +1546,23 @@ mod tests {
         for italian in ["it", "IT", "it_IT", "it-IT", "it_CH.UTF-8", "it-CH", "it.UTF-8"] {
             assert_eq!(Lang::from_locale(italian), Lang::It, "{italian}");
         }
-        for other in ["est", "et_EE", "eo", "ptx", "fra", "frp", "ita", "itx_IT", "C.UTF-8"] {
+        for korean in ["ko", "KO", "ko_KR", "ko-KR", "ko_KR.UTF-8", "ko_KR.eucKR"] {
+            assert_eq!(Lang::from_locale(korean), Lang::Ko, "{korean}");
+        }
+        for other in ["est", "et_EE", "eo", "ptx", "fra", "frp", "ita", "itx_IT", "kor", "kok_IN", "C.UTF-8"] {
             assert_eq!(Lang::from_locale(other), Lang::En, "{other}");
         }
     }
 
     #[test]
     fn the_row_walks_through_every_language_both_ways() {
-        assert_eq!([Lang::En.next(), Lang::De.next(), Lang::Es.next(), Lang::Pt.next(), Lang::Fr.next(), Lang::It.next()], [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::En]);
-        assert_eq!([Lang::En.previous(), Lang::De.previous(), Lang::Es.previous(), Lang::Pt.previous(), Lang::Fr.previous(), Lang::It.previous()], [Lang::It, Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr]);
-        assert_eq!(Lang::ALL.map(Lang::name), ["English", "Deutsch", "Español", "Português (Brasil)", "Français", "Italiano"]);
+        assert_eq!(Lang::ALL.map(Lang::next), [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::En]);
+        assert_eq!(Lang::ALL.map(Lang::previous), [Lang::Ko, Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It]);
+        // With every language offered, the whole round.
+        let all = Lang::ALL;
+        assert_eq!(all.map(|l| step_in(&all, l, true)), [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::En]);
+        assert_eq!(all.map(|l| step_in(&all, l, false)), [Lang::Ko, Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It]);
+        assert_eq!(Lang::ALL.map(Lang::name), ["English", "Deutsch", "Español", "Português (Brasil)", "Français", "Italiano", "한국어"]);
         assert_eq!(serde_json::to_string(&Lang::Es).unwrap(), "\"es\"");
         assert_eq!(serde_json::to_string(&Lang::Pt).unwrap(), "\"pt\"");
         assert_eq!(serde_json::from_str::<Lang>("\"pt\"").unwrap(), Lang::Pt);
@@ -1420,6 +1570,78 @@ mod tests {
         assert_eq!(serde_json::from_str::<Lang>("\"fr\"").unwrap(), Lang::Fr);
         assert_eq!(serde_json::to_string(&Lang::It).unwrap(), "\"it\"");
         assert_eq!(serde_json::from_str::<Lang>("\"it\"").unwrap(), Lang::It);
+        assert_eq!(serde_json::to_string(&Lang::Ko).unwrap(), "\"ko\"");
+        assert_eq!(serde_json::from_str::<Lang>("\"ko\"").unwrap(), Lang::Ko);
+    }
+
+    #[test]
+    fn a_table_file_named_in_the_environment_stands_in_for_its_language_only() {
+        let dir = crate::testutil::TestDir::new("i18n-table");
+        let file = dir.join("ko.tsv");
+        std::fs::write(&file, "Settings\t설정\n").unwrap();
+        let value = Some(format!("ko:{}", file.display()));
+        let ko = override_table(value.clone(), Lang::Ko).map(|(src, _)| Table::parse(src).0);
+        assert!(override_table(value, Lang::It).is_none(), "another language keeps its own table");
+        assert!(override_table(None, Lang::Ko).is_none());
+        // A file that is missing or empty: the table compiled in (missing), an empty table (empty: English everywhere).
+        assert!(override_table(Some(format!("ko:{}", dir.join("missing.tsv").display())), Lang::Ko).is_none());
+        std::fs::write(dir.join("empty.tsv"), "").unwrap();
+        let empty = override_table(Some(format!("ko:{}", dir.join("empty.tsv").display())), Lang::Ko).map(|(src, _)| Table::parse(src).0);
+        assert_eq!(empty.and_then(|t| t.translate("Settings").map(Cow::into_owned)), None);
+        assert!(override_table(Some("ko".into()), Lang::Ko).is_none(), "no file named");
+        assert_eq!(ko.and_then(|t| t.translate("Settings").map(Cow::into_owned)).as_deref(), Some("설정"));
+    }
+
+    /// The checks that want every line (`every_language_has_every_line` and the others over `shipped`) take exactly the
+    /// complete languages, from `Lang::ALL`: Korean now, the next language by setting `complete: true`, nothing to list.
+    #[test]
+    fn the_completeness_checks_take_every_complete_language_and_no_other() {
+        let files: Vec<&str> = shipped().into_iter().map(|(file, _)| file).collect();
+        let complete: Vec<Lang> = Lang::ALL.into_iter().filter(|l| *l != Lang::En && l.complete()).collect();
+        assert_eq!(files.len(), complete.len());
+        for lang in Lang::ALL.into_iter().filter(|l| *l != Lang::En) {
+            let file = lang.source().unwrap().2;
+            assert_eq!(files.contains(&file), lang.complete(), "{lang:?} ({file})");
+        }
+        assert_eq!(files, ["de.tsv", "es.tsv", "pt.tsv", "fr.tsv", "it.tsv", "ko.tsv"]);
+    }
+
+    /// Lead 22.11.2026: a language still being translated (`complete: false`, Korean until it was) is not offered: not
+    /// on the row (the welcome's pills and Settings walk `row`, `next`, `previous`), and its system or phone starts in
+    /// English. A developer reaches it with `POCKETUI_LANG_PREVIEW=1` or `POCKETUI_I18N_TABLE=<code>:<file>`.
+    #[test]
+    fn a_language_still_being_translated_is_not_offered_until_it_is_complete() {
+        assert!(!offered_if(false, "ko", false, None));
+        assert!(offered_if(false, "ko", true, None));
+        assert!(offered_if(false, "ko", false, Some("ko:/tmp/ko.tsv")) && !offered_if(false, "ko", false, Some("it:/tmp/it.tsv")));
+        assert!(!offered_if(false, "ko", false, Some("ko")), "no file named");
+        assert!(offered_if(true, "it", false, None));
+        // Every language is complete and offered now.
+        assert!(Lang::ALL.iter().all(|l| l.complete() && l.offered()));
+        assert_eq!(Lang::row(), Lang::ALL);
+    }
+
+    /// Korean is switched on (`complete`): offered on the row, a Korean system or phone starts in it, and the
+    /// completeness checks hold it to every line (`shipped`).
+    #[test]
+    fn korean_is_offered_and_held_to_every_line() {
+        let (_, errors) = Table::parse(KO);
+        assert!(errors.is_empty(), "{errors:?}");
+        let ko = Lang::Ko.table().expect("a table of its own");
+        for (line, korean) in [("Settings", "설정"), ("Continue", "계속하기"), ("Language", "언어"), ("The language of menus and messages.", "메뉴와 메시지 언어예요.")] {
+            assert_eq!(ko.translate(line).as_deref(), Some(korean), "{line}");
+        }
+        assert!(Lang::Ko.complete() && Lang::row().contains(&Lang::Ko));
+        assert!(shipped().into_iter().any(|(file, _)| file == "ko.tsv"));
+        assert_eq!(Lang::from_system(Some("ko_KR.UTF-8"), || None), Lang::Ko);
+        assert_eq!(Lang::from_system(None, || Some("ko_KR".into())), Lang::Ko);
+        assert_eq!(Lang::from_system_locale("ko"), Lang::Ko, "a Korean phone");
+        assert_eq!(Lang::It.next(), Lang::Ko);
+        assert_eq!(Lang::Ko.next(), Lang::En);
+        let _ko = for_this_thread(Lang::Ko);
+        assert_eq!(current(), Lang::Ko);
+        let mut tr = Cache::default();
+        assert_eq!(&*tr.get("Settings"), "설정");
     }
 
     #[test]
@@ -1430,7 +1652,8 @@ mod tests {
         assert!(Lang::Pt.accept_language().contains("pt-BR,"));
         assert!(Lang::Fr.accept_language().contains("fr-FR,"));
         assert!(Lang::It.accept_language().contains("it,"));
-        assert!(Lang::De.qwertz() && !Lang::En.qwertz() && !Lang::Es.qwertz() && !Lang::Pt.qwertz() && !Lang::Fr.qwertz() && !Lang::It.qwertz());
+        assert!(Lang::Ko.accept_language().contains("ko-KR,"));
+        assert!(Lang::De.qwertz() && Lang::ALL.iter().filter(|l| l.qwertz()).count() == 1);
     }
 
     #[test]
@@ -1454,6 +1677,40 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod sync_line_tests {
+    /// Every line of Pocket Sync's pages that says "Pocket" is one `sync_line` knows (a new one would say "Brick" on a
+    /// TrimUI again), and every line it knows is still in the code.
+    #[test]
+    fn sync_lines_with_pocket_are_all_known() {
+        let files = [include_str!("pocket_sync_page.rs"), include_str!("app_pocket_sync.rs")];
+        let mut unknown = Vec::new();
+        for file in files {
+            // The tests at the end of a file have made-up lines of their own.
+            let code = file.split("#[cfg(test)]").next().unwrap_or(file);
+            for line in code.lines().filter(|l| !l.trim_start().starts_with("//")) {
+                for lit in line.split('"').skip(1).step_by(2) {
+                    // Names: the feature's, the models'; a placeholder name; a format string (`sync_line` matches its result).
+                    let named = lit.replace("Pocket Sync", "").replace("Retroid Pocket", "");
+                    if !named.contains("Pocket") || lit == "Pocket" || lit.contains('{') {
+                        continue;
+                    }
+                    if !super::SYNC_LINES.contains(&lit) {
+                        unknown.push(lit.to_string());
+                    }
+                }
+            }
+        }
+        assert!(unknown.is_empty(), "Pocket Sync lines that would say Brick on a TrimUI: {unknown:?}");
+        let all = format!("{}{}{}", files[0], files[1], include_str!("main.rs"));
+        for line in super::SYNC_LINES {
+            assert!(all.contains(&format!("\"{line}\"")), "no longer in the code: {line}");
+        }
+        assert!(super::sync_line("Valid for 4:59 more, for one Pocket."));
+        assert!(!super::sync_line("Access this Pocket from other devices."));
+    }
+}
+
 #[cfg(all(test, feature = "brick"))]
 mod brick_tests {
     use super::*;
@@ -1463,8 +1720,8 @@ mod brick_tests {
     #[test]
     fn the_brick_is_called_the_brick_and_other_pockets_keep_their_name() {
         for (line, shown) in [
-            ("Reach the Pocket from your other devices.", "Reach the Brick from your other devices."),
-            ("Log in to this Pocket from a computer on the same Wi-Fi, with SSH.", "Log in to this Brick from a computer on the same Wi-Fi, with SSH."),
+            ("Access this Pocket from other devices.", "Reach the Brick from your other devices."),
+            ("Connect to this Pocket over SSH from a PC on your Wi-Fi.", "Log in to this Brick from a computer on the same Wi-Fi, with SSH."),
             ("Pocket", "Brick"),
             ("Erreiche den Pocket von deinen anderen Geräten.", "Erreiche den Brick von deinen anderen Geräten."),
             ("Los ajustes de este Pocket.", "Los ajustes de este Brick."),
@@ -1474,7 +1731,7 @@ mod brick_tests {
             ("die Einstellungen dieses Pockets", "die Einstellungen dieses Bricks"),
             ("Retroid Pocket 5, Neo Geo Pocket Color, Game Boy Pocket, GB Pocket", "Retroid Pocket 5, Neo Geo Pocket Color, Game Boy Pocket, GB Pocket"),
             ("PocketCore, Pocket5, PocketSlim, pocket-ui", "PocketCore, Pocket5, PocketSlim, pocket-ui"),
-            // A feature's name keeps its word; the handhelds it pairs are Bricks there.
+            // A feature's name keeps its word. (Its own lines keep "Pocket" before they get here: `sync_line`.)
             ("Pocket Sync", "Pocket Sync"),
             ("Was Pocket Sync abgleicht", "Was Pocket Sync abgleicht"),
             ("Pocket Sync · With TrimUI Brick at 14:05", "Pocket Sync · With TrimUI Brick at 14:05"),
@@ -1482,6 +1739,29 @@ mod brick_tests {
         ] {
             assert_eq!(brick_words(line), shown);
         }
+    }
+
+    /// Neon polish 21.11.2026: Pocket Sync on a Brick said "Keep saves the same on your other Bricks" and "Pair a Brick",
+    /// though a Brick pairs an RG35XX Plus, a Mini V2 or a phone as well. There "Pocket" is any handheld with pocket-ui,
+    /// in every language; the rest of the Brick's lines still call it the Brick.
+    #[test]
+    fn pocket_sync_keeps_pocket_for_any_handheld_in_every_language() {
+        let lines = SYNC_LINES.iter().map(|l| l.to_string()).chain(["Valid for 4:59 more, for one Pocket.".to_string()]);
+        for line in lines {
+            for lang in [Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It] {
+                let translated = lang.table().and_then(|t| t.translate(&line)).map_or_else(|| line.clone(), Cow::into_owned);
+                let shown = brick_line(&line, &translated);
+                assert!(!shown.contains("Brick") || line.contains("Brick"), "{lang:?}: {line} -> {shown}");
+                assert!(!shown.contains("Smart Pro"), "{lang:?}: {line} -> {shown}");
+            }
+        }
+        let line = "Keep saves the same on your other Pockets, without a computer.";
+        assert_eq!(brick_line(line, line), line);
+        assert_eq!(brick_line("Pair a Pocket", "Pair a Pocket"), "Pair a Pocket");
+        let de = Lang::De.table().and_then(|t| t.translate(line)).map(Cow::into_owned).unwrap_or_default();
+        assert!(de.contains("Pocket") && brick_line(line, &de) == de, "{de}");
+        // Every other line still calls the handheld itself the Brick.
+        assert_eq!(brick_line("Access this Pocket from other devices.", "Access this Pocket from other devices."), "Reach the Brick from your other devices.");
     }
 
     /// The pause menu's Performance note on a real Brick (2026-11-07) still sent players to "Performance & fan",

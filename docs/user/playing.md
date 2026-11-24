@@ -36,7 +36,7 @@ rows show previews too:
   games without box art. Empty shelves simply read "No games here yet".
 - Right after boot, while Curator scans your library for a moment, rows display titles cleanly with no blank boxes.
 
-Any game hidden from its card (**Hide or delete**, [Hide or delete a game](library.md#hide-or-delete-a-game)) disappears
+Any game hidden from its card (**Hide from the shelf**, [Hide or delete a game](library.md#hide-or-delete-a-game)) disappears
 from shelves, search and the game switcher; unhide it under Settings → System → [Storage](storage.md) → Hidden games.
 Deleting from the SD card asks twice to confirm.
 
@@ -220,7 +220,7 @@ a line and a dot when **Old-TV switch-on** is enabled; a handheld's display simp
 open when Continue is available. This also works in Easy and Kids Mode when Cozy is selected.
 
 The shelf accepts input immediately. Any button or touch ends the effect and acts on the shelf in the same press.
-Quick, Reduced and Off return directly to the shelf. Case sounds use the existing Sounds and Case sounds switches.
+Quick, Reduced and Off return directly to the shelf. Case sounds use the existing Sounds and Case sounds switches. With Playful on, the PSP door has its own click as it opens or closes.
 
 ## Recent games
 

@@ -68,6 +68,15 @@ audio stats
 # src/app_bluetooth.rs
 Failed to pair: org.bluez.Error.AuthenticationFailed
 
+# src/app_cabinet_tv.rs (parts of a slow frame in the Cabinet's frame log)
+tv compose
+tv glow
+tv console
+tv hand shadow made
+tv hand shadow
+tv soft shadow
+tv blit
+
 # src/app_cabinet.rs
 big spine
 box game
@@ -187,6 +196,7 @@ no SWAYSOCK
 C Buttons Mode
 
 # src/core_options.rs
+Number of frames
 super game boy
 system type
 frame skip
@@ -416,6 +426,7 @@ Seiken Densetsu 3 (Japan).bps
 game exit: shelf ready
 after a game
 after a tool
+after an update check
 after PC streaming
 menu: window known
 menu: screenshot taken
@@ -647,6 +658,8 @@ the touch screen is the lower screen's, which only shows the game (buttons for t
 touch: ignored, {s}
 
 # src/wifi.rs
+interfaces = wlan0
+interfaces = {s}
 NAME,UUID,TYPE,ACTIVE,STATE
 UUID,TYPE
 iw reg set: {s}
@@ -709,6 +722,34 @@ X-Shot-Age
 X-Screen-Hidden
 Choose a system for this file.
 Unknown kind of upload.
+
+# src/web/http.rs
+Transfer-Encoding: chunked
+Content-Length: {s}
+
+# src/web/pockets.rs
+okAt
+downSince
+
+# src/web/zip.rs (an error that ends a download, never shown)
+the ZIP would be too large
+
+# src/web/saves.rs (answers to the browser, English like src/web/api.rs's)
+attachment; filename="{s}"; filename*=UTF-8''{s}
+Content-Disposition
+This game's name can't hold a save.
+This game keeps its saves in its own folder.
+This game has no place for saves.
+{s} is not a save or a save state. Saves end in .srm or .sav, states in .pstate or .state.
+That is a state's picture. The Pocket makes it when you save.
+Can't make the states folder: {s}
+The Pocket's saves folder is missing.
+The game's folder is missing.
+That place is outside the saves.
+Can't make the uploads folder.
+The save's place can't be named.
+The save that is there could not be backed up, so nothing was changed. {s}
+The save that is there could not be read, so nothing was changed.
 
 # src/web/assets.rs
 text/html; charset=utf-8
@@ -889,6 +930,7 @@ the copy came out short
 # src/archive.rs: the sentences are put together from a first part and its advice; de.tsv translates each whole
 # (shown by the notice:* snapshot states)
 The zip file
+The 7z file
 {s} holds {s} game files.
 {s} holds 2 game files.
 {s} is password-protected, and pocket-core can't open it.
@@ -1947,6 +1989,9 @@ the console (plain)
 the case back in its row
 the case back in its row, under the console
 the case on its way back to its row
+the case on its way back to its row, under the console
+{s} {s} ms: {s} changes sides over the console ({s} at {s},{s} {s}x{s}, the console at {s},{s} {s}x{s})
+{s} {s} ms: the game went behind the console and comes out clear of it on its way
 going back into its row
 the case back in its row is painted over {s}, which stands in front of it
 the console stands twice: {s} and {s}
@@ -2030,6 +2075,7 @@ the game picked to make room, up out of the row
 shelf case {s}
 crate case {s} selected, {s} ms
 crate case {s} out, shelf game {s} picked
+home, row {s} selected, {s} ms: {s}
 # src/pocket_sync/net.rs (the protocol between Pockets)
 HTTP/1.1 401 Unpaired
 X-Pocket-Sig
@@ -2054,3 +2100,74 @@ TORCHIC
 photo {s} into its case
 in its case
 share {s} x={s} y={s} w={s} h={s} canvas={s}x{s}
+
+# Cover edit protocol and matching log prefixes for the diagnosis ZIP.
+A game is running. Change the cover once it ends.
+That game is not on the Pocket any more.
+cover reset
+coverRevision
+coverCustom
+first frame after
+launch: game process started
+audio: the stream failed;
+audio: new stream
+audio: no new stream;
+audio: output stalled;
+sleep: woke after
+hasLog
+
+# src/web/media.rs, src/web/updates.rs, src/app_web.rs: JSON keys, headers, and English API error replies
+A game is running. Quit the game before deleting photos.
+A game is running. Quit the game before deleting screenshots.
+albumOn
+albumTotal
+shotsTotal
+shelfTotal
+{s} - {s}
+Invalid photo name.
+That photo is already gone.
+That photo cannot be deleted.
+That screenshot is already gone.
+Couldn't delete the screenshot: {s}
+attachment; filename="{s}"
+releaseBuild
+stepLine
+lowBattery
+restartingSoon
+
+# src/ra_hotkeys.rs: the InputPlumber pad's name, looked up in /proc/bus/input/devices (as setsettings.sh does)
+Sony Interactive Entertainment DualSense Wireless Controller
+
+# src/web/api.rs, app_storage.rs: the game page's Delete (21.11.): a JSON key, and an answer to the browser (English, as the others)
+saveFiles
+Games can't be deleted on this device: their folder is read only.
+# Korean: the Accept-Language header.
+Accept-Language: ko-KR,ko;q=0.9,en;q=0.7
+# src/libretro.rs: pocket-core's start steps in the first-frame log line (R36S hand test #7/#12)
+core library
+core init
+game read
+game loaded
+
+# src/startup.rs: kernel counters in the R36S N64 startup log
+main={s} rchar={s} read_bytes={s} mem_available_kib={s}
+
+# src/app_bigcard_bench.rs (bench-bigcard: labels of measured frames on stdout, and the bench's copied systems)
+Bench {s}
+round {s}: switch to {s} ({s} games)
+round {s}: back from {s}
+open the biggest
+up to the biggest
+move {s} along {s}
+# Background file reader and failed start messages in the log.
+shelf reader interrupted
+after a cancelled start
+
+# src/ports_card.rs (its tests: made-up files and a stand-in's log)
+Dome Romantik
+package {s} -> {s}
+Damaged.
+Cut Off
+
+# src/setup.rs: the PortMaster-from-the-card page's name in the status file
+ports: from the card

@@ -22,7 +22,7 @@ use super::auth::{self, Browser, Tried};
 use super::files::{self, Refused, Roots};
 use super::http::{self, BadRequest, Body, Request, Response};
 use super::net::{self, LocalApi, SelfNode, Whois};
-use super::{assets, Edit, Shared};
+use super::{assets, cover_edit, diagnostics, Edit, Shared};
 use crate::library::{self, SysInfo};
 use crate::library_meta::{LibraryMeta, Status};
 
@@ -37,7 +37,7 @@ const PAGE: usize = 600;
 /// What a pairing try that did not pair says, whatever the reason.
 pub const NOT_PAIRED: &str = "That code is not right, or no code is showing. On the Pocket: Settings › Connections › Web companion › Pair a browser.";
 /// A cover larger than this is not served (nor read).
-const COVER_MAX: u64 = 8 << 20;
+const COVER_MAX: u64 = crate::covers::custom::MAX_BYTES;
 /// A screenshot is a PNG of the screen at most (1240 x 1080); this is far above one.
 const SHOT_MAX: u64 = 16 << 20;
 /// A game's page lists this many screenshots, the newest.
@@ -126,7 +126,7 @@ impl LibCache {
         LibCache { systems, info, by_id, by_path, search, at: Instant::now(), epoch: 0 }
     }
 
-    fn game(&self, id: &str) -> Option<(usize, usize)> {
+    pub(crate) fn game(&self, id: &str) -> Option<(usize, usize)> {
         self.by_id.get(id).copied()
     }
 }
@@ -315,9 +315,9 @@ pub fn handle(ctx: &Ctx, conn: &Conn, stream: TcpStream) {
     let t0 = Instant::now();
     let (resp, head_only, line) = match http::read_head(&mut reader) {
         Ok(req) => {
-            // An upload's body may take hours (a minute per read at most); any other body is at most 64 KB and gets
-            // the same short deadline as the head, so a client trickling a pairing body can't keep a worker.
-            reader.get_mut().until = if req.method == "POST" && req.path == "/api/upload" { None } else { Some(Instant::now() + ctx.deadline) };
+            // A game-file upload can take hours (a minute per read at most). Other requests, including cover
+            // uploads, have the same short deadline as the head so slow bodies cannot keep a worker.
+            reader.get_mut().until = if req.method == "POST" && matches!(req.path.as_str(), "/api/upload" | "/api/saves/upload") { None } else { Some(Instant::now() + ctx.deadline) };
             let resp = respond(ctx, conn, &req, &mut reader);
             (resp, req.method == "HEAD", Some(format!("{} {}", req.method, req.path)))
         }
@@ -391,6 +391,8 @@ pub fn respond(ctx: &Ctx, conn: &Conn, req: &Request, body: &mut impl BufRead) -
     match (m, path) {
         ("POST", "/api/pair") => return pair(ctx, conn, req, body),
         (_, "/api/session") => return session(ctx, who.as_ref()),
+        // The page's texts in the Pocket's language: before pairing too (`texts.rs`).
+        (_, "/api/texts") => return super::texts::answer(),
         _ => {}
     }
     let Some(who) = who else {
@@ -407,8 +409,20 @@ pub fn respond(ctx: &Ctx, conn: &Conn, req: &Request, body: &mut impl BufRead) -
         (_, "/api/library") => Ok(library_overview(ctx)),
         (_, "/api/games") => games(ctx, req),
         (_, "/api/game") => game(ctx, req),
-        (_, "/api/cover") => cover(ctx, req),
+        ("GET" | "HEAD", "/api/cover") => cover(ctx, req),
+        ("POST", "/api/cover/change") => cover_edit::change(ctx, req, body, false),
+        ("POST", "/api/cover/reset") => cover_edit::change(ctx, req, body, true),
+        ("GET" | "HEAD", "/api/diagnostics") => Ok(diagnostics::download(&ctx.shared.data_dir)),
+        ("GET" | "HEAD", "/api/diagnostics/status") => Ok(diagnostics::status(&ctx.shared.data_dir)),
         (_, "/api/shot") => shot(ctx, req),
+        (_, "/api/album") => Ok(super::media::list(ctx)),
+        (_, "/api/album/photo") => super::media::photo(ctx, req),
+        (_, "/api/media/zip") => super::media::zip(ctx, req),
+        ("POST", "/api/album/delete") => super::media::delete_photo(ctx, req, body),
+        ("POST", "/api/shot/delete") => super::media::delete_shot(ctx, req, body),
+        (_, "/api/update") => Ok(super::updates::status(ctx)),
+        ("POST", "/api/update/check") => super::updates::check(ctx),
+        ("POST", "/api/update/install") => super::updates::install(ctx, req, body),
         (_, "/api/stats") => Ok(stats(ctx)),
         (_, "/api/battery") => Ok(battery(ctx)),
         (_, "/api/screenshot") => Ok(screenshot(ctx)),
@@ -416,6 +430,14 @@ pub fn respond(ctx: &Ctx, conn: &Conn, req: &Request, body: &mut impl BufRead) -
         ("POST", "/api/upload/check") => Ok(upload_check(ctx, req)),
         ("POST", "/api/upload") => Ok(upload(ctx, req, body)),
         ("POST", "/api/logout") => Ok(logout(ctx, &who)),
+        // Saves and states, Pocket Sync (`saves.rs`, `pockets.rs`).
+        (_, "/api/saves") => super::saves::list(ctx, req),
+        (_, "/api/saves/file") => super::saves::download(ctx, req),
+        (_, "/api/saves/zip") => super::saves::zip_of(ctx, req),
+        (_, "/api/saves/all") => Ok(super::saves::summary(ctx)),
+        ("POST", "/api/saves/check") => super::saves::check(ctx, req),
+        ("POST", "/api/saves/upload") => Ok(super::saves::upload(ctx, req, body)),
+        (_, "/api/pockets") => Ok(Response::json(200, &super::pockets::overview(ctx))),
         ("POST", p) if p.starts_with("/api/") => edit(ctx, p, req, body),
         _ => Err(Response::error(404, "Not found.")),
     };
@@ -492,7 +514,7 @@ fn logout(ctx: &Ctx, who: &Principal) -> Response {
 
 // --- reading ---------------------------------------------------------------------------------------------------
 
-fn json_body(req: &Request, body: &mut impl Read) -> Result<Value, Response> {
+pub(crate) fn json_body(req: &Request, body: &mut impl Read) -> Result<Value, Response> {
     let bytes = http::read_body(body, req, http::MAX_JSON).map_err(|s| Response::error(s, if s == 413 { "That request is too large." } else { "The request was cut off." }))?;
     serde_json::from_slice(&bytes).map_err(|_| Response::error(400, "Bad request."))
 }
@@ -542,13 +564,16 @@ fn row(ctx: &Ctx, lib: &LibCache, p: &Player, s: usize, g: usize) -> Value {
     let game = &sys.games[g];
     let m = p.meta.get(&game.path);
     let (last, recent_secs) = p.recents.get(&game.path).copied().unwrap_or((0, 0));
+    let (cover, cover_custom) = cover_edit::describe(&ctx.shared.data_dir, &sys.name, &game.path);
     json!({
         "id": game_id(&game.path),
         "name": game.name,
         "system": sys.name,
         "systemName": sys.fullname,
         "stripe": stripe(&sys.name),
-        "cover": crate::covers::cover_path(&ctx.shared.data_dir, &sys.name, &game.path).is_file(),
+        "cover": cover.is_some(),
+        "coverRevision": cover,
+        "coverCustom": cover_custom,
         "favorite": p.favorites.contains(&game.path),
         "status": status_key(m.status),
         "sessions": m.sessions,
@@ -560,7 +585,7 @@ fn row(ctx: &Ctx, lib: &LibCache, p: &Player, s: usize, g: usize) -> Value {
 }
 
 /// The system's edge stripe on the shelf, as CSS ("#c8102e").
-fn stripe(system: &str) -> String {
+pub(crate) fn stripe(system: &str) -> String {
     format!("#{:06x}", crate::bezel::system_colour(system) & 0xff_ffff)
 }
 
@@ -673,8 +698,19 @@ fn game(ctx: &Ctx, req: &Request) -> Result<Response, Response> {
             .collect();
         v["pictures"] = json!(kinds);
     }
+    // "Delete from the card": what it frees, as the Pocket's sheet says it; absent where games can't be deleted
+    // (dArkOS's read-only view, Android), so the page offers no button there.
+    if crate::game_files::can_delete(&gm.path) {
+        let saves_dir = ctx.roots.saves.as_ref().and_then(|_| super::saves::save_dir(&ctx.roots, &gm.path));
+        let places = crate::game_files::Places { states: &ctx.roots.states, data: &ctx.shared.data_dir, protected: &[], shared: false, saves_dir };
+        if let Ok(plan) = crate::game_files::plan(&sys.name, &gm.path, &places) {
+            v["delete"] = json!({ "bytes": plan.game_bytes(), "files": plan.game.len(), "saves": plan.kept_bytes(), "saveFiles": plan.saves.len() + plan.states.len() });
+        }
+    }
     let shots = crate::screenshot::list(&ctx.roots.screenshots, &sys.name, &stem);
     v["shots"] = json!(shots.into_iter().take(SHOTS_MAX).map(|e| e.at).collect::<Vec<_>>());
+    v["album"] = json!(super::media::game_album(ctx, &sys.name, &gm.path));
+    v["albumOn"] = json!(crate::album::on(&ctx.shared.data_dir));
     let ix = ctx.shared.curator.lock().unwrap().clone();
     if let Some(ix) = ix {
         if let Some(at) = ix.find(&gm.path) {
@@ -713,8 +749,11 @@ fn cover(ctx: &Ctx, req: &Request) -> Result<Response, Response> {
     let lib = ctx.library();
     let (s, g) = req.query("id").and_then(|id| lib.game(id)).ok_or_else(|| Response::error(404, "No cover."))?;
     let (system, rom) = (&lib.systems[s].name, &lib.systems[s].games[g].path);
-    let path = match picture_kind(req.query("kind"))? {
-        None => crate::covers::cover_path(&ctx.shared.data_dir, system, rom),
+    let kind = picture_kind(req.query("kind"))?;
+    let custom = kind.is_none().then(|| crate::covers::custom::existing(&ctx.shared.data_dir, system, rom)).flatten();
+    let is_custom = custom.is_some();
+    let path = match kind {
+        None => custom.unwrap_or_else(|| crate::covers::cover_path(&ctx.shared.data_dir, system, rom)),
         Some(_) if !crate::settings::game_pictures(&ctx.shared.data_dir) => return Err(Response::error(404, "No cover.")),
         Some(kind) => crate::game_pictures::path(&ctx.shared.data_dir, kind, system, rom),
     };
@@ -727,7 +766,9 @@ fn cover(ctx: &Ctx, req: &Request) -> Result<Response, Response> {
     if !bytes.starts_with(b"\x89PNG") {
         return Err(Response::error(404, "No cover."));
     }
-    Ok(Response::new(200, "image/png", bytes).with("Cache-Control", "private, max-age=86400"))
+    let r = Response::new(200, "image/png", bytes);
+    // A second change can have the same file size and mtime on cards with coarse timestamps.
+    Ok(if is_custom { r } else { r.with("Cache-Control", "private, max-age=86400") })
 }
 
 /// A screenshot of a game (`id`, and `at`: the time part of its name, `screenshot::Entry::at`), as the PNG it is. Read
@@ -752,7 +793,12 @@ fn shot(ctx: &Ctx, req: &Request) -> Result<Response, Response> {
         return Err(none());
     }
     // The name says when it was taken and never changes: the browser may keep it.
-    Ok(Response::new(200, "image/png", bytes).with("Cache-Control", "private, max-age=86400"))
+    let mut resp = Response::new(200, "image/png", bytes).with("Cache-Control", "private, max-age=86400");
+    if req.query("download") == Some("1") {
+        let fname = path.file_name().and_then(|n| n.to_str()).unwrap_or("screenshot.png");
+        resp = resp.with("Content-Disposition", &super::media::attachment_header(fname));
+    }
+    Ok(resp)
 }
 
 fn stats(ctx: &Ctx) -> Response {
@@ -1049,6 +1095,10 @@ fn edit(ctx: &Ctx, path: &str, req: &Request, body: &mut impl Read) -> Result<Re
             let ix = ctx.shared.curator.lock().unwrap().clone().ok_or_else(|| Response::error(503, "Curator is still reading the library."))?;
             let work = ix.find(&path).and_then(|g| ix.game(g).work.clone()).ok_or_else(|| Response::error(409, "This game has no other versions."))?;
             Edit::Preferred { work, path }
+        }
+        "/api/game/delete" => {
+            let (system, _, path) = game()?;
+            Edit::DeleteGame { system, path, with_saves: v.get("saves").and_then(|b| b.as_bool()).unwrap_or(false) }
         }
         "/api/shelves/rename" => Edit::RenameShelf { index: shelf()?, was: text_of(&v, "was"), name: text_of(&v, "name") },
         "/api/shelves/delete" => Edit::DeleteShelf { index: shelf()?, was: text_of(&v, "was") },

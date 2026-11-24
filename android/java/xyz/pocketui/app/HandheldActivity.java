@@ -11,6 +11,10 @@ import android.os.Bundle;
 public class HandheldActivity extends PocketBase {
     static { System.loadLibrary("pocket_handheld"); }
     @Override protected boolean ownsBrightness() { return true; }
+    /** The Linux pages fill their window edge to edge (no safe insets): on a phone with a camera hole the window keeps out
+     *  of the hole's edge, so nothing of a page is under it (19.11.2026, 20:9 phones: the hole stood over the pause menu
+     *  and the game info). A handheld without one (Retroid Pocket Mini V2) keeps its whole panel. */
+    @Override protected int cutoutMode() { return android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER; }
     @Override protected native boolean nativeBack();
     @Override protected native void nativeConfigurationChanged();
     @Override protected native String nativePrepareDocument(int fd,String key,String name);

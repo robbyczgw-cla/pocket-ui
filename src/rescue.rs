@@ -145,7 +145,7 @@ impl WhatHappened {
 
     /// The headline: the launcher's reason, or that safe mode was asked for.
     pub fn headline(&self) -> String {
-        self.reason.clone().unwrap_or_else(|| "Safe mode was started by hand.".to_string())
+        self.reason.clone().unwrap_or_else(|| "Safe mode opened manually.".to_string())
     }
 }
 
@@ -202,7 +202,7 @@ pub const BACK_HINT: &str = "To go back to EmulationStation: Settings › System
 /// Settings → System's row and Quick settings' row (HOME): the dialog of `LEAVE_TITLE`.
 pub const BACK_ROW: &str = "Back to EmulationStation";
 /// Under that row in Settings.
-pub const BACK_ROW_HELP: &str = "Closes pocket-ui and EmulationStation comes back. SELECT + START held does the same.";
+pub const BACK_ROW_HELP: &str = "Closes pocket-ui and returns to EmulationStation (or hold SELECT + START).";
 /// Under that row in Quick settings.
 pub const BACK_QUICK_HELP: &str = "Closes pocket-ui, EmulationStation comes back.";
 
@@ -218,6 +218,30 @@ pub enum DialogKind {
     /// Settings → Games → Shelf space switched on with this many places: Cancel, the games played last, the favourites
     /// (`shelf_space::Fill`, `app_crate`).
     ShelfSpace(u32),
+    /// Android: how to set up the Dolphin app that plays GameCube and Wii (`DOLPHIN_STEPS`). `start`: before the first such
+    /// game (Cancel, Start the game); else from the game's card (OK).
+    Dolphin { start: bool },
+}
+
+/// The Dolphin app's packages start with this (Dolphin and its builds): GameCube and Wii on Android are played there.
+pub const DOLPHIN_PACKAGE: &str = "org.dolphinemu";
+/// The card's title and the game card's row.
+pub const DOLPHIN_TITLE: &str = "Setting up Dolphin";
+/// Under the row on the game's card.
+pub const DOLPHIN_ROW_LINE: &str = "Controller, touch buttons, picture, the way back";
+/// Dolphin's own names for its settings (its Android app, 2026): it takes no start options for the overlay or the pad,
+/// so the player sets them once there (19.11.2026, a hand test on the Mini V2: small picture, touch buttons, pad not mapped).
+pub const DOLPHIN_STEPS: [&str; 5] = [
+    "GameCube and Wii games play in the Dolphin app. Set it up once, there:",
+    "1. Pad: Settings, GameCube Input › GameCube Controller 1: Standard Controller, then its Device: your built-in pad. Wii: the same in Wii Input.",
+    "2. Touch buttons off: in a game, press Back, then Overlay Controls › Toggle Controls › Toggle All.",
+    "3. Picture: Screen Orientation During Emulation: Landscape, and Graphics Settings, Aspect Ratio: Auto.",
+    "4. Back to the shelf: hold Back, or press Back and choose Exit Emulation.",
+];
+
+/// Whether `package` is the Dolphin app.
+pub fn is_dolphin(package: &str) -> bool {
+    package == DOLPHIN_PACKAGE || package.starts_with("org.dolphinemu.")
 }
 
 /// A choice in a dialog.
@@ -234,6 +258,10 @@ pub enum Choice {
     FillRecent,
     /// Shelf space: the favourites go on the shelf first.
     FillFavourites,
+    /// Dolphin's card before the first GameCube or Wii game: the game starts.
+    StartGame,
+    /// Dolphin's card from the game's card: read, closed.
+    Ok,
 }
 
 impl Choice {
@@ -248,6 +276,8 @@ impl Choice {
             Choice::Report => crate::report::ROW,
             Choice::FillRecent => "The games I played last",
             Choice::FillFavourites => "My favourites",
+            Choice::StartGame => "Start the game",
+            Choice::Ok => "OK",
         }
     }
 
@@ -262,13 +292,15 @@ impl Choice {
             Choice::Report => crate::report::ROW,
             Choice::FillRecent => "The games I played last",
             Choice::FillFavourites => "My favourites",
+            Choice::StartGame => "Start the game",
+            Choice::Ok => "OK",
         }
     }
 }
 
 /// The warning before EmulationStation, one paragraph each (docs/ES-REPLACEMENT-GAPS, 5.3).
 pub const ES_WARNING: [&str; 3] = [
-    "EmulationStation is ROCKNIX's own menu. pocket-ui stays installed: restart the Pocket to come back to it.",
+    "EmulationStation is ROCKNIX's menu. pocket-ui stays installed; restart the Pocket to return.",
     "In EmulationStation, do not use Updates. On this Pocket a system update there also rewrites the bootloader that Android needs.",
     "Do not use Factory reset either. It deletes pocket-ui and its settings.",
 ];
@@ -278,7 +310,7 @@ pub const ES_WARNING: [&str; 3] = [
 #[cfg(feature = "brick")]
 const BRICK_CARD_LEAVE: &str = "Restart pocket-ui?";
 #[cfg(feature = "brick")]
-const BRICK_CARD_LEAVE_BODY: &str = "Only pocket-ui starts again, in seconds. Your games, saves and settings stay as they are.";
+const BRICK_CARD_LEAVE_BODY: &str = "Restarts pocket-ui in seconds. Your games, saves and settings stay untouched.";
 
 /// A dialog over the page: a title, what to know, and a short list of choices; Cancel first and selected, so A
 /// pressed by mistake does nothing.
@@ -311,6 +343,7 @@ impl Dialog {
             DialogKind::OpenEs => "Open EmulationStation?",
             DialogKind::Reset => "Reset pocket-ui settings?",
             DialogKind::ShelfSpace(_) => "Which games go on the shelf?",
+            DialogKind::Dolphin { .. } => DOLPHIN_TITLE,
         }
     }
 
@@ -322,15 +355,16 @@ impl Dialog {
             DialogKind::Leave => std::iter::once(format!("Restart pocket-ui starts it afresh. {}", ES_WARNING[0])).chain(ES_WARNING[1..].iter().map(|s| s.to_string())).collect(),
             DialogKind::Reset => vec![
                 format!(
-                    "Your look, Curator, favourites, play history, covers and downloaded extras move to {}. Nothing is deleted.",
+                    "Your look, Curator, favourites, history, covers and extras move to {}. Nothing is deleted.",
                     self.backup.as_deref().unwrap_or("a backup folder beside them")
                 ),
-                "Games, saves and the passwords for file sharing and remote access stay. pocket-ui then starts like new, with the first-start setup."
+                "Games, saves, and file-sharing/SSH passwords stay safe. pocket-ui then restarts with first-time setup."
                     .to_string(),
             ],
             DialogKind::ShelfSpace(n) => vec![format!(
-                "The shelf has room for {n} games. The others go into the crate under it: open Crate on Home to swap one out and one in."
+                "Your shelf holds {n} games; the rest wait in the crate below. Open Crate on Home to swap games in or out."
             )],
+            DialogKind::Dolphin { .. } => DOLPHIN_STEPS.iter().map(|s| s.to_string()).collect(),
         }
     }
 
@@ -341,6 +375,8 @@ impl Dialog {
             DialogKind::OpenEs => &[Choice::Cancel, Choice::OpenEs],
             DialogKind::Reset => &[Choice::Cancel, Choice::Reset],
             DialogKind::ShelfSpace(_) => &[Choice::Cancel, Choice::FillRecent, Choice::FillFavourites],
+            DialogKind::Dolphin { start: true } => &[Choice::Cancel, Choice::StartGame],
+            DialogKind::Dolphin { start: false } => &[Choice::Ok],
         }
     }
 
@@ -352,7 +388,7 @@ impl Dialog {
             b if b == cancel => return DialogOut::Close,
             b if b == confirm => {
                 return match self.choices()[self.sel.min(n - 1)] {
-                    Choice::Cancel => DialogOut::Close,
+                    Choice::Cancel | Choice::Ok => DialogOut::Close,
                     c => DialogOut::Chose(c),
                 }
             }
@@ -377,7 +413,7 @@ pub fn exit_code(c: Choice) -> Option<i32> {
     match c {
         Choice::RestartUi | Choice::BackToNextui => Some(RESTART_CODE),
         Choice::OpenEs => Some(OPEN_ES_CODE),
-        Choice::Cancel | Choice::Reset | Choice::Report | Choice::FillRecent | Choice::FillFavourites => None,
+        Choice::Cancel | Choice::Reset | Choice::Report | Choice::FillRecent | Choice::FillFavourites | Choice::StartGame | Choice::Ok => None,
     }
 }
 
@@ -421,7 +457,14 @@ impl RescuePage {
         if !self.reset_done {
             rows.push(Row::ResetSettings);
         }
-        rows.extend([Row::OpenEs, Row::PowerOff]);
+        #[cfg(feature = "brick")]
+        let standalone = crate::brick_profile::standalone();
+        #[cfg(not(feature = "brick"))]
+        let standalone = false;
+        if !standalone {
+            rows.push(Row::OpenEs);
+        }
+        rows.push(Row::PowerOff);
         rows
     }
 
@@ -443,10 +486,10 @@ impl RescuePage {
     /// The line under the list for the selected row.
     pub fn describe(&self, row: Row) -> &'static str {
         match row {
-            Row::RestartNormally => "Start pocket-ui as usual. If it fails again, this page comes back.",
-            Row::PreviousVersion => "Go back to the version that ran before this one. Your settings and games stay.",
-            Row::ResetSettings => "Move pocket-ui's settings aside and start like new. Games and saves stay.",
-            Row::OpenEs => "ROCKNIX's own menu, with a warning first.",
+            Row::RestartNormally => "Launch pocket-ui normally. If it crashes again, safe mode returns.",
+            Row::PreviousVersion => "Roll back to the version that ran before this one. Your games and settings stay safe.",
+            Row::ResetSettings => "Back up your settings and start fresh. Your games and saves stay safe.",
+            Row::OpenEs => "Switch to ROCKNIX's menu (warning first).",
             Row::PowerOff => "Switch the Pocket off.",
         }
     }
@@ -499,7 +542,7 @@ impl RescuePage {
             Ok(dir) => {
                 self.reset_done = true;
                 self.sel = 0;
-                self.message = Some(format!("Settings moved to {}. Restart normally to start like new.", dir.display()));
+                self.message = Some(format!("Settings moved to {}. Restart normally to start fresh.", dir.display()));
             }
             Err(e) => self.message = Some(format!("Couldn't move the settings: {e}")),
         }
@@ -509,6 +552,27 @@ impl RescuePage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Dolphin's card (19.11.2026): before the first GameCube or Wii game, A on "Start the game" (selected) starts it and B
+    /// or Cancel starts nothing; from the game's card it is read and closed with OK. The steps name Dolphin's own settings.
+    #[test]
+    fn dolphin_s_card_starts_the_game_or_just_closes() {
+        let mut d = Dialog { sel: 1, ..Dialog::new(DialogKind::Dolphin { start: true }) };
+        assert_eq!(d.choices(), &[Choice::Cancel, Choice::StartGame]);
+        assert_eq!(d.press(Button::South, Button::South, Button::East), DialogOut::Chose(Choice::StartGame));
+        assert_eq!(d.press(Button::East, Button::South, Button::East), DialogOut::Close);
+        d.sel = 0;
+        assert_eq!(d.press(Button::South, Button::South, Button::East), DialogOut::Close, "Cancel starts nothing");
+        let mut read = Dialog::new(DialogKind::Dolphin { start: false });
+        assert_eq!(read.choices(), &[Choice::Ok]);
+        assert_eq!(read.press(Button::South, Button::South, Button::East), DialogOut::Close);
+        let body = read.body().join(" ");
+        for name in ["GameCube Input", "Standard Controller", "Device", "Overlay Controls", "Toggle Controls", "Aspect Ratio", "Exit Emulation"] {
+            assert!(body.contains(name), "{name}: {body}");
+        }
+        assert!(is_dolphin("org.dolphinemu.dolphinemu") && is_dolphin("org.dolphinemu.mmjr") && !is_dolphin("com.armsx2"));
+        assert_eq!(exit_code(Choice::StartGame), None);
+    }
     use crate::testutil::TestDir;
 
     const A: Button = Button::East;
@@ -603,7 +667,7 @@ mod tests {
         assert_eq!(w.headline(), "pocket-ui stopped 4 times in a row (exit 139).");
         let none = WhatHappened::read(None, &d.join("nothing"), &d.join("nothing.log"));
         assert_eq!(none, WhatHappened::default());
-        assert_eq!(none.headline(), "Safe mode was started by hand.");
+        assert_eq!(none.headline(), "Safe mode opened manually.");
     }
 
     #[test]

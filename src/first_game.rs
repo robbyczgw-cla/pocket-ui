@@ -19,6 +19,12 @@ pub const CURATOR_NOTE: &str = "Curator: pick by mood, length, or what's new to 
 pub const JUST_PLAY_NOTE: &str = "Just Play: one press, the game you'd like now";
 const CURATOR_MARK: &str = "curator-told";
 const JUST_PLAY_MARK: &str = "just-play-told";
+const DOLPHIN_MARK: &str = "dolphin-told";
+
+/// Whether Dolphin's card is due before a GameCube or Wii game (`rescue::DialogKind::Dolphin`): once ever, never to a child.
+pub fn tell_dolphin_once(data_dir: &Path) -> bool {
+    tell_mark(data_dir, DOLPHIN_MARK)
+}
 
 /// Whether the Curator row's line is due (once ever, never to a child). Written here, like the others.
 pub fn tell_curator_once(data_dir: &Path) -> bool {
@@ -91,6 +97,8 @@ mod tests {
         assert!(!tell_curator_once(&dir), "never again");
         assert!(tell_just_play_once(&dir), "Just Play has its own mark");
         assert!(!tell_just_play_once(&dir));
+        assert!(tell_dolphin_once(&dir), "Dolphin's card has its own mark");
+        assert!(!tell_dolphin_once(&dir));
         let kids = crate::testutil::TestDir::new("curator-told-kids");
         crate::kids::Config { on: true, ..Default::default() }.save(&kids);
         assert!(!tell_curator_once(&kids) && !tell_just_play_once(&kids), "Kids Mode");

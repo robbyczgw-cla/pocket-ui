@@ -464,7 +464,7 @@ impl App {
         let (lines, color): (Vec<String>, u32) = if let Some(a) = &page.confirm_forget {
             headline(self, c, &format!("Forget {}?", name(a)), pal().alert);
             (
-                vec!["Press X again to forget it. A controller also gives up its player number. To use it after that, pair it again. B keeps it.".into()],
+                vec!["Press X again to forget it (controllers also release their player slot). Pair again later to reconnect. B cancels.".into()],
                 pal().text,
             )
         } else if let Some(e) = &page.error {
@@ -510,7 +510,7 @@ impl App {
             let left_s = SEARCH_SECS.saturating_sub(since.elapsed().as_secs()).max(1);
             headline(self, c, &format!("Searching, {left_s} s left"), pal().chalk);
             (
-                vec!["Put the device in pairing mode now. Controllers come first in the list; pick yours and press A.".into()],
+                vec!["Put your device in pairing mode now. Controllers list first; pick yours and press A.".into()],
                 pal().dust,
             )
         } else if let Some(n) = &page.notice {
@@ -537,7 +537,7 @@ impl App {
             headline(self, c, "No devices found", pal().dust);
             (vec!["Put the device in pairing mode, then select Search for devices.".into()], pal().dust)
         } else if brick_bluetooth() {
-            (vec!["Controllers and headphones. Connected headphones take the sound of games and menus; it comes back to the speaker when they go.".into()], pal().dust)
+            (vec!["Wireless pads and headphones. Connected headphones take all audio and hand it back to the speaker on disconnect.".into()], pal().dust)
         } else if page.shown.iter().any(|d| !d.paired) {
             let hidden = match page.hidden {
                 0 => String::new(),

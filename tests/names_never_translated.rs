@@ -68,25 +68,36 @@ fn every_database_fixture_and_system_name_stays_literal_in_de_and_es() {
     for name in &names { assert_eq!(media::printed_title(name, true), name.as_str()); }
     eprintln!("name corpus: {} names, 5 painters, DE + ES", names.len());
 
+    let mut all_names: Vec<&str> = vec!["Black", "Sun", "Golden Sun", "Game Boy Advance", "Black: Sun"];
+    all_names.extend(names.iter().map(String::as_str));
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get().min(4));
+    let chunk_size = all_names.len().div_ceil(threads).max(1);
     for lang in [Lang::De, Lang::Es] {
-        i18n::set(lang);
         lang.table().unwrap();
-        let mut actual = Text::builtin();
-        let mut reference = Text::builtin();
-        reference.set_translate(false);
-        let mut a = vec![0; 240 * 240];
-        let mut b = a.clone();
-        for name in ["Black", "Sun", "Golden Sun", "Game Boy Advance", "Black: Sun"].into_iter().chain(names.iter().map(String::as_str)) {
-            assert_eq!(actual.fit_name(Face::Title, 37, name, 100), reference.fit_name(Face::Title, 37, name, 100), "compact metadata name: {lang:?}: {name}");
-            assert_eq!(actual.wrap_name(Face::Title, 37, name, 100), reference.wrap_name(Face::Title, 37, name, 100), "wrapped metadata name: {lang:?}: {name}");
-            for path in 0..5 {
-                paint(&mut actual, name, path, &mut a);
-                paint(&mut reference, name, path, &mut b);
-                assert!(a == b, "translated name: {lang:?} path {path}: {name}");
-                assert!(actual.translating(), "name painter changed its caller");
-                assert!(!reference.translating(), "literal caller changed");
+        std::thread::scope(|s| {
+            for chunk in all_names.chunks(chunk_size) {
+                s.spawn(move || {
+                    let _lang = i18n::for_this_thread(lang);
+                    let mut actual = Text::builtin();
+                    let mut reference = Text::builtin();
+                    reference.set_translate(false);
+                    let mut a = vec![0; 240 * 240];
+                    let mut b = a.clone();
+                    for &name in chunk {
+                        assert_eq!(actual.fit_name(Face::Title, 37, name, 100), reference.fit_name(Face::Title, 37, name, 100), "compact metadata name: {lang:?}: {name}");
+                        assert_eq!(actual.wrap_name(Face::Title, 37, name, 100), reference.wrap_name(Face::Title, 37, name, 100), "wrapped metadata name: {lang:?}: {name}");
+                        for path in 0..5 {
+                            paint(&mut actual, name, path, &mut a);
+                            paint(&mut reference, name, path, &mut b);
+                            assert!(a == b, "translated name: {lang:?} path {path}: {name}");
+                            assert!(actual.translating(), "name painter changed its caller");
+                            assert!(!reference.translating(), "literal caller changed");
+                        }
+                    }
+                });
             }
-        }
+        });
+        i18n::set(lang);
         let mut ui = i18n::Cache::default();
         assert_ne!(&*ui.get("Settings"), "Settings", "our UI still translates");
         assert_ne!(&*ui.get("Sun"), "Sun", "a title fragment must not teach the UI a weekday name");

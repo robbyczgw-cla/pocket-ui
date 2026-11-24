@@ -120,7 +120,7 @@ fn save_safety_failed_exit_never_announces_saved() {
         assert!(!pocket_ui::fast_switch::requested(), "a failed exit save cannot announce saved");
         assert_eq!(std::fs::read(&legacy).unwrap(), previous, "failed quit keeps the earlier Auto");
         let notice = std::fs::read_to_string(root.join("pocket-core.error")).unwrap();
-        assert!(notice.contains("couldn't be saved"), "the shelf must explain the failed save: {notice}");
+        assert!(notice.contains("Couldn't save latest progress"), "the shelf must explain the failed save: {notice}");
         std::fs::remove_dir(&auto).unwrap();
         app.save_for_handoff();
         assert!(pocket_ui::fast_switch::requested(), "a later successful exit still permits fast switching");

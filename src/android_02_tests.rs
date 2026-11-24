@@ -25,8 +25,11 @@ fn page() -> ui::Ui {
     })
 }
 fn paint(u: &mut ui::Ui, w: u32, h: u32) -> Vec<u32> {
+    thread_local! {
+        static TEXT: std::cell::RefCell<Text> = std::cell::RefCell::new(Text::builtin());
+    }
     let mut p = vec![0; (w * h) as usize];
-    u.paint(&mut Canvas::new(&mut p, w, h), &mut Text::builtin(), None);
+    TEXT.with(|t| u.paint(&mut Canvas::new(&mut p, w, h), &mut t.borrow_mut(), None));
     p
 }
 
@@ -50,6 +53,47 @@ fn file_source_rule_mobile_preferences_and_buttons() {
         assert!(!lines.is_empty() && lines.iter().all(|l|!l.trim().is_empty()),"{label}: unnamed mobile controls");
     }
 }
+#[test]
+fn mobile_launcher_says_when_preferences_cannot_be_saved() {
+    use pocket_ui::{fsutil, i18n, save_trouble};
+    for lang in i18n::Lang::ALL {
+        let mut ui = page();
+        let _lang = i18n::for_this_thread(lang);
+        let data = tempfile::tempdir().unwrap();
+        let dir = data.path();
+        ui.save_preferences(dir, false);
+        assert_eq!(ui.take_storage_notice(dir), None, "a successful save is quiet");
+
+        for (errno, english) in [(libc::ENOSPC, save_trouble::CHANGES_FULL), (libc::EROFS, save_trouble::CHANGES_UNWRITABLE)] {
+            let expected = i18n::tr(english);
+            if lang != i18n::Lang::En && lang.complete() {
+                assert_ne!(expected, english, "{lang:?} should have a translation");
+            }
+            fsutil::card_refuses(dir, errno);
+            for background in [false, true] {
+                ui.save_preferences(dir, background);
+                fsutil::settle();
+                let notice = ui.take_storage_notice(dir);
+                if !background {
+                    assert_eq!(notice.as_deref(), Some(expected.as_str()), "{lang:?}");
+                } else {
+                    assert_eq!(notice, None, "the same failure is only shown once");
+                }
+            }
+            fsutil::card_works_again(dir);
+        }
+    }
+    // A background write can also be the first one the storage refuses.
+    let mut ui = page();
+    let data = tempfile::tempdir().unwrap();
+    fsutil::card_refuses(data.path(), libc::ENOSPC);
+    ui.save_preferences(data.path(), true);
+    fsutil::settle();
+    fsutil::card_works_again(data.path());
+    assert_eq!(ui.take_storage_notice(data.path()).as_deref(), Some(save_trouble::CHANGES_FULL));
+    assert_eq!(ui.take_storage_notice(data.path()), None);
+}
+
 /// The languages the fit tests walk: English, German and Spanish; in the merge gate's sample (`POCKETUI_TEST_QUICK`,
 /// scripts/gate.sh) German only, the longest of them. The nightly run and the release check walk all three.
 pub(crate) fn sample_languages() -> &'static [&'static str] {
@@ -980,7 +1024,7 @@ fn android_system_download_choices_keep_sizes_and_navigation_reachable() {
             assert!(!u.prefs.core_download_consent,"selection alone downloads nothing");
             u.prefs.onboarding_done = true;
             u.missing_core("melondsds");
-            u.core_note = ui::tr("The store list's signature doesn't match, so it wasn't used. Nothing was changed.");
+            u.core_note = ui::tr("Store catalogue failed signature check, so it was skipped. Nothing changed.");
             pocket_ui::text::boxes::reset();
             let frame = paint(&mut u,w,h);
             pocket_ui::text::boxes::finish(&frame,w as i32,h as i32);
@@ -1074,7 +1118,7 @@ fn android_updates_show_download_progress_and_failure_reasons_in_both_appearance
             }
             u.updates.confirming = false;
             u.updates.phase = "failed".into(); u.updates.cancellable = false;
-            for why in ["Connect to Wi-Fi to download updates. Nothing was installed.", "The download is damaged or was changed. Nothing was installed.", "This APK has a different signing key. Nothing was installed."] {
+            for why in ["Connect to Wi-Fi to download updates. Nothing was installed.", "Download failed verification. Nothing was installed.", "This APK has a different signing key. Nothing was installed."] {
                 u.updates.message = why.into();
                 paint(&mut u,1600,960);
                 assert!(u.regions.iter().any(|r| r.label == i18n::tr(why)), "the complete reason is accessible");
@@ -1913,7 +1957,7 @@ fn settings_licences_lists_every_core_with_licence_source_and_patches_and_goes_b
     dpad_to(&mut u, "Licences"); // a Settings row opens the page, reachable with the D-pad
     assert!(matches!(choose(&mut u, "Licences"), ui::Command::None));
     assert!(u.screen == ui::Screen::Licences);
-    assert_eq!(sheet_rows(&mut u), ["pocket-ui · GPL-2.0-or-later", "mgba · MPL-2.0", "ppsspp · GPL-2.0-or-later", "Back"]);
+    assert_eq!(sheet_rows(&mut u), ["pocket-ui · GPL-2.0-or-later", "mgba · MPL-2.0", "ppsspp · GPL-2.0-or-later", "Case sounds · CC0 1.0, CC BY 3.0", "Back"]);
     assert!(page_words(&mut u).contains("free software"), "the page says what it is before anything is chosen");
     // The optional download is listed like the one in the APK, with its upstream commit and both patches.
     dpad_to(&mut u, "ppsspp");
@@ -1926,6 +1970,16 @@ fn settings_licences_lists_every_core_with_licence_source_and_patches_and_goes_b
     u.press(Button::East);
     let words = page_words(&mut u);
     assert!(words.contains("Patches: None") && words.contains("In the app") && words.contains("MPL-2.0"), "{words}");
+    dpad_to(&mut u, "Case sounds");
+    u.press(Button::East);
+    let words = page_words(&mut u);
+    let changes = ui::licences_page::RECORDING_CHANGES;
+    for needle in ["slam.mp3", "florn", "freesound.org/s/454468/", "creativecommons.org/licenses/by/3.0/", changes] {
+        assert!(words.contains(needle), "{needle}: {words}");
+    }
+    for lang in pocket_ui::i18n::Lang::ALL.into_iter().filter(|lang| *lang != pocket_ui::i18n::Lang::En) {
+        assert_ne!(pocket_ui::i18n::tr_in(lang, changes), changes, "{lang:?}");
+    }
     // Translated labels (checked without switching the process-wide language under parallel tests).
     for text in [ui::licences_page::ABOUT, ui::licences_page::OFFER, ui::licences_page::UNREADABLE, "In the app", "Optional download"] {
         for lang in [pocket_ui::i18n::Lang::De, pocket_ui::i18n::Lang::Es] {
@@ -1936,7 +1990,7 @@ fn settings_licences_lists_every_core_with_licence_source_and_patches_and_goes_b
     assert!(u.screen == ui::Screen::Settings, "B goes back one step");
     // Every row of the page is reachable with the D-pad alone.
     u.navigate(ui::Screen::Licences);
-    for row in ["pocket-ui", "mgba", "ppsspp", "Back"] { dpad_to(&mut u, row); }
+    for row in ["pocket-ui", "mgba", "ppsspp", "Case sounds", "Back"] { dpad_to(&mut u, row); }
 }
 
 #[test]
@@ -1946,7 +2000,7 @@ fn settings_licences_without_its_list_says_so_instead_of_showing_an_empty_sheet(
     u.navigate(ui::Screen::Licences);
     let words = page_words(&mut u);
     assert!(words.contains("could not be read"), "{words}");
-    assert_eq!(sheet_rows(&mut u), ["pocket-ui · GPL-2.0-or-later", "Back"], "pocket-ui's own licence is always there");
+    assert_eq!(sheet_rows(&mut u), ["pocket-ui · GPL-2.0-or-later", "Case sounds · CC0 1.0, CC BY 3.0", "Back"], "pocket-ui's own licence is always there");
     // The real build's list parses: every line of a CORES.tsv has seven columns, the last may be empty.
     let mut u = page();
     u.licences.load(licence_list());
@@ -2651,7 +2705,7 @@ fn the_games_step_says_what_is_there_with_no_games_no_apps_and_no_permission() {
     assert_eq!(rows[0], "Choose your ROM folder");
     let empty = pocket_ui::android_first_start::Facts { folders: Some(vec![]), can_read: true, bios: vec![] };
     let (said, rows) = step2(Some(empty), Some(Default::default()));
-    assert!(said.contains("No games found on this device yet."), "{said}");
+    assert!(said.contains("No games found yet."), "{said}");
     assert_eq!(rows[0], "Choose your ROM folder");
     assert!(!rows.iter().any(|r| r.contains("Emulator apps") || r.starts_with("Get ")), "{rows:?}");
     // Nothing seen without the right to read: no claim that there are no games.

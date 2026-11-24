@@ -185,6 +185,28 @@ fn arkos_rocknix_and_jelos_images_with_a_gamelist() {
 }
 
 #[test]
+fn r36s_fix_b_stock_card_covers_match_titles_with_and_without_a_gamelist() {
+    let c = Card::new();
+    c.put("roms/gba/short.gba", b"");
+    c.put("roms/gba/Advance Wars (USA).gba", b"");
+    c.put("roms/gba/Metroid Fusion (USA).gba", b"");
+    c.put("roms/gba/media/images/short-image.png", PNG);
+    c.put("roms/gba/media/images/Golden Sun.png", PNG);
+    c.put("roms/gba/media/images/Advance Wars.png", PNG);
+    c.put("roms/gba/media/images/Metroid Fusion (USA).png", PNG);
+    c.put("roms/gba/gamelist.xml", r#"<gameList><game><path>./short.gba</path><name>Golden Sun</name></game></gameList>"#);
+    let index = c.index();
+    for (rom, art) in [
+        ("short.gba", "Golden Sun.png"),
+        ("Advance Wars (USA).gba", "Advance Wars.png"),
+        ("Metroid Fusion (USA).gba", "Metroid Fusion (USA).png"),
+    ] {
+        assert_eq!(file(&c.cover(&index, "gba", rom)), format!("images/{art}"));
+        assert!(index.has_box_art("gba", &c.roms().join("gba").join(rom)), "use card art before downloading");
+    }
+}
+
+#[test]
 fn nextui_and_minui_tags_in_brackets_and_media_folders() {
     let c = Card::new();
     c.put("roms/Game Boy Advance (GBA)/Golden Sun (USA).gba", b"");

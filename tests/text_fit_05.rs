@@ -92,7 +92,7 @@ fn portal_sheet_keeps_whole_text_above_its_buttons_at_1280x720() {
         let (shown, boxes, _) = scene.shot("setup:wifi-portal-sheet", "smartpro", "1280x720", lang, font, size);
         let mut bad = faults(&boxes);
         let whole = shown.split_whitespace().collect::<Vec<_>>().join(" ");
-        for source in ["This network wants a sign-in", "Hotel, train and café networks often ask you to accept their terms or type a room number before anything goes online.",
+        for source in ["This network wants a sign-in", "Hotel, train and café Wi-Fi often need a browser login or terms check before going online.",
             "pocket-ui checks again every 15 seconds and says when you're online.", "Sign in…", "Other ways", "Hotspot, front desk"] {
             let expected = i18n::tr_in(Lang::from_locale(lang), source);
             if !whole.contains(&expected.split_whitespace().collect::<Vec<_>>().join(" ")) { bad.push(format!("missing {expected:?}: {shown}")); }

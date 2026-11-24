@@ -70,6 +70,7 @@ pub fn todo(data_dir: &Path, db: &mut GameDb, games: &[(String, PathBuf, Option<
     // The names the games' checksums gave (`rom_id`), matched before the file names.
     let names = crate::rom_id::known(data_dir, &games.iter().map(|(s, r, _)| (s.clone(), r.clone())).collect::<Vec<_>>());
     for (system, rom, choice) in games {
+        if crate::background_io::cancelled() { break; }
         let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
         let Some(title) = db.resolve_rom(system, stem, names.get(rom).map(String::as_str), choice.as_ref()).and_then(|g| g.enwiki) else {
             continue;
@@ -110,6 +111,10 @@ pub fn fetch_until(
         }
         if i > 0 {
             std::thread::sleep(delay);
+            if stop() {
+                run.stopped = true;
+                break;
+            }
         }
         match fetch(title) {
             Ok(_) => run.fetched += 1,

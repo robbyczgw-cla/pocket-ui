@@ -66,6 +66,7 @@ mod app_card;
 mod app_identify;
 /// The console pages and the short facts about a system on the shelf.
 mod app_console;
+mod app_bigcard_bench;
 /// Settings > Sync, and the save scan after a game.
 mod app_sync;
 mod app_sync_conflicts;
@@ -132,6 +133,9 @@ mod app_connections;
 mod app_achievements;
 /// Finding games fast: the search (the Search row on Home) and the letter jump of the lists (L2/R2).
 mod app_search;
+
+#[cfg(test)]
+static READER_GAME_TEST: std::sync::Mutex<()> = std::sync::Mutex::new(());
 mod app_starter;
 /// Settings → Connections → USB file transfer, and a games card coming or going.
 mod app_games_card;
@@ -201,6 +205,7 @@ mod app_library;
 mod app_played;
 /// HOME + A in a game pocket-core does not host (the standalone emulators, ports): `grim` on a thread of its own.
 mod app_screenshot;
+mod app_shortcut_list;
 mod app_share_shelf;
 /// POCKETUI_FRAME_DUMP: the event loop tick by tick on a fixed 60 fps clock (`pocket_ui::frame_dump`).
 mod app_frame_dump;
@@ -337,6 +342,8 @@ enum UserEvent {
     OptionsSaved(bool),
     /// A standalone load left the game unchanged because Before load could not be kept.
     LoadBlocked(u64),
+    /// The result of checking a ROCKNIX RetroArch pause menu command.
+    RetroArchStateChecked { started: Instant, action: pocket_ui::ra_state::Action, confirmed: bool },
     Setup(SetupEvent),
     Update(UpdateEvent),
     /// The starter pack's downloads and scans (`app_starter`).
@@ -428,6 +435,7 @@ enum UserEvent {
     Backup(pocket_ui::backup_page::Event),
     /// EmulationStation's gamelists were read and differ from what the App has (`app_gamelist.rs`).
     Gamelist(std::sync::Arc<pocket_ui::gamelist::Index>),
+    GamelistDeferred,
     /// Android listed its apps (`app_android_games.rs`), read for this reason.
     AndroidApps(Vec<pocket_ui::android_games::App>, &'static str),
     /// The screenshots folder was read, or a screenshot was copied to the shelf (`app_gallery.rs`).
@@ -460,12 +468,15 @@ enum UserEvent {
     /// The folders were read again and the list differs from the one on screen (`app_library`); the cache holds it
     /// for the key.
     LibraryRescanned(Vec<System>, Option<pocket_ui::library_cache::Key>),
+    LibraryCacheStored(pocket_ui::library_cache::Key),
+    LibraryScanDeferred,
     /// How many things in the ROM folders the shelf leaves unread, counted after a rescan; `rose` when that is news
     /// and no game arrived (`app_library`).
     LibraryUnread { count: usize, rose: bool },
     /// A damaged system entry was skipped, or (`fallback`) the whole list couldn't be read and the shelf runs on the built-in
     /// one; the other games remain on the shelf.
     SystemListUnread { fallback: bool },
+    SystemListCheckDeferred,
     /// The picture went to a TV through USB-C, or back to the panel (`app_display_out`).
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     Display(Option<pocket_ui::display_out::Tv>),
@@ -623,11 +634,11 @@ const SETTINGS_GROUPS: [(&str, &[SettingsRow]); 8] = [
     ("Connections", &[
         ("Wi-Fi", Opens::Setup(Only::Wifi), "Connect to a network."),
         ("Bluetooth", Opens::Bluetooth, "Pair a controller or headphones, see what is connected."),
-        ("Tailscale", Opens::Tailscale, "Reach the Pocket from your other devices."),
+        ("Tailscale", Opens::Tailscale, "Access this Pocket from other devices."),
         ("Remote access (SSH)", Opens::Setup(Only::Remote), "Log in from a computer. Turns itself off when the Pocket restarts."),
         ("Sync", Opens::Sync, "Keep saves and states in step with your other devices."),
         (app_pocket_sync::SETTINGS_NAME, Opens::Pockets, "Keep saves the same on your other Pockets, without a computer."),
-        (app_web::SETTINGS_NAME, Opens::Web, "Your games, play time and uploads in a browser."),
+        (app_web::SETTINGS_NAME, Opens::Web, "Browse games, stats and uploads in any browser."),
         (app_moonlight::SETTINGS_NAME, Opens::PcStreaming, "Pair a gaming PC for Moonlight, and stream its games."),
     ]),
     // "Look" with a zero-width mark: the same word as its first row in English, a different one in German (Aussehen,
@@ -799,6 +810,7 @@ impl UpdateTask {
 }
 
 struct UpdateJob {
+    _card: pocket_ui::background_io::UpdatePause,
     id: u64,
     task: UpdateTask,
     label: String,
@@ -853,7 +865,10 @@ impl Updates {
     fn start(&mut self, task: UpdateTask) {
         self.next_job = self.next_job.wrapping_add(1).max(1);
         let worker = task.cancel().map_or_else(update::WorkerSnapshot::default, |c| c.snapshot());
-        self.phase = UpdatePhase::Running(UpdateJob { id: self.next_job, label: task.label(), task, since: Instant::now(), worker });
+        self.phase = UpdatePhase::Running(UpdateJob {
+            _card: pocket_ui::background_io::pause_for_update(),
+            id: self.next_job, label: task.label(), task, since: Instant::now(), worker,
+        });
     }
 
     fn finish(&mut self, outcome: UpdateOutcome) {
@@ -883,14 +898,12 @@ impl Updates {
     fn app_step(&self) -> Option<(update::Step, f32)> {
         match &self.phase {
             UpdatePhase::Running(job) => {
-                let UpdateTask::App { total, cancel, .. } = &job.task else { return None };
+                let UpdateTask::App { cancel, .. } = &job.task else { return None };
                 if cancel.is_cancelled() { return None; }
                 let (w, step) = (job.worker, job.worker.phase.step());
                 let frac = match step {
-                    update::Step::Downloading => {
-                        let total = Some(cancel.progress_total()).filter(|n| *n > 0).unwrap_or(*total);
-                        if total == 0 { 0.0 } else { self.done as f32 / total as f32 }
-                    }
+                    // Every file of the download on one bar that only moves forward (`update::Download`).
+                    update::Step::Downloading => cancel.download().fraction(),
                     _ if w.work_total > 0 => w.work_done as f32 / w.work_total as f32,
                     _ => 0.0,
                 };
@@ -900,6 +913,8 @@ impl Updates {
             _ => None,
         }
     }
+    fn worker(&self) -> update::WorkerSnapshot { match &self.phase { UpdatePhase::Running(j) => j.worker, _ => Default::default() } }
+    fn download(&self) -> update::Download { self.cancel().map(|c| c.download()).unwrap_or_default() }
     fn request_cancel(&mut self) -> bool {
         let Some(cancel) = self.cancel().filter(|c| !c.is_cancelled()) else { return false };
         cancel.cancel();
@@ -916,7 +931,28 @@ mod update_job_characterisation {
     use super::*;
 
     #[test]
+    fn r36s_fix_a_update_work_cancels_shelf_reads_until_it_finishes() {
+        let _guard = READER_GAME_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        for task in [
+            UpdateTask::Check,
+            UpdateTask::App { version: "9.8.7".into(), total: 100, cancel: update::Cancel::new() },
+        ] {
+            let mut updates = Updates::default();
+            let mut started = false;
+            assert!(pocket_ui::background_io::job(|| {
+                started = true;
+                updates.start(task);
+            }).is_none());
+            assert!(started);
+            assert!(pocket_ui::background_io::job(|| ()).is_none());
+            updates.finish(UpdateOutcome::Failed);
+            assert!(pocket_ui::background_io::job(|| ()).is_some());
+        }
+    }
+
+    #[test]
     fn cancellation_keeps_progress_and_the_original_sleep_timeout() {
+        let _guard = READER_GAME_TEST.lock().unwrap_or_else(|e| e.into_inner());
         let mut updates = Updates::default();
         let cancel = update::Cancel::new();
         updates.start(UpdateTask::App { version: "9.8.7".into(), total: 100, cancel: cancel.clone() });
@@ -935,6 +971,7 @@ mod update_job_characterisation {
 
     #[test]
     fn a_manifest_check_has_no_cancel_action_and_does_not_clear_a_backup_restart() {
+        let _guard = READER_GAME_TEST.lock().unwrap_or_else(|e| e.into_inner());
         let deadline = Instant::now() + Duration::from_secs(1);
         let mut updates = Updates { restart_at: Some(deadline), ..Updates::default() };
         updates.start(UpdateTask::Check);
@@ -1209,6 +1246,8 @@ struct QuickMenu {
     /// The Achievements page's Hardcore row was pressed once while off: the next A starts the game again in Hardcore
     /// (`app_achievements`); any other button takes it back.
     hardcore_ask: bool,
+    /// The lines of Page::ShortcutList, worked out when it opened (`app_shortcut_list`).
+    shortcut_list: Vec<pocket_ui::shortcut_list::Line>,
 }
 
 /// Which screen of the pause menu is showing.
@@ -1217,6 +1256,7 @@ enum Page {
     Main,
     /// A load was refused before mutation because its undo capture failed.
     LoadBlocked,
+    RetroArchStateUnconfirmed(pocket_ui::ra_state::Action),
     /// The list of groups plus "Keep for" and "Restore defaults".
     Options { sel: usize },
     Group { group: usize, sel: usize },
@@ -1241,6 +1281,8 @@ enum Page {
     PortPerf,
     /// "Couldn't save. Quit anyway?" before Quit while the game's saves fail (`app_save_trouble`).
     QuitUnsaved { sel: usize },
+    /// A RetroArch game's HOME shortcuts, from Runs on (`app_shortcut_list`); the lines are in `QuickMenu::shortcut_list`.
+    ShortcutList { sel: usize },
 }
 
 /// Lines of the options list (`pause_options::LinuxEntry`, in the library so the comparison with Android's page reads
@@ -1529,6 +1571,7 @@ struct App {
     pad: PadState,
     exit_since: Option<Instant>,
     running: Option<Running>,
+    retroarch_state_pending: Option<Instant>,
     launch_at: Option<Instant>,
     pending_launch: Option<app_launch::Pending>,
     /// A phone game's first start loading Java (`j2me_java`): its progress over the start, B stops it.
@@ -1543,6 +1586,10 @@ struct App {
     /// Settings > Games > Systems on the shelf: system ids the shelf and the switcher leave out.
     hidden: Vec<String>,
     toast: Option<(String, Instant)>,
+    /// The shelf's toast stands over the hint bar this frame (`paint_home`): the hints give way for its moment.
+    toast_over_hints: bool,
+    /// Settings and lists the card refused to save, told on the shelf once a run (`app_save_trouble`).
+    card_refusals: pocket_ui::save_trouble::CardRefusals,
     /// Settings → System → Sleep & power while it is open (`app_sleep_power`).
     sleep_page: pocket_ui::sleep_settings::Page,
     /// Settings → System → About: its selected row and the report's sheet (`app_report`).
@@ -1643,6 +1690,8 @@ struct App {
     hits: touch::HitMap,
     /// The dialog before leaving for EmulationStation (SELECT + START held, Escape, Settings → About), over everything.
     leave: Option<pocket_ui::rescue::Dialog>,
+    /// The GameCube or Wii game Dolphin's card stands before (system, name, path): "Start the game" starts it.
+    dolphin_launch: Option<(String, String, PathBuf)>,
     touch_rec: touch::Recognizer,
     /// where it is in window pixels, whether its left button is down, and the wheel's fraction (`app_touch`).
     cursor: Option<(f64, f64)>,
@@ -1678,7 +1727,7 @@ struct App {
     library: pocket_ui::library_meta::LibraryMeta,
     /// Offline game facts from Wikidata, and what each file matched (None: no entry).
     gamedb: pocket_ui::gamedb::GameDb,
-    game_infos: std::collections::HashMap<PathBuf, Option<pocket_ui::gamedb::GameInfo>>,
+    game_infos: std::collections::HashMap<PathBuf, Option<Box<pocket_ui::gamedb::GameInfo>>>,
     /// `infos_warm_tick`: the next game of the library to look up ahead (system, game), and the lookups made by
     /// `game_info` so far (the card's check counts them).
     infos_warm: (usize, usize),
@@ -1892,7 +1941,7 @@ impl App {
             Screen::Games(s) => (0..self.systems[s].games.len()).filter(|&g| self.shelf_space.on_shelf(&self.systems[s].games[g].path)).map(|g| Item::Game(s, g)).collect(),
             Screen::Favorites => self.favorite_items(),
             Screen::Crate => self.crate_items(),
-            screen => self.curator_items(screen),
+            screen => self.curator.released_items(screen).map_or_else(|| self.curator_items(screen), <[Item]>::to_vec),
         };
         self.big_after_rebuild(big_was);
         self.sel = self.sel.min(self.items.len().saturating_sub(1));
@@ -2118,13 +2167,16 @@ impl App {
         let app_launch::Pending { run, name, asked, animation, skipped, .. } = pending;
         let (system, path, emulator, core) = (run.system.clone(), run.path.clone(), run.player.name().to_string(), run.core.clone());
         let hosted = run.player == Player::Hosted;
+        if pocket_ui::startup::is_r36s_n64(&system) {
+            println!("n64 launch: prepared after {:.0} ms", pocket_ui::startup::clock_ms() - asked);
+        }
         self.search_launching(&path);
         println!("launch {system} {} (emulator {emulator}, core {core})", path.display());
         self.port_perf_before_launch(&system, &path);
         self.cover_run.game_started();
         self.text_run.game_started();
         self.identify.game_started();
-        self.settle_started_name(&system, &path);
+        self.identify_after_playing(&system, &path);
         pocket_ui::covers::set_game_on(true);
         let mut frozen_env = Vec::new();
         let fresh = self.frozen_at_launch(&path, hosted, at, wait, &mut frozen_env);
@@ -2192,6 +2244,15 @@ impl App {
         }
         // Smooth fan: a pocket-core game tells pocket-ui its fan choice instead of changing the trips (`app_perf_fan`).
         env.extend(self.perf_fan_game_env().filter(|_| hosted));
+        // RetroArch on ROCKNIX: pocket-core's HOME shortcuts, with this game's switches (`ra_hotkeys`). Not the dArkOS
+        // port's or Android's RetroArch, whose configuration is theirs.
+        if emulator == "retroarch" && !pocket_ui::device::darkos_port() && !pocket_ui::device::android_profile() {
+            let values = options::GameSettings::load(&self.data_dir, &system, &path).effective();
+            let on = pocket_ui::ra_hotkeys::enabled(&values, self.kids_live(), self.big_on());
+            if let Err(e) = pocket_ui::ra_hotkeys::prepare(&pocket_ui::ra_hotkeys::Paths::device(), on) {
+                eprintln!("ra_hotkeys: {e}");
+            }
+        }
         pocket_ui::mark!("launch", "{system} {}", path.display());
         // pocket-core games get our display (the overlay); RetroArch, the standalone emulators and apps get ROCKNIX's box.
         pocket_ui::mako_osd::set_hidden(hosted || pocket_ui::mako_osd::quiet_h700_games());
@@ -2266,7 +2327,7 @@ impl App {
         self.case_forget(&run.path);
         // How far the launch animation had got when it ended: a start that failed comes back out from there (`begin_failed_start`).
         let ran = self.launch_at.map_or(Duration::from_secs(60), |t| t.elapsed());
-        pocket_ui::covers::set_game_on(false);
+        pocket_ui::covers::set_game_on(self.pending_launch.is_some());
         pocket_ui::fast_switch::mark("game exit handled");
         pocket_ui::mark!("game-exited", "{} {}", run.system, run.path.display());
         pocket_ui::battery_history::set_activity(None);
@@ -2309,7 +2370,7 @@ impl App {
             self.android_games_refresh("an app didn't start");
         } else if never_started && !run.hosted() {
             // A system whose BIOS pocket-ui knows: the files missing are named, not guessed at (`hostsys::missing_bios`).
-            let bios = pocket_ui::hostsys::find(&run.system).and_then(|s| s.missing_bios(&pocket_ui::hostsys::bios_dir()));
+            let bios = pocket_ui::hostsys::find(&run.system).and_then(|s| s.missing_bios_for(&pocket_ui::hostsys::bios_dir(), &run.path));
             self.notice = Some(Notice::new(pocket_ui::fallback::not_started_notice_on(&run.system, &run.name, bios.as_deref())));
         }
         // A confirmed failed start without pocket-core moments may try the system emulator once.
@@ -2339,7 +2400,8 @@ impl App {
             println!("pocket-core couldn't start {} (exit ok {ok}, {secs} s): no other emulator for {}", run.path.display(), run.system);
             if self.notice.is_none() {
                 // No other emulator on this system at all (the Brick): not RetroArch's core downloader.
-                self.notice = Some(Notice::new(if default.is_empty() { pocket_ui::fallback::not_started_notice_on(&run.system, &run.name, None) } else { pocket_ui::fallback::core_missing_notice(&run.name) }));
+                // pocket-core again (the OS images): its core crashed; a missing one says so itself (`core_gone`).
+                self.notice = Some(Notice::new(pocket_ui::fallback::no_retry_notice(&run.system, &run.name, &default)));
             }
         }
         if let Some(core) = core_gone {
@@ -2403,8 +2465,7 @@ impl App {
         pocket_ui::trace::step("exit focus ready");
         // Stick movements were thinned out while the game ran (`idle::StickThrottle`); the controllers stay known.
         self.pad.let_go();
-        // A list that was read behind the game (its proper name, `settle_started_name`) is in before the first picture of
-        // the way back: a title that changes on the shelf under the player's eyes is a jump.
+        // A completed scan can go in before the first picture of the shelf.
         self.library_apply_pending();
         self.rebuild();
         pocket_ui::trace::step("exit rebuild ready");
@@ -2687,6 +2748,7 @@ impl App {
             save_trouble: Self::save_trouble_at_open(hosted),
             saving: None,
             hardcore_ask: false,
+            shortcut_list: Vec::new(),
         });
         self.menu_shot = app_menu_open::MenuShot::asked(shot);
         // The battery in this game, from memory (`battery_games`): microseconds, no file or sysfs read.
@@ -2709,7 +2771,7 @@ impl App {
         if menu.quitting {
             return;
         }
-        if menu.page == Page::LoadBlocked {
+        if menu.page == Page::LoadBlocked || matches!(menu.page, Page::RetroArchStateUnconfirmed(_)) {
             if b == CONFIRM || b == CANCEL { menu.page = Page::Main; }
             return;
         }
@@ -2723,6 +2785,10 @@ impl App {
         }
         if menu.page == Page::EmuChoice {
             self.emu_choice_input(b);
+            return;
+        }
+        if matches!(menu.page, Page::ShortcutList { .. }) {
+            self.shortcut_list_input(b);
             return;
         }
         if menu.page == Page::PortPerf {
@@ -2866,6 +2932,9 @@ impl App {
                 // The game's saves don't reach the card: Quit asks once first (`app_save_trouble`).
                 MainItem::Quit if app_save_trouble::asks_before_quit(menu) => menu.page = Page::QuitUnsaved { sel: 0 },
                 // RetroArch writes the auto state on quit, so Continue on Home picks up right here.
+                MainItem::Quit if menu.retroarch && self.running.as_ref().is_some_and(|run| self.retroarch_state_pending == Some(run.started)) => {
+                    pocket_ui::ui_sound::refuse();
+                }
                 MainItem::Quit if menu.retroarch => {
                     menu.quitting = true;
                     control::quit_retroarch();
@@ -3155,6 +3224,17 @@ impl App {
 
     fn resume_game(&mut self, action: Option<SaveAction>) {
         pocket_ui::trace::step("continue begin");
+        use pocket_ui::ra_state::Action as RetroArchAction;
+        let retroarch_action = match action {
+            Some(SaveAction::Save) => Some(RetroArchAction::Save),
+            Some(SaveAction::Load(_)) => Some(RetroArchAction::Load),
+            _ => None,
+        }.filter(|_| self.menu.as_ref().is_some_and(|menu| menu.retroarch)
+            && !pocket_ui::device::darkos_port() && !pocket_ui::device::android_profile());
+        if retroarch_action.is_some() && self.running.as_ref().is_some_and(|run| self.retroarch_state_pending == Some(run.started)) {
+            pocket_ui::ui_sound::refuse();
+            return;
+        }
         // PS2, GameCube, Wii and 3DS options changed in the menu: kept for this game now, and applied live or, when the
         // emulator can't take them while running, by a restart that comes back to this moment. After Save or
         // Load a restart waits for the next start, so the two never write states at the same time.
@@ -3194,7 +3274,7 @@ impl App {
                 // Earlier is pocket-core's only.
                 Some(SaveAction::Earlier | SaveAction::Restart) | None => {}
             }
-        } else {
+        } else if retroarch_action.is_none() {
             match (action, menu.hosted) {
                 (Some(SaveAction::Save), true) => control::pocket_core(&format!("save {}", menu.slot + 1)),
                 (Some(SaveAction::Load(target)), true) => control::pocket_core(&format!(
@@ -3217,6 +3297,15 @@ impl App {
             Some(con) => control::show_window(con),
             None => control::show_game(),
         };
+        if let (Some(action), Some(run)) = (retroarch_action, self.running.as_ref()) {
+            let (started, pgid, state) = (run.started, run.pgid, run.state_file());
+            let proxy = self.proxy.clone();
+            self.retroarch_state_pending = Some(started);
+            std::thread::spawn(move || {
+                let confirmed = pgid.is_some_and(|pgid| pocket_ui::ra_state::check(action, &state, pgid));
+                let _ = proxy.send_event(UserEvent::RetroArchStateChecked { started, action, confirmed });
+            });
+        }
         // After the window is back, so no frame of play is spent hidden.
         if menu.hosted {
             control::pocket_core("resume");
@@ -3330,8 +3419,13 @@ impl App {
         let fade = if self.menu.as_ref().is_some_and(|m| m.page == Page::PixelPath) { app_pixel_path::PAGE_FADE } else { pocket_ui::eject::PAUSE_FADE };
         self.paint_game_behind(c, VOID, fade);
         let Some(menu) = self.menu.as_ref() else { return };
-        if menu.page == Page::LoadBlocked {
-            Notice::new(pocket_ui::save_trouble::UNDO_FAILED).paint(c, &mut self.text);
+        let state_notice = match menu.page {
+            Page::LoadBlocked => Some(pocket_ui::save_trouble::UNDO_FAILED),
+            Page::RetroArchStateUnconfirmed(action) => Some(action.unconfirmed()),
+            _ => None,
+        };
+        if let Some(message) = state_notice {
+            Notice::new(message).paint(c, &mut self.text);
             self.nu_hints(c, &[("A", "Back"), ("B", "Back")]);
             return;
         }
@@ -3345,6 +3439,10 @@ impl App {
         }
         if menu.page == Page::EmuChoice {
             self.paint_emu_choice(c);
+            return;
+        }
+        if matches!(menu.page, Page::ShortcutList { .. }) {
+            self.paint_shortcut_list(c);
             return;
         }
         if menu.page == Page::PortPerf {
@@ -3467,11 +3565,33 @@ impl App {
             MainItem::Disc => disc.map(|d| d.note()),
             MainItem::PixelPath => Some("How the picture and sound reach you, stage by stage.".to_string()),
             MainItem::Players => Some("Which controller is which player.".to_string()),
-            MainItem::Zoom => Some("The picture larger, to read small text. Move with the D-pad.".to_string()),
+            MainItem::Zoom => Some("Zoom in to read tiny text. Pan around with the D-pad.".to_string()),
             _ => None,
         };
         // Options that couldn't be applied say so instead (not over Save's and Load's preview).
         let note = emu_note.filter(|_| !matches!(item, MainItem::Save | MainItem::Load | MainItem::Earlier)).or(note);
+        // Continue, Options and Save & quit: the paused game in the window, where Save's stands (`pause_page::shows_game`);
+        // the row's own line goes under it, else how long the game was played today.
+        let row_kind = match item {
+            MainItem::Continue => pocket_ui::pause_page::RowKind::Continue,
+            MainItem::Options => pocket_ui::pause_page::RowKind::Options,
+            MainItem::Quit => pocket_ui::pause_page::RowKind::Quit,
+            _ => pocket_ui::pause_page::RowKind::Other,
+        };
+        let live = pocket_ui::pause_page::shows_game(row_kind, quitting, self.menu.as_ref().is_some_and(|m| m.frame.is_some()));
+        let (window_note, note) = if live {
+            let line = note.unwrap_or_else(|| {
+                let session = self.running.as_ref().map_or(0, |r| r.started.elapsed().as_secs());
+                let today = self.running.as_ref().zip(pocket_ui::play_log::view()).map(|(r, log)| {
+                    let now = pocket_ui::play_time::now_secs();
+                    pocket_ui::play_history::played_today(&log, &r.path.to_string_lossy(), session, now, pocket_ui::appearance::utc_offset_now(now as i64))
+                });
+                pocket_ui::pause_page::paused_here(today, session)
+            });
+            (Some(line), None)
+        } else {
+            (window_note, note)
+        };
         let step = if item == MainItem::Disc {
             Some("Disc")
         } else if slotted && steps(item) && matches!(item, MainItem::Save | MainItem::Load | MainItem::Earlier) {
@@ -3505,10 +3625,10 @@ impl App {
                     rows: &rows,
                     sel,
                     window: window_note.clone().map(|note| Window {
-                        picture: self.menu.as_ref().and_then(|m| m.saved.as_ref()).and_then(|(i, _)| i.as_ref()),
+                        picture: if live { self.menu.as_ref().and_then(|m| m.frame.as_ref()) } else { self.menu.as_ref().and_then(|m| m.saved.as_ref()).and_then(|(i, _)| i.as_ref()) },
                         empty,
                         note,
-                        slots,
+                        slots: slots && !live,
                         strip_h: &strip_h,
                     }),
                     quitting: quit_msg,
@@ -3546,13 +3666,13 @@ impl App {
                     .into_iter()
                     .map(|e| match e {
                         OptEntry::Group(g) => (options::GROUPS[g].name.to_string(), ">".to_string(), options::GROUPS[g].desc_here().to_string()),
-                        OptEntry::Emulator => ("Emulator".into(), ">".into(), "Settings of the emulator itself, such as colours and palettes.".into()),
+                        OptEntry::Emulator => ("Emulator".into(), ">".into(), "Core-specific options, like palettes and hardware tweaks.".into()),
                         OptEntry::Controls => ("Controls".into(), ">".into(), "Which button does what, and the left stick.".into()),
-                        OptEntry::Zoom => ("Zoom".into(), ">".into(), "The picture larger, to read small text. Move with the D-pad.".into()),
+                        OptEntry::Zoom => ("Zoom".into(), ">".into(), "Zoom in to read tiny text. Pan around with the D-pad.".into()),
                         OptEntry::Cheats => {
                             let on = menu.cheats.as_ref().map_or(0, |c| c.enabled());
                             // A page's row ends in its angle with a value too ("2 on ›"), as Settings' "Off ›".
-                            ("Cheats".into(), if on > 0 { format!("{on} on >") } else { ">".into() }, "Infinite lives and the like, from the libretro cheat database.".into())
+                            ("Cheats".into(), if on > 0 { format!("{on} on >") } else { ">".into() }, "Infinite lives and more, from the libretro cheat database.".into())
                         }
                         OptEntry::RunsOn => ("Runs on".into(), ">".into(), "Which emulator plays this game or this console: pocket-core, RetroArch or another.".into()),
                         OptEntry::Keep => {
@@ -3633,7 +3753,7 @@ impl App {
                 let rows = menu.save_trouble.map(Self::quit_question_rows).unwrap_or_default();
                 (rows, sel, None, Some(pocket_ui::save_trouble::QUESTION.to_string()))
             }
-            Page::Main | Page::LoadBlocked | Page::PixelPath | Page::EmuChoice | Page::Players | Page::Zoom | Page::PortPerf => return,
+            Page::Main | Page::LoadBlocked | Page::RetroArchStateUnconfirmed(_) | Page::PixelPath | Page::EmuChoice | Page::Players | Page::Zoom | Page::PortPerf | Page::ShortcutList { .. } => return,
         };
 
         let achievement_counts = if matches!(menu.page, Page::Achievements { .. }) {
@@ -3656,6 +3776,7 @@ impl App {
             .map(|(i, (name, value, desc))| pocket_ui::pause_page::OptRow { name, value, desc, indent: indents.get(i).copied().unwrap_or(false), fixed: !actionable(i) })
             .collect();
         // Painted by `pause_page::paint_options`, the painter Android's player uses too; the Picture page with its preview.
+        let description_above_hints = matches!(menu.page, Page::Emulator { .. });
         let corner = self.status_corner();
         let picture = self.picture_page(c.w, c.h);
         let page = pocket_ui::pause_page::OptionsPage {
@@ -3664,6 +3785,7 @@ impl App {
             rows: &rows,
             sel,
             footer: footer.as_deref(),
+            description_above_hints,
             explanation,
             accent,
             corner: &corner,
@@ -3728,7 +3850,7 @@ impl App {
             let (w, h) = img.fit(max_w, max_h);
             return Some(Rc::new(img.resized(w, h)));
         }
-        let mut candidates = vec![pocket_ui::covers::cover_path(&self.data_dir, &system, &rom)];
+        let mut candidates = vec![pocket_ui::covers::active_cover_path(&self.data_dir, &system, &rom)];
         if system == "ports" {
             let launcher = rom.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
             candidates.extend(pocket_ui::ports::launcher_images(&launcher));
@@ -3849,8 +3971,9 @@ impl App {
                 Opens::Updates => {
                     self.updates.sel = 0;
                     self.updates.set_confirmation(false);
-                    // Off: nothing is asked until "Check again" is chosen.
-                    if self.updates.manifest.is_none() && !self.updates.is_busy() && self.update_auto() {
+                    if pocket_ui::device::no_wifi_chip() {
+                        self.update_action(UpdateAction::Card);
+                    } else if self.updates.manifest.is_none() && self.update_auto() {
                         self.update_action(UpdateAction::Check);
                     }
                     Some(SettingsPage::Updates)
@@ -4706,11 +4829,16 @@ impl App {
     fn update_actions(&self) -> Vec<UpdateAction> {
         let (available, confirming) = (self.updates.app_available().is_some(), self.updates.confirming());
         if pocket_ui::device::android_profile() { pocket_ui::update_page::actions(available, confirming) }
-        else { pocket_ui::update_page::actions_with_card(available, confirming) }
+        else { pocket_ui::update_page::actions_with_card(available, confirming, !pocket_ui::device::no_wifi_chip()) }
     }
 
     /// Starts `action` on a worker thread; results come back as `UserEvent::Update`.
     fn update_action(&mut self, action: UpdateAction) {
+        let action = match (pocket_ui::device::no_wifi_chip(), action) {
+            (true, UpdateAction::Check) => UpdateAction::Card,
+            (true, UpdateAction::Auto) => return,
+            _ => action,
+        };
         // The switch works at any time, even while something downloads.
         if action == UpdateAction::Auto {
             self.set_update_auto(!self.update_auto(), Instant::now());
@@ -4730,7 +4858,15 @@ impl App {
         match action {
             UpdateAction::Check => {
                 self.updates.start(UpdateTask::Check);
-                std::thread::spawn(move || send(UpdateEvent::Checked(app_update_hint::fetch(&url))));
+                let supports_card = !pocket_ui::device::android_profile();
+                std::thread::spawn(move || {
+                    let result = app_update_hint::fetch(&url);
+                    if result.is_err() && supports_card && pocket_ui::wifi::ip_now().is_none() {
+                        send(UpdateEvent::CardLooked { at_start: false, look: update::card::look() });
+                    } else {
+                        send(UpdateEvent::Checked(result));
+                    }
+                });
             }
             UpdateAction::InstallApp => {
                 if self.updates.app_available().is_none() { return; }
@@ -4798,10 +4934,12 @@ impl App {
             }
             UpdateEvent::Looked(result) => {
                 self.update_hint_looked(result, Instant::now());
+                self.resume_shelf_after_update();
                 return;
             }
             UpdateEvent::CardLooked { at_start: true, look } => {
                 self.card_update_found_at_start(look);
+                self.resume_shelf_after_update();
                 return;
             }
             UpdateEvent::CardLooked { at_start: false, look } => self.card_update_looked(look),
@@ -4824,6 +4962,18 @@ impl App {
         self.updates.finish(outcome);
         if let Some(inspector) = &self.update_inspector { let _ = inspector.send(()); }
         self.updates.sel = 0;
+        self.resume_shelf_after_update();
+    }
+
+    fn resume_shelf_after_update(&mut self) {
+        if !self.after_first_done || self.updates.restart_at.is_some() || pocket_ui::proc::mock() || pocket_ui::background_io::paused() {
+            return;
+        }
+        if self.identify.due() || self.cover_run.resume_due() {
+            self.auto_covers("after an update check");
+        } else if self.text_run.resume_due() {
+            self.auto_texts("after an update check");
+        }
     }
 
     /// Versions, the offered actions, and progress or the last result at the bottom.
@@ -4855,9 +5005,11 @@ impl App {
             Some(_) if app_step.is_some() => {
                 let (step, frac) = app_step.unwrap();
                 bar(c, frac);
-                match self.updates.cancel().and_then(|c| c.phase()) {
-                    Some(phase @ (update::WorkerPhase::Connecting | update::WorkerPhase::Fallback | update::WorkerPhase::CheckingDownload
-                        | update::WorkerPhase::CheckingAssets)) => phase.label().unwrap_or_default().to_string(),
+                let phase = self.updates.cancel().and_then(|c| c.phase()).unwrap_or(self.updates.worker().phase);
+                match step {
+                    // One sentence for every file, the same between the parts (Alex, 20.11.: "Connecting to update server" flashed for
+                    // every small part of the Brick's update).
+                    update::Step::Downloading => self.updates.download().line(phase),
                     _ => step.line((frac * 100.0) as u32),
                 }
             }
@@ -4867,6 +5019,7 @@ impl App {
                 bar(c, frac);
                 match self.updates.cancel().and_then(|c| c.phase()) {
                     Some(update::WorkerPhase::Downloading) if self.updates.can_cancel() => format!("Downloading the update… {}%", (frac * 100.0) as u32),
+                    Some(phase @ update::WorkerPhase::Fallback) if self.updates.can_cancel() && self.updates.download().retry.is_some() => self.updates.download().line(phase),
                     Some(phase) if self.updates.can_cancel() && phase.label().is_some() => phase.label().unwrap().to_string(),
                     _ => format!("{label}, {}%", (frac * 100.0) as u32),
                 }
@@ -4994,10 +5147,7 @@ impl App {
             added = pocket_ui::library_cache::games_added(&self.systems, &systems);
             // The next start shows them from the cache (`library_cache`), written on a thread.
             pocket_ui::library_cache::store_soon(&self.data_dir, &self.es_systems, systems.clone());
-            self.systems = systems;
-            self.recents.follow_library(&self.systems);
-            self.curator.library_changed();
-            self.find_library_changed();
+            self.library_replace_systems(systems);
         }
         // A gamelist copied with the games (`app_gamelist`).
         self.gamelist_refresh("games added");
@@ -5028,6 +5178,7 @@ impl App {
     /// nothing scraping already, games without covers. Quiet: the shelf shows "Covers 3 of 12" at most.
     fn auto_covers(&mut self, why: &str) {
         use pocket_ui::auto_covers::Decision;
+        if pocket_ui::background_io::paused() { return; }
         // The games are recognised by their checksum first (`app_identify`): covers and descriptions are asked for
         // under those names when it is through, which calls this again.
         if self.identify(why) {
@@ -5073,17 +5224,29 @@ impl App {
             let progress = |done, total, found| {
                 let _ = proxy.send_event(UserEvent::Covers(CoversEvent::Progress { done, total, found }));
             };
-            let stopped = || stop.load(std::sync::atomic::Ordering::Relaxed) || pocket_ui::covers::game_on();
-            let run = pocket_ui::game_pictures::run_until(&pocket_ui::game_pictures::Libretro, &data_dir, &missing, Some(&pictures), progress, stopped);
-            let (total, stopped, unreachable) = (run.covers_total + run.pictures_total, run.stopped(), run.unreachable);
-            let _ = proxy.send_event(UserEvent::Covers(CoversEvent::Done {
-                looked_up: run.covers_looked_up,
-                pictures_looked_up: run.pictures_looked_up,
-                found: run.found,
-                total,
-                stopped,
-                unreachable,
-            }));
+            let stopped = || stop.load(std::sync::atomic::Ordering::Relaxed) || pocket_ui::background_io::cancelled();
+            let run = pocket_ui::background_io::job(|| {
+                pocket_ui::game_pictures::run_until(&pocket_ui::game_pictures::Libretro, &data_dir, &missing, Some(&pictures), progress, stopped)
+            });
+            let event = match run {
+                Some(run) => CoversEvent::Done {
+                    total: run.covers_total + run.pictures_total,
+                    stopped: run.stopped(),
+                    unreachable: run.unreachable,
+                    looked_up: run.covers_looked_up,
+                    pictures_looked_up: run.pictures_looked_up,
+                    found: run.found,
+                },
+                None => CoversEvent::Done {
+                    total: missing.len() + pictures.len(),
+                    stopped: true,
+                    unreachable: false,
+                    looked_up: Vec::new(),
+                    pictures_looked_up: Vec::new(),
+                    found: 0,
+                },
+            };
+            let _ = proxy.send_event(UserEvent::Covers(event));
         });
     }
 
@@ -5114,6 +5277,7 @@ impl App {
                 self.pictures_changed();
                 self.cabinet.covers_changed();
                 self.look_previews = None;
+                if stopped { self.resume_shelf_after_update(); }
                 (total.max(1), total.max(1), found)
             }
         };
@@ -5613,7 +5777,10 @@ impl App {
             let msg = self.load_error.clone().unwrap_or_else(|| "No games yet".into());
             let dy = pocket_ui::ui_art::above_words(c, pocket_ui::ui_art::Art::NoGames, MARGIN, false, EMPTY_ART_TOP, 300, 50);
             self.text.draw(c, Face::Title, 50, MARGIN, 300 + dy, pal().chalk, &msg);
-            let hint = if pocket_ui::card_health::image_card() { pocket_ui::card_health::IMAGE_CARD_NOTE } else { "Copy games into /storage/roms/<system> and restart." };
+            // The dArkOS port reads dArkOS's own folders (start.sh's view); /storage/roms is its private view of them.
+            let hint = if pocket_ui::card_health::image_card() { pocket_ui::card_health::IMAGE_CARD_NOTE }
+                else if pocket_ui::device::darkos_port() { app_starter::DARKOS_OWN_GAMES }
+                else { "Copy games into /storage/roms/<system> and restart." };
             for (i, line) in self.text.wrap_prose(Face::Body, 28, hint, c.w - 2 * MARGIN).iter().enumerate() {
                 self.text.draw(c, Face::Body, 28, MARGIN, 350 + dy + i as i32 * 38, pal().dust, line);
             }
@@ -5651,10 +5818,20 @@ impl App {
     }
 
     fn paint_home(&mut self, c: &mut Canvas, with_hints: bool) {
+        // The toast at the end stands over the hint bar for its moment: the hints give way meanwhile, so its pill never
+        // cuts a key in half ("Open means your moment is waiting" over HOME on Android, the crate's "… is on the shelf
+        // now", 19.11.2026; tests/hint_bar.rs `:toasted`).
+        self.toast_over_hints = self.toast.as_ref().is_some_and(|(m, at)| toast_age(*at) < toast_len(m));
+        self.paint_home_inner(c, with_hints);
+        self.toast_over_hints = false;
+    }
+
+    fn paint_home_inner(&mut self, c: &mut Canvas, with_hints: bool) {
         let big = self.big_live();
-        // The Shelf look's launch: the shelf under the scene stands still, so it is painted once and copied after
-        // (`app_cabinet::LaunchShelf`).
-        if !self.launch_shelf_restore(c, big, with_hints) {
+        // The Shelf or Cabinet launch: once the page under the scene stands still, copy it (and reuse its dim pass)
+        // instead of painting the whole home page every frame (`app_cabinet::LaunchShelf`).
+        let (restored, dimmed) = self.launch_shelf_restore(c, big, with_hints);
+        if !restored {
             if !self.paint_home_page(c, with_hints, big) {
                 return;
             }
@@ -5682,7 +5859,7 @@ impl App {
             let p = (pocket_ui::frame_clock::now().saturating_duration_since(t).saturating_sub(self.cabinet.launch_delay()).as_secs_f32() / FADE.as_secs_f32()).min(1.0);
             // The Shelf look's case goes into its console over the shelf (the Cabinet paints its own with the cabinet).
             if self.theme == Theme::Shelf || self.theme == Theme::Cabinet || big {
-                self.paint_insert(c, pocket_ui::frame_clock::now());
+                self.paint_insert_with(c, pocket_ui::frame_clock::now(), dimmed);
             }
             let p = self.cabinet.launch_fade_at(p);
             self.cabinet.launch_veil(c, p);
@@ -5703,6 +5880,8 @@ impl App {
         // A save with two versions found since the last time: told once (`app_sync_conflicts`).
         if with_hints {
             self.sync_conflict_notice();
+            // Settings or lists the card refused to save: told once (`app_save_trouble`).
+            self.card_refusal_notice();
         }
         let notice_bottom = if let Some(n) = &self.notice { n.paint(c, &mut self.text) } else { 0 };
         self.notice_painted = notice_bottom > 0;
@@ -5902,7 +6081,7 @@ impl App {
             Item::JustPlay => (shelf::JUST_PLAY.into(), "curator".into(), shelf::JUST_PLAY_SIDE.into(), shelf::JUST_PLAY_LINE.into()),
             Item::Crate => {
                 // Shelf space (`app_crate`): how many are in the crate, and the shelf's free places.
-                let n = self.crate_items().len();
+                let n = self.crate_count();
                 let count = if n == 1 { "1 game".to_string() } else { format!("{n} games") };
                 let line = match self.shelf_space.free() {
                     0 => format!("{count} in the crate, the shelf is full"),
@@ -6026,6 +6205,9 @@ impl App {
     /// Button hints along the bottom edge; the ones for a single button can be tapped. When they change at rest, the
     /// old ones fade out as the new ones fade in; during a move the new ones come at once (`app_motion`).
     fn paint_hint_row(&mut self, c: &mut Canvas, hints: &[(&str, &str)]) {
+        if self.toast_over_hints {
+            return;
+        }
         let now = Instant::now();
         let moving = self.moving_now(now);
         if let Some((old, p)) = self.motion.hints_fade(hints, now, moving) {
@@ -6169,6 +6351,13 @@ fn snapshot(app: &mut App, args: &[String]) {
         || ["POCKETUI_FRAME_BENCH", "POCKETUI_BENCH_FRAMES", "POCKETUI_SNAPSHOT_LAUNCH_SERIES"].iter()
             .any(|key| std::env::var(key).is_ok_and(|v| !v.is_empty() && v != "0")) {
         app_shrink_wrap::bench_run();
+    }
+    // `<state>:toasted`: the shelf's toast stands over the page for its moment, the longest line Home says by itself
+    // (tests/hint_bar.rs: no key of the bar half under its pill).
+    let toasted = state.as_deref().is_some_and(|s| s.ends_with(":toasted"));
+    let state = state.map(|s| s.strip_suffix(":toasted").map(str::to_string).unwrap_or(s));
+    if toasted {
+        app.toast = Some((pocket_ui::first_game::OPEN_CASE_NOTE.to_string(), Instant::now()));
     }
     let bgrun = state.as_deref().is_some_and(|s| s.ends_with(":bgrun"));
     let state = state.map(|s| s.strip_suffix(":bgrun").map(str::to_string).unwrap_or(s));
@@ -6335,6 +6524,10 @@ fn snapshot(app: &mut App, args: &[String]) {
         app.bench_showcase(rest, w, h);
         return;
     }
+    if state == "test-cabinet-card-swap" && pocket_ui::proc::mock() {
+        app.cabinet_card_swap_check();
+        return;
+    }
     // "infos-warm-check:<system>": the first card's lookups cold and after the idle look-ahead (`App::infos_warm_check`).
     if let Some(rest) = state.strip_prefix("infos-warm-check:") {
         app.infos_warm_check(rest);
@@ -6360,11 +6553,18 @@ fn snapshot(app: &mut App, args: &[String]) {
         );
         return;
     }
+    // "bench-bigcard[:<look>]": a huge card's shelf switches and moves, frame by frame (`App::bench_bigcard`).
+    if let Some(look) = state.strip_prefix("bench-bigcard").map(|r| r.trim_start_matches(':')) {
+        let look = if look.is_empty() { "cabinet" } else { look };
+        let samples = app.bench_bigcard(look);
+        app_bigcard_bench::print_bigcard(look, &samples);
+        return;
+    }
     // "bench-shelf[:<look>]": a move on Home in numbers, on stdout (`App::bench_shelf`, tests/shelf_moves.rs).
     if let Some(look) = state.strip_prefix("bench-shelf").map(|r| r.trim_start_matches(':')) {
         let b = app.bench_shelf(if look.is_empty() { "split" } else { look }, w, h);
         println!(
-            "bench-shelf items={} moves={} p50_us={:.0} p95_us={:.0} max_us={:.0} glyphs={} patterns={} panel={}x{} logical={w}x{h} paint={:?} design_passes={:.1} sealed={} look={:?} changes={} moment_ms={:.1} worst={} room_rebuilds={}",
+            "bench-shelf items={} moves={} p50_us={:.0} p95_us={:.0} max_us={:.0} glyphs={} patterns={} panel={}x{} logical={w}x{h} paint={:?} design_passes={:.1} sealed={} look={:?} changes={} moment_ms={:.1} worst={} room_rebuilds={} shadows_made={}",
             app.items.len(),
             b.moves,
             b.p50_us,
@@ -6381,7 +6581,8 @@ fn snapshot(app: &mut App, args: &[String]) {
             b.changes,
             b.moment_ms,
             b.worst,
-            app_cabinet::ROOM_REBUILDS.load(std::sync::atomic::Ordering::Relaxed)
+            app_cabinet::ROOM_REBUILDS.load(std::sync::atomic::Ordering::Relaxed),
+            b.shadows_made
         );
         print_design_sites();
         return;
@@ -6419,7 +6620,7 @@ fn snapshot(app: &mut App, args: &[String]) {
     // "notice:<several|password|packing|checksum|incomplete|empty|none>": Home with the card a zip pocket-core refused leaves
     // (`archive::message`), "notice:bios" the card for a game that didn't start (`fallback::not_started_notice`; "bios-segacd"
     // for one whose missing BIOS is known),
-    // "notice:update" the hint that a newer pocket-ui is ready (`app_update_hint`), "notice:card-update" an update file found on the card (`app_card_update`), "notice:twin" RetroArch's start of a game sharing its file name (`frozen::SHARED`), "notice:switched-off" the start after a switch-off after sleeping (`app_auto_off`), "notice:patch-<version|damaged|
+    // "notice:update" the hint that a newer pocket-ui is ready (`app_update_hint`), "notice:card-update" an update file found on the card (`app_card_update`), "notice:twin" RetroArch's start of a game sharing its file name (`frozen::SHARED`), "notice:card-full" / "notice:card-unwritable" settings or lists the card refused to save (`save_trouble::CardRefusals`), "notice:switched-off" the start after a switch-off after sleeping (`app_auto_off`), "notice:patch-<version|damaged|
     // big|kind>" a patch next to the game that pocket-core refused (`softpatch::message`).
     if let Some(kind) = state.strip_prefix("notice:") {
         // A trailing ":toast" also raises the small toast, so its place under the card is rendered.
@@ -6440,6 +6641,8 @@ fn snapshot(app: &mut App, args: &[String]) {
             #[cfg(not(feature = "brick"))]
             "switched-off" => pocket_ui::auto_off::Note { hours: 3, brightness: None }.text(),
             "twin" => pocket_ui::frozen::SHARED.to_string(),
+            "card-full" => pocket_ui::save_trouble::CHANGES_FULL.to_string(),
+            "card-unwritable" => pocket_ui::save_trouble::CHANGES_UNWRITABLE.to_string(),
             "save-failed" => pocket_ui::save_trouble::MOMENT_FAILED.to_string(),
             "undo-failed" => pocket_ui::save_trouble::UNDO_FAILED.to_string(),
             "fallback" => pocket_ui::fallback::notice("retroarch"),
@@ -6547,6 +6750,9 @@ fn snapshot(app: &mut App, args: &[String]) {
                 if step.starts_with("ports-get") { setup.with_portmaster_demo(step.strip_prefix("ports-get-").unwrap_or("offer")) }
                 else if step == "ports-update" { setup.with_updates(&["2048.zip", "cceleste.zip"]) } else { setup }
             }
+            // PortMaster games from the card (no Wi-Fi) with made-up files: empty, empty-games (the RG28XX's GAMES drive),
+            // found, installing, done, failed (keys: d, u).
+            _ if step.starts_with("ports-card-") => setup.only(Only::Extras).with_ports_card_demo(&step["ports-card-".len()..]),
             _ => setup,
         };
         app.setup = Some(setup);
@@ -6618,7 +6824,10 @@ fn snapshot(app: &mut App, args: &[String]) {
     // "emu:<system>[:<game file>][:<emulator>/<core>][:save][:<row>]": the "Runs on" page (`app_emu_choice`).
     if app.emu_choice_snapshot(state) {
         let mut buf = vec![0u32; (w * h) as usize];
-        app.paint(&mut snap_canvas(&mut buf, w, h));
+        let mut c = snap_canvas(&mut buf, w, h);
+        app.paint(&mut c);
+        // A card that A on the game raised (Dolphin's, `open_dolphin_card`) over everything, as the real draw puts it.
+        app.paint_leave(&mut c);
         write_png(&buf, w, h, out);
         return;
     }
@@ -6737,9 +6946,14 @@ fn snapshot(app: &mut App, args: &[String]) {
             None => app.curator_snapshot_after(rest),
         }
         if let Some(keys) = rest.strip_prefix("walk:").and_then(|r| r.splitn(3, ':').nth(2)) {
-            for k in keys.chars() {
+            let mut chars = keys.chars().peekable();
+            while let Some(k) = chars.next() {
                 app.walk_key(k);
-                pocket_ui::frame_clock::hold_settled();
+                // Keep a sticker press started by the final key intact until `sticker_snapshot_clock()` sets its moment:
+                // advancing `hold_settled()` by real wall-clock paint time after `walk_key` could expire it under load.
+                if chars.peek().is_some() || app.cabinet.press.is_none() {
+                    pocket_ui::frame_clock::hold_settled();
+                }
                 app.paint(&mut snap_canvas(&mut buf, w, h));
             }
             sticker_clock = app.sticker_snapshot_clock();
@@ -6749,7 +6963,7 @@ fn snapshot(app: &mut App, args: &[String]) {
         // One moment for the turn, the slide and the disc: the clock stands while the frame is set up and painted
         // (a sticker's press holds it at its own moment: `sticker_snapshot_clock`).
         if !sticker_clock {
-            pocket_ui::frame_clock::hold_settled();
+            pocket_ui::frame_clock::freeze(pocket_ui::frame_clock::now().max(Instant::now()) + pocket_ui::frame_clock::SETTLE);
         }
         if let Some(bx) = app.card.as_mut().and_then(|o| o.card.boxed.as_mut()) {
             bx.snapshot_settle();
@@ -6858,6 +7072,16 @@ fn snapshot(app: &mut App, args: &[String]) {
         options: Default::default(),
     });
     let frame = args.get(2).and_then(|p| image::load_image(std::path::Path::new(p)));
+    // The pause menu's "Paused here · played 42 min today" (`pause_page::paused_here`): this morning's 40 minutes of the
+    // game in a made-up log, as a device with Play history on (the default) has them; the running session adds its own.
+    if state.split(':').next() == Some("menu") && pocket_ui::play_log::view().is_none() {
+        let now = pocket_ui::play_time::now_secs();
+        let tz = pocket_ui::appearance::utc_offset_now(now as i64);
+        let morning = (pocket_ui::civil_date::local_day(now, tz) * 86_400 + 8 * 3600 - tz as i64) as u64;
+        let game = pocket_ui::play_log::Game { path: format!("/storage/roms/{g_system}/{g_file}"), name: "uCity".into(), system: g_system.clone() };
+        let session = pocket_ui::play_log::Session { game: 0, start: morning, tz, secs: 42 * 60, ended: true, emulator: "pocket-core".into(), ..Default::default() };
+        pocket_ui::play_log::show_instead(pocket_ui::play_log::build(vec![game], vec![session], Vec::new(), Vec::new()));
+    }
     let tmp = snapshot_tmp();
     // "picture-gba[:<row>]": the Picture page of a GBA game, whose LCD grid has a row for the GBA screen's colours.
     // "picture-snes[:<row>]": a SNES game's.
@@ -6935,10 +7159,17 @@ fn snapshot(app: &mut App, args: &[String]) {
                 }
                 if kind == ":restarting" { app.update_event(UpdateEvent::Done(Ok(true))); }
             }
-            ":connecting" | ":fallback" => {
+            // "downloading": all parts on one bar with the time left; "fallback": a lost connection and the next try.
+            ":connecting" | ":fallback" | ":downloading" => {
                 let cancel = update::Cancel::new();
-                cancel.set_phase(if kind == ":connecting" { update::WorkerPhase::Connecting } else { update::WorkerPhase::Fallback });
-                app.updates.start(UpdateTask::App { version: "0.3.0".into(), total: 100, cancel });
+                let phase = match kind {
+                    ":connecting" => update::WorkerPhase::Connecting,
+                    ":fallback" => update::WorkerPhase::Fallback,
+                    _ => update::WorkerPhase::Downloading,
+                };
+                if kind != ":connecting" { cancel.pretend_download(42_000_000, 100_000_000, 60, (kind == ":fallback").then_some((2, 3))); }
+                cancel.set_phase(phase);
+                app.updates.start(UpdateTask::App { version: "0.7.0".into(), total: 100_000_000, cancel });
             }
             // The page with a newer pocket-ui on offer: its notes, then the question, with a flat battery or a full one.
             ":ready" | ":confirm" | ":confirm-low" | ":confirm-charging" | ":off" => {
@@ -7205,6 +7436,7 @@ fn snapshot(app: &mut App, args: &[String]) {
         save_trouble: None,
         saving: None,
         hardcore_ask: hard_ask,
+        shortcut_list: Vec::new(),
     });
     if let (Some(ms), Some(m)) = (fill_ms, app.menu.as_mut()) {
         let at = Instant::now();
@@ -7357,6 +7589,18 @@ fn snapshot(app: &mut App, args: &[String]) {
     if name == "runs-on" && app.emu_choice_snapshot_in_menu(n(0)) {
         if let Some(m) = app.menu.as_mut() {
             (m.hosted, m.retroarch, m.settings, m.page) = (false, true, None, Page::EmuChoice);
+        }
+    }
+    // "shortcut-list[:<row>]": that game's Runs on → Shortcuts, every shortcut on and RetroArch's Rewind too
+    // (`app_shortcut_list`).
+    if name == "shortcut-list" && app.emu_choice_snapshot_in_menu(0) {
+        if let Some(m) = app.menu.as_mut() {
+            (m.hosted, m.retroarch, m.settings) = (false, true, None);
+        }
+        use pocket_ui::shortcut_list::{retroarch, Game};
+        app.show_shortcut_list(retroarch(Game { on: Default::default(), rewind: true, kids: false, easy: false }));
+        if let Some(m) = app.menu.as_mut() {
+            m.page = Page::ShortcutList { sel: n(0) };
         }
     }
     // "menu:port-perf": the port's Options page, Performance & fan, over the paused game (`app_port_perf`).
@@ -8200,6 +8444,16 @@ impl App {
                     self.request_redraw();
                 }
             }
+            UserEvent::RetroArchStateChecked { started, action, confirmed } => {
+                if self.retroarch_state_pending == Some(started) {
+                    self.retroarch_state_pending = None;
+                }
+                if !confirmed && self.running.as_ref().is_some_and(|run| run.started == started) {
+                    if self.menu.is_none() { self.open_menu(); }
+                    if let Some(menu) = self.menu.as_mut() { menu.page = Page::RetroArchStateUnconfirmed(action); }
+                    self.request_redraw();
+                }
+            }
             UserEvent::Sync(e) => self.sync_event(e),
             UserEvent::Tailscale(e) => self.tailscale_event(e),
             UserEvent::Romm(n) => self.romm_news(n),
@@ -8213,6 +8467,7 @@ impl App {
             UserEvent::Backup(e) => self.backup_event(e),
             UserEvent::Storage(e) => self.storage_event(e),
             UserEvent::Gamelist(index) => self.gamelist_event(index),
+            UserEvent::GamelistDeferred => self.gamelist_defer(),
             UserEvent::AndroidApps(apps, why) => self.android_apps_event(apps, why),
             UserEvent::Gallery(e) => self.gallery_event(e),
             UserEvent::AlbumPicture(file, img) => self.album_picture(file, img),
@@ -8251,7 +8506,10 @@ impl App {
             }
             UserEvent::Online => self.auto_covers("online after boot"),
             UserEvent::LibraryRescanned(systems, key) => self.library_rescanned(systems, key),
+            UserEvent::LibraryCacheStored(key) => self.library_ui.key = Some(key),
+            UserEvent::LibraryScanDeferred => self.library_ui_rescan_after_game(),
             UserEvent::LibraryUnread { count, rose } => self.library_unread(count, rose),
+            UserEvent::SystemListCheckDeferred => self.library_ui.system_list_check_due = true,
             UserEvent::SystemListUnread { fallback } => {
                 // A rescan that kept the list on screen (`fallback: false`) leaves what the start found.
                 self.system_list_fallback |= fallback;
@@ -8758,6 +9016,8 @@ impl ApplicationHandler<UserEvent> for App {
         // A game list read again after the start, swapped in once nothing holds a game by its place (`app_library`).
         self.library_apply_pending();
         self.games_card_say();
+        self.gamelist_resume();
+        self.gallery_resume();
         // The Cabinet's TV may have finished behind Settings, a card or another look. Drain its answers here too,
         // so a completed request cannot keep an invisible Cabinet animating forever.
         if self.cabinet.tv.poll() {
@@ -8939,8 +9199,16 @@ impl ApplicationHandler<UserEvent> for App {
         if let Some(t) = self.box_warm_tick(now) {
             wake = Some(wake.map_or(t, |w| w.min(t)));
         }
+        // The focused game's console rig and cartridge/disc, pre-warmed while resting on a case (`app_cabinet::insert_warm_tick`).
+        if let Some(t) = self.insert_warm_tick(now) {
+            wake = Some(wake.map_or(t, |w| w.min(t)));
+        }
         // The library's game facts, looked up ahead in idle moments: the first card's "More by" needs all of them (`app_card::infos_warm_tick`).
         if let Some(t) = self.infos_warm_tick(now) {
+            wake = Some(wake.map_or(t, |w| w.min(t)));
+        }
+        // The Cabinet: the shelves next to the selected one, made ahead after a move (`app_cabinet::cabinet_warm_tick`).
+        if let Some(t) = self.cabinet_warm_tick(now) {
             wake = Some(wake.map_or(t, |w| w.min(t)));
         }
         // Lived-in shelf: the row's leaning and lying spines, made ahead after the row opened (`app_cabinet::lived_warm_tick`).
@@ -9140,6 +9408,8 @@ impl App {
         if std::mem::replace(&mut self.after_first_done, true) {
             return;
         }
+        // Start the update search before scheduling shelf reads, so they can wait for the card.
+        self.card_update_start();
         // The game list read again (it came from the cache), or the cache written (`app_library`).
         self.library_after_first_frame();
         // The pages' state the first frame doesn't show, each on a thread (`startup::Later`).
@@ -9156,8 +9426,6 @@ impl App {
         self.achievements.start();
         // Is the card nearly full? A statvfs on a thread; a notice on the shelf once (`app_storage`).
         self.storage_check("at start");
-        // An update file copied onto the card (a handheld without Wi-Fi): looked for on a thread (`app_card_update`).
-        self.card_update_start();
         // The games recognised by their checksum, on a thread of the lowest priority that waits a moment first; the
         // covers follow it (`app_identify`).
         self.auto_covers("at start");
@@ -9316,6 +9584,8 @@ fn main() {
         if let Some(d) = args.iter().position(|a| a == "--snapshot").and_then(|i| args.get(i + 1)).and_then(|s| pocket_ui::device::snapshot_state(s).1) {
             pocket_ui::device::force(d);
         }
+        // Settle the device and its Wi-Fi adapter before starting any workers.
+        let _ = pocket_ui::device::current();
         if pocket_ui::rescue::safe_mode_requested(&args, std::env::var(pocket_ui::rescue::SAFE_ENV).ok().as_deref()) {
             let data_dir = PathBuf::from(std::env::var("POCKETUI_DATA").unwrap_or_else(|_| "/storage/.config/pocket-ui".into()));
             // Settings → Language (only that field of settings.json is read; a damaged file is the system's).
@@ -9404,6 +9674,11 @@ fn main() {
     // The shelf asks whether Hardcore keeps a game from continuing (`achievements::hardcore::skips_moments`).
     pocket_ui::achievements::hardcore::shelf_data(&data_dir);
     pocket_ui::rumble::load_menu_haptics(&data_dir);
+    // The dArkOS port shows Haptics only where something can vibrate (`darkos::no_motor`).
+    #[cfg(feature = "brick")]
+    if pocket_ui::darkos::host() {
+        pocket_ui::rumble::look_for_motor();
+    }
     // Renders the UI sounds now, on the mixer thread, not with the first one.
     pocket_ui::ui_sound::start();
     let sound_config = pocket_ui::ui_sound::Config::load(&data_dir);
@@ -9657,6 +9932,7 @@ fn main() {
         pad: PadState::new(sources),
         exit_since: None,
         running: None,
+        retroarch_state_pending: None,
         launch_at: None,
         pending_launch: None,
         java_fetch: None,
@@ -9680,6 +9956,8 @@ fn main() {
         hidden: settings.hidden_systems.clone(),
         data_dir,
         toast: None,
+        toast_over_hints: false,
+        card_refusals: Default::default(),
         sleep_page: pocket_ui::sleep_settings::Page::new(pocket_ui::sleep_settings::Config::default()),
         about: Default::default(),
         after_game_note: None,
@@ -9735,6 +10013,7 @@ fn main() {
         sys,
         hits: Default::default(),
         leave: None,
+        dolphin_launch: None,
         touch_rec: Default::default(),
         cursor: None,
         mouse_down: false,
@@ -10515,7 +10794,7 @@ mod meta_words_tests {
             "Not here yet",
         ];
         let mut wrong = Vec::new();
-        for lang in Lang::ALL.into_iter().filter(|l| l.table().is_some()) {
+        for lang in Lang::ALL.into_iter().filter(|l| l.table().is_some() && l.complete()) {
             for word in &words {
                 let shown = tr_in(lang, word);
                 // Only a word every language writes the same ("100 %") may stay as it is.

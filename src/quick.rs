@@ -3289,6 +3289,37 @@ mod tests {
         assert_eq!(power_choices(&s), [Choice::Sleep, Choice::Restart, Choice::PowerOff, Choice::RestartUi]);
     }
 
+    /// R36S hand test 20.11.2026 #15c: in Clean the selected entry had two marks, a bar over the row and a pill around its
+    /// name on it. Now one mark, over the whole row, as on Settings; every entry, on the canvases it is painted on (640x480
+    /// panels are laid out at 1280x960 and halved, `scaled_layout`; the Brick's 1024x768 natively).
+    #[test]
+    fn the_power_menu_marks_the_selected_entry_once() {
+        let _style = crate::font_style::for_this_thread(crate::font_style::FontStyle::Barlow, Default::default());
+        let pill = crate::palette::DARK.select;
+        for (w, h) in [(1280, 960), (1024, 768), (1920, 1080)] {
+            let (mut s, _) = sys();
+            s.open_power(Instant::now());
+            let n = power_choices(&s).len();
+            for sel in 0..n {
+                if let Screen::Power(m) = &mut s.screen {
+                    m.sel = sel;
+                }
+                let mut text = crate::text::Text::builtin();
+                let mut px = vec![0u32; (w * h) as usize];
+                let mut c = crate::gfx::Canvas::new(&mut px, w, h);
+                crate::palette::scoped(0, || s.paint(&mut c, &mut text, false));
+                drop(c);
+                let band = px.iter().filter(|p| **p & 0xffffff == crate::palette::DARK.band).count();
+                assert_eq!(band, 0, "{w}x{h} entry {sel}: a second mark (the bar under the name pill)");
+                // The panel is at least 960 wide (or the screen less its margins): the row's mark is nearly that, a
+                // pill around the name alone was under half of it.
+                let xs: Vec<u32> = (0..w * h).filter(|i| px[*i as usize] & 0xffffff == pill).map(|i| i % w).collect();
+                let span = xs.iter().max().unwrap_or(&0) - xs.iter().min().unwrap_or(&0);
+                assert!(span >= 900, "{w}x{h} entry {sel}: the mark spans the row ({span} px wide)");
+            }
+        }
+    }
+
     #[test]
     fn the_menu_knows_whether_a_game_is_under_it_and_shows_the_battery_even_without_one() {
         let (mut s, _) = sys();
@@ -3475,7 +3506,7 @@ mod tests {
         // No warning any more, and offline with a clock set by hand is not "may be a little off" either.
         let (line, clock) = s.time_note(BY_HAND_ROW, want);
         assert_eq!(clock, crate::clock_check::Clock::Fine);
-        assert!(line.starts_with("Set by hand.") && line.contains("network time sets the clock again"), "{line}");
+        assert!(line.starts_with("Set manually.") && line.contains("network time takes over again"), "{line}");
         paint_page(&mut s);
     }
 
@@ -3521,7 +3552,7 @@ mod tests {
         assert_eq!(s.view.ntp, Some(NtpState::Synced));
         s.screen = Screen::Time(TimePage::Summary { sel: BY_HAND_ROW });
         let (line, _) = s.time_note(BY_HAND_ROW, unix_now());
-        assert!(line.contains("nothing to set by hand"), "{line}");
+        assert!(line.contains("No manual setup needed"), "{line}");
         tap(&mut s, CONFIRM, &SHELF, now);
         assert!(matches!(s.screen, Screen::Time(TimePage::Summary { .. })), "no picker");
         assert_eq!(s.toast.as_ref().map(|t| t.0.as_str()), Some("Network time keeps the clock right."));

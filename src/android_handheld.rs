@@ -318,6 +318,21 @@ mod tests {
         &MANIFEST[at..end]
     }
 
+    /// The player's dialogs (`inLanguage`): every language of the row counts as chosen, so one without lines there
+    /// (Korean, 21.11.2026) is English, never the phone's: on a German phone, Korean chosen gave German dialogs.
+    #[test]
+    fn the_players_dialogs_take_every_language_of_the_row_as_chosen() {
+        let at = POCKET.find("private static String inLanguage(").expect("inLanguage");
+        let chosen = POCKET[at..].lines().find(|l| l.contains("boolean chosen=")).expect("the chosen line");
+        for lang in crate::i18n::Lang::ALL {
+            let code = serde_json::to_string(&lang).unwrap();
+            let code = code.trim_matches('"');
+            // A variable of its own (`de||es||…`) or the setting written out (`\"language\":\"ko\"`).
+            let named = chosen.contains(&format!("{code}||")) || chosen.contains(&format!("\\\"language\\\":\\\"{code}\\\""));
+            assert!(named, "{lang:?} ({code}) is not taken as chosen: {chosen}");
+        }
+    }
+
     /// Android can't take a view down and make it again in its process (its native loop never ends): a pad paired, a new
     /// language or keyboard is followed by the view itself (review of 12.11.2026, #2: an ANR when a pad was paired).
     #[test]
@@ -345,6 +360,23 @@ mod tests {
         assert!(POCKET.contains("public String language()"), "the Activity's base answers language()");
         assert_eq!(crate::i18n::Lang::from_locale("de"), crate::i18n::Lang::De);
         assert_eq!(crate::i18n::Lang::from_locale("es"), crate::i18n::Lang::Es);
+    }
+
+    /// A phone's camera hole (19.11.2026, 20:9 phones at 2400x1080 in landscape: it stood over the pause menu's and the game
+    /// info's left edge): the Linux pages fill their window edge to edge with no safe insets, so the Handheld view's window
+    /// keeps out of the hole's edge (`LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER`). A panel without a hole (Mini V2) is unchanged.
+    /// The Mobile view lays out into the safe insets and keeps the edges round the hole.
+    #[test]
+    fn the_handheld_view_keeps_out_of_a_camera_hole() {
+        let base = &POCKET[POCKET.find("abstract class PocketBase").expect("PocketBase")..];
+        assert!(base.contains("attrs.layoutInDisplayCutoutMode = cutoutMode();"), "the window's cutout mode is the view's own");
+        let mode = |java: &str| {
+            let at = java.find("protected int cutoutMode()").expect("cutoutMode");
+            java[at..at + java[at..].find('}').unwrap()].to_string()
+        };
+        assert!(mode(base).contains("LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES"), "the Mobile view: {}", mode(base));
+        assert!(mode(HANDHELD).contains("LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER"), "the Handheld view: {}", mode(HANDHELD));
+        assert!(HANDHELD.contains("extends PocketBase"));
     }
 
     /// The files dialog (13.11.2026 rollout): it says what the app writes (a copy of the saves in "pocket-ui saves" when the Mobile

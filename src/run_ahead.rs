@@ -120,11 +120,11 @@ pub enum Off {
 impl Off {
     pub fn notice(self) -> &'static str {
         match self {
-            Off::Unsuited => "Run-ahead isn't available for this emulator",
-            Off::SlowStates => "Run-ahead is off: saving states takes too long here",
-            Off::TooSlow => "Run-ahead is off: too slow for this game",
-            Off::NotExact => "Run-ahead is off: this game doesn't replay exactly",
-            Off::StateFailed => "Run-ahead is off: the emulator couldn't save its state",
+            Off::Unsuited => "Run-ahead isn't supported by this core",
+            Off::SlowStates => "Run-ahead off: save states are too slow here",
+            Off::TooSlow => "Run-ahead off: too heavy for this game",
+            Off::NotExact => "Run-ahead off: game isn't deterministic",
+            Off::StateFailed => "Run-ahead off: core couldn't save state",
         }
     }
 }

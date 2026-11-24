@@ -79,6 +79,8 @@ for name in ["LICENSE", "NOTICE.md", "android/CORE-LICENCES.md"]:
     lines += ["== %s ==" % name, Path(name).read_text(), ""]
 (out / "pocket-ui-android-licences.txt").write_text("\n".join(lines))
 PY
+# Every core in the APK has its system files in assets/system, every core cores.json offers is in lib/ (scripts/package-complete.py).
+python3 -I "$ROOT/scripts/package-complete.py" android "$OUT/pocket-ui-android.apk" || { echo "release-apk: the APK is incomplete" >&2; exit 1; }
 echo
 echo "release-apk: assets in $OUT:"; ls -l "$OUT"
 echo "release-apk: next, from the private tree: scripts/android/release-check.sh $OUT/pocket-ui-android.apk --sources $ROOT/$B/cores/corresponding-source --previous-code <last published versionCode>"

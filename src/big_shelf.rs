@@ -22,17 +22,26 @@ pub struct Order {
 
 /// `counts`: each system shown and how many games it has, in the library's order. `favourites`: games of those systems.
 pub fn arrange(counts: &[(usize, usize)], favourites: &[(usize, usize)]) -> Order {
+    arrange_on_shelf(counts, favourites, |_| true)
+}
+
+/// `arrange` with only the games `on_shelf` keeps (Shelf space: the rest are in the crate, `shelf_space`); a system with
+/// none of them left has no group.
+pub fn arrange_on_shelf(counts: &[(usize, usize)], favourites: &[(usize, usize)], on_shelf: impl Fn((usize, usize)) -> bool) -> Order {
     let mut order = Order::default();
+    let favourites: Vec<(usize, usize)> = favourites.iter().copied().filter(|&g| on_shelf(g)).collect();
+    let systems: Vec<(usize, Vec<(usize, usize)>)> =
+        counts.iter().map(|&(system, count)| (system, (0..count).map(|g| (system, g)).filter(|&g| on_shelf(g)).collect())).collect();
     // Favourites that are all the games have nothing to stand in front of: each would just come twice.
-    let games: usize = counts.iter().map(|(_, count)| count).sum();
+    let games: usize = systems.iter().map(|(_, games)| games.len()).sum();
     if !favourites.is_empty() && favourites.len() < games {
         order.groups.push(Group { start: 0, system: None });
-        order.games.extend_from_slice(favourites);
+        order.games.extend_from_slice(&favourites);
         order.front = favourites.len();
     }
-    for &(system, count) in counts.iter().filter(|(_, count)| *count > 0) {
+    for (system, games) in systems.into_iter().filter(|(_, games)| !games.is_empty()) {
         order.groups.push(Group { start: order.games.len(), system: Some(system) });
-        order.games.extend((0..count).map(|g| (system, g)));
+        order.games.extend(games);
     }
     order.total = order.games.len() - order.front;
     order
@@ -138,6 +147,17 @@ mod tests {
         assert_eq!(order.games, vec![(1, 0), (0, 0), (0, 1), (1, 0)]);
         assert_eq!(order.groups, vec![Group { start: 0, system: None }, Group { start: 1, system: Some(0) }, Group { start: 3, system: Some(1) }]);
         assert_eq!(order.front, 1);
+    }
+
+    /// Shelf space (19.11.2026): only the games on the shelf, a system without any has no group, a favourite in the crate is
+    /// not in front.
+    #[test]
+    fn only_the_shelf_s_games_with_shelf_space() {
+        let order = arrange_on_shelf(&[(0, 3), (1, 2), (2, 1)], &[(1, 0), (0, 2)], |(s, g)| (s, g) != (0, 1) && s != 2 && (s, g) != (1, 0));
+        assert_eq!(order.games, vec![(0, 2), (0, 0), (0, 2), (1, 1)]);
+        assert_eq!(order.groups, vec![Group { start: 0, system: None }, Group { start: 1, system: Some(0) }, Group { start: 3, system: Some(1) }]);
+        assert_eq!((order.front, order.total), (1, 3));
+        assert_eq!(arrange_on_shelf(&[(0, 2)], &[], |_| true), arrange(&[(0, 2)], &[]));
     }
 
     #[test]

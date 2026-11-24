@@ -176,12 +176,12 @@ impl WebPage {
     /// The line for the selected row, in the hint bar.
     pub fn describe(&self, row: Row) -> &'static str {
         match row {
-            Row::Switch => "Your games, play time and uploads in a browser.",
-            Row::Pair if self.prefs.enabled => "A one-time code that lets a browser in.",
+            Row::Switch => "Browse games, stats and uploads in any browser.",
+            Row::Pair if self.prefs.enabled => "Generate a one-time pairing code.",
             Row::Pair => "Switch the web companion on first.",
-            Row::Browsers => "Browsers paired with a code. A revokes one.",
-            Row::Tailnet if self.prefs.trust_tailnet => "Open: your own Tailscale devices need no code.",
-            Row::Tailnet => "Code: every browser needs a code, yours too.",
+            Row::Browsers => "Paired browsers. Press A to revoke access.",
+            Row::Tailnet if self.prefs.trust_tailnet => "Open: your Tailscale devices skip the code.",
+            Row::Tailnet => "Code: every browser needs a pairing code.",
         }
     }
 }

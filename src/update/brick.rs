@@ -104,8 +104,11 @@ pub(super) fn install_folder_with(
         }
     }
     ram.reserve(rel.size)?;
+    // The changed parts are named inside the app archive: until it is read, the bar keeps room for them.
+    cancel.more_files_may_follow();
     download_checked(tools, rel, manifest_url, &tarball, cancel, progress)?;
     let mut plan = super::brick_assets::fetch(tools, card, &tarball, &mut ram, manifest_url, cancel, progress, free)?;
+    cancel.files_known(0);
     if cancel.is_cancelled() { return Err("Download cancelled.".into()); }
     // Every network child has exited before the first update write on the card, including changed components.
     let _idle = super::brick_io::IdleIo::enter().map_err(|e| e.to_string())?;

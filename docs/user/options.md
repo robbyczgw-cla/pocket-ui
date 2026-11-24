@@ -1,359 +1,294 @@
 # Options
 
-Pause menu → **Options**: the settings of the running game. This page describes the Options of games on
-pocket-ui's own host (see [Systems](systems.md#on-pocket-uis-own-host)). PlayStation 2, GameCube, Wii and 3DS
-have a shorter list of their own ([Options for PlayStation 2, GameCube, Wii and 3DS](options-big.md)); for RetroArch and the
-other emulators, Options opens [Runs on](#runs-on): which emulator plays the game, and RetroArch's own settings.
-The same settings for one game are on its card without starting it: [This game](#this-game).
+Pause menu → **Options** lets you dial in visuals, controls, cheats, shortcuts and performance for the game you're
+playing. This page covers games running in pocket-ui's own player ([Systems](systems.md#on-pocket-uis-own-host)).
+PlayStation 2, GameCube, Wii and 3DS have their own compact Options ([Options for PlayStation 2, GameCube, Wii and
+3DS](options-big.md)), while RetroArch and standalone emulators open [Runs on](#runs-on). Want to tweak a game before
+launching it? Press START on its card for [This game](#this-game).
 
 | Entry | What it holds |
 |---|---|
-| **Picture** | Size, look, frame and orientation, with a live preview. |
-| **Emulator** | Settings of the emulator itself, such as colours and palettes. Shown only when the emulator offers settings. |
-| **Controls** | Which button does what, and the left stick. |
-| **Cheats** | Cheats from the libretro cheat database. On TrimUI, opening it downloads the database once over Wi-Fi, with progress; afterwards it works offline. Other hosts show it only for matching games. See [Cheats](options-cheats.md) |
-| **Shortcuts** | HOME + button combinations while you play. |
-| **Speed, rumble, fan** | Fast-forward speed, rewind, what is shown over the game, rumble, performance, fan and run-ahead. |
-| **Zoom** | The paused picture larger, to read small text ([Zoom](big-text.md#zoom)). |
-| **Runs on** | Which emulator plays this game or this console (see [Runs on](#runs-on)). It has its own Save changes. |
-| **Keep for** | Where your changes stay: **This game** or **This console**. **Restore defaults** below it undoes them. |
+| **Picture** | Scaling, visual look, screen frame, orientation, 3D resolution and Mode 7, with a live preview. |
+| **Emulator** | Core-specific tweaks like colour palettes or sprite limits (shown when the core offers them). |
+| **Controls** | Per-button mapping, stick/D-pad swaps, DS stylus/layout actions and Hold to toggle. |
+| **Cheats** | Libretro cheat database plus your own `.cht` files (one-time Wi-Fi download on TrimUI). See [Cheats](options-cheats.md). |
+| **Shortcuts** | Toggle individual HOME + button in-game shortcuts. |
+| **Speed, rumble, fan** | Fast-forward speed, rewind, Earlier states, on-screen overlay, rumble, performance, fan and run-ahead. |
+| **Zoom** | Magnify the paused frame 2x/3x for tiny text ([Zoom](big-text.md#zoom)). |
+| **Runs on** | Pick which emulator/core runs this game or console (uses its own Save changes; see [Runs on](#runs-on)). |
+| **Keep for** | Save tweaks to **This game** or **This console** (**Restore defaults** underneath resets them). |
 
-Move with Up/Down (the list wraps around at the ends), change a value with Left/Right (A also steps
-to the next value), and go back with B. A row that opens a page ends in **›** on every row; a row that changes right
-there shows its value, the selected one as **‹ value ›**. The line at the bottom explains the selected setting.
-**A change applies to the running game at once** and stays: it is kept the moment you make it, as in Settings. Where
-it stays is the **Keep for** row ([below](#keep-for)).
+Move with Up/Down (wraps at ends), change inline values (**‹ value ›**) with Left/Right or A, open subpages (**›**)
+with A, and go back with B. **Every change applies live and saves immediately** to whichever scope **Keep for** shows
+([below](#keep-for)).
 
 ## Picture
 
-Pause menu → Options → **Picture**.
+Pause menu → Options → **Picture** previews your tweaks live over the paused frame with two side-by-side panels:
 
-While this page is open, a **live preview** shows the game's last picture with the settings as they
-are now, in two views side by side:
+- **Whole screen:** zoomed-out preview showing scaling, placement and screen frame.
+- **Actual size:** 1:1 crop from the centre showing scanlines, LCD grid, Old TV mask and Smooth exactly as they look in
+  motion.
 
-- **Whole screen**: the full screen, made smaller. Shows the size, the position and the frame.
-- **Actual size**: a piece from the middle of the screen at its real size. Shows scanlines, the LCD
-  grid, the Old TV mask and Smooth exactly as in the game.
-
-The preview is drawn again after every change, or says "No picture". With Large text the list shows three or four
-settings at a time and scrolls, so the preview stays large.
+Updates live on every press (or shows "No picture" if unavailable). With Large text, the list scrolls cleanly beside the
+preview.
 
 ### Screen scaling
 
 | Choice | What it looks like |
 |---|---|
-| **Integer** | Integer scaling: scaled by a whole number, so every game pixel is the same size: the sharpest picture, with black borders. Game Boy 7× (1120 × 1008), Game Boy Advance 5× (1200 × 800), NES and SNES 4× (about 1170 × 896 and 1195 × 896). The whole number is the largest one whose width still fits the screen, in the shape the emulator reports. |
-| **Integer, smaller** | One whole number smaller than Integer, so every pixel is still the same size and a screen frame has room: Game Boy 6× (960 × 864), Game Boy Advance 4× (960 × 640), NES and SNES 3× (about 880 × 672 and 896 × 672). |
-| **Aspect** | As large as fits, in the console's own shape. Bigger, but pixels are no longer all the same size. |
-| **Fullscreen** | Fills the screen and stretches the pixels. |
+| **Integer** | Scales by whole pixel multiples so every pixel is identical, tack-sharp with black borders (e.g. Game Boy 7× at 1120×1008, GBA 5× at 1200×800, NES/SNES 4× at ~1170×896 / 1195×896). Picks the largest whole multiple that fits. |
+| **Integer, smaller** | One whole step down so pixels stay razor-sharp while leaving breathing room for screen frames (Game Boy 6×, GBA 4×, NES/SNES 3×). |
+| **Aspect** | Fills as much screen as possible while keeping the console's true aspect ratio (slightly uneven pixel sizes). |
+| **Fullscreen** | Stretches edge to edge across the entire display. |
 
 ### Look
 
-How the picture looks, in one row. Handhelds get **LCD grid**; TV consoles, arcade and computers get **Scanlines** and
-**Old TV**. **Custom** has them all and opens the rows below. Scaling and Screen frame are rows of their own.
+Pick the vibe of your screen in one row. Handhelds include **LCD grid**; TV consoles, arcade and computers include
+**Scanlines** and **Old TV**. **Custom** unlocks manual Sharpness and Effect combos below.
 
 | Choice | What it looks like |
 |---|---|
-| **Clean** | Plain pixels, nothing added, all the same size at any scaling. The start of every console. |
-| **Smooth** | Sharp pixels, but stair-steps on slanted edges are rounded off. |
-| **Soft** | The whole picture slightly blurred, no hard pixel squares. |
-| **Bloom** | A clear picture where bright parts glow softly around the edges. |
-| **LCD grid** | Handhelds. Thin dark gaps between the pixels, like a handheld's screen. |
-| **Scanlines** | TV consoles, arcade, computers. Rows like a TV's beam, closing up in bright parts. |
-| **Old TV** | As Scanlines, plus a fine colour mask and a soft glow. Only the picture: the TV around it is a [Screen frame](options-screen.md#screen-frame). |
+| **Clean** | Pure, even pixels with zero filters (default on every console). |
+| **Smooth** | Sharp pixels with jagged diagonal stair-steps gently rounded off. |
+| **Soft** | Subtle blur across the picture for a softer vintage look. |
+| **Bloom** | Crisp image with gentle glow around bright highlights. |
+| **LCD grid** | Handhelds: fine dark pixel grid like a classic portable screen. |
+| **Scanlines** | TV consoles, arcade and computers: subtle CRT scanlines that brighten naturally on light areas. |
+| **Old TV** | Scanlines plus a fine phosphor colour mask and soft glow (image only; pair with a [Screen frame](options-screen.md#screen-frame) for the TV cabinet). |
 
-Choosing a Look sets Sharpness and Effect together; nothing else changes. What you saved keeps working: a combination
-that matches a Look shows as that Look, any other (Soft with an effect, an LCD grid on a PlayStation) shows as
-**Custom** with its rows open, and the picture is the same.
+Picking a Look sets Sharpness and Effect together without touching scaling or frames. Any custom combo (like Soft +
+Scanlines, or LCD grid on PlayStation) displays under **Custom** automatically.
 
-A good start: **LCD grid** on handhelds; **Old TV** with Integer scaling on NES, SNES, Mega Drive and PC Engine;
-**Clean**, as they start, on PlayStation, Saturn, Nintendo 64, PSP, Dreamcast and Nintendo DS.
+Quick recommendations: **LCD grid** on handhelds; **Old TV** + Integer scaling on NES, SNES, Mega Drive and PC Engine;
+**Clean** on PlayStation, Saturn, N64, PSP, Dreamcast and DS.
 
-**LCD colours** (Game Boy Advance, shown with the LCD grid): **On** shows the colours of the Game Boy Advance's own
-screen, softer and darker, as the games were made for. Choosing the LCD grid turns it on; turn it off and the Look stays.
-It is left out while the emulator's own colour correction is on (Options → Emulator).
+**LCD colours** *(GBA, shown with LCD grid)*: **On** applies the richer, warmer palette GBA games were tuned for (turns
+on automatically with LCD grid; hidden if the core's own colour correction is enabled under Options → Emulator).
 
 ### Custom: Sharpness and Effect
 
-Under **Custom** two rows open, a step in. **Sharpness**: **Sharp** hard pixel squares, as the console drew them;
-**Crisp** all pixels the same size at any scaling (the same as Sharp at Integer); **Soft** blurs every pixel edge a
-little. **Effect**: **None**, **LCD grid**, **Scanlines**, **Old TV**, **Bloom** or **Smooth**, every console offered
-all of them.
+Picking **Custom** reveals two sub-rows: **Sharpness** (**Sharp** hard pixels, **Crisp** balanced sub-pixels at any
+scale, **Soft** gentle blur) and **Effect** (**None**, **LCD grid**, **Scanlines**, **Old TV**, **Bloom**, **Smooth**; all
+available on any console).
 
 ### Screen frame and Screen orientation
 
-The frame around the picture and the turned screen for upright games: see [Screen frame and Screen orientation](options-screen.md).
+For console shells, CRT bezels, Ambient glow and vertical TATE rotation, see
+[Screen frame and Screen orientation](options-screen.md).
 
 ### Resolution
 
-Nintendo 64, PSP, Dreamcast and PlayStation games only, on the handhelds whose graphics chip was measured for it (the Retroid Pocket Mini V2
-and its Snapdragon 865 siblings, and the Snapdragon 8 Gen 2 handhelds), with pocket-ui OS and with pocket-ui for Android on the same
-handhelds (Options → Picture in the game's menu): how sharp the 3D picture is drawn. **Original** is the
-console's own resolution (the N64's 320 × 240, the PSP's 480 × 272, the Dreamcast's 640 × 480, the PlayStation's 320 × 240 or so);
-**2x**, **3x** and **4x** draw it that many times larger, so edges and far-away things look clean on this screen instead of in steps. It costs the graphics chip
-more, not the game's speed: the list offers only what ran at full speed on this handheld.
+Available for Nintendo 64, PSP, Dreamcast and PlayStation on Snapdragon 865 and Snapdragon 8 Gen 2 handhelds (both
+pocket-ui OS and pocket-ui for Android). Sets internal 3D rendering sharpness: **Original** (N64 320×240, PSP 480×272,
+Dreamcast 640×480, PS1 ~320×240) up to **2x**, **3x** or **4x**, offering only multipliers verified to run full speed on
+your hardware.
 
-- It is the same row as the **Resolution** of PlayStation 2, GameCube, Wii and Xbox games ([their Options](options-big.md)), and
-  like theirs it **takes effect the next time the game starts**: quit and start the game again to see it.
-- It is kept for the console, like the other Picture settings, or for one game with [Keep for](#keep-for) → This game.
-- Unless you choose one, each console starts with the sharpest resolution that keeps a margin on this handheld:
+- **Takes effect on next launch** (just like PS2/GameCube/Wii/Xbox; see [their Options](options-big.md)), saved per
+  console or per game via [Keep for](#keep-for) → This game.
+- Defaults to the sharpest full-speed tier per console:
 
 | Handheld | Nintendo 64 | PSP | Dreamcast | PlayStation |
 |---|---|---|---|---|
 | Retroid Pocket Mini V2, Mini, Pocket 5, Flip 2 (Snapdragon 865) | 2x (3x offered) | 2x (3x offered) | 2x | Original (2x offered) |
 | Retroid Pocket 6, Nova, AYN Odin 2 family (Snapdragon 8 Gen 2) | 2x (3x offered) | 2x (3x offered) | 2x | Original (2x offered) |
 
-  On Android, a handheld or phone with another chip has no Resolution row; the emulator keeps its own setting on the Emulator page.
-  The H700, RK3566 and RK3326 handhelds have no Resolution row: their N64, PSP and Dreamcast games run on ROCKNIX's own
-  emulators, which keep their settings, and the PlayStation keeps its Enhanced Resolution under [Emulator](#emulator).
-- PlayStation 2x is the emulator's "Enhanced Resolution": the 3D is sharper, but some games lose a picture with it (Crash
-  Bandicoot 2's pause screen shows black where the game was), so it is not where a PlayStation game starts.
-- The emulator's own resolution option (Emulator page) is left out where this row is there, so there is one place for it.
+  *(Other Android chips, H700, RK3566 and RK3326 omit this row, since H700/Rockchip use ROCKNIX's emulators for N64/PSP/Dreamcast
+  and PS1 Enhanced Resolution stays under [Emulator](#emulator).)*
+- PS1 defaults to Original because 2x (Enhanced Resolution) can black out pause menus in a few titles (like Crash
+  Bandicoot 2).
+- When this row is present, the duplicate resolution switch under Emulator is hidden to keep one clear place.
 
 ### Mode 7
 
-Super Nintendo games only, on the same handhelds as [Resolution](#resolution) (Snapdragon 865 and Snapdragon 8 Gen 2), with
-pocket-ui OS and with pocket-ui for Android (Options → Picture in the game's menu). Mode 7 is the SNES's turning, tilting floor:
-the track of Super Mario Kart and F-Zero, the ground in Pilotwings.
+Super Nintendo games on Snapdragon 865 and 8 Gen 2 handhelds (pocket-ui OS and pocket-ui for Android). Enhances the
+SNES's rotating/tilting Mode 7 floors in *Super Mario Kart*, *F-Zero*, *Pilotwings* and more:
 
-- **Original** is the console's own picture, as always.
-- **HD** draws those floors sharper (twice the console's resolution on the Snapdragon 865 handhelds, three times on the
-  Snapdragon 8 Gen 2 ones): the far end of the track is clean instead of a blur of steps. Everything else stays as it was.
-- **HD widescreen** also draws the Mode 7 scenes wider, out to 16:9, so a wide screen is filled at the sides. Other scenes
-  (menus, maps) stay 4:3 with black at the sides. Only on handhelds with a wide screen (Retroid Pocket 5, Flip 2, Pocket 6,
-  the AYN Odin 2 family); on the Mini V2 a 16:9 picture would only be smaller. Things the game draws near the edges (karts,
-  enemies) can pop in late at the sides: the game never meant them to be seen there.
-- pocket-ui for Android offers Original and HD: its SNES emulator (bsnes) has HD but no widescreen.
-- On pocket-ui OS, HD and HD widescreen play the game with bsnes-hd instead of Snes9x (both are on the card). The game's
-  in-game saves carry over; a Continue moment made with the other one is put aside, and the game starts fresh once.
-  bsnes-hd needs more of the processor, so the handheld runs a little warmer.
-- Like Resolution it **takes effect the next time the game starts**, and is kept for the console or for one game with
-  [Keep for](#keep-for) → This game.
+- **Original:** classic SNES resolution (Snes9x).
+- **HD:** crisp high-res Mode 7 floors (2× on Snapdragon 865, 3× on Snapdragon 8 Gen 2), so distant tracks look razor clean
+  while sprites and HUD stay authentic.
+- **HD widescreen:** extends Mode 7 tracks to fill 16:9 displays on widescreen handhelds (Retroid Pocket 5, Flip 2,
+  Pocket 6, Odin 2 family; omitted on 4:3/square screens like Mini V2). Menus stay 4:3, and sprites near screen edges
+  may pop in slightly since the original game never drew off-screen.
+- pocket-ui for Android offers Original and HD (its bsnes core supports HD without widescreen).
+- On pocket-ui OS, HD / HD widescreen run on bundled **bsnes-hd** instead of Snes9x (slightly warmer CPU; in-game saves
+  carry over, while Continue states from the other core stay separate so the game starts fresh once).
+- **Takes effect on next launch**, saved per console or per game via [Keep for](#keep-for) → This game.
 
 ### Starting values per console
-
-Every console starts with the look that suits it on this screen:
 
 | Consoles | Starts with |
 |---|---|
 | Disc and 3D consoles: PlayStation, Mega-CD, PC Engine CD, Saturn, Nintendo 64, PSP, Dreamcast | **Aspect**, **Crisp**, None, frame None |
-| Nintendo DS (both screens stacked) | **Aspect**, **Crisp**, None, frame None |
-| ScummVM (320 × 200 adventures) | **Aspect**, **Crisp**, None, frame None |
-| Everything else, handhelds and 2D home consoles included | Integer, Sharp, None, frame None |
+| Nintendo DS (stacked dual screens) | **Aspect**, **Crisp**, None, frame None |
+| ScummVM (320×200 adventures) | **Aspect**, **Crisp**, None, frame None |
+| All other handhelds and 2D home consoles | Integer, Sharp, None, frame None |
 
-Out of the box no console has a screen effect or a frame: a clean picture. Pick an effect or a frame in the pause menu
-(Options → Picture, with Keep for set to this game or this console) for one game or a whole console.
-
-With **Handhelds** or **Every console** in [Settings → Playing → Screen frames](settings-playing.md#screen-frames), the handhelds or every
-console start with frame **Auto** instead of None. A frame saved for a console or a game stays.
-
-Only the systems listed under [On pocket-ui's own host](systems.md#on-pocket-uis-own-host) have the
-Options menu today. The other starting values apply once more systems move there.
+Every console starts clean with no effect or frame. Turn on [Settings → Playing → Screen frames](settings-playing.md#screen-frames)
+(**Handhelds** or **Every console**) to default to **Auto** frames without overriding per-game or per-console choices.
 
 ## Emulator
 
-Pause menu → Options → **Emulator**: the settings of the emulator itself, with the names and
-explanations the emulator gives them, for example colour palettes or colour correction. pocket-ui
-leaves out settings that make no sense on this device, and starts some with values that suit it
-better.
-
-- Some emulators sort their settings into groups. A group opens with A or Right; B goes back.
-- Left/Right change a value; A steps to the next one. Where a setting has a long list of values,
-  L1/R1 skip five at a time; its explanation says so.
-- Some settings only take effect when the game starts again. Their explanation says: "Takes effect
-  the next time the game starts. Save it, then start the game again."
-- A change reaches the game when you continue playing. If it makes other settings appear or
-  disappear, the page shows that the next time you open it.
+Pause menu → Options → **Emulator** exposes the active core's own tweaks (palettes, colour correction, accuracy hacks)
+while hiding desktop clutter. Open groups with A/Right, adjust with Left/Right, skip 5 values on long lists with L1/R1.
+Settings needing a restart note it right below; others apply when you resume.
 
 ## Controls
 
-Pause menu → Options → **Controls**: what each button presses in the game you are playing, and your own changes.
+Pause menu → Options → **Controls** customises in-game controls per game or console:
 
-- **Left stick as D-pad** (On / Off): on by default, except for PlayStation, where both sticks go to the game
-  as analogue sticks. Turn it off for games that use an analogue stick.
-- **D-pad as left stick** (On / Off, only for systems whose games use a stick: PlayStation, N64, PSP, Dreamcast and
-  others): the D-pad moves the left stick, so Mario 64 walks on a handheld without sticks. On by default for N64, PSP
-  and Dreamcast on handhelds without sticks (TrimUI Brick, RG35XX Plus, RG35XX SP, RG28XX, RG34XX). A stick you move wins.
-- Then one line for each button of the Mini V2: A, B, X, Y, L1, R1, L2, R2, L3, R3, Select, Start
-  and the four D-pad directions. The value is the console button it presses, by the name the
-  emulator uses ("A presses A."). Left/Right choose another console button, or **None** ("X does
-  nothing in this game."). L3 and R3 mean pressing the left and right stick in.
-- **Nintendo DS actions:** any button can be assigned **Stylus mode** or **Screen layout**. On handhelds without
-  sticks, L2 switches between the game D-pad and the stylus; R2 cycles the screen layouts. In stylus mode the D-pad
-  moves the pointer, and the button mapped to DS A touches (hold it to drag). Other buttons keep working normally.
-  Release a direction or touch button held while switching before using it in the new mode. These assignments use
-  the same per-game and per-system Controls settings on Linux and Android. Pads with sticks keep their existing defaults.
-- **Hold to toggle** ([how](big-text.md#hold-to-toggle)) and **Reset controls**, which puts everything back.
-- **Controller setup**, the last line: a separate layout for each controller, in menus and games
-  ([Controller setup](controls-settings.md#controller-setup)).
+- **Left stick as D-pad** (On/Off): On by default except PlayStation (where both sticks are analogue).
+- **D-pad as left stick** (On/Off, stick-based consoles like PS1/N64/PSP/Dreamcast): lets stickless handhelds (TrimUI
+  Brick, RG35XX Plus/SP, RG28XX, RG34XX) walk smoothly in 3D games (On by default for N64/PSP/Dreamcast on stickless
+  units; moving a real stick always wins).
+- **Button rows** (A, B, X, Y, L1, R1, L2, R2, L3, R3, Select, Start, D-pad): map each physical button to any console
+  input or **None**.
+- **Nintendo DS actions:** bind **Stylus mode** or **Screen layout** to any button (saved per game or console on Linux
+  and Android). On stickless handhelds, **L2** toggles Stylus mode (D-pad moves pointer, DS A touches/drags; release held
+  directions when toggling) and **R2** taps to swap screens (top/bottom or top-only/bottom-only) or holds to cycle
+  layouts. Handhelds with sticks keep their defaults.
+- **Hold to toggle** ([details](big-text.md#hold-to-toggle)), **Reset controls** and **Controller setup**
+  ([per-controller mapping](controls-settings.md#controller-setup)).
 
-When you play together ([Players](pause-menu.md#players)), the layout is the same for every player: a controller's buttons
-do what these lines say, by where the button sits (the right face button is A). They name the buttons as printed on the Pocket, even when Settings → Controls → Buttons → [**Button layout**](settings-sound.md#button-layout) is Xbox: that changes pocket-ui's menus, not games.
-
-HOME, and SELECT + START held to quit, always work on the real buttons, whatever you change here.
-
-On the TrimUI Brick, **F1 and F2 are system shortcuts**. Their global actions are chosen in
-Settings → Controls → **Lights & buttons**; they cannot be assigned to console buttons here
-or in Controller setup. This applies to every hosted core, including mGBA.
+Multiplayer maps use the same per-game layout by physical button position (printed right button = A, unaffected by menu
+[Button layout](settings-sound.md#button-layout)). HOME and SELECT + START quit always stay bound to their real buttons.
+On TrimUI Brick, F1 and F2 are global shortcuts configured under Settings → Controls → **Lights & buttons** and cannot
+be mapped to console inputs.
 
 ## Cheats
 
-Games on pocket-ui's own host get a **Cheats** page when the libretro cheat database has cheats for them: an On/Off list per
-game, with a one-time Wi-Fi download on TrimUI. See [Options: Cheats](options-cheats.md).
+Available on pocket-core whenever the libretro cheat database or your own `.cht` file matches the game (one-time Wi-Fi
+download on TrimUI). Full guide: [Options: Cheats](options-cheats.md).
 
 ## Shortcuts
 
-Pause menu → Options → **Shortcuts**. On pocket-ui's own host, hold HOME and press another button
-while you play:
+Pause menu → Options → **Shortcuts** toggles each HOME + button combo in pocket-core:
 
 | Row | Keys | What it does |
 |---|---|---|
-| **Save state** | HOME + R1 | Save to the selected slot. |
-| **Load state** | HOME + L1 | Load the selected slot. |
-| **Change slot** | HOME + Left / Right | Choose the previous / next slot (1 to 8). |
-| **Fast-forward** | HOME + R2 | Turn fast-forward on or off. The speed is set under [Speed, rumble, fan](#speed-rumble-fan). |
-| **Rewind** | Hold HOME + L2 | Rewind, for as long as you hold it. Rewind itself has to be switched on under [Speed, rumble, fan](#speed-rumble-fan). |
-| **Screenshot** | HOME + A | Save a [screenshot](playing.md#screenshots) of the game. The pause menu does not open. |
-| **Over the game** | HOME + Y | Switch to the next level of [Over the game](pause-menu.md#over-the-game): Off, FPS, FPS + sensors (and Pixel Path with Pixel Path in the pause menu). It lasts until you quit or change **Over the game** under Speed, rumble, fan. |
-| **Zoom** | HOME + X | The paused picture larger ([Zoom](big-text.md#zoom)); B goes back into the game. Off by default. |
+| **Save state** | HOME + R1 | Quick-save to the active slot. |
+| **Load state** | HOME + L1 | Quick-load from the active slot. |
+| **Change slot** | HOME + Left / Right | Cycle active save slot (1–8). |
+| **Fast-forward** | HOME + R2 | Toggle fast-forward on/off (speed set under [Speed, rumble, fan](#speed-rumble-fan)). |
+| **Rewind** | Hold HOME + L2 | Rewind while held (requires Rewind On under [Speed, rumble, fan](#speed-rumble-fan)). |
+| **Screenshot** | HOME + A | Save a [screenshot](playing.md#screenshots) silently without pausing. |
+| **Over the game** | HOME + Y | Cycle [Over the game](pause-menu.md#over-the-game) (Off → FPS → FPS + sensors → Pixel Path) until you quit. |
+| **Zoom** | HOME + X | Magnify the paused frame ([Zoom](big-text.md#zoom); B returns; Off by default). |
 
-A short message over the picture confirms what happened, for example "Saved to slot 3",
-"Slot 4 is empty" or "Screenshot saved".
+Brief toasts confirm actions ("Saved to slot 3", "Slot 4 is empty", "Screenshot saved"). Inputs never leak into the game
+while HOME is held, and analogue L2/R2 trigger halfway down. Disable any shortcut here individually.
 
-While HOME is held, the game gets no buttons, so a shortcut never presses anything in the game.
-L2 and R2 count as pressed from half-way down. On this page each shortcut can be switched **Off**.
+### Shortcuts in RetroArch games
+
+RetroArch games on pocket-ui OS get the same HOME combos automatically (respecting any switches turned Off here):
+
+| Keys | In RetroArch |
+|---|---|
+| HOME + R1 | Quick-save (shared with pause menu Save/Load). |
+| HOME + L1 | Quick-load. |
+| HOME + R2 | Toggle fast-forward. |
+| Hold HOME + L2 | Rewind (when **Rewind** is On under Runs on). |
+| HOME + A | Capture a screenshot into Settings → Games → Screenshots. |
+| HOME + Y | Toggle RetroArch's FPS counter (follows Over the game switch). |
+| HOME + X | Open RetroArch's own menu. |
+| HOME + START, twice | Quit RetroArch and save Continue state (double-tap prevents accidents). |
+
+HOME still opens the pause menu and HOME + SELECT opens [Recent games](playing.md#recent-games). **Change slot** and
+**Zoom** aren't available in RetroArch; check Pause menu → Options (Runs on) → **Shortcuts** mid-game for the exact
+active list.
+
+On ROCKNIX, pocket-ui writes only hotkey lines to `retroarch.cfg` and sets `system.autohotkeys=0` (using your pad's HOME
+key, or SELECT if it has none). In pocket-ui for Android and pocket-ui beta for dArkOS, RetroArch keeps its own keys.
 
 ## Speed, rumble, fan
 
-Pause menu → Options → **Speed, rumble, fan** ("Settings you rarely need."). Values in bold are the defaults.
+Pause menu → Options → **Speed, rumble, fan** (bold values are defaults):
 
 | Setting | Choices | What it does |
 |---|---|---|
-| **Fast-forward speed** | 2x, 3x, **4x**, 8x, As fast as possible | How fast the game runs while fast-forward is on (HOME + R2). Sound is muted meanwhile, and "FF 4x" (or the speed you chose) shows over the picture. |
-| **Rewind** | **Off**, On | Remembers the last minute so you can play it backwards: hold HOME + L2. "REWIND" shows over the picture and sound is muted; at the oldest moment the picture stops. Uses some extra power. |
-| **Earlier states** | Off, **On** | Keeps a state every 5 minutes of play, the last half hour, and where each session began; the pause menu's **Earlier** loads them ([Earlier](pause-menu-saves.md#earlier)). The game never waits for it. **Off by default for N64, PSP, DS, Dreamcast and Saturn**: their states are 8 to 40 MB. At most 100 MB a game and 1 GB on the SD card. |
-| **Over the game** | **Off**, FPS, FPS + sensors, Pixel Path (with Pixel Path in the pause menu) | What is drawn over the game while you play. **FPS** shows frames per second and CPU load in the top left corner, for example "60 FPS   CPU 23%", updated twice a second. **FPS + sensors** adds temperature, fan and battery draw: see [the FPS line and sensors](pause-menu.md#the-fps-line-and-sensors). **Pixel Path** shows one line beside the picture instead, which turns orange when something slips: see [Pixel Path over the game](pause-menu.md#pixel-path-over-the-game). The start value is the one under Settings → Playing → [Over the game](settings-playing.md#over-the-game). |
-| **Rumble** | Off, Low, **Medium**, High | How strongly games that rumble shake the console. |
-| **Performance** | Battery, **Auto**, Max | **Auto**: the system decides how fast the CPU runs (until October 2026 this was called Balanced). Battery limits the CPU to half speed: enough for Game Boy and NES. Max keeps the CPU at full speed for demanding games. |
-| **Fan** | Very quiet, **Quiet**, Auto, Cool | Very quiet keeps the fan off until the Pocket gets warm (60 °C); the Pocket feels a bit warmer. Quiet starts the fan later and keeps it slow. Auto keeps the system's cooling profile. Cool starts it earlier. With [Smooth fan](performance.md#smooth-fan) on, each is a smooth curve. Not shown on a handheld without a fan (the Anbernic H700 ones, the TrimUI Brick). |
-| **Run-ahead** | **Off**, 1 frame, 2 frames | The game responds to your buttons 1 or 2 frames sooner (a frame is 1/60 s). Only on NES, Famicom Disk System, SNES, Game Boy, Game Boy Color, Game Boy Advance, Mega Drive, Master System, Game Gear, SG-1000, PC Engine, SuperGrafx, Atari 2600, WonderSwan and Virtual Boy; the row is not shown for other systems. See [Run-ahead](#run-ahead). |
+| **Fast-forward speed** | 2x, 3x, **4x**, 8x, As fast as possible | Fast-forward multiplier for HOME + R2 (mutes audio, displays "FF 4x"). |
+| **Rewind** | **Off**, On | Buffers the last minute so holding HOME + L2 rewinds smoothly ("REWIND", muted; costs extra CPU/battery). |
+| **Earlier states** | Off, **On** | Auto-snapshots every 5 minutes (last 30 min) plus session start for pause menu **Earlier** ([Earlier](pause-menu-saves.md#earlier)). **Defaults Off on N64, PSP, DS, Dreamcast and Saturn** (8–40 MB states). Capped at 100 MB/game and 1 GB total. |
+| **Over the game** | **Off**, FPS, FPS + sensors, Pixel Path (with Pixel Path in the pause menu) | Live overlay: **FPS** ("60 FPS   CPU 23%"), **FPS + sensors** (adds temp, fan, battery; [details](pause-menu.md#the-fps-line-and-sensors)), or **Pixel Path** ([details](pause-menu.md#pixel-path-over-the-game)). Defaults to Settings → Playing → [Over the game](settings-playing.md#over-the-game). |
+| **Rumble** | Off, Low, **Medium**, High | Vibration intensity for rumble-capable games. |
+| **Performance** | Battery, **Auto**, Max | **Auto** *(formerly Balanced)* scales dynamically; **Battery** caps CPU around half speed for light 2D; **Max** locks top clocks. |
+| **Fan** | Very quiet, **Quiet**, Auto, Cool | Game cooling curve (smooth with [Smooth fan](performance.md#smooth-fan) On; hidden on fanless H700 and TrimUI Brick). |
+| **Run-ahead** | **Off**, 1 frame, 2 frames | Cuts 1–2 frames of internal game latency on supported 8/16-bit and handheld cores (NES, FDS, SNES, GB/GBC/GBA, Mega Drive, Master System, Game Gear, SG-1000, PC Engine, SuperGrafx, Atari 2600, WonderSwan, Virtual Boy). See [Run-ahead](#run-ahead). |
 
-- Rewind is off by default because keeping the history costs processor time, most on SNES.
-  Loading a save clears the history. Holding HOME + L2 while Rewind is off shows "Rewind is off.
-  Switch it on under Speed, rumble, fan."
-- Performance and Fan apply only while the game runs. The system's own settings come back when you
-  quit, even if the game crashed.
-- What a game starts with when you saved nothing for it or its console is set in Settings → Playing →
-  [Performance & fan](performance.md) (**Games: performance** and **Games: fan**), or in
-  [Quick settings](quick-settings.md#quick-settings) over the paused game. The bold values
-  above are the defaults of that page. A value saved here for a console or a game wins over it, and "Restore
-  defaults" goes back to it.
+- Rewind starts Off because state history uses noticeable CPU (especially on SNES); loading a state resets the rewind
+  buffer.
+- Performance and Fan reset automatically when you exit, even after a crash.
+- Games without overrides inherit Settings → Playing → [Performance & fan](performance.md) (or
+  [Quick settings](quick-settings.md#quick-settings)); **Restore defaults** reverts to those baselines.
 
 ### Run-ahead
 
-Many games react to a button a frame or two after you press it, inside the console itself. Run-ahead hides that
-delay: every frame the game is run ahead by the frames you chose with the buttons you hold, that picture is shown,
-and the game goes back to where it really is. Jumps and shots start sooner; nothing else changes.
+Many classic games inherently take 1–2 frames to respond on real hardware. Run-ahead simulates ahead with your inputs to
+hide that lag, so jumps and dodges feel snappier without changing gameplay.
 
-- **Which value.** Most games react one or two frames after the press. Start with 1 frame. If the game still feels
-  late, try 2 frames. Run ahead further than a game's own delay and the picture jumps a little when you press a
-  button: then go back to 1 frame. Suggestions to start from:
+- **Recommended starting points:** start with **1 frame**; try **2 frames** only if a game still feels slightly heavy
+  (if graphics visibly twitch when pressing a button, step back to 1 frame):
 
   | Console | Start with |
   |---|---|
   | NES, Game Boy, Game Boy Color, Master System, Game Gear, SG-1000 | 1 frame |
-  | SNES, Mega Drive, PC Engine | 1 frame; many games here take 2 |
-  | Game Boy Advance | 1 frame. 2 frames are too much for the Mini V2 in heavier games (F-Zero: Maximum Velocity) and switch themselves off |
+  | SNES, Mega Drive, PC Engine | 1 frame (many games handle 2) |
+  | Game Boy Advance | 1 frame (2 frames can overwhelm heavy GBA games like F-Zero: Maximum Velocity on Mini V2 and auto-disable) |
   | Atari 2600, WonderSwan | 1 frame |
   | Famicom Disk System, SuperGrafx, Virtual Boy | 1 frame |
 
-- **Cost.** The console runs two or three frames for every one you see, so the game uses more processor time and
-  power (the measurements are in the developer notes, [HOST.md](../HOST.md)).
-- **It switches itself off** where it can't work (the first seconds after the start or a load don't count), and says so over the game: "Run-ahead isn't available for this
-  emulator", "Run-ahead is off: too slow for this game", "…: saving states takes too long here", "…: this game
-  doesn't replay exactly". Choosing another value in the menu tries again.
-- Fast-forward and rewind work as before (run-ahead pauses while they run). Save states, the auto-resume state and
-  cheats always use the real game, not the frames run ahead.
-- It is kept like the other settings: for this console or for this game ([Keep for](#keep-for)).
+- Runs 2–3 internal frames per visible frame, using more CPU/battery ([HOST.md](../HOST.md)).
+- Auto-disables cleanly with a message if a core doesn't support it, drops frames or fails deterministic replay.
+- Pauses automatically during fast-forward and rewind; saves and cheats always use the real game state. Saved per game
+  or console via [Keep for](#keep-for).
 
 ## Keep for
 
-Every change in Options is kept the moment you make it; there is nothing to save. **Keep for** says where it stays:
-**This game** (only this game uses it) or **This console** (every game on this console starts with it). Left, Right or A
-moves between the two and keeps the values in use there at once. It starts on **This game**, or on **This console**
-when the console already has settings of its own. **Restore defaults** removes the saved settings for this console and
-this game; press A twice, any other button takes it back.
-
-A game with its own settings uses only those; later changes for the console do not reach it until
-you move **Keep for** to **This console**, or restore the defaults.
+Changes save live; **Keep for** decides whether they apply to **This game** or **This console** (toggle with Left/Right
+or A; starts on **This console** if the console already has custom settings, else **This game**). **Restore defaults**
+(press A twice) wipes both game and console overrides. Games with their own overrides stay independent until you switch
+**Keep for** back to **This console** or restore defaults.
 
 ## Runs on
 
-**Runs on** chooses the emulator that plays a game, for this game alone or for every game of its console. Open it
-with **START** on a console page, with **START** on a game's card and then the **Runs on** row of [This game](#this-game), or in the pause menu: Options → **Runs on** on pocket-ui's own
-host, **Options** for RetroArch and the other emulators. (PlayStation 2, GameCube, Wii and 3DS have other Options in
-the pause menu; use START on the card for them.)
+Choose which emulator runs a game or console, opened via **START** on a console page, START on a game card → **Runs on**,
+or Pause → Options → **Runs on** (or Pause → **Options** on RetroArch/standalone; use card START for PS2/GameCube/Wii/3DS).
 
-The first row shows what plays the game now, for example "pocket-core · mGBA" or "RetroArch · gpSP". Its first entry
-is **Default (…)**, what plays without a choice of yours (a game: its console's; a console: pocket-core where it plays
-the system, else ROCKNIX's); save it to go back. Right goes on through pocket-core and every emulator ROCKNIX lists for
-the system that starts on this Pocket (one chosen earlier in EmulationStation shows "Not installed"); the list stops at
-both ends. The line below says what you get:
+The top row shows the active emulator (e.g. `pocket-core · mGBA` or `RetroArch · gpSP`), starting with **Default (…)**
+followed by pocket-core and every working ROCKNIX emulator for that console:
 
-- **pocket-core**: continues at once where you left off, eight save slots, Options, shortcuts, run-ahead, fast
-  switching between games and achievements.
-- **RetroArch**: one save, Quit saves the moment. Starts slower; none of pocket-ui's slots, Options, run-ahead, fast
-  switching or achievements.
-- **Standalone**: ARMSX2, Dolphin and Azahar keep pocket-ui's Save, Load, Options and continuing. The others keep
-  their own saves and settings: save in the game before you quit.
+- **pocket-core:** instant Continue, eight visual save slots, live Options, shortcuts, run-ahead, fast switcher and
+  RetroAchievements.
+- **RetroArch:** single auto-save on Quit, slower start, without pocket-ui's slots, Options or achievements.
+- **Standalone:** ARMSX2, Dolphin and Azahar keep pocket-ui Save/Load/Options/Continue; others use in-game saving only.
 
-Save states belong to one emulator: after a change the game starts from its in-game save.
+Save states never cross emulators; switching emulators boots from your in-game save.
 
-While RetroArch is chosen, the page also lists its settings, read the next time the game starts: **Aspect ratio**
-(Core provided, 4:3, 3:2, 16:9, Square pixels, Full screen), **Integer scaling**, **Smoothing**, **Shader** (None and
-the well-known CRT, LCD and sharp-scaling presets ROCKNIX has, such as crt-geom or lcd-grid-v2), **Rewind** (hold
-HOME + L2), **Run-ahead** (RetroArch's own, 1 or 2 frames) and **Auto save and load** (with Off, pocket-ui can't
-continue the game where you left off). Rewind and run-ahead are not shown where ROCKNIX switches them off (Nintendo 64,
-PSP, Dreamcast, Saturn, 32X and a few more). The values shown are the ones in use, ROCKNIX's own until you change
-them (3:2 for the Game Boy Advance). HOME + R2 turns RetroArch's fast-forward on and off. Phone games have two more rows,
-**D-pad** ([their keys](systems.md#phone-games-j2me)) and **Screen size** ([Phone games](systems.md#phone-games-j2me)).
-Nintendo 64 and Dreamcast on RetroArch have a **D-pad** row too: **Automatic** (the D-pad moves the left stick on a
-handheld without sticks, such as the RG35XX Plus or RG28XX), **Left stick** or **D-pad**. pocket-ui writes it as
-RetroArch's remap for the game, never over a remap of your own. PSP on ROCKNIX's PPSSPP gets the D-pad on the analog
-nub by itself on a handheld without sticks, unless you changed those controls in PPSSPP.
+When RetroArch is picked, extra rows appear (applied on next launch): **Aspect ratio** (Core provided, 4:3, 3:2, 16:9,
+Square pixels, Full screen), **Integer scaling**, **Smoothing**, **Shader** (None plus curated ROCKNIX CRT/LCD presets
+like `crt-geom` and `lcd-grid-v2`), **Rewind**, **Run-ahead** (1–2 frames) and **Auto save and load** (turning Off
+disables Continue). Rewind/run-ahead hide on heavy systems (N64, PSP, Dreamcast, Saturn, 32X). Includes **Shortcuts** in
+the pause menu, **D-pad** / **Screen size** for [Phone games](systems.md#phone-games-j2me), and **D-pad** (**Automatic**,
+**Left stick**, **D-pad**) for N64 and Dreamcast on RetroArch so stickless handhelds steer smoothly (never overwriting
+your own RetroArch remaps; PPSSPP auto-maps D-pad to nub on stickless devices too).
 
-**Save changes** on this page is the one place that still asks: **For this console**, **For this game** (only what differs from the console's
-is kept for the game) or **Restore defaults** (pocket-ui's default emulator and ROCKNIX's settings). Nothing is kept
-until you save, because a choice applies the next time the game starts, even when made in the pause menu. If pocket-core
-couldn't start a game (see [Systems](systems.md#when-a-game-does-not-start-on-the-own-host)), the page says so;
-choose pocket-core and save to give it another try.
-
-The choice is kept where ROCKNIX's EmulationStation keeps its "Emulator" setting, so each sees the other's (pocket-core
-as AUTO). Not offered: ROCKNIX's full shader list (one chosen in EmulationStation is kept), video filters, bezels and
-the standalone emulators' own settings. RetroArch settings for one game need a file name ROCKNIX's scripts can read; for names with
-`[`, `*`, `$` and the like the page asks to save them for the console.
-
-PlayStation 2, GameCube, Wii and 3DS games have their own, shorter Options: see [Options for PlayStation 2, GameCube, Wii and 3DS](options-big.md).
+Because emulator changes take effect on next launch, press **Save changes** (**For this console**, **For this game**, or
+**Restore defaults**) to commit. Choices sync with ROCKNIX's own Emulator setting (`AUTO` = pocket-core). Filenames with
+special characters (`[`, `*`, `$`) save at the console level.
 
 ## This game
 
-Press **START** on a game's card (or its box) to set up one game without starting it. It is the pause menu's
-Options for that game, reachable from the shelf: so the picture you want is there before you play, not twelve
-presses into a running game.
+Press **START** on any game card or box to configure it right from the shelf before launching:
 
 | Row | What it holds |
 |---|---|
-| **Screen scaling**, **Look** (with Sharpness and Effect under Custom), **Screen frame** (with its colour or finish), **Screen orientation**, **Resolution** (N64, PSP, Dreamcast, PlayStation), **Mode 7** (Super Nintendo) | The [Picture](#picture) settings. A frame's sub-choices show up under it, as in the pause menu. |
-| **Fast-forward speed**, **Rewind**, **Earlier states**, **Over the game**, **Rumble**, **Performance**, **Fan**, **Run-ahead** | The same rows as [Speed, rumble, fan](#speed-rumble-fan). |
-| **Save state**, **Load state**, **Change slot**, **Fast-forward**, **Rewind**, **Screenshot**, **Over the game**, **Zoom** | The [Shortcuts](#shortcuts): which HOME + button does what. |
-| **Controls** | Which button does what, and the left stick ([Controls](#controls)). The page names the buttons the standard way; the pause menu shows the console's own names. |
-| **Runs on** | Which emulator plays this game ([Runs on](#runs-on)). B from there comes back here. |
-| **Resolution** and the other rows of the emulator | For PlayStation 2, GameCube, Wii, 3DS and Xbox games: the rows of [their Options](options-big.md). They take effect the next time the game starts. |
-| **Use the console's settings** | Only when the game has settings of its own: takes it off them, so it starts like the other games on its console. |
+| **Screen scaling**, **Look** (Sharpness & Effect under Custom), **Screen frame** (+ colour/finish), **Screen orientation**, **Resolution** (N64/PSP/Dreamcast/PS1), **Mode 7** (SNES) | All [Picture](#picture) settings (previewed once in-game). |
+| **Fast-forward speed**, **Rewind**, **Earlier states**, **Over the game**, **Rumble**, **Performance**, **Fan**, **Run-ahead** | Same rows as [Speed, rumble, fan](#speed-rumble-fan). |
+| **Save state**, **Load state**, **Change slot**, **Fast-forward**, **Rewind**, **Screenshot**, **Over the game**, **Zoom** | All [Shortcuts](#shortcuts). |
+| **Controls** | Button remapping and stick/D-pad options ([Controls](#controls)). |
+| **Runs on** | Emulator selection ([Runs on](#runs-on); B returns here). |
+| **Resolution** and emulator rows | [Options](options-big.md) for PS2, GameCube, Wii, 3DS and Xbox (applied next launch). |
+| **Use the console's settings** | Clears this game's override so it inherits its console defaults again (shown only when customised). |
 
-Left and Right change a value, B goes back to the card. Every change is kept at once as **this game's own** settings,
-exactly what **Keep for → This game** keeps in the pause menu, so the game starts with it and the pause menu
-shows it. The two places read and write the same file; there is nothing to save twice. Picture settings have no
-running game to show them on here: you see them when the game starts, and Options → Picture in the pause menu shows
-them live. A game that RetroArch plays shows its own Runs on only, with a line saying why; one that pocket-core could
-play but RetroArch does now keeps its picture rows, which apply when it runs on pocket-core.
+Changes save immediately to **this game's** settings, sharing the exact same file as Pause → Options with **Keep for →
+This game**.

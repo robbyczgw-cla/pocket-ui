@@ -139,8 +139,16 @@ impl PadView {
         self.trigger.iter().any(|t| t.pressed) || outside(self.left) || outside(self.right)
     }
 
+    /// A trigger as the page draws it: its travel, or for a pad whose L2/R2 are plain keys (dArkOS's pads, BTN_TL2/BTN_TR2)
+    /// full while the key is down. The bar lit only from an axis before (a dArkOS player, 21.11.2026: L2 and R2 never lit).
     pub fn trigger(&self, left: bool) -> Trigger {
-        self.trigger[if left { 0 } else { 1 }]
+        let t = self.trigger[if left { 0 } else { 1 }];
+        let key = self.held & (if left { Button::L2 } else { Button::R2 }).bit() != 0;
+        match (key, t.analog) {
+            (false, _) => t,
+            (true, true) => Trigger { pressed: true, ..t },
+            (true, false) => Trigger { value: 1.0, analog: false, pressed: true },
+        }
     }
 
     /// The stick as it reported, -1 to 1 on both axes (y up is negative, as the pad has it).
@@ -446,6 +454,48 @@ mod tests {
         pull(&mut t, 0.35);
         assert!(!t.selected().unwrap().trigger(false).pressed);
         assert!(!t.selected().unwrap().trigger(true).analog, "the left trigger sent nothing");
+    }
+
+    /// A dArkOS player (0.6.0, 21.11.2026): on Test buttons L2 and R2 never lit, every other button did. dArkOS's pads (the RG353M's
+    /// tree: GPIO keys BTN_TL2/BTN_TR2) send the triggers as keys, BTN_TL2/BTN_TR2; the bars the page draws for them read
+    /// `trigger()`, which only an axis moved. Missed because the trigger tests only fed axes and the button tests only asked
+    /// `is_down`, not what the drawing reads. Both dArkOS pads, through the real decoder, both triggers.
+    #[test]
+    fn triggers_that_are_keys_light_their_bars_as_the_other_buttons_light() {
+        use crate::pad::decode::Decoder;
+        use evdev::InputEvent;
+        let sticks = vec![(0, 0, 4095), (1, 0, 4095), (3, 0, 4095), (4, 0, 4095)];
+        let dpad = [544, 545, 546, 547];
+        let rk3566: Vec<u16> = [304, 305, 307, 308, 310, 311, 312, 313, 314, 315, 316, 317, 318].into_iter().chain(dpad).collect();
+        let rk3326: Vec<u16> = [304, 305, 307, 308, 310, 311, 312, 313].into_iter().chain(dpad).chain(704..=709).collect();
+        for (name, keys) in [("retrogame_joypad", rk3566), ("GO-Super Gamepad", rk3326)] {
+            let c = pad("builtin", name);
+            let now = Instant::now();
+            let mut t = ButtonTest::new(&[c.clone()], now);
+            let mut d = Decoder::with_caps(0x19, 0x0001, 0x0001, 0x0100, name, keys, sticks.clone());
+            for (code, left, button) in [(312, true, Button::L2), (313, false, Button::R2)] {
+                for e in d.event(1, InputEvent::new(1, code, 1)) {
+                    t.feed(&c, &e, plain(), now);
+                }
+                let p = t.selected().unwrap();
+                let bar = p.trigger(left);
+                assert!(p.is_down(button) && bar.pressed && bar.value == 1.0 && !bar.analog, "{name} {button:?} lights its bar: {bar:?}");
+                assert!(!p.trigger(!left).pressed, "{name} {button:?}: the other trigger stays dark");
+                for e in d.event(1, InputEvent::new(1, code, 0)) {
+                    t.feed(&c, &e, plain(), now);
+                }
+                let bar = t.selected().unwrap().trigger(left);
+                assert!(!bar.pressed && bar.value == 0.0, "{name} {button:?} goes out: {bar:?}");
+            }
+        }
+        // A pad with both (an axis and its key, InputPlumber's DualSense): the bar keeps the travel, lit while the key is down.
+        let c = pad("bt:ds", "DualSense");
+        let now = Instant::now();
+        let mut t = ButtonTest::new(&[c.clone()], now);
+        t.feed(&c, &PadEvent::Axis { source: 1, axis: Axis::L2, value: 0.5 }, plain(), now);
+        press(&mut t, &c, Button::L2, true, plain(), now);
+        let bar = t.selected().unwrap().trigger(true);
+        assert!(bar.analog && bar.pressed && percent(bar.value) == 50, "{bar:?}");
     }
 
     #[test]

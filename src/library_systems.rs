@@ -61,7 +61,7 @@ pub fn issues(path: &Path) -> Result<Vec<Issue>, String> {
 /// The list as XML text: the player's, with the unreadable entries left out; the built-in one when none of theirs can be
 /// read (missing, unreadable, no system in it, all damaged). Never fails, never empty.
 pub(super) fn read(path: &Path) -> (String, Status) {
-    let xml = match std::fs::read(path) {
+    let xml = match crate::background_io::read(path) {
         // A name in another encoding (Latin-1 "Pokémon") must not cost the whole list: bad bytes become "\u{FFFD}".
         Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return fall_back(Fallback::Missing, Vec::new()),

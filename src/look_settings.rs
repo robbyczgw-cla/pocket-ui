@@ -31,10 +31,10 @@ impl Theme {
     /// One line for the theme choice in setup.
     pub fn blurb(self) -> &'static str {
         match self {
-            Theme::Shelf => "Your games standing on a shelf. The one you pick shows its cover.",
+            Theme::Shelf => "Games lined up on a shelf, showing the selected game's box art.",
             Theme::Split => "List on the left, details on the right.",
-            Theme::Cabinet => "Your games in their cases on a wooden shelf. Pull one out to see its cover.",
-            Theme::Big => "One big game at a time, simple menus.",
+            Theme::Cabinet => "Cases lined up on a wooden shelf. Pull any case out to see its box art.",
+            Theme::Big => "One big case at a time, zero clutter.",
         }
     }
 }
@@ -63,8 +63,8 @@ impl Appearance {
     /// One line about the choice, under the row in the look step.
     pub fn blurb(self) -> &'static str {
         match self {
-            Appearance::Dark => "Black pages. Uses the least battery.",
-            Appearance::Light => "Paper pages for daylight. Uses more battery.",
+            Appearance::Dark => "Dark pages. Best for battery.",
+            Appearance::Light => "Light pages for daylight. Uses more battery.",
             Appearance::Auto => "Light from 07:00, dark from 20:00, local time.",
         }
     }
@@ -94,8 +94,8 @@ impl Motion {
     /// One line about the choice, after the row in the look step.
     pub fn blurb(self) -> &'static str {
         match self {
-            Motion::Full => "Selections glide, pages slide in.",
-            Motion::Reduced => "Only fades. Nothing slides or grows.",
+            Motion::Full => "Smooth glides and sliding pages.",
+            Motion::Reduced => "Gentle fades only, no sliding.",
             Motion::Off => "No animation at all.",
         }
     }

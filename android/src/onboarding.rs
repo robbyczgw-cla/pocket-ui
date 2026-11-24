@@ -120,7 +120,8 @@ impl Ui {
     }
     fn setup_items(&self) -> Vec<(String, u16)> {
         let mut items = match self.prefs.onboarding_step.min(7) {
-            1 => pocket_ui::i18n::Lang::ALL.iter().enumerate().map(|(i, l)| (l.name().to_string(), i as u16)).collect(),
+            // The languages offered (`Lang::row`: not one still being translated).
+            1 => pocket_ui::i18n::Lang::row().iter().enumerate().map(|(i, l)| (l.name().to_string(), i as u16)).collect(),
             2 => {
                 // Folders found first (the likely answer), then the picker, then the apps found as switches.
                 let few = if self.setup_compact >= 3 { 1 } else { 2 };
@@ -218,8 +219,8 @@ impl Ui {
             }
             _ => match step {
                 1 => {
-                    if let Some(lang) = pocket_ui::i18n::Lang::ALL.get(action as usize) {
-                        self.prefs.choose_language(*lang);
+                    if let Some(lang) = pocket_ui::i18n::Lang::row().get(action as usize).copied() {
+                        self.prefs.choose_language(lang);
                     }
                 }
                 2 if action >= FOUND_GET => {
@@ -296,7 +297,7 @@ impl Ui {
     /// Whether choice `action` of this step is the one in use (a radio mark), or `None` for a row that acts.
     fn setup_chosen(&self, action: u16) -> Option<bool> {
         match self.prefs.onboarding_step.min(7) {
-            1 => Some(pocket_ui::i18n::Lang::ALL.get(action as usize) == Some(&pocket_ui::i18n::current())),
+            1 => Some(pocket_ui::i18n::Lang::row().get(action as usize) == Some(&pocket_ui::i18n::current())),
             3 if (action as usize) < Theme::PHONE.len() => Some(Theme::PHONE.get(action as usize) == Some(&self.prefs.theme)),
             4 => Some(self.prefs.download_media == Some(action == 0)),
             2 if action >= FOUND_GET => None,
@@ -319,7 +320,7 @@ impl Ui {
             5 => ("More systems?", if self.core_channel_open { "Choose extra systems to download on Wi-Fi. All are optional. You can add them later in Extras." } else { COMING_SOON_STEP }),
             6 => ("Your controls", "Tap a game to select it, tap again to play. Swipe along the shelf. Back goes one step back."),
             // With a pad the covers had no page: the last one says they come on their own.
-            _ if self.controller_connected && self.prefs.download_media.is_none() => ("Ready to play", "Everything is ready. Covers and pictures download on unmetered Wi-Fi as you browse; Settings can turn that off."),
+            _ if self.controller_connected && self.prefs.download_media.is_none() => ("Ready to play", "All set. Box art downloads on unmetered Wi-Fi as you browse (toggle any time in Settings)."),
             _ => ("Ready to play", "Everything is ready. You can change these choices in Settings and add more game folders later."),
         }
     }
@@ -331,10 +332,10 @@ impl Ui {
         if size.0 <= size.1 {
             // Upright, "Where your games are" with what the device has can be more than a small phone holds at a large font
             // (720x1600 with its bars, font 1.3): it leaves out, step by step, what the rows say anyway.
-            if self.prefs.onboarding_step != 2 {
-                return SetupPlan::USUAL;
-            }
-            for level in 0..=3 {
+            // The other steps fit as they are, else (seven languages since Korean, 720x1600 at font 1.3: the list ran up
+            // into the sentence over it) they take the ladder's smaller type below too.
+            let levels = if self.prefs.onboarding_step == 2 { 0..=3 } else { 0..=0 };
+            for level in levels {
                 self.setup_compact = level;
                 if self.setup_layout(text, size, SetupPlan::USUAL).faults.is_empty() {
                     return SetupPlan::USUAL;
@@ -487,10 +488,10 @@ impl Ui {
                     found
                 }
             } else if !self.found_folders().is_empty() {
-                tr("Games found on this device. Choose them below, or another folder.")
+                tr("Games found on this device. Pick them below, or another folder.")
             } else if self.found.as_ref().is_some_and(|f| f.can_read) {
                 // Only where the files could be read: without that right "none found" would be a guess.
-                tr("No games found on this device yet. Choose the folder you put them in, or add games later.")
+                tr("No games found yet. Pick your games folder below, or add them later.")
             } else {
                 tr("No folder chosen yet. You can add games later.")
             };
@@ -600,7 +601,9 @@ impl Ui {
         let arrangements: Vec<Vec<(i32, i32, i32)>> = match step {
             3 if wide => vec![cells_of(true, true), cells_of(true, false), cells_of(false, false)],
             3 => vec![cells_of(true, false), cells_of(false, false)],
-            1 => vec![cells_of(false, false), cells_of(true, false)],
+            // Upright the languages stay one to a row ("Português (Brasil)" whole); the ladder's smaller type makes room.
+            1 if wide => vec![cells_of(false, false), cells_of(true, false)],
+            1 => vec![cells_of(false, false)],
             _ => vec![cells_of(false, false)],
         };
         let rows = |cells: &[(i32, i32, i32)]| cells.iter().map(|(_, r, _)| r + 1).max().unwrap_or(0);

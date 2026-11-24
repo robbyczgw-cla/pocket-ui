@@ -246,8 +246,9 @@ pub fn smb_sections(conf: &str) -> Vec<String> {
 /// Puts `SMB_CONF` at `path` unless it is already there, keeping the first original found as
 /// `<path>.rocknix`. Returns whether the file changed.
 pub fn secure_share_config(path: &std::path::Path) -> std::io::Result<bool> {
+    let conf = SMB_CONF.replacen("interfaces = wlan0", &format!("interfaces = {}", managed_interface()), 1);
     let current = std::fs::read_to_string(path).unwrap_or_default();
-    if current == SMB_CONF {
+    if current == conf {
         return Ok(false);
     }
     let backup = path.with_extension("conf.rocknix");
@@ -256,7 +257,7 @@ pub fn secure_share_config(path: &std::path::Path) -> std::io::Result<bool> {
     }
     // Written under a temporary name and renamed, so smbd never reads half a file.
     let tmp = path.with_extension("conf.new");
-    std::fs::write(&tmp, SMB_CONF)?;
+    std::fs::write(&tmp, conf)?;
     std::fs::rename(&tmp, path)?;
     Ok(true)
 }
@@ -439,9 +440,9 @@ pub fn connection_error(e: &str) -> &'static str {
     } else if lower.contains("wlan0 not ready") {
         "Wi-Fi isn't ready yet. Try again in a moment."
     } else if lower.contains("timeout") || lower.contains("timed out") {
-        "The network took too long to respond. Try again."
+        "Network timed out. Try again."
     } else if lower.contains("activation failed") || lower.contains("activation: failed") {
-        "The connection didn't work. Try again."
+        "Connection failed. Try again."
     } else {
         "Couldn't connect to the network. Try again."
     }
@@ -588,19 +589,59 @@ pub fn parse_mac(text: &str) -> Option<String> {
     (ok && parts.iter().any(|p| *p != "00")).then(|| t.to_ascii_uppercase())
 }
 
+/// The kernel's network interfaces. Mock runs can only use a fixture, never the host's interfaces.
+pub(crate) fn net_class() -> Option<std::path::PathBuf> {
+    std::env::var_os("POCKETUI_NET_CLASS").map(std::path::PathBuf::from).or_else(|| {
+        (cfg!(target_os = "linux") && std::env::var_os("POCKETUI_MOCK").is_none())
+            .then(|| "/sys/class/net".into())
+    })
+}
+
+/// The preferred name, or a wireless netdev with another name (e.g. wlx…).
+pub(crate) fn interface_in(class: &std::path::Path) -> Option<String> {
+    let preferred = std::env::var("POCKETUI_WIFI_IFACE").unwrap_or_else(|_| "wlan0".into());
+    // Interface names also go in Samba's interface list.
+    let valid = |name: &str| !name.is_empty() && name.len() < 16
+        && name != "." && name != ".." && name.bytes().all(|b| b.is_ascii_alphanumeric() || b"_.-".contains(&b));
+    if valid(&preferred) && class.join(&preferred).exists() {
+        return Some(preferred);
+    }
+    std::fs::read_dir(class).ok()?.flatten().filter_map(|e| {
+        let name = e.file_name().into_string().ok()?;
+        (valid(&name) && (e.path().join("wireless").is_dir() || e.path().join("phy80211").exists())).then_some(name)
+    }).min()
+}
+
+/// The Wi-Fi device used for NetworkManager and file sharing in this session.
+fn managed_interface() -> &'static str {
+    crate::device::current().wifi_adapter().unwrap_or("wlan0")
+}
+
+fn interface() -> std::borrow::Cow<'static, str> {
+    std::env::var("POCKETUI_WIFI_IFACE").map_or_else(
+        |_| std::borrow::Cow::Borrowed(managed_interface()), std::borrow::Cow::Owned)
+}
+
+pub(crate) fn net_device() -> Option<std::path::PathBuf> {
+    if crate::device::current().wifi_adapter_missing_at_start() {
+        return None;
+    }
+    Some(net_class()?.join(interface().as_ref()))
+}
+
 /// The Wi-Fi interface's address (wlan0, or `POCKETUI_WIFI_IFACE` in the virtual device): one small file, read on the
 /// scan's thread. iwd on ROCKNIX keeps the chip's fixed address (no `AddressRandomization`), so it is the one a hotel sees.
 pub fn mac() -> Option<String> {
-    let iface = std::env::var("POCKETUI_WIFI_IFACE").unwrap_or_else(|_| "wlan0".into());
+    let iface = interface();
     if iface.is_empty() || iface.contains('/') || iface.contains("..") {
         return None;
     }
-    parse_mac(&std::fs::read_to_string(format!("/sys/class/net/{iface}/address")).ok()?)
+    parse_mac(&std::fs::read_to_string(net_device()?.join("address")).ok()?)
 }
 
 #[cfg(target_os = "linux")]
 mod imp {
-    use super::{parse_scan, rocknix_settings, scan_error, stale_profile, Network, Saved, Saving};
+    use super::{interface, managed_interface, parse_scan, rocknix_settings, scan_error, stale_profile, Network, Saved, Saving};
     use crate::net_state::ScanError;
     use std::path::Path;
     use std::process::Command;
@@ -625,7 +666,7 @@ mod imp {
 
     impl crate::wifi_activation::Ops for Activation<'_> {
         fn device(&mut self) -> Result<crate::wifi_activation::Device, String> {
-            let out = self.command(&["-g", "GENERAL.STATE,GENERAL.CON-UUID,GENERAL.REASON", "device", "show", "wlan0"])?;
+            let out = self.command(&["-g", "GENERAL.STATE,GENERAL.CON-UUID,GENERAL.REASON", "device", "show", managed_interface()])?;
             let mut lines = out.lines();
             let state = lines
                 .next()
@@ -643,7 +684,7 @@ mod imp {
             Ok(crate::wifi_activation::Device { state, ssid, reason })
         }
         fn disconnect(&mut self) -> Result<(), String> {
-            self.command(&["-w", "2", "device", "disconnect", "wlan0"]).map(|_| ())
+            self.command(&["-w", "2", "device", "disconnect", managed_interface()]).map(|_| ())
         }
         fn now(&self) -> Duration {
             self.started.elapsed()
@@ -667,6 +708,9 @@ mod imp {
     pub fn connected_ssid() -> Option<String> {
         let mut cmd = Command::new("nmcli");
         cmd.args(["-t", "-f", "ACTIVE,SSID", "device", "wifi", "list", "--rescan", "no"]);
+        if let Some(iface) = crate::device::current().wifi_adapter() {
+            cmd.args(["ifname", iface]);
+        }
         let out = crate::proc::run_with_timeout(&mut cmd, Duration::from_secs(5)).ok()?;
         super::parse_active_ssid(&String::from_utf8_lossy(&out.stdout))
     }
@@ -685,6 +729,9 @@ mod imp {
     pub fn scan_until(nmcli: &Path, stop: &AtomicBool) -> Result<Vec<Network>, ScanError> {
         let mut cmd = Command::new(nmcli);
         cmd.args(["-t", "-f", "SSID,SIGNAL,SECURITY,IN-USE", "dev", "wifi", "list", "--rescan", "yes"]);
+        if let Some(iface) = crate::device::current().wifi_adapter() {
+            cmd.args(["ifname", iface]);
+        }
         let out = crate::proc::run_until(&mut cmd, SCAN_TIMEOUT, stop).map_err(|e| match e.kind() {
             std::io::ErrorKind::TimedOut => ScanError { code: None, detail: format!("nmcli did not answer in {} s", SCAN_TIMEOUT.as_secs()) },
             std::io::ErrorKind::Interrupted => ScanError { code: None, detail: "stopped".into() },
@@ -738,7 +785,7 @@ mod imp {
             if hidden {
                 cmd.args(["hidden", "yes"]);
             }
-            cmd.args(["ifname", "wlan0"]);
+            cmd.args(["ifname", managed_interface()]);
             let out = cmd.output().map_err(|e| e.to_string())?;
             if out.status.success() {
                 return Ok(());
@@ -878,7 +925,7 @@ mod imp {
     fn activate_saved(nmcli: &Path, uuid: &str, stop: Option<&AtomicBool>) -> Result<(), String> {
         if stop.is_some_and(|s| s.load(std::sync::atomic::Ordering::SeqCst)) { return Err("stopped".into()); }
         let mut cmd = Command::new(nmcli);
-        cmd.env("LC_ALL", "C").args(["-w", if stop.is_some() { "30" } else { "45" }, "connection", "up", "uuid", uuid, "ifname", "wlan0"]);
+        cmd.env("LC_ALL", "C").args(["-w", if stop.is_some() { "30" } else { "45" }, "connection", "up", "uuid", uuid, "ifname", managed_interface()]);
         let out = match stop {
             Some(stop) => crate::proc::run_until(&mut cmd, Duration::from_secs(30), stop),
             None => crate::proc::run_with_timeout(&mut cmd, Duration::from_secs(50)),
@@ -977,7 +1024,7 @@ mod imp {
 
     /// What the radio heard and how long ago (`iw dev wlan0 scan dump`, no new scan); None when iw can't say.
     fn heard() -> Option<Vec<(String, u64)>> {
-        let out = crate::proc::run_with_timeout(Command::new("iw").args(["dev", "wlan0", "scan", "dump"]), IW_TIMEOUT).ok()?;
+        let out = crate::proc::run_with_timeout(Command::new("iw").args(["dev", managed_interface(), "scan", "dump"]), IW_TIMEOUT).ok()?;
         out.status.success().then(|| super::parse_scan_dump(&String::from_utf8_lossy(&out.stdout)))
     }
 
@@ -989,6 +1036,9 @@ mod imp {
     /// network in range (`pick_network`: ROCKNIX's own first, else the strongest saved one, e.g. a phone
     /// hotspot elsewhere). Never cuts in while NetworkManager is connecting. One `ip` call every 15 s while online.
     pub fn watchdog(net: std::sync::Arc<crate::net_state::NetState>) {
+        if crate::device::current().wifi_adapter_missing_at_start() {
+            return;
+        }
         std::thread::Builder::new()
             .name("wifi-watchdog".into())
             .spawn(move || {
@@ -1439,8 +1489,11 @@ esac
     const IP_TIMEOUT: Duration = Duration::from_secs(1);
 
     fn ask_ip() -> Option<String> {
+        if crate::device::current().wifi_adapter_missing_at_start() {
+            return None;
+        }
         // The virtual device has no Wi-Fi chip: POCKETUI_WIFI_IFACE=eth0 there stands in for it (docs/VIRTUAL-DEVICE.md).
-        let iface = std::env::var("POCKETUI_WIFI_IFACE").unwrap_or_else(|_| "wlan0".into());
+        let iface = interface();
         let out = crate::proc::run_with_timeout(Command::new("ip").args(["-4", "-o", "addr", "show", &iface]), IP_TIMEOUT).ok()?;
         let text = String::from_utf8_lossy(&out.stdout);
         let cidr = text.split_whitespace().skip_while(|w| *w != "inet").nth(1)?;

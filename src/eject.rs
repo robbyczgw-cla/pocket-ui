@@ -160,7 +160,7 @@ impl Way {
     /// the game: the old TV switching off as its picture pulls together, a top-loader's lid springing open as it starts
     /// to lift, the game coming out of its console as it leaves its seat, the case shutting round it. The launch's
     /// sounds played backwards in kind: the way back is no longer silent (ritual review 14.11., finding 9).
-    pub fn sounds(self, medium: crate::media::Medium) -> Vec<(Sound, Duration)> {
+    pub fn sounds(self, medium: crate::media::Medium, game: crate::media::Game, form: FormFactor, mechanism: Option<crate::insert_rig::Kind>) -> Vec<(Sound, Duration)> {
         let mut out = Vec::new();
         if self.off && self.screen == Screen::Tv {
             out.push((Sound::TvOff, ui_sound::hit_at(Sound::TvOff)));
@@ -170,12 +170,17 @@ impl Way {
             out.push((Sound::SwitchOff, ui_sound::hit_at(Sound::SwitchOff)));
         }
         if self.lid {
-            out.push((Sound::LidOpen, self.back_at(cabinet::IN_AT_COZY + crate::insert_rig::SHUT_AFTER)));
+            let open = match (game, mechanism) {
+                (crate::media::Game::Umd, _) => Sound::UmdOpen,
+                (_, Some(crate::insert_rig::Kind::Tray)) => Sound::TrayOpen,
+                _ => Sound::LidOpen,
+            };
+            out.push((open, self.back_at(cabinet::IN_AT_COZY + crate::insert_rig::SHUT_AFTER)));
         }
-        if let Some(sound) = ui_sound::coming_out(medium) {
+        if let Some(sound) = ui_sound::coming_out(game, form) {
             out.push((sound, self.back_at(cabinet::IN_AT_COZY)));
         }
-        out.push((ui_sound::opening(medium), self.case_shut_at()));
+        out.push((ui_sound::closing(medium), self.case_shut_at()));
         out
     }
 }
@@ -538,27 +543,31 @@ mod tests {
 
     #[test]
     fn the_way_back_sounds_like_the_way_in_backwards() {
-        use crate::media::Medium;
+        use crate::media::{Game, Medium};
         let tv = Way::new(Screen::Tv, true, false);
-        let names = |w: Way, m: Medium| w.sounds(m).iter().map(|s| s.0).collect::<Vec<_>>();
+        let sounds = |w: Way, system| {
+            let game = Game::of(system, "game.rom");
+            w.sounds(Medium::of(system), game, FormFactor::of(system), crate::insert_rig::moving_kind(system, game))
+        };
+        let names = |w: Way, system| sounds(w, system).iter().map(|s| s.0).collect::<Vec<_>>();
         // A cartridge on a TV: the TV goes off, the cartridge comes out, its box shuts.
-        assert_eq!(names(tv, Medium::of("snes")), [Sound::TvOff, Sound::CartOut, ui_sound::opening(Medium::of("snes"))]);
+        assert_eq!(names(tv, "snes"), [Sound::TvOff, Sound::CartOut, ui_sound::opening(Medium::of("snes"))]);
         // A handheld: no TV, its own cartridge's sound; a DS card pops out.
         let lcd = Way::new(Screen::Lcd, true, false);
-        assert_eq!(names(lcd, Medium::of("gba"))[..2], [Sound::SwitchOff, Sound::HandheldCartOut], "its switch first, as its display goes dark");
-        assert_eq!(names(lcd, Medium::of("nds"))[1], Sound::CardOut);
-        assert_eq!(lcd.sounds(Medium::of("gba"))[0].1, ui_sound::hit_at(Sound::SwitchOff), "the switch from the way back's first frame");
+        assert_eq!(names(lcd, "gba")[..2], [Sound::SwitchOff, Sound::HandheldCartOut], "its switch first, as its display goes dark");
+        assert_eq!(names(lcd, "nds")[1], Sound::CardOut);
+        assert_eq!(sounds(lcd, "gba")[0].1, ui_sound::hit_at(Sound::SwitchOff), "the switch from the way back's first frame");
         // A disc in a top-loader: the lid springs open, the disc lifts quietly.
         let disc = Way::new(Screen::Tv, true, true);
-        assert_eq!(names(disc, Medium::of("psx")), [Sound::TvOff, Sound::LidOpen, ui_sound::opening(Medium::of("psx"))]);
+        assert_eq!(names(disc, "psx"), [Sound::TvOff, Sound::LidOpen, ui_sound::closing(Medium::of("psx"))]);
         // In the order the picture shows them, all within the way back, all switched off with Case sounds.
         for (w, m) in [(tv, "snes"), (lcd, "gba"), (lcd, "psp"), (disc, "psx"), (disc, "dreamcast"), (tv, "pcengine")] {
-            let s = w.sounds(Medium::of(m));
+            let s = sounds(w, m);
             assert!(s.windows(2).all(|p| p[0].1 <= p[1].1), "{m}: {s:?}");
             assert!(s.iter().all(|(sound, at)| *at <= w.len() && ui_sound::is_case_sound(*sound)), "{m}: {s:?}");
         }
         // The game leaves its seat when the launch's seated moment shows again.
-        let out = tv.sounds(Medium::of("snes"))[1].1;
+        let out = sounds(tv, "snes")[1].1;
         assert!(matches!(tv.moment(out), Moment::Shelf { black, scene } if black == 0.0 && scene.abs_diff(cabinet::IN_AT_COZY) <= ms(2)));
     }
 

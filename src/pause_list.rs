@@ -102,8 +102,8 @@ pub fn earlier_chip(then: u64, now: u64) -> String {
 /// The line under Earlier's picture: what A does, and how the moments come about.
 pub fn earlier_note(then: Option<u64>, now: u64) -> String {
     match then {
-        Some(t) => format!("Back to the moment from {} · one is kept every 5 min of play", crate::play_time::ago_from(t, now)),
-        None => "Nothing earlier yet · a moment is kept every 5 min of play".into(),
+        Some(t) => format!("Jump back to {} (auto-saved every 5 min of play)", crate::play_time::ago_from(t, now)),
+        None => "No earlier backups yet (auto-saved every 5 min of play)".into(),
     }
 }
 

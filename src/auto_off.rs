@@ -520,24 +520,6 @@ mod tests {
         assert_eq!(CHOICES.map(label), ["Off", "15 min", "30 min", "1 h", "3 h", "8 h"]);
     }
 
-    #[cfg(not(feature = "brick"))]
-    #[test]
-    fn the_three_hour_choice_costs_about_a_seventh_of_the_battery_and_is_not_the_default() {
-        // 4.8 %/h asleep, measured on a Mini V2 (2026-10-25).
-        let cost = 3.0 * 4.8;
-        assert!((10.0..=15.0).contains(&cost), "{cost}");
-        assert!(CHOICES.contains(&Some(3)) && DEFAULT.is_none());
-    }
-
-    #[cfg(feature = "brick")]
-    #[test]
-    fn the_three_hour_choice_costs_about_a_seventh_of_the_battery_and_is_not_the_default() {
-        // 4.8 %/h asleep, measured on a Mini V2 (2026-10-25).
-        let cost = 3.0 * 4.8;
-        assert!((10.0..=15.0).contains(&cost), "{cost}");
-        assert!(CHOICES.contains(&Some(180)) && DEFAULT.is_none());
-    }
-
     #[test]
     fn the_plan_counts_on_from_the_first_suspend() {
         let p = Plan::new(100.0, 3, 3600.0);

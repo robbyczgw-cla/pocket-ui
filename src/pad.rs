@@ -1428,8 +1428,16 @@ mod tests {
             std::thread::yield_now();
         }
         let (tx, rx) = std::sync::mpsc::channel();
+        // Release the reader from inside `attach` once it holds the lock and starts draining the waiting events, so a
+        // scheduling stall before `attach` cannot let the reader fill `Early::LIMIT` and drop events beforehand.
+        let go_cb = go.clone();
+        early.attach(move |i| {
+            if i == 0 {
+                go_cb.store(true, std::sync::atomic::Ordering::Release);
+            }
+            tx.send(i).is_ok()
+        });
         go.store(true, std::sync::atomic::Ordering::Release);
-        early.attach(move |i| tx.send(i).is_ok());
         reader.join().unwrap();
         let got: Vec<usize> = rx.try_iter().collect();
         assert!(got.windows(2).all(|w| w[0] < w[1]), "in order");

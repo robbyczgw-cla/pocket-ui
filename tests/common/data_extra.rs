@@ -324,7 +324,7 @@ pub fn probe(source: &str, d: &Path, file: &Path, bytes: Option<&[u8]>, valid: b
             let (picture,sound,..)=core.run(0);assert!(picture.is_some() && sound.iter().any(|&s|s!=0));
         }
         source if source.starts_with("report-") => {
-            let src=pocket_ui::report::Sources {data_dir:data.clone(),live_log:d.join("absent-live-log"),root:d.join("report-root"),storage:d.join("report-storage"),battery:d.join("report-battery"),pocket_core:d.join("absent-pocket-core"),out_dir:d.join("reports")};
+            let src=pocket_ui::report::Sources {data_dir:data.clone(),live_log:d.join("absent-live-log"),root:d.join("report-root"),storage:d.join("report-storage"),battery:d.join("report-battery"),pocket_core:d.join("absent-pocket-core"),out_dir:d.join("reports"),card_dir:None};
             let local=pocket_ui::report::Stamp {year:2026,month:11,day:18,hour:12,min:0,sec:0};
             let got=pocket_ui::report::entries(&src,&[],1795003200,&local);
             let readme=got.iter().find(|(n,_)|n=="README.txt").unwrap();assert!(!String::from_utf8_lossy(&readme.1).trim().is_empty());

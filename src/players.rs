@@ -253,13 +253,13 @@ impl SeatsView {
 /// The toast when a controller comes or goes during a game.
 pub fn connected_note(c: &Controller, player: Option<usize>) -> String {
     match player {
-        Some(p) => format!("{} connected — Player {}", short_name(c), p + 1),
-        None => format!("{} connected — all four players are taken", short_name(c)),
+        Some(p) => format!("{} connected (Player {})", short_name(c), p + 1),
+        None => format!("{} connected (all 4 players full)", short_name(c)),
     }
 }
 
 pub fn disconnected_note(c: &Controller, player: usize) -> String {
-    format!("{} disconnected — Player {}", short_name(c), player + 1)
+    format!("{} disconnected (Player {})", short_name(c), player + 1)
 }
 
 /// Where a player's rumble goes (`rumble::set_targets`): the Pocket's motor, the controller's own, or nowhere.
@@ -620,11 +620,11 @@ mod tests {
         assert_eq!(i.buttons(0), 1 << joypad::UP, "player 1 still holds Up");
         assert_eq!((i.buttons(1), i.sticks(1).analog(true)[3]), (0, 0), "player 2 has let go");
         assert!(merged.iter().all(|e| !matches!(e, PadEvent::Button { button: Button::Up, .. })), "Up is still down for the shortcuts: {merged:?}");
-        assert_eq!(i.take_notes(), ["DualSense disconnected — Player 2"]);
+        assert_eq!(i.take_notes(), ["DualSense disconnected (Player 2)"]);
         // Hotplug during the game: back as player 2, a new one as player 3.
         i.feed(PadEvent::Connected { source: 3, controller: pad("bt:a") }, |_| {});
         i.feed(PadEvent::Connected { source: 4, controller: pad("bt:b") }, |_| {});
-        assert_eq!(i.take_notes(), ["DualSense connected — Player 2", "DualSense connected — Player 3"]);
+        assert_eq!(i.take_notes(), ["DualSense connected (Player 2)", "DualSense connected (Player 3)"]);
         assert!(i.take_notes().is_empty());
         i.feed(button(4, Button::West, true), |_| {});
         assert_eq!(i.buttons(2), 1 << joypad::Y);

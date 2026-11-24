@@ -75,3 +75,34 @@ fn a_game_starts_animating_before_slow_preparation_finishes() {
     assert!(frames >= 5, "the animation must keep painting during slow preparation: {result}");
     assert!(line.contains("inserting=true") && line.contains("changed=true"), "the first frame must actually show the animation: {line}");
 }
+
+#[test]
+fn r36s_fix_a_cabinet_warm_does_not_reuse_case_numbers_after_the_card_changes() {
+    let dir = tempfile::tempdir().unwrap();
+    let tmp = dir.path();
+    let wayland = wayland_for_snapshots(tmp);
+    let mut systems = String::from("<systemList>");
+    for i in 0..14 {
+        let shelf = tmp.join(format!("roms/system{i}"));
+        std::fs::create_dir_all(&shelf).unwrap();
+        std::fs::write(shelf.join("Test.gba"), b"fixture").unwrap();
+        systems.push_str(&format!(
+            "<system><name>test{i}</name><fullname>System {i:02}</fullname><path>{}</path><extension>.gba</extension></system>",
+            shelf.display()
+        ));
+    }
+    systems.push_str("</systemList>");
+    std::fs::write(tmp.join("es_systems.cfg"), systems).unwrap();
+    std::fs::create_dir(tmp.join("data")).unwrap();
+    std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"theme":"cabinet"}"#).unwrap();
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+    cmd.arg("--snapshot").arg("test-cabinet-card-swap").arg(tmp.join("unused.png"))
+        .env("POCKETUI_MOCK", "1").env("POCKETUI_NO_HW", "1")
+        .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
+        .env("POCKETUI_DATA", tmp.join("data"));
+    if let Some(w) = &wayland { cmd.env("WAYLAND_DISPLAY", &w.path); }
+    let out = cmd.output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success() && stdout.contains("cabinet card swap warmed the new library"), "{stdout}\n{stderr}");
+}

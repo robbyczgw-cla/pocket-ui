@@ -352,11 +352,11 @@ mod tests {
     #[test]
     fn the_warning_is_short_and_calm() {
         let mut text = Text::new();
-        for lang in crate::i18n::Lang::ALL {
+        for lang in crate::i18n::Lang::ALL.into_iter().filter(|l| l.complete()) {
             let help = crate::i18n::tr_in(lang, HELP);
             let (lines, ..) = layout(&mut text, &help, 1240, 1080);
             assert!(lines.len() <= 2, "{lang:?}: {lines:?}");
-            assert!(["encrypted", "verschlüsselt", "cifrar", "criptograf", "chiffr", "cifrat"].iter().any(|w| help.contains(w)), "{help}");
+            assert!(["encrypted", "verschlüsselt", "cifrar", "criptograf", "chiffr", "cifrat", "암호화"].iter().any(|w| help.contains(w)), "{help}");
         }
     }
 

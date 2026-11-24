@@ -8,6 +8,7 @@ use super::*;
 pub const ABOUT: &str = "pocket-ui is free software (GPL version 2 or later). The emulators in it are separate programs with their own licences. Choose one to see its licence, where its source is and what was changed in it.";
 pub const OFFER: &str = "The complete source of every emulator, with the patches, is next to the APK on the release page. Ask for it any time: open an issue titled \"Source request\".";
 pub const UNREADABLE: &str = "The list of licences could not be read. The texts are in the app's package and next to the APK on the release page.";
+pub const RECORDING_CHANGES: &str = "Trimmed, mixed to mono, filtered, faded and levelled.";
 
 /// One row of `CORES.tsv`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -27,7 +28,7 @@ pub struct LicencesUi {
     pub cores: Vec<Core>,
     /// The list was read (even if it is empty); false: it could not be.
     pub read: bool,
-    /// The core whose details are shown above the rows.
+    /// The licence entry whose details are shown above the rows.
     pub open: Option<usize>,
 }
 
@@ -69,11 +70,20 @@ impl Ui {
         let row = |label: String, value: String| MenuRow { label, value, check: None, stepper: false };
         let mut rows = vec![row("pocket-ui".into(), "GPL-2.0-or-later".into())];
         rows.extend(self.licences.cores.iter().map(|c| row(c.id.clone(), c.licence.clone())));
+        rows.push(row(tr("Case sounds"), "CC0 1.0, CC BY 3.0".into()));
         rows.push(row(tr("Back"), String::new()));
         rows
     }
-    /// The words above the rows: the chosen core's details, else what this page is, else why there is no list.
+    /// The chosen licence's details, or the page's introduction.
     pub(super) fn licences_words(&self) -> String {
+        if self.licences.open == Some(self.licences.cores.len()) {
+            return [
+                "NES door slam.mp3 · florn · freesound.org/s/454468/".into(),
+                "CC BY 3.0 · creativecommons.org/licenses/by/3.0/".into(),
+                tr(RECORDING_CHANGES),
+                "CC0 1.0 · XenosNS, lartti, ottoojala, ryanharding95, ewellis".into(),
+            ].join("\n");
+        }
         match self.licences.open.and_then(|i| self.licences.cores.get(i)) {
             Some(core) => core.words(),
             None if !self.licences.read => format!("{}\n{}", tr(ABOUT), tr(UNREADABLE)),
@@ -86,7 +96,7 @@ impl Ui {
             Button::Down | Button::Right => self.move_by(1),
             Button::South | Button::Start => self.navigate(if b == Button::Start { Screen::Library } else { Screen::Settings }),
             Button::East => {
-                let last = self.licences.cores.len() + 1;
+                let last = self.licences.cores.len() + 2;
                 match self.menu {
                     0 => self.licences.open = None,
                     m if m == last => self.navigate(Screen::Settings),

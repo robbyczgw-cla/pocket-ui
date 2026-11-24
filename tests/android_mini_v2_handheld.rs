@@ -53,7 +53,7 @@ struct Job {
 
 /// One screen's record: the text-fit faults the program wrote, what was painted, the picture (when asked for).
 fn run(jobs: Vec<Job>, print_shots: bool) -> Vec<String> {
-    let tmp_guard = tempfile::Builder::new().prefix("pui-miniv2-").tempdir_in("/tmp").unwrap();
+    let tmp_guard = tempfile::Builder::new().prefix("pui-miniv2-").tempdir().unwrap();
     let tmp = tmp_guard.path().to_path_buf();
     let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])
@@ -158,7 +158,7 @@ fn handheld_view_shots() {
 /// page names the folder, the apps, the link and the BIOS. `FIRST_START_SHOTS=<dir>` keeps the pictures.
 #[test]
 fn the_first_start_s_your_games_fits_with_what_the_device_has_in_every_language() {
-    let tmp_guard = tempfile::Builder::new().prefix("pui-fs-").tempdir_in("/tmp").unwrap();
+    let tmp_guard = tempfile::Builder::new().prefix("pui-fs-").tempdir().unwrap();
     let tmp = tmp_guard.path().to_path_buf();
     let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])

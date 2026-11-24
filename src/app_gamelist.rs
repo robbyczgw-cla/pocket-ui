@@ -39,6 +39,7 @@ pub(crate) struct GamelistUi {
     covers: std::cell::RefCell<HashMap<PathBuf, Option<PathBuf>>>,
     /// A read is running (on its thread).
     loading: Arc<AtomicBool>,
+    deferred: bool,
     page: Option<Page>,
     /// The Settings row's "N to add", worked out once (the row is painted often; this walks the shelf): forgotten when
     /// the gamelists are read again, the page opens or an offer is taken.
@@ -49,17 +50,28 @@ impl App {
     /// Reads the gamelists on a thread; a different result comes back as `UserEvent::Gamelist`. One at a time. Without
     /// gamelists this is a few `stat`s per system.
     pub(crate) fn gamelist_refresh(&mut self, why: &'static str) {
+        if pocket_ui::background_io::paused() {
+            self.gamelist_defer();
+            return;
+        }
         if self.gamelist.loading.swap(true, Ordering::SeqCst) {
             return;
         }
         let busy = self.gamelist.loading.clone();
+        self.gamelist.deferred = false;
         let (proxy, data_dir, es_systems, current) = (self.proxy.clone(), self.data_dir.clone(), self.es_systems.clone(), self.gamelist.index.clone());
         let first = !self.gamelist.read_once;
         let spawned = std::thread::Builder::new().name("gamelist".into()).spawn(move || {
             let t0 = Instant::now();
             // Folders of another card ("Game Boy Advance (GBA)") are a system's too: their gamelists and pictures count.
-            let sources = pocket_ui::library::read_sources(&es_systems);
-            let fresh = Index::load(&data_dir, &Locations::device(), &sources);
+            let Some(fresh) = pocket_ui::background_io::job(|| {
+                let sources = pocket_ui::library::read_sources(&es_systems);
+                Index::load(&data_dir, &Locations::device(), &sources)
+            }) else {
+                busy.store(false, Ordering::SeqCst);
+                let _ = proxy.send_event(UserEvent::GamelistDeferred);
+                return;
+            };
             let same = fresh.same_as(&current);
             if !same || !fresh.is_empty() {
                 println!("gamelist: {} files read ({why}) in {:?}{}", fresh.files(), t0.elapsed(), if same { ", nothing changed" } else { "" });
@@ -73,6 +85,16 @@ impl App {
             self.gamelist.loading.store(false, Ordering::SeqCst);
             // No read is coming: the download must not wait for one.
             self.gamelist.read_once = true;
+        }
+    }
+
+    pub(crate) fn gamelist_defer(&mut self) {
+        self.gamelist.deferred = true;
+    }
+
+    pub(crate) fn gamelist_resume(&mut self) {
+        if self.gamelist.deferred && !pocket_ui::background_io::paused() {
+            self.gamelist_refresh("after a game");
         }
     }
 

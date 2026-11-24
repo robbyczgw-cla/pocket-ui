@@ -366,7 +366,7 @@ impl BluetoothPage {
     /// The line beside the hints for the selected row.
     pub fn describe(&self, row: Row) -> String {
         match row {
-            Row::Switch => "The same switch as in the quick settings.".into(),
+            Row::Switch => "Mirrors the toggle in Quick settings.".into(),
             Row::Search if self.searching.is_some() => "A stops the search.".into(),
             Row::Search => format!("Looks for devices in pairing mode for {SEARCH_SECS} seconds."),
             Row::Device(i) => {

@@ -20,8 +20,9 @@
 #
 # Stages when pocket-ui keeps failing ("crashes" = a crash, or an end before its first picture):
 #   1. A freshly installed version that fails while update-pending is there: back to `previous` at once (update.rs).
-#   2. Restart, up to POCKETUI_RESTARTS times with a growing pause; a run that lasted POCKETUI_STABLE_SECS starts the
-#      count afresh.
+#   2. Restart, up to POCKETUI_RESTARTS times with a growing pause; a run that lasted POCKETUI_CRASH_RESET_SECS (10 min)
+#      starts the count afresh. Not POCKETUI_STABLE_SECS: a pocket-ui that dies every 2–5 minutes (as it may after
+#      reading a big card) restarted for ever and never reached safe mode.
 #   3. The last known good version: a version that ran POCKETUI_STABLE_SECS with a picture becomes `known-good` (a link
 #      like `current`, kept on disk by update.rs and dev.sh). If `current` is another version, it is switched back to it
 #      (and `rolled-back` names the one that failed).
@@ -61,6 +62,7 @@ RESTARTS=${POCKETUI_RESTARTS:-3}
 SAFE_RESTARTS=${POCKETUI_SAFE_RESTARTS:-2}
 RESTART_DELAY=${POCKETUI_RESTART_DELAY:-1}
 STABLE_SECS=${POCKETUI_STABLE_SECS:-120}
+CRASH_RESET_SECS=${POCKETUI_CRASH_RESET_SECS:-600}
 # The black screen guard. Generous: a first start after an update reads the whole library before its first picture.
 FIRST_FRAME_SECS=${POCKETUI_FIRST_FRAME_SECS:-45}
 FRAME_FILE=${POCKETUI_FRAME_FILE:-/tmp/pocket-ui.frame}
@@ -682,7 +684,7 @@ while :; do
   if [ $framed = 0 ] && ! sway_answers; then
     es_fallback "pocket-ui could not start: sway does not answer ($why)"
   fi
-  [ "$ran" -ge "$STABLE_SECS" ] && crashes=0
+  [ "$ran" -ge "$CRASH_RESET_SECS" ] && crashes=0
   crashes=$((crashes + 1))
   limit=$RESTARTS
   [ "$stage" = safe ] && limit=$SAFE_RESTARTS

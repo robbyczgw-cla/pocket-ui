@@ -104,7 +104,7 @@ impl App {
             #[cfg(feature = "brick")]
             if pocket_ui::device::brick() {
                 let (level, fallback) = (self.leds.level, stripe(system));
-                let cover = pocket_ui::covers::cover_path(&self.data_dir, system, rom);
+                let cover = pocket_ui::covers::active_cover_path(&self.data_dir, system, rom);
                 let turn = GAME_TURN.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
                 std::thread::spawn(move || {
                     let rgb = cover_colour(&cover).unwrap_or(fallback);

@@ -23,7 +23,7 @@ fn row_h() -> i32 { pocket_ui::type_scale::row(66, 36) }
 use crate::{App, Screen, SettingsPage, UserEvent, CANCEL, CONFIRM, EMPTY_ART_TOP, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// What Home says (here and as the note) when the whole system list can't be read.
-pub(crate) const SYSTEM_LIST_LINE: &str = "Your system list can't be read, so pocket-ui uses its built-in list. Settings › Games › Game check says why.";
+pub(crate) const SYSTEM_LIST_LINE: &str = "Your system list can't be read; using defaults. See Settings › Games › Game check.";
 
 /// The name of the Settings row.
 pub(crate) const SETTINGS_NAME: &str = "Starter pack";
@@ -228,6 +228,10 @@ impl App {
         if self.starter.busy.is_some() || games.is_empty() {
             return;
         }
+        if pocket_ui::device::darkos_port() {
+            self.starter.message = Some((starter::NOT_IN_DARKOS.into(), true));
+            return;
+        }
         let count = games.len();
         self.starter.added = 0;
         self.starter.message = None;
@@ -330,10 +334,7 @@ impl App {
         if pocket_ui::library_cache::enabled() {
             self.library_rescan("starter pack");
         } else if let Ok(systems) = pocket_ui::library::load_shown(&self.es_systems, &self.data_dir) {
-            self.systems = systems;
-            self.recents.follow_library(&self.systems);
-            self.curator.library_changed();
-            self.find_library_changed();
+            self.library_replace_systems(systems);
             self.rebuild();
         }
     }
@@ -395,6 +396,14 @@ impl App {
         if !self.starter_home() {
             return false;
         }
+        // The dArkOS port: A is Add games (dArkOS's folders); no starter pack, no looking around (`DARKOS_OWN_GAMES`).
+        if pocket_ui::device::darkos_port() {
+            if b == CONFIRM || b == Button::North {
+                self.setup = Some(self.new_setup().only(pocket_ui::setup::Only::Games));
+                return true;
+            }
+            return false;
+        }
         if b == CONFIRM {
             if self.starter_home_offline() {
                 // Not online: the Wi-Fi page first; Home with its pack hint is there when B comes back.
@@ -430,11 +439,13 @@ impl App {
         }
         let max_w = c.w - 2 * MARGIN;
         let line28 = pocket_ui::type_scale::line(28, 10);
-        let mut y = 350 + 38 * self.text.wrap_prose(Face::Body, 28, "Get a few free games to start playing right away.", max_w).len() as i32;
-        let own = own_games_line(pocket_ui::device::android_profile());
-        y += line28 * self.text.wrap_prose(Face::Body, 28, own, max_w).len() as i32;
+        let mut y = 350 + 38 * self.text.wrap_prose(Face::Body, 28, starter_home_intro(), max_w).len() as i32;
+        if !pocket_ui::device::darkos_port() {
+            let own = own_games_line(pocket_ui::device::android_profile());
+            y += line28 * self.text.wrap_prose(Face::Body, 28, own, max_w).len() as i32;
+        }
         if self.library_ui.unread.is_some_and(|n| n > 0) {
-            y += line28 * self.text.wrap(Face::Body, 28, "Some game files in your ROM folders can't be read. Settings › Games › Game check says why.", max_w).len() as i32;
+            y += line28 * self.text.wrap(Face::Body, 28, "Some ROM files couldn't be read. See Settings › Games › Game check.", max_w).len() as i32;
         }
         if self.system_list_fallback {
             y += line28 * self.text.wrap(Face::Body, 28, SYSTEM_LIST_LINE, max_w).len() as i32;
@@ -444,11 +455,11 @@ impl App {
         let (w, own_w) = (self.text.width(Face::Body, 34, label) + 2 * NU_BTN_PAD, self.text.width(Face::Body, 34, own_label) + 2 * NU_BTN_PAD);
         let h = if MARGIN + w + 20 + own_w <= c.w - MARGIN { 72 } else { 72 * 2 + 16 };
         let note = if pocket_ui::wifi::ip().is_none() && !pocket_ui::device::current().has_wifi() {
-            "Needs a network, and this handheld has no Wi-Fi.".to_string()
+            "Needs a network; this handheld has no Wi-Fi.".to_string()
         } else if self.starter_home_offline() {
-            "Free games come over Wi-Fi. The starter pack waits here.".to_string()
+            "Free homebrew over Wi-Fi, ready when you connect.".to_string()
         } else {
-            format!("{} small games, free to share, from their authors.", starter::games().len())
+            format!("{} free homebrew games, shared by their creators.", starter::games().len())
         };
         let note_lines = self.text.wrap_prose(Face::Body, 24, &note, max_w).len() as i32;
         let extra = (note_lines - 1).max(0) * pocket_ui::type_scale::line(24, 10);
@@ -470,16 +481,19 @@ impl App {
         let dy = pocket_ui::ui_art::above_words(c, pocket_ui::ui_art::Art::NoGames, MARGIN, false, EMPTY_ART_TOP - up, 300 - up, 50);
         self.text.draw(c, Face::Title, 50, MARGIN, 300 - up + dy, pal().chalk, "No games yet");
         let max_w = c.w - 2 * MARGIN;
-        let lines = self.text.wrap_prose(Face::Body, 28, "Get a few free games to start playing right away.", max_w);
+        let lines = self.text.wrap_prose(Face::Body, 28, starter_home_intro(), max_w);
         let mut y = 350 - up + dy;
         for line in &lines {
             self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, line);
             y += 38;
         }
-        let own = own_games_line(pocket_ui::device::android_profile());
-        for line in self.text.wrap_prose(Face::Body, 28, own, max_w) {
-            self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
-            y += pocket_ui::type_scale::line(28, 10);
+        let darkos = pocket_ui::device::darkos_port();
+        if !darkos {
+            let own = own_games_line(pocket_ui::device::android_profile());
+            for line in self.text.wrap_prose(Face::Body, 28, own, max_w) {
+                self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
+                y += pocket_ui::type_scale::line(28, 10);
+            }
         }
         // The system list itself can't be read (the shelf runs on the built-in one and found nothing): the cause, here too.
         if self.system_list_fallback {
@@ -490,7 +504,7 @@ impl App {
         }
         // Files in the ROM folders that the shelf leaves out: said here, so the copy doesn't look like it never happened.
         if self.library_ui.unread.is_some_and(|n| n > 0) {
-            for line in self.text.wrap(Face::Body, 28, "Some game files in your ROM folders can't be read. Settings › Games › Game check says why.", max_w) {
+            for line in self.text.wrap(Face::Body, 28, "Some ROM files couldn't be read. See Settings › Games › Game check.", max_w) {
                 self.text.draw(c, Face::Body, 28, MARGIN, y, pal().chalk, &line);
                 y += pocket_ui::type_scale::line(28, 10);
             }
@@ -500,6 +514,13 @@ impl App {
         if let Some(text) = busy {
             // A job is running (the page was left meanwhile): say so, calmly, instead of offering it again.
             self.text.draw(c, Face::Body, 32, MARGIN, y + 36, pal().chalk, &text);
+        } else if darkos {
+            // The dArkOS port: one button, Add games (its folders), A.
+            let (label, h) = ("Add games", 72);
+            let w = self.text.width(Face::Body, 34, label) + 2 * NU_BTN_PAD;
+            pocket_ui::retro::select(c, MARGIN, y, w, h, h / 2, pal().select);
+            self.text.draw(c, Face::Body, 34, MARGIN + NU_BTN_PAD, y + h / 2 + 12, pal().ink, label);
+            self.hits.button(Area::new(MARGIN, y, w, h), CONFIRM);
         } else {
             let offline = self.starter_home_offline();
             let label = if offline { "Connect to Wi-Fi" } else { "Get the starter pack" };
@@ -518,11 +539,11 @@ impl App {
             let h = if oy > y { h * 2 + 16 } else { h };
             // Said before anyone tries: the games come over the internet.
             let note = if pocket_ui::wifi::ip().is_none() && !pocket_ui::device::current().has_wifi() {
-                "Needs a network, and this handheld has no Wi-Fi.".to_string()
+                "Needs a network; this handheld has no Wi-Fi.".to_string()
             } else if offline {
-                "Free games come over Wi-Fi. The starter pack waits here.".to_string()
+                "Free homebrew over Wi-Fi, ready when you connect.".to_string()
             } else {
-                format!("{} small games, free to share, from their authors.", starter::games().len())
+                format!("{} free homebrew games, shared by their creators.", starter::games().len())
             };
             // Wrapped like the message below: a long note runs off the right edge in German.
             let (mut ny, mut extra) = (y + h + 44, 0);
@@ -544,7 +565,9 @@ impl App {
                 }
             }
         }
-        if with_hints {
+        if with_hints && darkos {
+            self.paint_hint_row(c, &[("A", "Add games"), ("START", "Settings")]);
+        } else if with_hints {
             // Not offered again while it is under way.
             let first = if self.starter_home_offline() { "Connect to Wi-Fi" } else { "Get the starter pack" };
             // Not offered again while it is under way.
@@ -567,7 +590,7 @@ impl App {
         self.text.draw(c, Face::Title, 50, MARGIN, 300 + dy, pal().chalk, "No games yet");
         let max_w = c.w - 2 * MARGIN;
         let mut y = 350 + dy;
-        for line in self.text.wrap_prose(Face::Body, 28, "Press A for the starter pack and the ways to add your own games.", max_w) {
+        for line in self.text.wrap_prose(Face::Body, 28, "Press A for the starter pack or to add your own games.", max_w) {
             self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
             y += 38;
         }
@@ -630,19 +653,27 @@ impl App {
             vec![(text, pal().chalk)]
         } else if let Some((m, err)) = self.starter.message.clone() {
             vec![(m, if err { pal().alert } else { pal().chalk })]
+        } else if pocket_ui::device::darkos_port() {
+            // The dArkOS port can't write into the games folders: the page says so at once, not after a write error.
+            vec![(starter::NOT_IN_DARKOS.to_string(), pal().chalk)]
         } else if !self.starter.scanned {
             vec![("Looking at your games folder…".to_string(), pal().dust)]
         } else {
             match rows.get(sel) {
-                _ if rows.len() == 1 => vec![("This Pocket has none of the systems the pack's games are for.".to_string(), pal().chalk)],
+                _ if rows.len() == 1 => vec![("No matching systems on this Pocket for the starter pack.".to_string(), pal().chalk)],
                 Some(Row::Game(g)) => {
                     vec![(g.description.clone(), pal().chalk), (format!("By {} · {}", g.author, g.license_short), pal().dust)]
                 }
-                _ => vec![("Free games their authors share for anyone to play. They come over the internet and are added only when you press A.".to_string(), pal().chalk)],
+                // No Wi-Fi chip: A says `NEEDS_NETWORK` (`starter::Failure::Offline`), so the page says it first.
+                _ => vec![(pocket_ui::device::wifi_or(
+                    "Free homebrew shared by their creators. Downloads over Wi-Fi, only when you press A.",
+                    "Free homebrew shared by their creators. Needs a network; this handheld has no Wi-Fi.",
+                ).to_string(), pal().chalk)],
             }
         };
         self.starter_footer(c, &lines);
-        let hint: &[(&str, &str)] = if self.starter.busy.is_some() {
+        // The dArkOS port adds no game (`starter::NOT_IN_DARKOS`): A offers nothing there.
+        let hint: &[(&str, &str)] = if self.starter.busy.is_some() || pocket_ui::device::darkos_port() {
             &[("B", "Back")]
         } else {
             match rows.get(sel) {
@@ -729,6 +760,15 @@ impl App {
     }
 }
 
+/// Home's empty card in the dArkOS port, where the starter pack can't add games (`starter::NOT_IN_DARKOS`): where games go
+/// instead. Home offers only Add games there (A), no starter pack and no looking around.
+pub(crate) const DARKOS_OWN_GAMES: &str = "Copy games into dArkOS's EASYROMS folders (one per system), then restart pocket-ui.";
+
+/// The first line under "No games yet" on Home's empty card.
+fn starter_home_intro() -> &'static str {
+    if pocket_ui::device::darkos_port() { DARKOS_OWN_GAMES } else { "Grab a few free games and start playing now." }
+}
+
 /// Home's empty shelf, under the starter pack: how to bring your own games. Android's Add games has no phone page and no
 /// file sharing, only the ROMs folders (review 19.11. #1), so it never promises those there.
 pub(crate) fn own_games_line(android: bool) -> &'static str {
@@ -737,17 +777,17 @@ pub(crate) fn own_games_line(android: bool) -> &'static str {
     } else if pocket_ui::card_health::image_card() {
         pocket_ui::card_health::IMAGE_CARD_NOTE
     } else if pocket_ui::card_health::games_drive() {
-        "Or copy your own: put the card in your computer and copy them to the GAMES drive."
-    } else if pocket_ui::device::no_wifi_chip() {
+        "Or add your own: pop the card into a PC and copy to the GAMES drive."
+    } else if pocket_ui::device::no_own_wifi() {
         // No phone or file sharing without Wi-Fi: Add games shows the second card (or the computer) instead.
-        "Or copy your own: Settings › Games › Add games shows how."
+        "Or add your own: Settings › Games › Add games."
     } else {
-        "Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing)."
+        "Or add your own: Settings › Games › Add games (phone, file sharing)."
     }
 }
 
 /// Android's way in: the ROMs folder, from a computer over USB or with a file manager.
-pub(crate) const ANDROID_OWN: &str = "Or copy your own into the ROMs folder, one folder per system (over USB or with a file manager). Settings › Games › Add games lists the folders.";
+pub(crate) const ANDROID_OWN: &str = "Or copy your own into ROMs (one folder per system) via USB or file manager. See Settings › Games › Add games.";
 
 
 #[cfg(test)]
@@ -760,11 +800,11 @@ mod tests {
         use pocket_ui::i18n::{tr_in, Lang};
         let line = own_games_line(true);
         assert!(line.contains("ROMs") && line.contains("Add games"), "{line}");
-        for lang in Lang::ALL {
+        for lang in Lang::ALL.into_iter().filter(|l| l.complete()) {
             let said = tr_in(lang, line);
             assert!(lang == Lang::En || said != line, "{lang:?} has the Android line");
             // The two ways the Linux line names in brackets ("phone, file sharing"), in this language's own words.
-            let linux = tr_in(lang, "Or copy your own: Settings › Games › Add games shows the ways (phone, file sharing).");
+            let linux = tr_in(lang, "Or add your own: Settings › Games › Add games (phone, file sharing).");
             let ways = linux.split_once('(').and_then(|(_, w)| w.split_once(')')).map(|(w, _)| w.to_string()).unwrap();
             for way in ways.split(',').map(|w| w.trim().to_lowercase()) {
                 assert!(!said.to_lowercase().contains(&way), "{lang:?} promises {way}: {said}");

@@ -48,5 +48,18 @@ final class SafeInsets {
         }
         return safe;
     }
+    /** Only the camera hole's edges (no bars, gestures or corners), in physical pixels: the handhelds' pause menu fills the
+     *  window as on Linux and keeps out of the hole alone (player.rs `menu_view`). */
+    @SuppressWarnings("deprecation") static int[] cutout(WindowInsets insets){
+        int[] hole={0,0,0,0};
+        if(Build.VERSION.SDK_INT>=30){
+            android.graphics.Insets edges=insets.getInsetsIgnoringVisibility(WindowInsets.Type.displayCutout());
+            hole[0]=edges.left;hole[1]=edges.top;hole[2]=edges.right;hole[3]=edges.bottom;
+        }else if(Build.VERSION.SDK_INT>=28&&insets.getDisplayCutout()!=null){
+            android.view.DisplayCutout c=insets.getDisplayCutout();
+            hole[0]=c.getSafeInsetLeft();hole[1]=c.getSafeInsetTop();hole[2]=c.getSafeInsetRight();hole[3]=c.getSafeInsetBottom();
+        }
+        return hole;
+    }
     private SafeInsets(){}
 }

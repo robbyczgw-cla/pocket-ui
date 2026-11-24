@@ -875,7 +875,7 @@ fn kill_same(name: &str, pgid: Option<i32>) {
 }
 
 /// The first matching process in `pgid` (any group when None); pocket-core matches exactly.
-fn find_pid(pgid: Option<i32>, name: &str) -> Option<i32> {
+pub(crate) fn find_pid(pgid: Option<i32>, name: &str) -> Option<i32> {
     pids_of(pgid, name).first().copied()
 }
 

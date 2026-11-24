@@ -82,6 +82,9 @@ abstract class PocketBase extends NativeActivity {
     private void backRequested(){android.util.Log.i(TAG,"launcher system back");if(!nativeBack())backRequests.incrementAndGet();}
     private final java.util.concurrent.atomic.AtomicInteger backRequests=new java.util.concurrent.atomic.AtomicInteger();
     private volatile String metrics = "1,1,0,0,0,0,0";
+    /** Where the window may go round a camera hole (Android 9+). The Mobile view lays its pages into the safe insets and
+     *  uses the edges round the hole; the Handheld view (`HandheldActivity`) keeps out of it. */
+    protected int cutoutMode() { return android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES; }
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         deviceControls(); // before the first picture: a handheld starts the long way round
@@ -91,7 +94,7 @@ abstract class PocketBase extends NativeActivity {
         android.view.Window window = getWindow();
         if (android.os.Build.VERSION.SDK_INT >= 28) {
             android.view.WindowManager.LayoutParams attrs = window.getAttributes();
-            attrs.layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            attrs.layoutInDisplayCutoutMode = cutoutMode();
             window.setAttributes(attrs);
         }
         if (android.os.Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false);
@@ -898,7 +901,8 @@ abstract class PocketBase extends NativeActivity {
         boolean pt=settings.contains("\"language\":\"pt\"");
         boolean fr=settings.contains("\"language\":\"fr\"");
         boolean it=settings.contains("\"language\":\"it\"");
-        boolean chosen=de||es||pt||fr||it||settings.contains("\"language\":\"en\"")||settings.contains("\"german\":false");
+        // Korean has no lines here yet: chosen, it is English (not the phone's language).
+        boolean chosen=de||es||pt||fr||it||settings.contains("\"language\":\"en\"")||settings.contains("\"language\":\"ko\"")||settings.contains("\"german\":false");
         if(de||(!chosen&&system.equals("de")))return german;
         if(pt||(!chosen&&system.equals("pt")))return portuguese;
         if(fr||(!chosen&&system.equals("fr")))return french;

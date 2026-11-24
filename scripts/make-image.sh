@@ -32,6 +32,7 @@ umask 022
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/scripts/image/pins.sh"
 . "$ROOT/scripts/image/tools.sh"
+. "$ROOT/scripts/image/card-texts.sh"
 UA=pocket-ui-image-build/0.1
 TARGET=aarch64-unknown-linux-gnu
 
@@ -129,11 +130,10 @@ fi
 say "boot files (scripts/make-sd-efi.sh)"
 rm -rf "$W/sd-efi"
 sh "$ROOT/scripts/make-sd-efi.sh" "$W/KERNEL" "$W/$SM8250_DTB_FILE" "$W/sd-efi" >/dev/null
-if [ "$MODEL" != rp-mini-v2 ]; then
-  mv "$W/sd-efi/boot/pocket/miniv2-noufs.dtb" "$W/sd-efi/boot/pocket/$SM8250_DTB_FILE"
-  sed "s/miniv2-noufs.dtb/$SM8250_DTB_FILE/g" "$ROOT/deploy/sd-efi/grub.cfg" >"$W/sd-efi/boot/grub/grub.cfg"
-  sed "s/miniv2-noufs.dtb/$SM8250_DTB_FILE/g" "$ROOT/deploy/sd-efi/loader/entries/pocket-ui.conf" >"$W/sd-efi/loader/entries/pocket-ui.conf"
-fi
+[ "$MODEL" = rp-mini-v2 ] || mv "$W/sd-efi/boot/pocket/miniv2-noufs.dtb" "$W/sd-efi/boot/pocket/$SM8250_DTB_FILE"
+# The templates are written for the Mini V2: this card's model, image and tree go in (scripts/image/card-texts.sh).
+sm8250_card_text <"$ROOT/deploy/sd-efi/grub.cfg" >"$W/sd-efi/boot/grub/grub.cfg"
+sm8250_card_text <"$ROOT/deploy/sd-efi/loader/entries/pocket-ui.conf" >"$W/sd-efi/loader/entries/pocket-ui.conf"
 [ "$(md5 -q "$W/sd-efi/boot/pocket/Image" 2>/dev/null || md5sum "$W/sd-efi/boot/pocket/Image" | cut -d' ' -f1)" = "$IMAGE_MD5" ] ||
   die "boot/pocket/Image differs from the kernel that booted on the device"
 GRUB_VERSION=$(cat "$W/sd-efi/boot/grub/grub-efi-arm64-bin.version")
@@ -165,7 +165,7 @@ for f in README SOURCE-OFFER; do
   sed -e "s|@VERSION@|$VERSION|g" -e "s|@ROCKNIX_TAG@|$ROCKNIX_TAG|g" -e "s|@ROCKNIX_COMMIT@|$ROCKNIX_COMMIT|g" \
     -e "s|@POCKET_UI_SOURCE@|$SOURCE|g" -e "s|@RELEASE_URL@|$RELEASE_URL|g" -e "s|@ISSUES_URL@|$ISSUES|g" -e "s|@GRUB_VERSION@|$GRUB_VERSION|g" \
     -e "s|@GRUB_DEB_VERSION@|${GRUB_SRC#* }|g" -e "s|@GRUB_SOURCE_URL@|$GRUB_SOURCE_URL|g" -e "s|@OS_NAME@|$POCKET_OS_NAME|g" \
-    "$ROOT/deploy/image/$f.txt.in" >"$W/info/$f.txt"
+    "$ROOT/deploy/image/$f.txt.in" | sm8250_card_text >"$W/info/$f.txt"
   ! grep -n '@[A-Z_]*@' "$W/info/$f.txt" || die "placeholder left in $f.txt"
 done
 if [ "$MODEL" != rp-mini-v2 ]; then
@@ -177,14 +177,21 @@ s=s.replace('Retroid Pocket Mini V2', sys.argv[2]).replace('the Mini V2', 'the d
 s=s.replace('miniv2-noufs.dtb', sys.argv[3])
 s=s.replace('FAT partition "ROCKNIX" (readable on any computer):', 'FAT partition "ROCKNIX" (an EFI system partition: Linux shows it, Windows and macOS hide it):').replace('-rp-mini-v2.img.xz', '-'+sys.argv[4]+'.img.xz')
 a=s.index('These steps are for'); b=s.index('1. Write',a)
-s=s[:a]+('EXPERIMENTAL — tested: no; testers wanted. No hardware boot has been verified.\n'
-'Made for Retroid\'s stock bootloader with a working Retroid u-boot in loader ("Boot mode: Loader").\n'
-'The card also carries the files OpenABL (ROCKNIX\'s bootloader, "Boot mode: Linux") and other UEFI\n'
-'loaders start from a card; those ways are untested too.\n'
-'Boot menu shows "UEFI" next to Android? Retroid\'s UEFI does not start cards. Set up OpenABL once as\n'
-'ROCKNIX\'s guide for your device says (https://rocknix.org, Run Script as Root, backup first; Android\n'
-'stays), then pick "Boot mode: Linux" and "Boot source: SD card". 12 GB devices (Visionox screen): not yet.\n'
-'This image itself flashes no bootloader. Panel: original, not Visionox.\n\n')+s[b:]
+s=s[:a]+('BETA: no boot on real hardware confirmed yet; testers wanted. Original screen only: 12 GB devices with the Visionox\n'
+'screen stay black, don\'t flash those. This image itself flashes no bootloader.\n'
+'Power off, hold Volume Down + Power. Menu shows "Loader"? Pick Boot mode: Loader, Start. Nothing gets flashed.\n'
+'Only Android and UEFI? Retroid\'s UEFI does not start this card; OpenABL is needed once. Risk: it overwrites abl_a and\n'
+'abl_b. An interrupted or bad flash can stop the device from starting and may require EDL recovery.\n'
+'This card has no flashing scripts: write ROCKNIX SM8250 (20261101 or newer) to a card, copy its openabl folder to\n'
+'/sdcard/openabl, battery above 50%, run backup_abl.sh as root exactly once before flashing. Running it again after\n'
+'flashing overwrites the original backup on the handheld. Check both abl_a.img and abl_b.img are non-empty and copy them\n'
+'to your computer. Then run flash_abl.sh (don\'t switch off), check that ROCKNIX starts, and write this card. Choose\n'
+'Boot mode: Linux, Boot source: SD card. Back to Android: Boot mode: Android (with OpenABL also Volume Up at power on).\n'
+'Undo: restore_backup_abl.sh as\n'
+'root, from the same folder, while the device still starts Android.\n'
+'The bundled GRUB and OpenABL entries disable internal UFS. If OpenABL starts /KERNEL, Linux can see internal UFS and\n'
+'ROCKNIX can mount a qualifying partition read-write.\n'
+'Every step: https://pocketui.xyz/install#rp5-uefi and https://rocknix.org/devices/retroid/\n\n')+s[b:]
 p.write_text(s)
 PYNOTES
 fi

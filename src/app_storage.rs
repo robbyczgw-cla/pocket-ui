@@ -6,9 +6,11 @@
 //!   once with a quiet "Updating…" until the new ones are in), the clean-ups on a thread, the hidden games shown again.
 //! * The **low-space notice**: a statvfs on a thread after the first frame and after every game; under 1 GB a notice on
 //!   the shelf once (`storage::check`, remembered in `storage.json`).
-//! * The game card's **Hide or delete** row (`game_card::RowKind::Manage`): Hide sets the flag in library.json and takes
-//!   the game out of the list on screen (the cache follows); Delete works out what goes on a thread
-//!   (`game_files::plan`), shows it, and deletes on a thread after the second A.
+//! * The game card's last two rows, **Delete from the card** (`game_card::RowKind::Delete`) and **Hide from the shelf**
+//!   (`RowKind::Hide`): Hide sets the flag in library.json and takes the game out of the list on screen (the cache
+//!   follows); Delete works out what goes on a thread (`game_files::plan`), shows it, and deletes on a thread after the
+//!   second A. The web companion's Delete goes the same way (`App::delete_game`). Delete is only offered where the
+//!   game's folder can be written (`game_files::can_delete`), never while a game runs and never in Kids Mode.
 //!
 //! A game hidden or deleted leaves every list at once: the shelf's game list is made without it (`library::load_shown`,
 //! and here the list on screen minus the game), and the search, Curator and the web companion are made from that list.
@@ -294,16 +296,15 @@ impl App {
 
     // ---- hide and delete from the card ------------------------------------------------------------------------------
 
-    /// The card's last row (`game_card::RowKind::Manage`), under everything else.
-    pub(crate) fn card_manage_row(&self) -> CuratorRow {
-        CuratorRow { kind: RowKind::Manage, title: "Hide or delete".into(), line: "Take it off the shelf, or off the SD card".into() }
-    }
-
-    /// A on "Hide or delete": the two choices.
-    pub(crate) fn open_card_manage(&mut self) {
-        if let Some(open) = self.card.as_mut() {
-            open.card.mode = Mode::Manage { sel: 0 };
+    /// The card's last rows: "Delete from the card" (where the game's folder can be written: not dArkOS's read-only
+    /// view of the games, not Android's shared folders, `game_files::can_delete`) and "Hide from the shelf".
+    pub(crate) fn card_manage_rows(&self, path: &Path) -> Vec<CuratorRow> {
+        let mut rows = Vec::with_capacity(2);
+        if game_files::can_delete(path) {
+            rows.push(CuratorRow { kind: RowKind::Delete, title: "Delete from the card".into(), line: "Frees its space. Asks twice, saves stay".into() });
         }
+        rows.push(CuratorRow { kind: RowKind::Hide, title: "Hide from the shelf".into(), line: "Stays on the card. Storage brings it back".into() });
+        rows
     }
 
     /// "Hide from the shelf": the flag in library.json, the game out of every list. The card closes.
@@ -361,6 +362,12 @@ impl App {
 
     /// "Delete from the card…": what it takes is worked out on a thread.
     pub(crate) fn card_plan_delete(&mut self) {
+        if let Some(why) = self.delete_refused() {
+            if let Some(open) = self.card.as_mut() {
+                open.card.delete_info(Err(why.into()), false);
+            }
+            return;
+        }
         let Some(open) = self.card.as_ref() else { return };
         let (proxy, es, data) = (self.proxy.clone(), self.es_systems.clone(), self.data_dir.clone());
         let (system, path) = (open.system.clone(), open.path.clone());
@@ -369,7 +376,7 @@ impl App {
         std::thread::spawn(move || {
             let protected = protected_folders(&es, &data);
             let states = pocket_ui::slots::states_dir();
-            let plan = game_files::plan(&system, &path, &Places { states: &states, data: &data, protected: &protected, shared });
+            let plan = game_files::plan(&system, &path, &Places { states: &states, data: &data, protected: &protected, shared, saves_dir: own_saves_dir(&path) });
             let _ = proxy.send_event(UserEvent::Storage(Event::Planned(path, plan)));
         });
     }
@@ -390,10 +397,55 @@ impl App {
         }
     }
 
+    /// Why no game may be deleted now: one runs or is starting (its files are open), or Kids Mode is on.
+    pub(crate) fn delete_refused(&self) -> Option<&'static str> {
+        if self.running.is_some() || self.pending_launch.is_some() || self.launch_at.is_some() {
+            Some("A game is running. Quit the game before deleting one.")
+        } else if self.kids_live() {
+            Some("Games can't be deleted in Kids mode.")
+        } else {
+            None
+        }
+    }
+
     /// The second A on Delete: on a thread.
     pub(crate) fn card_delete(&mut self, with_saves: bool) {
+        if let Some(why) = self.delete_refused() {
+            if let Some(open) = self.card.as_mut() {
+                open.card.delete_failed(why.into());
+            }
+            return;
+        }
         let Some(open) = self.card.as_ref() else { return };
         let Some((path, plan)) = self.storage.plan.take().filter(|(p, _)| *p == open.path) else { return };
+        self.delete_planned(path, plan, with_saves);
+    }
+
+    /// Delete the game `path` of `system` from the web companion: worked out and deleted on a thread, as the card does;
+    /// the result comes back as the card's (`card_deleted`), so every list forgets it the same way.
+    pub(crate) fn delete_game(&mut self, system: String, path: PathBuf, with_saves: bool) -> Result<(), String> {
+        if let Some(why) = self.delete_refused() {
+            return Err(why.into());
+        }
+        if !self.systems.iter().any(|s| s.name == system && s.games.iter().any(|g| g.path == path)) || std::fs::symlink_metadata(&path).is_err() {
+            return Err("That game is not on the Pocket any more.".into());
+        }
+        if !game_files::can_delete(&path) {
+            return Err("Games can't be deleted on this device: their folder is read only.".into());
+        }
+        let (proxy, es, data) = (self.proxy.clone(), self.es_systems.clone(), self.data_dir.clone());
+        let shared = !self.same_name_games(&system, &path).is_empty();
+        println!("library: deleting {} from the web companion{}", path.display(), if with_saves { ", with saves and states" } else { "" });
+        std::thread::spawn(move || {
+            let protected = protected_folders(&es, &data);
+            let states = pocket_ui::slots::states_dir();
+            let result = game_files::plan(&system, &path, &Places { states: &states, data: &data, protected: &protected, shared, saves_dir: own_saves_dir(&path) }).and_then(|plan| game_files::delete(&plan, with_saves, &protected));
+            let _ = proxy.send_event(UserEvent::Storage(Event::Deleted(path, result)));
+        });
+        Ok(())
+    }
+
+    fn delete_planned(&mut self, path: PathBuf, plan: Plan, with_saves: bool) {
         println!("library: deleting {} ({} files{})", path.display(), plan.files(with_saves), if with_saves { ", with saves and states" } else { "" });
         let (proxy, es, data) = (self.proxy.clone(), self.es_systems.clone(), self.data_dir.clone());
         std::thread::spawn(move || {
@@ -422,6 +474,11 @@ impl App {
                     self.rebuild();
                 }
                 self.favorites.remove(&path);
+                // Shelf space: its place on the shelf is free, no empty case stands for it.
+                if self.shelf_space.put_away(&path) {
+                    self.shelf_space.save(&self.data_dir);
+                    self.rebuild();
+                }
                 if self.library.is_hidden(&path) {
                     let _ = self.library.set_hidden(&path, false);
                 }
@@ -507,7 +564,7 @@ impl App {
         if rows.is_empty() {
             // Never an empty list: what it would hold, in words.
             let (head, line) = match page.view {
-                View::Hidden => ("No hidden games", "Hide one from its card: X on a game, then Hide or delete."),
+                View::Hidden => ("No hidden games", "Hide one from its card: X on a game, then Hide from the shelf."),
                 _ => ("No games on the SD card", "Add games over file sharing: Settings › Games › Add games."),
             };
             self.text.draw(c, Face::Title, 37, pad + NU_BTN_PAD, top + 60 + type_scale::grow(37), pal().text, head);
@@ -543,11 +600,11 @@ impl App {
         c.rect(left, y0, width, 2, pal().spine);
         let (head, lines, warn) = match page.view {
             View::Main => page.details(),
-            View::Systems => ("Games by system".into(), vec!["Largest first. To delete a game, open its card (X on the game), then Hide or delete.".into()], false),
-            View::Hidden if page.hidden.is_empty() => ("Hidden games".into(), vec!["Games you hide leave the shelf, the lists, the search, Curator and the web companion.".into()], false),
+            View::Systems => ("Games by system".into(), vec!["Largest first. To delete a game, open its card (X on the game), then Delete from the card.".into()], false),
+            View::Hidden if page.hidden.is_empty() => ("Hidden games".into(), vec!["Hidden games vanish from the shelf, lists, search, Curator and web companion.".into()], false),
             View::Hidden => match &page.message {
                 Some((m, _)) => ("Done".into(), vec![m.clone()], false),
-                None => ("Hidden games".into(), vec!["A shows the game again: on the shelf, in the lists, the search, Curator and the web companion.".into()], false),
+                None => ("Hidden games".into(), vec!["Press A to restore it to the shelf, lists, search, Curator and web companion.".into()], false),
             },
         };
         let head = self.text.fit(Face::Title, 44, &head, width);
@@ -636,10 +693,10 @@ impl App {
         true
     }
 
-    /// `--snapshot card-manage:<system>:<name>[:row|:sheet|:delete|:armed|:saves|:working|:error]` (the card of that
-    /// game with Hide or delete selected at its end, the two choices, the delete sheet with made-up sizes, armed,
-    /// with saves and states and Sync on, before the sizes are in, a game no longer there), and `storage-notice` (Home
-    /// with the low-space notice).
+    /// `--snapshot card-manage:<system>:<name>[:row|:hide|:delete|:armed|:saves|:working|:error]` (the card of that
+    /// game with Delete from the card selected, Hide from the shelf selected, the delete sheet with made-up sizes,
+    /// armed, with saves and states and Sync on, before the sizes are in, a game no longer there), and
+    /// `storage-notice` (Home with the low-space notice).
     pub(crate) fn storage_shelf_snapshot(&mut self, state: &str) -> bool {
         if state == "storage-notice" {
             self.notice = Some(Notice::new(storage::low_notice(812_000_000)));
@@ -660,42 +717,48 @@ impl App {
         self.show_card(Item::Game(s, g), system, gname, path);
         let Some(open) = self.card.as_mut() else { return true };
         let info = || DeleteInfo { game_bytes: 2_310_000_000, files: 3, names: vec!["Racer.cue".into(), "Racer (Track 1).bin".into()], kept_files: 4, kept_bytes: 41_200_000 };
-        match mode {
-            "sheet" => open.card.mode = Mode::Manage { sel: 1 },
-            "delete" | "armed" | "saves" | "working" | "error" => {
-                open.card.mode = Mode::Manage { sel: 1 };
-                open.card.press(CONFIRM);
-                match mode {
-                    "working" => {}
-                    "error" => open.card.delete_info(Err("The game's file is no longer on the SD card.".into()), false),
-                    _ => open.card.delete_info(Ok(info()), mode == "saves"),
-                }
-                if mode == "armed" {
-                    open.card.press(CONFIRM);
-                }
-                if mode == "saves" {
-                    open.card.press(Button::Up);
-                    open.card.press(CONFIRM);
-                }
+        if matches!(mode, "delete" | "armed" | "saves" | "working" | "error") {
+            open.card.mode = Mode::Delete(pocket_ui::game_card::DeleteSheet { info: None, with_saves: false, sel: 1, armed: false, synced: false, busy: false });
+            match mode {
+                "working" => {}
+                "error" => open.card.delete_info(Err("The game's file is no longer on the SD card.".into()), false),
+                _ => open.card.delete_info(Ok(info()), mode == "saves"),
             }
-            _ => {}
+            if mode == "armed" {
+                open.card.press(CONFIRM);
+            }
+            if mode == "saves" {
+                open.card.press(Button::Up);
+                open.card.press(CONFIRM);
+            }
         }
         true
     }
 
-    /// After the first paint (which places the card's rows): Down to the end of the card, onto Hide or delete.
+    /// After the first paint (which places the card's rows): Down onto Delete from the card (`:row`) or Hide from the
+    /// shelf (`:hide`).
     pub(crate) fn storage_shelf_snapshot_after(&mut self, state: &str) {
         let Some(rest) = state.strip_prefix("card-manage:") else { return };
-        if !rest.ends_with(":row") && rest.split(':').count() > 2 {
-            return;
-        }
+        let mode = rest.split(':').nth(2).unwrap_or("row");
+        let want = match mode {
+            "row" => RowKind::Delete,
+            "hide" => RowKind::Hide,
+            _ => return,
+        };
         if let Some(open) = self.card.as_mut() {
-            let last = open.card.data.rows.len().checked_sub(1);
-            if let Some(i) = last {
+            if let Some(i) = open.card.data.rows.iter().position(|r| r.kind == want) {
                 open.card.focus_row(i);
             }
         }
     }
+}
+
+/// Where the game's saves are when not beside it (the Brick's and dArkOS's `POCKET_CORE_SAVE_DIR`), by the rule the web
+/// companion's saves and Pocket Sync use (`web::saves::save_dir`).
+fn own_saves_dir(game: &Path) -> Option<PathBuf> {
+    let roots = pocket_ui::web::files::Roots::default();
+    roots.saves.as_ref()?;
+    pocket_ui::web::saves::save_dir(&roots, game)
 }
 
 /// The folders "Delete from the card" never takes: the games folder, every system's ROM folder, BIOS, states,

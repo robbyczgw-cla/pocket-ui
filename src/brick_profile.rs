@@ -282,7 +282,8 @@ fn additional_core_on_card(system: &str) -> Option<&'static str> {
 /// (`pocket-fb` without `--gl`, or one that lost it) the CPU copy ignores them, and a row that does nothing is worse than none.
 /// Settings > Screen frames follows the same answer. With `POCKET_BRICK_GL=1` and a working GPU they all come back.
 pub fn picture_rows_out() -> bool {
-    crate::device::brick() && !crate::brick_picture::shaders_available()
+    // The dArkOS port uses the same bridge, without `--gl` (docs/DARKOS.md, "Over the game"): it answers no there.
+    (crate::device::brick() || crate::darkos::host()) && !crate::brick_picture::shaders_available()
 }
 
 /// Picture choices that are heavy for the Brick's GPU (GE8300, 786 432 pixels a picture; docs/BRICK-SHADERS.md has the counts and the

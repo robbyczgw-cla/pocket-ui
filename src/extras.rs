@@ -28,6 +28,12 @@ fn allowed_shortcuts(wanted: Enabled) -> Enabled {
     shortcuts_for(wanted, std::env::var_os(NO_SHORTCUTS).is_some(), over_game_allowed())
 }
 
+/// The shortcuts a game gets from the ones switched on: none in Kids Mode, no HOME + Y in Easy. Also RetroArch's
+/// (`ra_hotkeys`), which pocket-ui works out before the start instead of pocket-core's environment.
+pub fn allowed_for(wanted: Enabled, kids: bool, easy: bool) -> Enabled {
+    shortcuts_for(wanted, kids, !easy)
+}
+
 fn shortcuts_for(wanted: Enabled, none: bool, over_game: bool) -> Enabled {
     if none {
         Enabled::none()

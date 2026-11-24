@@ -6,6 +6,7 @@
 set -u
 . /repo/scripts/image/pins.sh
 . /repo/scripts/image/grub-checks.sh
+. /repo/scripts/image/card-texts.sh
 . /repo/scripts/image/bios-checks.sh
 . /repo/scripts/image/p2-table.sh
 . /repo/scripts/image/tools.sh
@@ -373,9 +374,12 @@ boot_sm8550_efi() {
   G=$W/fat/boot/grub/grub.cfg
   B=$W/fat/loader/entries/pocket-ui.conf
   T=$W/fat/boot/pocket/$EFI_DTB_FILE
-  sed "s/rp6-noufs.dtb/$EFI_DTB_FILE/g" /repo/deploy/sd-efi-sm8550/grub.cfg >"$W/lists/grub.expected"
-  sed "s/rp6-noufs.dtb/$EFI_DTB_FILE/g" /repo/deploy/sd-efi-sm8550/loader/entries/pocket-ui.conf >"$W/lists/bls.expected"
-  check "grub.cfg is deploy/sd-efi-sm8550/grub.cfg with this model's tree ($EFI_DTB_FILE)" 'same "$G" "$W/lists/grub.expected" && [ "$(grep -c "^ *devicetree /boot/pocket/$EFI_DTB_FILE$" "$G")" = 1 ]'
+  sm8550_efi_card_text </repo/deploy/sd-efi-sm8550/grub.cfg >"$W/lists/grub.expected"
+  sm8550_efi_card_text </repo/deploy/sd-efi-sm8550/loader/entries/pocket-ui.conf >"$W/lists/bls.expected"
+  check "grub.cfg is deploy/sd-efi-sm8550/grub.cfg with this model's name and tree ($EFI_DTB_FILE)" 'same "$G" "$W/lists/grub.expected" && [ "$(grep -c "^ *devicetree /boot/pocket/$EFI_DTB_FILE$" "$G")" = 1 ]'
+  # Read on its own, not against the template: 0.6.0's grub.cfg on the Pocket 5 and Flip 2 matched theirs and named the Mini V2.
+  check "grub.cfg's comments name this card's model ($EFI_MODEL_NAME) and tree, and no other model (card-texts.sh)" \
+    'grub_names_card "$G" "$EFI_MODEL_NAME" "$EFI_DTB_FILE" && card_names_no_other "$G" "$FAMILY" "$MODEL"'
   check "grub.cfg finds the FAT partition by label ROCKNIX and loads /boot/pocket/Image" 'grep -Eq "^ *search .*--label ROCKNIX$" "$G" && grep -Eq "^ *linux /boot/pocket/Image boot=LABEL=ROCKNIX disk=LABEL=STORAGE " "$G"'
   sed -n 's/^ *linux \/boot\/pocket\/Image //p' "$G" >"$W/lists/grub-cmdline"
   check "GRUB passes every word of KERNEL's own command line (ROCKNIX's SM8550 settings)" \
@@ -397,8 +401,10 @@ boot_sm8550_efi() {
     '( for n in $SM8550_UFS_NODES; do [ "$(fdtget -t s "$T" "$n" status)" = disabled ] || exit 1; done ) && [ "$(fdtget -t s "$T" /soc@0/mmc@8804000 status)" = okay ]'
   check_tree_firmware "$T"
   check "GRUB is an arm64 EFI application" 'file -b "$W/fat/EFI/BOOT/BOOTAA64.EFI" | grep -q "EFI application.*Aarch64"'
-  warn "GRUB is byte for byte the SM8250 cards' (the one on the author's device)" '[ "$(md5 "$W/fat/EFI/BOOT/BOOTAA64.EFI")" = "$GRUB_EFI_MD5_DEVICE" ]'
-  check "GRUB version recorded: $(cat "$W/fat/boot/grub/grub-efi-arm64-bin.version" 2>/dev/null)" 'grep -q "^grub-efi-arm64-bin " "$W/fat/boot/grub/grub-efi-arm64-bin.version"'
+  # Built from the pinned packages (pins.sh GRUB_DEB_*), so a difference is a failure, not a warning (22.11.2026: Debian's newest,
+  # 2.12-9+deb13u4, gave another file and the release refused the cards).
+  check "GRUB is byte for byte the one on the author's device (md5 $GRUB_EFI_MD5_DEVICE, Debian $GRUB_DEB_VERSION)" '[ "$(md5 "$W/fat/EFI/BOOT/BOOTAA64.EFI")" = "$GRUB_EFI_MD5_DEVICE" ]'
+  check "GRUB version recorded: $(cat "$W/fat/boot/grub/grub-efi-arm64-bin.version" 2>/dev/null)" 'grep -qx "grub-efi-arm64-bin $GRUB_DEB_VERSION (source grub2 $GRUB_DEB_VERSION)" "$W/fat/boot/grub/grub-efi-arm64-bin.version"'
   rm -f "$W/lists/efi.img"* "$W/lists/efi-back.dtb"
 }
 case $FAMILY in H700) boot_h700 ;; SM8550) boot_sm8550 ;; SM4450) boot_sm4450 ;; RK3566) boot_rk3566 ;; RK3326) boot_rk3326 ;; esac
@@ -458,8 +464,8 @@ check "says how it starts without flashing: Volume Down, Retroid's \"UEFI\", Sta
   'grep -q "Nothing needs flashing" "$R" && grep -q "Hold Volume Down and press Power" "$R" && grep -q "Pick \"UEFI\"" "$R" && grep -q "Secure Boot" "$R"'
 check "says it is untested that way, and the ABL and OpenABL ways still work; never flashes" \
   'grep -q "nobody has started this card that way yet" "$R" && grep -q "Set device model" "$R" && grep -q "OpenABL" "$R" && grep -q "does not flash a boot helper" "$R"'
-check "says the internal storage stays hidden through UEFI and OpenABL, and what an internal ROCKNIX does" \
-  'grep -q "hides the handheld" "$R" && grep -q "install package" "$R"'
+check "scopes UFS isolation to the bundled boot entries and explains the fallback and internal ROCKNIX" \
+  'grep -q "entries disable internal UFS" "$R" && grep -q "starts /KERNEL" "$R" && grep -q "install package" "$R"'
 check "names the EFI system partition, GRUB and this model's tree on the card" 'grep -q "an EFI system partition: Linux shows it" "$R" && grep -q "EFI/BOOT/BOOTAA64.EFI" "$R" && grep -q "boot/pocket/$EFI_DTB_FILE" "$R" && grep -q "GNU GPL version 3 or later" "$R"'
 check "going back to Android: Volume Down + Power, Android" 'grep -q "To go back to Android" "$R"'
 check "says the firmware without a stated licence stays, and comes out on request" 'grep -q "states no licence" "$R" && grep -q "on request" "$R"'
@@ -467,11 +473,12 @@ else
 check "names the model: $DT_MODEL" 'grep -q "for the $DT_MODEL: SD card image" "$R"'
 check "says plainly what the handheld needs first: ROCKNIX's boot helper (ABL), once, from Android, and that this card doesn't do it" \
   'grep -q "needs one thing first" "$R" && grep -q "ABL" "$R" && grep -q "from Android" "$R" && grep -q "does not flash" "$R"'
-check "says an internal ROCKNIX install wins over this card, and what to use instead" 'grep -q "internal storage, this card" "$R" && grep -q "install package" "$R"'
+check "says the Odin boot path leaves UFS enabled and an internal ROCKNIX install wins" 'grep -q "starts through /KERNEL, which leaves internal UFS enabled" "$R" && grep -q "internal storage, this card" "$R" && grep -q "install package" "$R"'
 check "says the firmware without a stated licence stays, and comes out on request" 'grep -q "states no licence" "$R" && grep -q "on request" "$R"'
 fi
 [ "$FAMILY" = SM4450 ] || check "DraStic: closed source, unchanged like ROCKNIX, 2017 statement, not a formal licence, credit Exophase, removed on request" 'grep -q "DraStic by Exophase" "$R" && grep -q "closed-source" "$R" && grep -q "not a formal licence" "$R" && grep -q "on request" "$R"'
 check "names version $VERSION" 'grep -q "pocket-ui $VERSION" "$R"'
+check "names no other model of the $FAMILY family (card-texts.sh)" 'card_names_no_other "$R" "$FAMILY" "$MODEL"'
 check "$POCKET_OS_NAME, built on ROCKNIX, not made or endorsed by its team, with link" 'grep -q "$POCKET_OS_NAME $VERSION" "$R" && grep -q "built on ROCKNIX" "$R" && grep -q "not made or" "$R" && grep -q "https://github.com/ROCKNIX/distribution" "$R"'
 check "source offer: ROCKNIX tag $ROCKNIX_TAG and commit" 'grep -q "tag $ROCKNIX_TAG" "$R" && grep -q "$ROCKNIX_COMMIT" "$R"'
 check "artwork under CC BY-NC-SA 4.0" 'grep -q "CC BY-NC-SA 4.0" "$R"'
@@ -497,6 +504,8 @@ O=$W/fat/pocket-ui-info/SOURCE-OFFER.txt
 [ $EFI = 0 ] || check "SOURCE-OFFER.txt names GRUB and its Debian source" 'grep -q "the Linux kernel, GRUB," "$O" && grep -Eq "^  GRUB: +https://snapshot.debian.org/package/grub2/" "$O"'
 check "SOURCE-OFFER.txt: written offer for three years, how to ask, ROCKNIX tag and commit" \
   'grep -q "^Written offer" "$O" && grep -q "at least three years" "$O" && grep -q "https://github.com/.*/issues" "$O" && grep -q "$ROCKNIX_COMMIT" "$O" && grep -q "pocket-ui $VERSION" "$O"'
+check "SOURCE-OFFER.txt: the title names $DT_MODEL, the offer this card's image pocket-ui-$VERSION-$MODEL.img.xz, no other model" \
+  'offer_names_card "$O" "$VERSION" "$DT_MODEL" "pocket-ui-$VERSION-$MODEL" && card_names_no_other "$O" "$FAMILY" "$MODEL"'
 mkdir -p "$W/fat/pocket-ui-info/firmware-licences"
 for f in README.txt $FAM_FW_SHARED; do
   mcopy -n -i "$FAT" "::/pocket-ui-info/firmware-licences/$f" "$W/fat/pocket-ui-info/firmware-licences/$f" 2>/dev/null

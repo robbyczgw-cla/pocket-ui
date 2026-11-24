@@ -9,7 +9,7 @@ impl Drop for Stub {
 
 #[test]
 fn every_console_keeps_its_identity_on_a_narrow_curator_title_card() {
-    let tmp = tempfile::Builder::new().prefix("pui-tile-").tempdir_in("/tmp").unwrap();
+    let tmp = tempfile::Builder::new().prefix("pui-tile-").tempdir().unwrap();
     let display = tmp.path().join("wl");
     let _stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|s| s.is_empty())).then(|| {
         let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), display.to_str().unwrap()]).spawn().unwrap();

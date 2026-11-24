@@ -16,14 +16,14 @@
 use crate::quit::Saver;
 
 /// Other emulators: pocket-ui can't save or continue them; Quit only closes them.
-pub const OWN_SAVES: &str = "This emulator keeps its own saves. Save in the game before you quit.";
+pub const OWN_SAVES: &str = "This emulator handles its own saves. Save in-game before quitting.";
 /// A PortMaster port: saving depends on the engine; Quit never requests a save.
-pub const PORT_SAVES: &str = "Saving is up to the game. Use its save option if it has one.";
+pub const PORT_SAVES: &str = "Saving is handled by the game. Use its own save option if it has one.";
 /// A PS2 game whose emulator hasn't said yet which game runs: a Save would have no file to go to, a Quit no
 /// resume state to write.
-pub const NOT_READY: &str = "Save and Load aren't ready yet. Save in the game before you quit.";
+pub const NOT_READY: &str = "Save states aren't ready yet. Save in-game before quitting.";
 /// pocket-core with a system without save states that `hostsys` has no line for.
-pub const NO_STATES: &str = "This game has no save states. Save in the game before you quit.";
+pub const NO_STATES: &str = "No save states for this game. Save in-game before quitting.";
 
 /// What saving offers in the pause menu.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

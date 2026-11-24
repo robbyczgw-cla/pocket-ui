@@ -37,7 +37,7 @@ fn wayland(tmp: &Path) -> Option<Stub> {
 struct Ctx {
     tmp: PathBuf,
     stub: Option<Stub>,
-    n: std::cell::Cell<u32>,
+    n: std::sync::atomic::AtomicU32,
     /// Last, so the stub is gone before the folder is; removes the folder with the Ctx, also on a panic.
     _dir: tempfile::TempDir,
 }
@@ -58,8 +58,7 @@ impl Ctx {
     /// `ra` the made-up tally (`POCKETUI_SNAPSHOT_RA`, "unlocked/total"; "" for signed out).
     #[allow(clippy::too_many_arguments)]
     fn shot_ra(&self, look: &str, state: &str, (lang, text_size): (&str, &str), size: &str, settings: &str, progress: &str, ra: &str) -> Shot {
-        self.n.set(self.n.get() + 1);
-        let n = self.n.get();
+        let n = self.n.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
         let (data, tmpdir) = (self.tmp.join(format!("data-{n}")), self.tmp.join(format!("tmp-{n}")));
         std::fs::create_dir_all(&data).unwrap();
         std::fs::create_dir_all(&tmpdir).unwrap();
@@ -174,17 +173,26 @@ fn no_line_signed_out_without_an_unlock_or_with_progress_off() {
 fn the_line_fits_translated_in_every_language_and_size() {
     let c = context("fit");
     let says = [("en", "achievements"), ("de", "Erfolgen"), ("fr", "succès"), ("es", "logros"), ("pt", "conquistas"), ("it", "obiettivi")];
-    for (lang, word) in says {
-        for (size, text_size) in [("640x480", "normal"), ("640x480", "large"), ("720x720", "normal"), ("1024x768", "normal"), ("1240x1080", "normal"), ("1920x1080", "large")] {
-            let name = format!("{lang} {size} {text_size}");
-            for state in ["box:gba:fusion:r", "where-was-i"] {
-                let s = c.shot_ra("shelf", state, (lang, text_size), size, REMIND, "chrono", "1234/2000");
-                assert!(has(&s.visible, word) && has(&s.visible, "1234") && has(&s.visible, "2000"), "{name} {state}: {:?}", s.visible);
-                assert!(s.faults.is_empty(), "{name} {state}: cut or overflowing: {:?}", s.faults);
-            }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get().min(4));
+    std::thread::scope(|s| {
+        for _ in 0..threads {
+            let (c, next) = (&c, &next);
+            s.spawn(move || loop {
+                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some(&(lang, word)) = says.get(i) else { break };
+                for (size, text_size) in [("640x480", "normal"), ("640x480", "large"), ("720x720", "normal"), ("1024x768", "normal"), ("1240x1080", "normal"), ("1920x1080", "large")] {
+                    let name = format!("{lang} {size} {text_size}");
+                    for state in ["box:gba:fusion:r", "where-was-i"] {
+                        let s = c.shot_ra("shelf", state, (lang, text_size), size, REMIND, "chrono", "1234/2000");
+                        assert!(has(&s.visible, word) && has(&s.visible, "1234") && has(&s.visible, "2000"), "{name} {state}: {:?}", s.visible);
+                        assert!(s.faults.is_empty(), "{name} {state}: cut or overflowing: {:?}", s.faults);
+                    }
+                }
+                let home = c.shot_ra("shelf", "home:5", (lang, "normal"), "640x480", "", "pokemon", "1234/2000");
+                assert!(has(&home.visible, "1234"), "{lang} Continue: {:?}", home.visible);
+                assert!(home.faults.is_empty(), "{lang} Continue: {:?}", home.faults);
+            });
         }
-        let home = c.shot_ra("shelf", "home:5", (lang, "normal"), "640x480", "", "pokemon", "1234/2000");
-        assert!(has(&home.visible, "1234"), "{lang} Continue: {:?}", home.visible);
-        assert!(home.faults.is_empty(), "{lang} Continue: {:?}", home.faults);
-    }
+    });
 }

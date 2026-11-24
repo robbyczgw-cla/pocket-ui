@@ -745,3 +745,8 @@ RG35XX Plus
 RG35XX SP
 Pokémon Gold Version
 The Legend of Zelda: The Minish Cap
+
+# PortMaster-from-the-card snapshot (setup:ports-card-*): its made-up files
+Dome Romantik
+OpenTTD
+godot_4.3.squashfs

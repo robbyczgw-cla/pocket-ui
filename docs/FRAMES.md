@@ -28,7 +28,7 @@
   (the DS frame draws the lens when the screens aren't stacked).
 - Like every Picture setting they are kept per console and per game, and pocket-core applies them
   live (`set <key> <value>`, `VideoSettings::set`).
-- Defaults (the owner's choice, 2026-10-23): None on every console, and no screen effect either, so a clean picture out of the box.
+- Defaults (the owner's choice, 2026-10-23): None on every console, and no screen effect either, for a clean picture out of the box.
   Settings → Playing → Screen frames (`settings::Frames`: Off, the start setting; Handhelds; Every console) puts Auto below the
   console's and the game's own choice (`GameSettings::load` in `src/options.rs`; `options::HANDHELDS`).
 

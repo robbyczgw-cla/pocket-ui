@@ -76,7 +76,7 @@ fn shot(lib: &Path, stub: &Option<Stub>, (size, device): (&str, &str), state: &s
 }
 
 fn setup() -> (tempfile::TempDir, Option<Stub>, PathBuf) {
-    let tmp = tempfile::Builder::new().prefix("pui-qr-").tempdir_in("/tmp").unwrap();
+    let tmp = tempfile::Builder::new().prefix("pui-qr-").tempdir().unwrap();
     let stub = wayland(tmp.path());
     let lib = library_in(&tmp.path().join("lib"), None, "shelf");
     (tmp, stub, lib)

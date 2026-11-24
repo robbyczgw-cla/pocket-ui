@@ -38,11 +38,11 @@ const NO_MATCH: &str = "It may not be in your games folder. Or check the spellin
 const LIST_TOP: i32 = 208;
 
 fn kb_top(h: i32) -> i32 {
-    pocket_ui::kit::content_bottom(h) - (5 * key_h(h) + 4 * KEY_GAP)
+    pocket_ui::kit::content_bottom(h) - (5 * key_h(h) + 4 * pocket_ui::kit::chrome(KEY_GAP, h))
 }
-/// The height of a key: 62, 58 on a short screen (768 lines: more room for what is above the keyboard).
+/// The keyboard keeps its share of the screen on the Brick, leaving room for results above it.
 fn key_h(h: i32) -> i32 {
-    if pocket_ui::kit::short_screen(h) { 58 } else { 62 }
+    if h < 740 && pocket_ui::kit::short_screen(h) { 58 } else { pocket_ui::kit::chrome(62, h) }
 }
 const KEY_GAP: i32 = 8;
 /// Rows of results while typing (four fit over the keyboard) and in the results (the keyboard stepped aside).
@@ -89,13 +89,26 @@ impl Reader {
                     let (lock, cv) = &*worker.queue;
                     let mut q = lock.lock().unwrap();
                     loop {
+                        if pocket_ui::background_io::paused() {
+                            q = if q.is_empty() {
+                                cv.wait(q).unwrap()
+                            } else {
+                                cv.wait_timeout(q, std::time::Duration::from_millis(150)).unwrap().0
+                            };
+                            continue;
+                        }
                         if let Some(job) = q.pop_front() {
                             break job;
                         }
                         q = cv.wait(q).unwrap();
                     }
                 };
-                let img = read_thumb(&candidates, key.1);
+                let Some(img) = pocket_ui::background_io::job(|| read_thumb(&candidates, key.1)) else {
+                    if generation == worker.generation.load(std::sync::atomic::Ordering::Acquire) {
+                        worker.queue.0.lock().unwrap().push_back((generation, (key, candidates)));
+                    }
+                    continue;
+                };
                 let mut done = worker.done.lock().unwrap();
                 if generation == worker.generation.load(std::sync::atomic::Ordering::Acquire) {
                     done.push((key, img));
@@ -125,7 +138,7 @@ impl Reader {
 
 /// The first of `candidates` that is there, fitted into `size` x `size`.
 fn read_thumb(candidates: &[PathBuf], size: i32) -> Option<Image> {
-    let path = candidates.iter().find(|p| p.exists())?;
+    let path = candidates.iter().find(|p| pocket_ui::background_io::exists(p))?;
     let img = image::load_image(path)?;
     let (w, h) = img.fit(size, size);
     Some(img.resized(w, h))
@@ -437,7 +450,7 @@ impl App {
         if self.find.thumbs.len() >= THUMBS_MAX {
             self.find.thumbs.retain(|_, s| matches!(s, Slot::Pending));
         }
-        let mut candidates = vec![pocket_ui::covers::cover_path(&self.data_dir, system, rom)];
+        let mut candidates = vec![pocket_ui::covers::active_cover_path(&self.data_dir, system, rom)];
         if system == "ports" {
             let launcher = rom.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
             candidates.extend(pocket_ui::ports::launcher_images(&launcher));
@@ -472,10 +485,14 @@ impl App {
         let width = c.w - 2 * MARGIN;
         self.paint_top_line(c, Some("Search"), pal().dust);
         let typing = page.focus == Focus::Keys;
+        let scale = |px| pocket_ui::kit::chrome(px, c.h);
+        let (field_y, field_h, list_top) = (scale(FIELD_Y), scale(FIELD_H), scale(LIST_TOP));
+        let (count_base, query_base) = (field_y + scale(54), field_y + scale(62));
+        let (caret_inset, caret_h) = (scale(16), scale(52));
 
         // The query: paper while it is being typed, a spine while the results have the buttons.
         let (field, ink, dim) = if typing { (pal().label, pal().ink, pal().label_dust) } else { (pal().spine, pal().chalk, pal().dust) };
-        c.rect(MARGIN, FIELD_Y, width, FIELD_H, field);
+        c.rect(MARGIN, field_y, width, field_h, field);
         let count = if page.waiting() {
             "Getting the list ready…".to_string()
         } else if page.showing_recent() || page.hits.is_empty() {
@@ -492,7 +509,7 @@ impl App {
         };
         let count_w = if count.is_empty() { 0 } else { self.text.width(Face::Body, 28, &count) + 28 };
         if !count.is_empty() {
-            self.text.draw_right(c, Face::Body, 28, right - 28, FIELD_Y + 54, dim, &count);
+            self.text.draw_right(c, Face::Body, 28, right - 28, count_base, dim, &count);
         }
         let room = width - 56 - count_w;
         let text_x = MARGIN + 28;
@@ -500,7 +517,7 @@ impl App {
             // The caret stands at the start; the hint begins after it, not under it.
             let after_caret = if typing { 16 } else { 0 };
             let (px, hint) = self.text.fit_sizes(Face::Title, &[50, 37], "Any game, by its name", room - after_caret);
-            self.text.draw(c, Face::Title, px, text_x + after_caret, FIELD_Y + 62, dim, &hint);
+            self.text.draw(c, Face::Title, px, text_x + after_caret, query_base, dim, &hint);
             0
         } else {
             // A long query shows its end, where the typing is. What was typed is the player's own: painted as it is,
@@ -508,12 +525,12 @@ impl App {
             let was = self.text.translating();
             self.text.set_translate(false);
             let shown = tail_fit(&mut self.text, &page.kb.text, room);
-            let w = self.text.draw(c, Face::Title, 50, text_x, FIELD_Y + 62, ink, &shown);
+            let w = self.text.draw(c, Face::Title, 50, text_x, query_base, ink, &shown);
             self.text.set_translate(was);
             w
         };
         if typing {
-            c.rect(text_x + w + 4, FIELD_Y + 16, 4, 52, ink);
+            c.rect(text_x + w + 4, field_y + caret_inset, 4, caret_h, ink);
         }
 
         let bottom = if typing { kb_top(c.h) - 16 } else { pocket_ui::kit::content_bottom(c.h) };
@@ -523,8 +540,8 @@ impl App {
             // A magnifying glass by an empty box (`ui_art`), right of the words: the keyboard may take the room below.
             let k = pocket_ui::ui_art::empty_scale(c.h);
             let (aw, ah) = pocket_ui::ui_art::size(pocket_ui::ui_art::Art::Search, k);
-            let width = if LIST_TOP + 16 + ah <= bottom && aw * 3 < width && !(typing && pocket_ui::kit::short_screen(c.h)) {
-                pocket_ui::ui_art::paint(c, pocket_ui::ui_art::Art::Search, c.w - MARGIN - aw, LIST_TOP + 16, k);
+            let width = if list_top + 16 + ah <= bottom && aw * 3 < width && !(typing && pocket_ui::kit::short_screen(c.h)) {
+                pocket_ui::ui_art::paint(c, pocket_ui::ui_art::Art::Search, c.w - MARGIN - aw, list_top + 16, k);
                 width - aw - 40
             } else {
                 width
@@ -533,8 +550,8 @@ impl App {
             // Over the keyboard of a short screen (768 lines) the heading stands higher and the reason is set smaller, so
             // that its two lines stay above the keys.
             let over_keys = typing && pocket_ui::kit::short_screen(c.h);
-            self.text.draw(c, Face::Title, 37, MARGIN, LIST_TOP + if over_keys { 44 } else { 60 }, pal().chalk, &q);
-            let mut y = LIST_TOP + if over_keys { 82 } else { 106 } + pocket_ui::type_scale::grow(28);
+            self.text.draw(c, Face::Title, 37, MARGIN, list_top + if over_keys { 44 } else { 60 }, pal().chalk, &q);
+            let mut y = list_top + if over_keys { 82 } else { 106 } + pocket_ui::type_scale::grow(28);
             let font = if over_keys { 24 } else { 28 };
             let step = pocket_ui::type_scale::line(font, 10);
             // Over the keys, only the lines that end above them (1280x720 and 1024x768 in Large text: the reason ran
@@ -566,23 +583,30 @@ impl App {
     /// Nothing typed yet: the recent searches, or a word on what can be typed.
     fn paint_recent(&mut self, c: &mut Canvas, page: &SearchPage, bottom: i32) {
         let width = c.w - 2 * MARGIN;
+        let top = pocket_ui::kit::chrome(LIST_TOP, c.h);
         if page.recent.list.is_empty() {
             // Over the keys of the Smart Pro's 720 lines (under 768) the two lines move up as the results' do; the second
             // only where it ends above the keys.
-            let up = c.h < 768 && LIST_TOP + 106 + pocket_ui::type_scale::grow(28) + 10 > bottom;
+            let up = c.h < 768 && top + 106 + pocket_ui::type_scale::grow(28) + 10 > bottom;
             let (px, hint) = self.text.fit_sizes(Face::Title, &[37, 28], "Type part of a game's name.", width);
-            self.text.draw(c, Face::Title, px, MARGIN, LIST_TOP + if up { 44 } else { 60 }, pal().chalk, &hint);
+            self.text.draw(c, Face::Title, px, MARGIN, top + if up { 44 } else { 60 }, pal().chalk, &hint);
             let games: usize = self.systems.iter().filter(|s| !self.hidden.contains(&s.name)).map(|s| s.games.len()).sum();
             let line = format!("Every game on the shelf is searched, {games} in all. Small typos are fine.");
-            let line = self.text.fit(Face::Body, 28, &line, width);
-            let y = LIST_TOP + if up { 82 } else { 106 } + pocket_ui::type_scale::grow(28);
-            if c.h >= 768 || y + 10 <= bottom {
+            let y = top + if up { 82 } else { 106 } + pocket_ui::type_scale::grow(28);
+            if top != LIST_TOP {
+                let step = pocket_ui::type_scale::line(28, pocket_ui::kit::chrome(10, c.h));
+                let fit = ((bottom - y) / step + 1).clamp(0, 2) as usize;
+                for (i, line) in self.text.wrap_prose_at_most(Face::Body, 28, &line, width, fit).iter().enumerate() {
+                    self.text.draw(c, Face::Body, 28, MARGIN, y + i as i32 * step, pal().dust, line);
+                }
+            } else if c.h >= 768 || y + 10 <= bottom {
+                let line = self.text.fit(Face::Body, 28, &line, width);
                 self.text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &line);
             }
             return;
         }
-        self.text.draw(c, Face::Body, 28, MARGIN, LIST_TOP + 30, pal().dust, "Recent searches");
-        let top = LIST_TOP + 52 + pocket_ui::type_scale::grow(28);
+        self.text.draw(c, Face::Body, 28, MARGIN, top + 30, pal().dust, "Recent searches");
+        let top = top + 52 + pocket_ui::type_scale::grow(28);
         let pitch = recent_row() + ROW_GAP;
         let selected = (page.focus == Focus::Results).then_some(page.sel);
         for (i, q) in page.recent.list.iter().enumerate() {
@@ -602,28 +626,31 @@ impl App {
     /// The games found, a window of them around the selection.
     fn paint_hits(&mut self, c: &mut Canvas, page: &SearchPage, bottom: i32) {
         let typing = page.focus == Focus::Keys;
-        let (row_h, thumb) = if typing { TYPING_ROW } else { RESULTS_ROW };
-        let pitch = row_h + ROW_GAP;
-        let visible = ((bottom - LIST_TOP + ROW_GAP) / pitch).max(1) as usize;
+        let scale = |px| pocket_ui::kit::chrome(px, c.h);
+        let top = scale(LIST_TOP);
+        let (row_h, thumb) = if typing { (scale(TYPING_ROW.0), scale(TYPING_ROW.1)) } else { RESULTS_ROW };
+        let gap = if typing { scale(ROW_GAP) } else { ROW_GAP };
+        let pitch = row_h + gap;
+        let visible = ((bottom - top + gap) / pitch).max(1) as usize;
         let first = window_start(page.sel, visible, page.hits.len());
         // The results scroll smoothly under their edges (`app_motion`); new results start at rest.
         let key = (page.hits.len() as u64) << 1 | typing as u64;
         let first_f = self.motion.scroll_at(5, key, first, Instant::now());
         let w = c.w - 2 * MARGIN;
-        let mut band = c.rows(LIST_TOP, LIST_TOP + visible as i32 * pitch - ROW_GAP);
+        let mut band = c.rows(top, top + visible as i32 * pitch - gap);
         for (i, off) in super::app_motion::rows_in_view(first_f, visible, page.hits.len()) {
             let y = (off * pitch as f32).round() as i32;
             let selected = !typing && i == page.sel;
             self.paint_hit(&mut band, page.hits[i], y, row_h, thumb, selected);
-            self.find.rows.push((Area::new(MARGIN, LIST_TOP + y, w, row_h), i));
-            self.motion.row(MARGIN, LIST_TOP + y, w, pitch);
+            self.find.rows.push((Area::new(MARGIN, top + y, w, row_h), i));
+            self.motion.row(MARGIN, top + y, w, pitch);
         }
         self.hits.list(page.sel, page.hits.len(), 0.0, pitch as f32);
         // More below or above: a thin bar on the right, as on the game card.
         if page.hits.len() > visible {
-            let track = (visible as i32 * pitch - ROW_GAP).max(1);
+            let track = (visible as i32 * pitch - gap).max(1);
             let h = (track * visible as i32 / page.hits.len() as i32).max(24);
-            let y = LIST_TOP + (track - h) * first as i32 / (page.hits.len() - visible).max(1) as i32;
+            let y = top + (track - h) * first as i32 / (page.hits.len() - visible).max(1) as i32;
             pocket_ui::retro::pill(c, c.w - MARGIN + 18, y, 4, h, 2, pal().chip);
         }
     }
@@ -680,7 +707,8 @@ impl App {
         let width = c.w - 2 * MARGIN;
         let key_w = (width - KEY_GAP * 9) / 10;
         for (r, row) in page.kb.rows().iter().enumerate() {
-            let (y, key_h) = (kb_top(c.h) + r as i32 * (key_h(c.h) + KEY_GAP), key_h(c.h));
+            let key_h = key_h(c.h);
+            let y = kb_top(c.h) + r as i32 * (key_h + pocket_ui::kit::chrome(KEY_GAP, c.h));
             let widths: Vec<i32> = row
                 .iter()
                 .map(|k| match k {
@@ -883,6 +911,24 @@ fn blend_round_rect(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, r: i32, colo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn r36s_readers_search_waits_for_the_game_before_reading_a_requested_cover() {
+        let _guard = super::super::READER_GAME_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let r = Reader::start().unwrap();
+        pocket_ui::covers::set_game_on(true);
+        r.ask(((PathBuf::from("no-search-cover.n64"), 60), Vec::new()));
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let early = r.take();
+        pocket_ui::covers::set_game_on(false);
+        assert!(early.is_empty(), "the queued thumbnail must wait");
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while std::time::Instant::now() < until {
+            if !r.take().is_empty() { return; }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        panic!("the thumbnail request was lost");
+    }
 
     #[test]
     fn no_match_says_the_game_may_not_be_on_the_card_in_two_lines_at_most() {

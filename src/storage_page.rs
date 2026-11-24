@@ -361,7 +361,7 @@ impl StoragePage {
             return health_details(self.health);
         }
         let Some(u) = &self.usage else {
-            return ("Counting…".into(), vec!["Adding up what is on the SD card. This takes a few seconds.".into()], false);
+            return ("Counting…".into(), vec!["Scanning SD card usage. Takes a few seconds.".into()], false);
         };
         let label = match row {
             Row::Free => "Free on the SD card".to_string(),
@@ -376,9 +376,9 @@ impl StoragePage {
             Row::Free => {
                 if self.low() {
                     warn = true;
-                    lines.push("Less than 1 GB is left. Once the SD card is full, states can't be written and saves can fail. Delete what you don't need below.".into());
+                    lines.push("Under 1 GB free. A full SD card can break saves and states. Clear some space below.".into());
                 } else {
-                    lines.push("pocket-ui says so on the shelf once less than 1 GB is left.".into());
+                    lines.push("Shows a low-space alert on the shelf under 1 GB free.".into());
                 }
                 if u.unreadable > 0 {
                     lines.push(format!("{} folders could not be read; what is in them is not counted.", u.unreadable));
@@ -386,7 +386,7 @@ impl StoragePage {
             }
             Row::Kind(Kind::Games) => {
                 lines.push(format!("On {} systems. A lists them by size.", u.systems.len()));
-                lines.push("To delete a game, open its card (X on the game), then Hide or delete.".into());
+                lines.push("To delete a game, press X on it, then choose Delete from the card.".into());
             }
             Row::Kind(Kind::States) => {
                 let sel = self.selection(Cleanup::OldStates(self.months));
@@ -398,9 +398,9 @@ impl StoragePage {
                         n => format!("A deletes the automatic states of {n} games not played for {} months: {}.", self.months, storage::size(sel.bytes)),
                     });
                 }
-                lines.push("Slots you saved into and your saves stay. Left/right: 3, 6 or 12 months.".into());
+                lines.push("Manual slots and in-game saves stay safe. Left/right: 3, 6 or 12 months.".into());
             }
-            Row::Kind(Kind::Saves) => lines.push("Battery saves and memory cards. Never deleted here.".into()),
+            Row::Kind(Kind::Saves) => lines.push("In-game saves and memory cards. Never deleted here.".into()),
             // Earlier (`timeline`): the most its states may take; nothing to delete here.
             Row::Earlier => {
                 lines.push(format!(
@@ -410,9 +410,9 @@ impl StoragePage {
                 ));
                 lines.push(if u.earlier == 0 { "None yet: one every 5 min of play.".into() } else { "The Save states row above deletes those of old games.".into() });
             }
-            Row::Kind(Kind::Screenshots) => lines.push("In the screenshots folder of the games share. Delete them from your computer.".into()),
+            Row::Kind(Kind::Screenshots) => lines.push("Stored in the screenshots folder. Delete them in Screenshots or from a PC.".into()),
             Row::Kind(Kind::Pictures) => {
-                lines.push("A clears them. Box art and game pictures are downloaded again when the Pocket is online.".into());
+                lines.push("Press A to clear cache. Box art re-downloads automatically when online.".into());
             }
             Row::Kind(Kind::Logs) => {
                 let sel = self.selection(Cleanup::OldLogs);
@@ -433,9 +433,9 @@ impl StoragePage {
                     });
                 }
             }
-            Row::Kind(Kind::Other) => lines.push("BIOS files, music, the data of ports and anything else on the SD card.".into()),
-            Row::Hidden if self.hidden.is_empty() => lines.push("No hidden games. Hide one from its card: X on a game, then Hide or delete.".into()),
-            Row::Hidden => lines.push("Games you hid from the shelf. A lists them; A on one shows it again.".into()),
+            Row::Kind(Kind::Other) => lines.push("BIOS files, music, PortMaster data and other files on the card.".into()),
+            Row::Hidden if self.hidden.is_empty() => lines.push("No hidden games. Press X on any game, then choose Hide from the shelf.".into()),
+            Row::Hidden => lines.push("Games hidden from your shelf. Press A to view and unhide them.".into()),
             Row::Health => unreachable!("answered above"),
         }
         (label, lines, warn)
@@ -461,12 +461,12 @@ pub fn health_details(h: Option<Health>) -> (String, Vec<String>, bool) {
         None => ("SD card check".into(), vec!["Looking at what the system says about the SD card…".into()], false),
         Some(Health::Fine) => (
             "SD card check".into(),
-            vec!["The system logged no file system errors. That is not a full test of the SD card.".into()],
+            vec!["No file system errors logged (not a full SD card hardware scan).".into()],
             false,
         ),
         Some(Health::Errors) => (
             "The system saw errors on the SD card".into(),
-            vec!["Games or saves may go missing.".into(), "Copy your saves to a computer, then check the SD card there.".into()],
+            vec!["Games or saves may go missing.".into(), "Back up your saves to a PC, then check the SD card.".into()],
             true,
         ),
         Some(Health::ReadOnly) => (
@@ -652,7 +652,7 @@ mod tests {
         let mut p = page();
         assert!(p.low());
         let (_, lines, warn) = p.details();
-        assert!(warn && lines[0].starts_with("Less than 1 GB"));
+        assert!(warn && lines[0].starts_with("Under 1 GB"));
         assert_eq!(p.value(Row::Free), "800 MB of 64.0 GB");
         let mut u = usage();
         u.free = Some((20_000_000_000, 64_000_000_000));

@@ -209,8 +209,11 @@ impl App {
             update_hint::Step::Look => {
                 self.update_hint.phase = HintPhase::Checking { resume: Some(due) };
                 let (url, proxy) = (self.hint_url(), self.proxy.clone());
+                let pause = pocket_ui::background_io::pause_for_update();
                 std::thread::spawn(move || {
-                    let _ = proxy.send_event(UserEvent::Update(UpdateEvent::Looked(fetch(&url))));
+                    let result = fetch(&url);
+                    drop(pause);
+                    let _ = proxy.send_event(UserEvent::Update(UpdateEvent::Looked(result)));
                 });
                 None
             }
@@ -414,7 +417,7 @@ fn hint_wifi() -> bool {
     #[cfg(all(target_os = "android", feature = "handheld"))]
     return super::app_android::unmetered_wifi();
     #[cfg(not(all(target_os = "android", feature = "handheld")))]
-    pocket_ui::status_corner::status().wifi
+    { !pocket_ui::device::no_wifi_chip() && pocket_ui::status_corner::status().wifi }
 }
 
 /// The signed list, on the look's thread (and the Updates page's "Check again").

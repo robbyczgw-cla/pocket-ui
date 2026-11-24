@@ -60,8 +60,8 @@ Nothing is read until the shelf, a box, the card or a start asks for one game (`
 there (`UserEvent::CaseKnows`, a frame only when it changed). While a game runs the thread reads only saves of ROMs it
 knows already (for "Where was I?"), never a ROM through. The cache, `<data>/identify/case-knows.tsv`, holds per ROM
 its size, time, the release's CRC (or `-`) and what a several-file save remembers; a save is read again only when its
-size or time changed (2 KiB to 512 KiB, under a millisecond to parse; files over 1 MiB are not read). A game's end makes its line stale; the old line stays
-on screen until the new one is in.
+size or time changed (2 KiB to 512 KiB, under a millisecond to parse; files over 1 MiB are not read). A game's end makes its line stale, and so do saves Pocket Sync
+brings from another Pocket (`App::case_saves_came`); the old line stays on screen until the new one is in.
 
 ## The games
 

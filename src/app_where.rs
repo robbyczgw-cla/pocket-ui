@@ -169,7 +169,6 @@ fn card_mode(mode: &CardMode) -> Option<&'static str> {
         CardMode::Status { .. } => Some("Status"),
         CardMode::Note(_) => Some("Note"),
         CardMode::Choose { .. } => Some("Choose"),
-        CardMode::Manage { .. } => Some("Manage"),
         CardMode::Delete(_) => Some("Delete"),
     }
 }
@@ -179,6 +178,7 @@ fn pause_name(page: Page) -> String {
     match page {
         Page::Main => "Main".into(),
         Page::LoadBlocked => "LoadBlocked".into(),
+        Page::RetroArchStateUnconfirmed(_) => "RetroArchStateUnconfirmed".into(),
         Page::Options { .. } => "Options".into(),
         Page::Group { group, .. } => format!("Group {{ group: {group} }}"),
         Page::Emulator { cat, .. } => format!("Emulator {{ cat: {cat:?} }}"),
@@ -191,6 +191,7 @@ fn pause_name(page: Page) -> String {
         Page::Players => "Players".into(),
         Page::Zoom => "Zoom".into(),
         Page::PortPerf => "PortPerf".into(),
+        Page::ShortcutList { sel } => format!("ShortcutList {sel}"),
         Page::QuitUnsaved { .. } => "QuitUnsaved".into(),
     }
 }

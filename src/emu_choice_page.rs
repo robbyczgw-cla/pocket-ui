@@ -80,6 +80,8 @@ pub enum Row {
     Download,
     /// An entry of `RA_SETTINGS`.
     Ra(usize),
+    /// The pause menu of a RetroArch game: its HOME shortcuts (`shortcut_list`), a page of the App's.
+    Shortcuts,
     Save,
 }
 
@@ -122,6 +124,8 @@ pub enum Action {
         edits: Vec<(String, Option<String>)>,
         clear_fallback: bool,
     },
+    /// Open the list of the game's HOME shortcuts (the Shortcuts row).
+    Shortcuts,
 }
 
 /// `EmuChoicePage::mark`: the selection, the mode, the runner and the RetroArch values.
@@ -145,6 +149,8 @@ pub struct EmuChoicePage {
     pub note: Option<String>,
     /// Android: the Download row's state.
     pub download: Download,
+    /// The Shortcuts row: the pause menu of a running RetroArch game (`app_shortcut_list`).
+    pub shortcuts: bool,
 }
 
 impl EmuChoicePage {
@@ -162,6 +168,7 @@ impl EmuChoicePage {
             mode: Mode::List,
             note: None,
             download: Download::Idle,
+            shortcuts: false,
         };
         page.choices = emu_choice::choices(&page.ctx(page.subject.fell_back))
             .into_iter()
@@ -238,6 +245,9 @@ impl EmuChoicePage {
                     .map(|(i, _)| Row::Ra(i)),
             );
         }
+        if self.shortcuts {
+            v.push(Row::Shortcuts);
+        }
         v.push(Row::Save);
         v
     }
@@ -265,6 +275,7 @@ impl EmuChoicePage {
             Row::RunsOn => "Runs on",
             Row::Download => "Download",
             Row::Ra(i) => RA_SETTINGS[i].name,
+            Row::Shortcuts => crate::shortcut_list::TITLE,
             Row::Save => "Save changes",
         }
     }
@@ -290,7 +301,7 @@ impl EmuChoicePage {
                 s.value_label(self.ra.get(s.key).map_or(s.unset, String::as_str))
             }
             Row::Download => self.download_value(),
-            Row::Save => ">".to_string(),
+            Row::Shortcuts | Row::Save => ">".to_string(),
         }
     }
 
@@ -352,6 +363,7 @@ impl EmuChoicePage {
                 }
                 [what, "RetroArch reads it the next time the game starts.".to_string()]
             }
+            Row::Shortcuts => [crate::shortcut_list::ROW_DESC.to_string(), String::new()],
             Row::Save => ["Keeps these choices for this console or this game.".to_string(), self.level_line()],
         }
     }
@@ -392,9 +404,9 @@ impl EmuChoicePage {
         console.then_some(Level::Console)
     }
 
-    /// The line under the page while RetroArch is chosen: its shortcuts on this Pocket.
+    /// The line under the page while RetroArch is chosen: its shortcuts on this Pocket (pocket-core's, `ra_hotkeys`).
     pub fn footer(&self) -> Option<&'static str> {
-        (self.runner.kind() == Kind::RetroArch).then_some("RetroArch's shortcuts: HOME + R2 fast-forward, hold HOME + L2 to rewind (with Rewind on).")
+        (self.runner.kind() == Kind::RetroArch).then_some("RetroArch's shortcuts: HOME + R1 save, HOME + L1 load, HOME + R2 fast-forward, hold HOME + L2 to rewind (with Rewind on).")
     }
 
     /// Changes on screen that aren't saved yet.
@@ -423,7 +435,7 @@ impl EmuChoicePage {
     pub fn changes(&self, row: Row) -> bool {
         match row {
             Row::RunsOn => self.runners().len() > 1,
-            Row::Download => false,
+            Row::Download | Row::Shortcuts => false,
             _ => true,
         }
     }
@@ -462,7 +474,7 @@ impl EmuChoicePage {
                     self.ra.insert(key, v);
                 }
             }
-            Row::Download | Row::Save => {}
+            Row::Download | Row::Shortcuts | Row::Save => {}
         }
         self.note = None;
     }
@@ -480,6 +492,7 @@ impl EmuChoicePage {
                     Button::Right => self.step(row, 1),
                     b if b == confirm && row == Row::Save => self.mode = Mode::Save { sel: 0 },
                     b if b == confirm && row == Row::Download => return self.download_pressed(),
+                    b if b == confirm && row == Row::Shortcuts => return Action::Shortcuts,
                     b if b == confirm => self.step(row, 1),
                     b if b == cancel => return Action::Close,
                     _ => {}
@@ -585,7 +598,7 @@ impl EmuChoicePage {
                     emu_choice::key(sys, None, Level::Console, "core"),
                 );
                 // What this page shows when nobody chose: pocket-core for the console, ROCKNIX's default for a game
-                // pocket-core doesn't take (a 7z). Saving that is no choice: the console's lines go, as ES's AUTO.
+                // pocket-core doesn't take (a file type its core doesn't open). Saving that is no choice: the console's lines go, as ES's AUTO.
                 let mut unchosen = self.cfg.clone();
                 unchosen.apply(&[(ek.clone(), None), (ck.clone(), None)]);
                 if let Some(f) = file {
@@ -776,6 +789,25 @@ mod tests {
             other => panic!("{other:?}"),
         }
         all
+    }
+
+    /// A RetroArch game's pause menu lists its HOME shortcuts from here (its Options is this page): a row above Save
+    /// changes that A opens and Left/Right leave alone. Elsewhere (the shelf, Android) the page has no such row.
+    #[test]
+    fn a_retroarch_games_page_in_the_pause_menu_has_a_shortcuts_row() {
+        let cfg = format!("{SHIPPED}gba[\"Zelda.gba\"].emulator=retroarch\ngba[\"Zelda.gba\"].core=mgba\n");
+        let mut p = page(Some("Zelda.gba"), &cfg);
+        assert!(!p.rows().contains(&Row::Shortcuts), "not on the shelf's page");
+        p.shortcuts = true;
+        let rows = p.rows();
+        assert_eq!(rows[rows.len() - 2..], [Row::Shortcuts, Row::Save], "{rows:?}");
+        p.sel = rows.len() - 2;
+        assert!(!p.changes(Row::Shortcuts));
+        assert_eq!(p.press(Button::Right, A, B), Action::Nothing);
+        assert!(!p.unsaved(), "Left/Right change nothing there");
+        assert_eq!(p.press(A, A, B), Action::Shortcuts);
+        assert_eq!(p.label(Row::Shortcuts), "Shortcuts");
+        assert_eq!(p.footer(), Some("RetroArch's shortcuts: HOME + R1 save, HOME + L1 load, HOME + R2 fast-forward, hold HOME + L2 to rewind (with Rewind on)."));
     }
 
     #[test]

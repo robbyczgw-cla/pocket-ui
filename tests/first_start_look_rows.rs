@@ -28,7 +28,7 @@ fn pixels(path: &std::path::Path) -> (Vec<u32>, usize, usize) {
 
 #[test]
 fn the_look_rows_stand_apart_on_the_brick_in_every_text_size() {
-    let tmp_guard = tempfile::Builder::new().prefix("pui-look-rows-").tempdir_in("/tmp").unwrap();
+    let tmp_guard = tempfile::Builder::new().prefix("pui-look-rows-").tempdir().unwrap();
     let tmp = tmp_guard.path().to_path_buf();
     let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])

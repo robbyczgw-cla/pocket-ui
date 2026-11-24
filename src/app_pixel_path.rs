@@ -321,28 +321,41 @@ impl App {
             self.text.draw(c, Face::Body, NU_SMALL, gx + 26, head_base, word_colour, word);
         }
 
-        let top = pocket_ui::kit::header_bottom(c.h) + 14;
+        use pocket_ui::{kit, type_scale};
+        let screen_h = c.h;
+        let scale = |px| kit::chrome(px, screen_h);
+        let native_brick = (740..900).contains(&c.h) && c.w * 3 == c.h * 4;
+        let top = kit::header_bottom(c.h) + if native_brick { scale(14) } else { 14 };
         let right = c.w - pad;
-        // Taller rows and a wider column of stage names with larger text (Settings → Text size); on a screen with
-        // fewer than 1080 lines (the Mini V1's 960) the seven rows share what is left, so the last seconds of play
-        // stay above the hints (docs/DEVICES.md).
-        let full = 104 + pocket_ui::type_scale::grow(28);
-        let row = full - ((1080 - c.h).max(0) + 6) / 7;
-        // At native 768 lines reserve the selected explanation and the live line above the hint pill too.
-        let row = if pocket_ui::kit::short_screen(c.h) {
-            let bottom = pocket_ui::kit::hint_bar_top(c.h) - 8;
-            row.min((bottom - top - 26 - pocket_ui::type_scale::grow(28) - 40 - 12 - pocket_ui::type_scale::px(28) as i32 / 3) / 7)
-        } else { row };
-        // The dot, the value and its line move up by half of what a row gave up, and the line closer to the value;
-        // with larger text there is no room for that, and only the selected stage keeps its line, where it was.
-        let tight = row < full && pocket_ui::type_scale::grow(28) > 0;
-        // On 768 lines (rows 59 px) a value and its line don't fit in a row at all: the rows show the values, and the
-        // selected stage's line is read under them, above the last seconds of play.
-        let cramped = row < 70;
-        // Cramped (rows of 51 px at Large text on 720 lines): the grade word under the stage's name, a step smaller there,
-        // must end above the next stage's name, or its letters touch the next name's ("Originalgetreu" on "Ansicht").
+        // On the Brick, reserve a line each for the live figures and the legend, then share the remaining room.
+        let legend_base = kit::hint_bar_top(c.h) - scale(12);
+        let compact_live_base = legend_base - type_scale::line(24, scale(8));
+        let full = 104 + type_scale::grow(28);
+        let row = if native_brick {
+            (compact_live_base - type_scale::line(28, scale(6)) - top) / 7
+        } else {
+            let row = full - ((1080 - c.h).max(0) + 6) / 7;
+            if kit::short_screen(c.h) {
+                let bottom = kit::hint_bar_top(c.h) - 8;
+                row.min((bottom - top - 26 - type_scale::grow(28) - 40 - 12 - type_scale::px(28) as i32 / 3) / 7)
+            } else {
+                row
+            }
+        };
+        // At Normal the Brick's type floor still leaves room for a line under each stage value.
+        let large = if native_brick { type_scale::get() != type_scale::TextSize::Normal } else { type_scale::grow(28) > 0 };
+        let tight = row < full && large;
+        let cramped = !native_brick && row < 70;
         let tiny = cramped && row < 54;
-        let (lift, line_dy) = if cramped { (0, 26i32.min(row - if tiny { 31 } else { 28 })) } else if tight { (0, 40) } else { ((full - row) / 2, 40 - (full - row) / 2) };
+        let (lift, line_dy) = if native_brick {
+            (48 - row / 2, row / 2 - 2)
+        } else if cramped {
+            (0, 26i32.min(row - if tiny { 31 } else { 28 }))
+        } else if tight {
+            (0, 40)
+        } else {
+            ((full - row) / 2, 40 - (full - row) / 2)
+        };
         let (dot_x, name_x, value_x) = (pad + 34, pad + 74, pad + 74 + pocket_ui::type_scale::wide(162, 28));
         let Some(path) = path else {
             self.text.draw(c, Face::Body, 30, name_x, top + 60, 0x9a978f, "Reading the path…");
@@ -370,7 +383,6 @@ impl App {
             // The grade at 26 and 24 px from the value: the longest German values still fit beside "Beeinträchtigt".
             // With larger text it goes under the stage's name instead, and the value gets the whole line: its colour is
             // the dot's, the word is there for those who can't tell colours apart.
-            let large = pocket_ui::type_scale::grow(28) > 0;
             let grade_w = if large { 0 } else { self.text.width(Face::Body, 26, s.grade.name()) };
             if s.grade != Grade::Unknown {
                 if large {
@@ -392,7 +404,11 @@ impl App {
 
         // The last seconds of play (the game is paused behind the menu).
         // Cramped, the last stage's grade word stands under its name: the lines below start under it.
-        let mut live_base = top + 7 * row + 26 + pocket_ui::type_scale::grow(28) + if cramped { 12 + (60 - row).clamp(0, 8) } else { 0 };
+        let mut live_base = if native_brick {
+            compact_live_base
+        } else {
+            top + 7 * row + 26 + type_scale::grow(28) + if cramped { 12 + (60 - row).clamp(0, 8) } else { 0 }
+        };
         if cramped {
             if let Some(s) = path.stages.get(sel).filter(|s| !s.line.is_empty()) {
                 let line = self.text.fit(Face::Body, 28, &s.line, right - NU_BTN_PAD - name_x);
@@ -422,17 +438,27 @@ impl App {
             (false, None) => &[("B", "Back"), ("A", "Explain")],
         };
         let hints_at = self.nu_hints(c, hints);
-        // The legend, left of the hints on their line.
-        let base = pocket_ui::kit::hint_bar_mid(c.h) + pocket_ui::type_scale::mid(24);
+        // The legend has a line of its own on the Brick. Elsewhere it shares the hint bar's line.
         let mut lx = pad + NU_BTN_PAD;
+        let (base, legend_right, gap, font) = if native_brick {
+            let legend_right = right - NU_BTN_PAD;
+            let gap = scale(20);
+            let font = [24, 22, 20, 18].into_iter().find(|&px| {
+                let words: i32 = Grade::SCALE.iter().map(|g| self.text.width(Face::Body, px, g.name())).sum();
+                words + 4 * 22 + 3 * gap <= legend_right - lx
+            }).unwrap_or(18);
+            (legend_base, legend_right, gap, font)
+        } else {
+            (kit::hint_bar_mid(c.h) + type_scale::mid(24), hints_at - 24, 30, 24)
+        };
         for g in Grade::SCALE {
-            let w = self.text.width(Face::Body, 24, g.name());
-            if lx + 22 + w > hints_at - 24 {
+            let w = self.text.width(Face::Body, font, g.name());
+            if lx + 22 + w > legend_right {
                 break;
             }
             c.disc(lx + 7, base - 8, 7, g.colour());
-            self.text.draw(c, Face::Body, 24, lx + 22, base, 0xaaa79f, g.name());
-            lx += 22 + w + 30;
+            self.text.draw(c, Face::Body, font, lx + 22, base, 0xaaa79f, g.name());
+            lx += 22 + w + gap;
         }
 
         if about {

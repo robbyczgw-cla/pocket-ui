@@ -68,10 +68,10 @@ public final class PlayerActivity extends Activity {
         if(wanted!=orientation){orientation=wanted;setRequestedOrientation(wanted);}
     }
     private native void nativeZoom(float factor);
-    private volatile int safeLeft,safeTop,safeRight,safeBottom;
+    private volatile int safeLeft,safeTop,safeRight,safeBottom,holeLeft,holeTop,holeRight,holeBottom;
     private native String nativeCreate(String core,String rom,String system,String key,String title);
     private native String nativeTranslate(String text);
-    private native int nativeFrame(int width,int height,float density,float fontScale,int left,int top,int right,int bottom);
+    private native int nativeFrame(int width,int height,float density,float fontScale,int left,int top,int right,int bottom,int holeLeft,int holeTop,int holeRight,int holeBottom);
     private native boolean nativeKey(int key,boolean down,boolean controller,int device);
     private native boolean nativeAnalog(float x,float y,float rx,float ry,float hatX,float hatY,float lt,float rt,int device);
     private native boolean nativeTouch(int id,float x,float y,int phase);
@@ -161,7 +161,7 @@ public final class PlayerActivity extends Activity {
             public void onSurfaceChanged(GL10 unused,int width,int height) { }
             public void onDrawFrame(GL10 unused) {
                 if (!ready) return;
-                int state=nativeFrame(surface.getWidth(),surface.getHeight(),getResources().getDisplayMetrics().density,getResources().getConfiguration().fontScale,safeLeft,safeTop,safeRight,safeBottom);
+                int state=nativeFrame(surface.getWidth(),surface.getHeight(),getResources().getDisplayMetrics().density,getResources().getConfiguration().fontScale,safeLeft,safeTop,safeRight,safeBottom,holeLeft,holeTop,holeRight,holeBottom);
                 paused=state==1||state==3;
                 if (state==2) {ready=false;runOnUiThread(()->finish());}
                 else if (state==1) surface.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
@@ -185,6 +185,7 @@ public final class PlayerActivity extends Activity {
         if(android.os.Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         surface.setOnApplyWindowInsetsListener((view,insets)->{
             int[] safe=SafeInsets.read(this,insets);safeLeft=safe[0];safeTop=safe[1];safeRight=safe[2];safeBottom=safe[3];
+            int[] hole=SafeInsets.cutout(insets);holeLeft=hole[0];holeTop=hole[1];holeRight=hole[2];holeBottom=hole[3];
             return insets;
         });
         setContentView(surface);

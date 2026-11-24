@@ -5,6 +5,7 @@
 set -u
 . /repo/scripts/image/pins.sh
 . /repo/scripts/image/grub-checks.sh
+. /repo/scripts/image/card-texts.sh
 . /repo/scripts/image/bios-checks.sh
 sm8250_pins "${MODEL:-rp-mini-v2}"
 IMG=$1
@@ -145,9 +146,12 @@ check "every firmware file in SYSTEM ($(wc -l <"$W/lists/firmware")) is listed w
 rm -f "$W/SYSTEM"
 
 echo "== boot files"
-sed "s/miniv2-noufs.dtb/$SM8250_DTB_FILE/g" /repo/deploy/sd-efi/grub.cfg >"$W/grub.expected"
-check "grub.cfg is the template with this model's single tree" 'same "$W/fat/boot/grub/grub.cfg" "$W/grub.expected" && [ "$(grep -c "^ *devicetree " "$W/grub.expected")" = 1 ]'
+sm8250_card_text </repo/deploy/sd-efi/grub.cfg >"$W/grub.expected"
+check "grub.cfg is the template with this model's name and single tree" 'same "$W/fat/boot/grub/grub.cfg" "$W/grub.expected" && [ "$(grep -c "^ *devicetree " "$W/grub.expected")" = 1 ]'
 G=$W/fat/boot/grub/grub.cfg
+# Read on its own, not against the template: 0.6.0's Pocket 5 and Flip 2 cards matched it and still named the Mini V2.
+check "grub.cfg's comments name this card's model ($SM8250_MODEL_NAME) and tree, and no other SM8250 model (card-texts.sh)" \
+  'grub_names_card "$G" "$SM8250_MODEL_NAME" "$SM8250_DTB_FILE" && card_names_no_other "$G" SM8250 "$SM8250_MODEL"'
 check "grub.cfg finds the FAT partition by label ROCKNIX" 'grep -Eq "^ *search .*--label ROCKNIX$" "$G"'
 check "grub.cfg loads /boot/pocket/Image" 'grep -Eq "^ *linux /boot/pocket/Image " "$G"'
 check "grub.cfg loads /boot/pocket/$SM8250_DTB_FILE" 'grep -Eq "^ *devicetree /boot/pocket/$SM8250_DTB_FILE$" "$G"'
@@ -162,13 +166,15 @@ for p in $(awk '$1 == "linux" || $1 == "devicetree" || $1 == "initrd" { print $2
 done
 # OpenABL ("Boot mode: Linux") reads the BLS entry before EFI/BOOT/BOOTAA64.EFI: the same kernel, tree and command line.
 # The exact file list above also keeps extlinux/ and boot.scr off the card, which Retroid's u-boot would start before GRUB.
-sed "s/miniv2-noufs.dtb/$SM8250_DTB_FILE/g" /repo/deploy/sd-efi/loader/entries/pocket-ui.conf >"$W/bls.expected"
+sm8250_card_text </repo/deploy/sd-efi/loader/entries/pocket-ui.conf >"$W/bls.expected"
 B=$W/fat/loader/entries/pocket-ui.conf
 check "loader/entries/pocket-ui.conf is the template with this model's tree" 'same "$B" "$W/bls.expected"'
 check "the BLS entry starts what grub.cfg starts (kernel, $SM8250_DTB_FILE, command line), no initrd" 'bls_matches_grub "$B" "$G"'
 check "GRUB is an arm64 EFI application" 'file -b "$W/fat/EFI/BOOT/BOOTAA64.EFI" | grep -q "EFI application.*Aarch64"'
-warn "GRUB is byte for byte the one on the author's device" '[ "$(md5 "$W/fat/EFI/BOOT/BOOTAA64.EFI")" = "$GRUB_EFI_MD5_DEVICE" ]'
-check "GRUB version recorded: $(cat "$W/fat/boot/grub/grub-efi-arm64-bin.version" 2>/dev/null)" 'grep -q "^grub-efi-arm64-bin " "$W/fat/boot/grub/grub-efi-arm64-bin.version"'
+# Built from the pinned packages (pins.sh GRUB_DEB_*), so a difference is a failure, not a warning (22.11.2026: Debian's newest,
+# 2.12-9+deb13u4, gave another file and the release refused the cards).
+check "GRUB is byte for byte the one on the author's device (md5 $GRUB_EFI_MD5_DEVICE, Debian $GRUB_DEB_VERSION)" '[ "$(md5 "$W/fat/EFI/BOOT/BOOTAA64.EFI")" = "$GRUB_EFI_MD5_DEVICE" ]'
+check "GRUB version recorded: $(cat "$W/fat/boot/grub/grub-efi-arm64-bin.version" 2>/dev/null)" 'grep -qx "grub-efi-arm64-bin $GRUB_DEB_VERSION (source grub2 $GRUB_DEB_VERSION)" "$W/fat/boot/grub/grub-efi-arm64-bin.version"'
 check "Image is the one on the author's device (md5 $IMAGE_MD5)" '[ "$(md5 "$W/fat/boot/pocket/Image")" = "$IMAGE_MD5" ]'
 python3 -I - "$W/fat/KERNEL" "$W/kernel-image" <<'EOF'
 import struct, sys, zlib
@@ -193,6 +199,8 @@ check "pocket-ui-info/pocket-ui-os.txt: $POCKET_OS_NAME $VERSION, for Settings >
 echo "== notes on the card (pocket-ui-info/README.txt)"
 R=$W/fat/pocket-ui-info/README.txt
 check "names version $VERSION" 'grep -q "pocket-ui $VERSION" "$R"'
+check "names this card's model and image ($SM8250_MODEL_NAME, pocket-ui-$VERSION-$SM8250_MODEL.img.xz), no other SM8250 model" \
+  'grep -q "for the $SM8250_MODEL_NAME: SD card image" "$R" && grep -qF "Write pocket-ui-$VERSION-$SM8250_MODEL.img.xz " "$R" && card_names_no_other "$R" SM8250 "$SM8250_MODEL"'
 check "$POCKET_OS_NAME, built on ROCKNIX, not made or endorsed by its team, with link" 'grep -q "$POCKET_OS_NAME $VERSION" "$R" && grep -q "built on ROCKNIX" "$R" && grep -q "not made or" "$R" && grep -q "https://github.com/ROCKNIX/distribution" "$R"'
 check "source offer: ROCKNIX tag $ROCKNIX_TAG and commit" 'grep -q "tag $ROCKNIX_TAG" "$R" && grep -q "$ROCKNIX_COMMIT" "$R"'
 check "artwork under CC BY-NC-SA 4.0" 'grep -q "CC BY-NC-SA 4.0" "$R"'
@@ -207,6 +215,8 @@ mcopy -n -i "$FAT" ::/pocket-ui-info/SOURCE-OFFER.txt "$W/fat/pocket-ui-info/SOU
 O=$W/fat/pocket-ui-info/SOURCE-OFFER.txt
 check "SOURCE-OFFER.txt: written offer for three years, how to ask, ROCKNIX tag and commit" \
   'grep -q "^Written offer" "$O" && grep -q "at least three years" "$O" && grep -q "https://github.com/.*/issues" "$O" && grep -q "$ROCKNIX_COMMIT" "$O" && grep -q "pocket-ui $VERSION" "$O"'
+check "SOURCE-OFFER.txt: the title names $SM8250_MODEL_NAME, the offer this card's image pocket-ui-$VERSION-$SM8250_MODEL.img.xz, no other model" \
+  'offer_names_card "$O" "$VERSION" "$SM8250_MODEL_NAME" "pocket-ui-$VERSION-$SM8250_MODEL" && card_names_no_other "$O" SM8250 "$SM8250_MODEL"'
 mkdir -p "$W/fat/pocket-ui-info/firmware-licences"
 for f in /repo/deploy/image/firmware-licences/*; do
   mcopy -n -i "$FAT" "::/pocket-ui-info/firmware-licences/${f##*/}" "$W/fat/pocket-ui-info/firmware-licences/${f##*/}" 2>/dev/null

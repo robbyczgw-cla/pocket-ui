@@ -30,7 +30,7 @@ F2 button	Bouton F2
 Mute slider	Interrupteur muet
 The Brick's lights, the F1 and F2 keys and the mute slider.	Les lumières du Brick, les touches F1 et F2 et l'interrupteur muet.
 Lights off	Lumières éteintes
-A soft tick as you move, and how strong it is. Games rumble on their own (pause menu, Options).	Un léger tic quand tu bouges, et sa force. Les jeux vibrent d'eux-mêmes (menu pause, Options).
+Light tactile clicks as you browse, and their strength. Game rumble is set in Options.	Un léger tic quand tu bouges, et sa force. Les jeux vibrent d'eux-mêmes (menu pause, Options).
 Left grip	Poignée gauche
 Right grip	Poignée droite
 Middle	Centre
@@ -72,20 +72,30 @@ Steady, breathing, fading, pulsing, a colour cycle, the battery and charger, or 
 How fast it breathes, fades, pulses or cycles.	La vitesse de respiration, de fondu, de pulsation ou de cycle.
 Not saved.	Non enregistré.
 The emulator choice couldn't be saved on the card. Nothing was changed.	Le choix de l'émulateur n'a pas pu être enregistré sur la carte. Rien n'a été modifié.
-Controllers and headphones. Connected headphones take the sound of games and menus; it comes back to the speaker when they go.	Manettes et casques. Un casque connecté reçoit le son des jeux et des menus ; il revient sur le haut-parleur quand il est débranché.
+Wireless pads and headphones. Connected headphones take all audio and hand it back to the speaker on disconnect.	Manettes et casques. Un casque connecté reçoit le son des jeux et des menus ; il revient sur le haut-parleur quand il est débranché.
 Restart pocket-ui?	Redémarrer pocket-ui ?
-Only pocket-ui starts again, in seconds. Your games, saves and settings stay as they are.	Seul pocket-ui redémarre, en quelques secondes. Tes jeux, sauvegardes et réglages restent comme ils sont.
+Restarts pocket-ui in seconds. Your games, saves and settings stay untouched.	Seul pocket-ui redémarre, en quelques secondes. Tes jeux, sauvegardes et réglages restent comme ils sont.
 New versions of pocket-ui.	Nouvelles versions de pocket-ui.
 User	Utilisateur
 (unchanged)	(inchangé)
-How fast the processor may run, in games and in menus.	La vitesse maximale du processeur, en jeu et dans les menus.
+CPU speed limits for games and menus.	La vitesse maximale du processeur, en jeu et dans les menus.
 Battery saves and save states. No games, no BIOS files.	Sauvegardes et save states. Ni jeux, ni fichiers BIOS.
 To {s} on the SD card. Copy it to a computer too.	Vers {s} sur la carte SD. Copie-la aussi sur un ordinateur.
-The screen goes off and the game waits; the power button wakes it.	L'écran s'éteint et le jeu attend ; le bouton d'alimentation le réveille.
-Saves the game and puts the Brick to sleep. The power button wakes it; the game waits in its pause menu.	Sauve le jeu et met le Brick en veille. Le bouton d'alimentation le réveille ; le jeu attend dans son menu pause.
-Only the screen goes dark and the game waits. The power button turns it back on.	Seul l'écran s'éteint et le jeu attend. Le bouton d'alimentation le rallume.
+Turns the screen off and pauses the game. Power wakes it.	L'écran s'éteint et le jeu attend ; le bouton d'alimentation le réveille.
+Saves your game and puts the Brick to sleep. Power wakes it straight to the pause menu.	Sauve le jeu et met le Brick en veille. Le bouton d'alimentation le réveille ; le jeu attend dans son menu pause.
+Turns off only the screen while pausing your game. Power turns it back on.	Seul l'écran s'éteint et le jeu attend. Le bouton d'alimentation le rallume.
 Saves the game. The power button wakes it.	Sauve le jeu. Le bouton d'alimentation le réveille.
 The power button wakes it.	Le bouton d'alimentation le réveille.
 Back to EmulationStation	Retour à EmulationStation
 Back to EmulationStation?	Retour à EmulationStation ?
 pocket-ui closes and EmulationStation comes back. Your games, saves and settings stay as they are.	pocket-ui se ferme et EmulationStation revient. Tes jeux, sauvegardes et réglages restent comme ils sont.
+The starter pack isn't available on dArkOS (pocket-ui only reads dArkOS's folders). Copy games into EASYROMS instead.	Le pack de départ ne fonctionne pas dans pocket-ui sur dArkOS : pocket-ui lit les dossiers de jeux de dArkOS et n’y écrit pas. Copie plutôt les jeux dans les dossiers de dArkOS (la partie EASYROMS).
+Set up Wi-Fi in dArkOS. pocket-ui uses the connection dArkOS makes.	Configure le Wi-Fi dans dArkOS. pocket-ui utilise la connexion que fait dArkOS.
+Connected · {s}	Connecté · {s}
+Set up in dArkOS. Shows whether it is connected.	Se configure dans dArkOS. Montre s'il est connecté.
+The clock looks wrong. Play history and the dates on saves will be off until it is set. Set it in dArkOS.	L'horloge semble fausse. L'historique de jeu et les dates des sauvegardes seront décalés tant qu'elle n'est pas réglée. Règle-la dans dArkOS.
+The clock looks wrong, so the update server can't be checked. Set it in dArkOS, or wait for network time over Wi-Fi.	L'horloge semble fausse, donc le serveur de mises à jour ne peut pas être vérifié. Règle-la dans dArkOS, ou attends l'heure réseau par Wi-Fi.
+It listens on your Wi-Fi. Set up Wi-Fi in dArkOS; Settings › Connections › Wi-Fi shows the connection.	Il écoute sur ton Wi-Fi. Configure le Wi-Fi dans dArkOS ; Paramètres › Connexions › Wi-Fi montre la connexion.
+Turn on to browse your library in any browser on your Wi-Fi. The URL appears here.	Active-le pour ouvrir ta bibliothèque dans un navigateur sur le même Wi-Fi. L'adresse à ouvrir s'affiche ici.
+Pair one in dArkOS, or plug one into the USB-C port. This handheld's own buttons show up here too.	Associe-en une dans dArkOS, ou branche-en une sur le port USB-C. Les boutons de cette console s'affichent aussi ici.
+Copy games into dArkOS's EASYROMS folders (one per system), then restart pocket-ui.	Copie les jeux dans les dossiers de dArkOS (la partie EASYROMS, un dossier par système), puis relance pocket-ui.

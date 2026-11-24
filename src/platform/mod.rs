@@ -65,6 +65,59 @@ mod tests {
         }
     }
 
+    /// The places whose curl has no `--connect-timeout` of its own, and why a silent network still ends it soon.
+    const SHORT_ANYWAY: &[(&str, &str)] = &[
+        ("net_check.rs", "the sign-in check: --max-time 4 in all"),
+        ("platform/linux.rs", "the wiki text: --max-time 10 in all"),
+        ("portal.rs", "the sign-in sheet: its config file sets connect-timeout 5 and max-time 10 (`Session::run`)"),
+        ("sync.rs", "Syncthing on this Pocket (localhost): -m with each call's 2 to 15 s"),
+        ("update/brick_assets.rs", "a test that the bundled curl starts"),
+    ];
+
+    /// Every curl that reaches out gives up within seconds on a network that drops the packets (a hotel's before the
+    /// sign-in): `--connect-timeout`, the downloads' own `download_args` (tested there), or a short limit in all
+    /// (`SHORT_ANYWAY`).
+    /// The covers' and the Store catalogue's had only `--max-time 60`, so three covers held the worker for 3 minutes
+    /// (review 21.11.2026).
+    #[test]
+    fn every_curl_gives_up_soon_on_a_silent_network() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = Vec::new();
+        rust_files(&src, &mut files);
+        let mut slow = Vec::new();
+        for f in &files {
+            let rel = f.strip_prefix(&src).unwrap().to_string_lossy().replace('\\', "/");
+            if SHORT_ANYWAY.iter().any(|(file, _)| *file == rel) {
+                continue;
+            }
+            let text = std::fs::read_to_string(f).unwrap();
+            let lines: Vec<&str> = text.lines().collect();
+            for (i, l) in lines.iter().enumerate() {
+                let is_curl = l.contains("Command::new(") && l.split("Command::new(").nth(1).is_some_and(|a| a.split(')').next().is_some_and(|a| a.contains("curl")));
+                if !is_curl {
+                    continue;
+                }
+                // The command up to where it runs.
+                let mut call = String::new();
+                for l in &lines[i..(i + 40).min(lines.len())] {
+                    call.push_str(l);
+                    if l.contains(".output()") || l.contains(".spawn()") || l.contains(".status()") {
+                        break;
+                    }
+                }
+                // `--version` asks the program, not the network (the tests' probes for a curl).
+                let soon = call.contains("--connect-timeout") || call.contains("download_args(") || call.contains("\"--version\"");
+                if !soon {
+                    slow.push(format!("{rel}:{}", i + 1));
+                }
+            }
+        }
+        assert!(slow.is_empty(), "curl without --connect-timeout waits out its whole --max-time on a silent network: {slow:?}");
+        for (file, why) in SHORT_ANYWAY {
+            assert!(src.join(file).exists() && !why.is_empty(), "{file} is gone: take it off SHORT_ANYWAY");
+        }
+    }
+
     #[test]
     fn every_curl_has_an_android_way() {
         let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");

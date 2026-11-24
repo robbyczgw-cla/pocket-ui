@@ -32,6 +32,10 @@ struct Card {
     stub: Option<Stub>,
     /// `POCKETUI_DEVICE` and the screen: the Brick, or the Smart Pro on the same card (`Card::smart_pro`, docs/TRIMUI-SMART-PRO.md).
     device: (&'static str, &'static str),
+    /// `POCKETUI_HOST`: the dArkOS port (`Card::darkos`) instead of the Brick's own card.
+    host: Option<&'static str>,
+    /// `POCKETUI_NET_CLASS` (the port's `/sys/class/net`): with `wlan0` in it, dArkOS's Wi-Fi is there (`darkos::wifi_here`).
+    net_class: Option<PathBuf>,
 }
 
 impl Card {
@@ -47,7 +51,19 @@ impl Card {
             test_clock::wait_for(|| stub.path.exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
             stub
         });
-        Card { _dir: dir, tmp, stub, device: ("brick", "1024x768") }
+        Card { _dir: dir, tmp, stub, device: ("brick", "1024x768"), host: None, net_class: None }
+    }
+
+    /// The same build as the dArkOS port on an RG353M (docs/DARKOS.md): `POCKETUI_HOST=darkos`, 640x480, no Brick card;
+    /// `wifi`: the kernel shows `wlan0` (dArkOS's Wi-Fi), else only `lo`.
+    fn darkos(wifi: bool) -> Card {
+        let card = Card::new();
+        let net = card.tmp.join("net");
+        std::fs::create_dir_all(net.join("lo")).unwrap();
+        if wifi {
+            std::fs::create_dir_all(net.join("wlan0")).unwrap();
+        }
+        Card { device: ("darkos-rg353m", "640x480"), host: Some("darkos"), net_class: Some(net), ..card }
     }
 
     /// The same card on a TrimUI Smart Pro: 1280x720, sticks, no F keys, no slider, no lights page.
@@ -69,11 +85,18 @@ impl Card {
         if let Some(s) = &self.stub {
             cmd.env("WAYLAND_DISPLAY", &s.path);
         }
+        match self.host {
+            Some(host) => cmd.env("POCKETUI_HOST", host).env_remove("POCKETUI_BRICK_STANDALONE"),
+            None => cmd.env("POCKETUI_BRICK_STANDALONE", "1").env_remove("POCKETUI_HOST"),
+        };
+        match &self.net_class {
+            Some(net) => cmd.env("POCKETUI_NET_CLASS", net),
+            None => cmd.env_remove("POCKETUI_NET_CLASS"),
+        };
         let out = cmd
             .args(["--snapshot", state, self.tmp.join("shot.png").to_str().unwrap()])
             .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_DEVICE", self.device.0)
-            .env("POCKETUI_BRICK_STANDALONE", "1")
             .env("POCKETUI_ES_SYSTEMS", self.tmp.join("lib/es_systems.cfg"))
             .env("POCKETUI_DATA", self.tmp.join("lib/data"))
             .env("POCKETUI_LANG", lang)
@@ -255,7 +278,7 @@ fn the_bricks_pages_offer_only_what_the_brick_has() {
     let card = Card::new();
     for lang in LANGS {
         let (about, _) = card.shot("about", lang, "normal");
-        assert!(about.contains("TrimUI Brick") && !about.contains("experiment") && !about.contains("expériment") && !about.contains("sperimental"), "{lang}: {about}");
+        assert!(about.contains("TrimUI Brick") && !about.contains("experiment") && !about.contains("expériment") && !about.contains("sperimental") && !about.contains("실험"), "{lang}: {about}");
         let (perf, _) = card.shot("perf", lang, "normal");
         // No fan row ("Fan", "Fan outside games" and their translations start their line); the note that names the pause
         // menu's group "Options › Speed, rumble, fan" is that menu's real name (it shows since the flat hint bar left it room).
@@ -331,7 +354,7 @@ fn the_smart_pro_is_called_by_its_name_and_experimental() {
     let card = Card::smart_pro();
     for lang in LANGS {
         let (about, _) = card.shot("about", lang, "normal");
-        assert!(about.contains("TrimUI Smart Pro") && (about.contains("experiment") || about.contains("expériment") || about.contains("sperimental")), "{lang}: {about}");
+        assert!(about.contains("TrimUI Smart Pro") && (about.contains("experiment") || about.contains("expériment") || about.contains("sperimental") || about.contains("실험")), "{lang}: {about}");
         for state in ["tailscale", "sync:off", "sys:power-noboot"] {
             let (shown, _) = card.shot(state, lang, "normal");
             assert!(shown.contains("Smart Pro"), "{lang} {state}: {shown}");
@@ -410,7 +433,7 @@ fn text_fits_on_the_smart_pros_1280x720() {
 fn the_updates_page_shows_its_whole_note_on_the_smart_pro_in_large_text() {
     let card = Card::smart_pro();
     let states = ["updates:note", "updates:refused", "updates:ready", "updates:confirm", "updates:confirm-low", "updates:card",
-        "updates:card-refused", "updates:no-wifi", "updates:timeout", "updates:unreachable", "updates:connecting", "updates:fallback",
+        "updates:card-refused", "updates:no-wifi", "updates:timeout", "updates:unreachable", "updates:connecting", "updates:fallback", "updates:downloading",
         "updates:unpacking", "updates:moving", "updates:restarting"];
     let mut bad = Vec::new();
     for lang in LANGS {
@@ -432,7 +455,7 @@ fn brickpro_names_the_experiment_and_shows_only_its_proven_controls() {
     let card = Card { device: ("brickpro", "1024x768"), ..Card::new() };
     for lang in LANGS {
         let (about, _) = card.shot("about", lang, "normal");
-        assert!(about.contains("TrimUI Brick Pro") && (about.contains("experiment") || about.contains("expériment") || about.contains("sperimental")), "{lang}: {about}");
+        assert!(about.contains("TrimUI Brick Pro") && (about.contains("experiment") || about.contains("expériment") || about.contains("sperimental") || about.contains("실험")), "{lang}: {about}");
     }
     let (keys, _) = card.shot("leds:colour", "en", "normal");
     assert!(keys.contains("F1 button") && keys.contains("F2 button"), "{keys}");
@@ -497,4 +520,116 @@ fn a_handhelds_start_lights_its_display_on_the_brick() {
         assert!(brighter * 10 >= n * 9, "{system}: lit means brighter ({brighter} of {n})");
         assert!((bb.2 - bb.0) * (bb.3 - bb.1) * 4 < 1024 * 768, "{system}: only the glass, {bb:?}");
     }
+}
+
+/// The dArkOS port offers no row that does nothing there (dArkOS walk, 20.11.2026: Screen frames, Tailscale, Bluetooth and RomM
+/// were listed and did nothing). dArkOS keeps its own Wi-Fi, Bluetooth, SSH and clock, the port brings no Tailscale and no Syncthing,
+/// RomM can't write into the read-only games folders, and the port's bridge has no GPU path for frames (`darkos::LEAVES_OUT`,
+/// `NEEDS_GPU`). Every category of Settings, at its first and its last row, and a game's own settings.
+#[test]
+fn the_darkos_port_lists_no_row_that_does_nothing_there() {
+    let card = Card::darkos(true);
+    let mut lines = std::collections::BTreeSet::new();
+    for g in 0..8 {
+        for r in [0, 99] {
+            let (seen, _) = card.shot(&format!("settings:{g}:{r}"), "en", "normal");
+            lines.extend(seen.lines().map(|l| l.trim().to_string()));
+        }
+    }
+    let dead: Vec<&str> = ["Bluetooth", "Tailscale", "Remote access (SSH)", "Sync", "Time", "RomM", "Screen frames"]
+        .into_iter().filter(|row| lines.contains(*row)).collect();
+    assert!(dead.is_empty(), "rows that do nothing on dArkOS: {dead:?}\n{lines:#?}");
+    // What works there stays: the way back, the port's own updates, Pocket Sync, the web companion, Wi-Fi (its own page).
+    for kept in ["Wi-Fi", "Back to EmulationStation", "Updates", "Pocket Sync", "Web companion", "Over the game"] {
+        assert!(lines.contains(kept), "{kept} is a row on dArkOS: {lines:#?}");
+    }
+    // A game's own settings: no Picture rows (Screen frame, scaling, effect) the CPU copy ignores.
+    let (game, _) = card.shot("this-game:gba", "en", "normal");
+    assert!(!game.lines().any(|l| l.trim() == "Screen frame"), "{game}");
+}
+
+/// The lead's question of 20.11.2026: the boards' rows say `wifi: false` (pocket-ui has no Wi-Fi page there), so an RG353V on
+/// dArkOS's Wi-Fi was told "this handheld has no Wi-Fi" by Pocket Sync and the web companion. With `wlan0` they speak of a
+/// network; without one (an RG351MP, no dongle) they still say there is none.
+#[test]
+fn the_darkos_port_with_wifi_is_not_told_it_has_none() {
+    let none = "this handheld has no Wi-Fi";
+    let (with, without) = (Card::darkos(true), Card::darkos(false));
+    for state in ["web:off", "pockets:what"] {
+        let online = joined(&with.shot(state, "en", "normal").0);
+        assert!(!online.contains(none), "{state} with wlan0: {online}");
+        let offline = joined(&without.shot(state, "en", "normal").0);
+        assert!(offline.contains(none), "{state} without a wireless interface: {offline}");
+    }
+}
+
+/// The starter pack can't add games in the dArkOS port (the games folders are read only there): its page says so at once instead
+/// of meeting a write error after A.
+#[test]
+fn the_darkos_port_says_the_starter_pack_does_not_work_there() {
+    let raw = Card::darkos(true).shot("starter", "en", "normal").0;
+    let page = joined(&raw);
+    // The hint bar offers no A ("Get all"/"Get" as a hint label of its own; the first row is "Get all 9 games").
+    assert!(page.contains("isn't available on dArkOS") && !raw.lines().any(|l| matches!(l.trim(), "Get all" | "Get")), "{page}");
+    let (brick, _) = Card::new().shot("starter", "en", "normal");
+    assert!(!brick.contains("dArkOS"), "{brick}");
+    // An empty card (one system, its folder empty, no history): Home offers no starter pack there, and says where games go on dArkOS.
+    let empty = Card::darkos(true);
+    let roms = empty.tmp.join("empty-roms/gba");
+    std::fs::create_dir_all(&roms).unwrap();
+    std::fs::write(empty.tmp.join("lib/es_systems.cfg"), format!(
+        "<systemList><system><name>gba</name><fullname>Game Boy Advance</fullname><path>{}</path><extension>.gba .zip</extension><command>true</command></system></systemList>", roms.display()
+    )).unwrap();
+    std::fs::remove_dir_all(empty.tmp.join("lib/data")).unwrap();
+    std::fs::create_dir_all(empty.tmp.join("lib/data")).unwrap();
+    std::fs::write(empty.tmp.join("lib/data/settings.json"), r#"{"onboarded":true}"#).unwrap();
+    let home = joined(&empty.shot("shelf::shelf", "en", "normal").0);
+    assert!(home.contains("No games yet") && home.contains("EASYROMS") && !home.contains("Get the starter pack"), "{home}");
+}
+
+/// Every row the dArkOS port's Settings show (each category at its first and its last row), one line each.
+fn darkos_rows(card: &Card) -> std::collections::BTreeSet<String> {
+    let mut lines = std::collections::BTreeSet::new();
+    for g in 0..8 {
+        for r in [0, 99] {
+            lines.extend(card.shot(&format!("settings:{g}:{r}"), "en", "normal").0.lines().map(|l| l.trim().to_string()));
+        }
+    }
+    lines
+}
+
+/// The lead's rule of 20.11.2026: Wi-Fi stays a row on dArkOS, with a page of its own that says where Wi-Fi is set up and shows the
+/// connection, never "This device has no Wi-Fi"; and every "Settings › … › Row" an offline or network page names on dArkOS is a
+/// row that is there (with dArkOS's Wi-Fi and without).
+#[test]
+fn the_darkos_port_points_only_at_rows_it_has() {
+    for wifi in [true, false] {
+        let card = Card::darkos(wifi);
+        let page = joined(&card.shot("setup:wifi", "en", "normal").0);
+        assert!(page.contains("Set up Wi-Fi in dArkOS") && !page.contains("has no Wi-Fi"), "wifi={wifi}: {page}");
+        let rows = darkos_rows(&card);
+        let states = ["web:off", "web:waiting", "achievements:offline", "pockets:nobody", "pockets:what", "starter-home:wifi-off",
+            "starter:3:offline", "setup:extras", "updates:unreachable", "updates:no-wifi", "test-buttons:empty", "pc-streaming:none",
+            "pc-streaming:missing", "cheats-offline"];
+        let mut dead = Vec::new();
+        for state in states {
+            let text = joined(&card.shot(state, "en", "normal").0);
+            for (i, _) in text.match_indices("Settings › ") {
+                // "Settings › Category › Row …": the row is the start of what follows the second "›".
+                let Some(rest) = text[i..].splitn(3, " › ").nth(2) else { continue };
+                if !rows.iter().any(|r| r.len() >= 3 && rest.starts_with(r.as_str())) {
+                    dead.push(format!("{state} (wifi={wifi}): …{}", text[i..].chars().take(60).collect::<String>()));
+                }
+            }
+            if wifi && text.contains("has no Wi-Fi") {
+                dead.push(format!("{state} (wifi=true) says there is no Wi-Fi: {text}"));
+            }
+        }
+        assert!(dead.is_empty(), "texts on dArkOS that point where nothing is:\n{}", dead.join("\n"));
+    }
+}
+
+/// The painted words in one line: a sentence wrapped over two lines reads whole.
+fn joined(seen: &str) -> String {
+    seen.lines().map(str::trim).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" ")
 }

@@ -22,7 +22,7 @@ struct Card {
 
 impl Card {
     fn new() -> Card {
-        let dir = tempfile::Builder::new().prefix("pui-fs-").tempdir_in("/tmp").unwrap();
+        let dir = tempfile::Builder::new().prefix("pui-fs-").tempdir().unwrap();
         let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
         assert!(ok.success());
         let stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {
@@ -189,7 +189,7 @@ fn the_last_page_of_the_first_start_says_what_home_does() {
         let extras = match lang {
             "de" => "Jederzeit mehr laden: Einstellungen › Spiele › Cover & Downloads.",
             "es" => "Consigue más cuando quieras: Ajustes › Juegos › Carátulas y descargas.",
-            _ => "More to get any time: Settings › Games › Box art & downloads.",
+            _ => "Get more any time: Settings › Games › Box art & downloads.",
         };
         assert!(sees(&page, extras), "{lang}: the final first-start page points to the optional downloads: {page}");
         // Settings' Add games is not the first start.

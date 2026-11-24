@@ -60,7 +60,7 @@ fn failed_save_is_visible_and_a_blocked_load_explains_and_returns_without_loadin
     let stub = wayland(tmp.path());
     for size in ["640x480", "1024x768"] {
         for (lang, load_head, load_tail, save_head, save_tail, play) in [
-            ("en", "Couldn't load:", "unchanged.", "Couldn't keep this moment.", "kept.", "Continue"),
+            ("en", "Load cancelled:", "untouched.", "Couldn't save this state.", "safe.", "Continue"),
             ("de", "Laden nicht möglich:", "unverändert.", "Dieser Spielmoment", "erhalten.", "Fortsetzen"),
             ("es", "No se pudo cargar:", "sigue igual.", "No se pudo guardar", "conservan.", "Continuar"),
         ] {

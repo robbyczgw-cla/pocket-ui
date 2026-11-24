@@ -53,7 +53,7 @@ printf '%s\n' "$0" >>"$GATE_FIXTURE_CALLS"
 case $0 in */test-package.sh) [ "${GATE_FIXTURE_FAIL:-0}" = 0 ] || exit 1 ;; esac
 SUITE
 done
-for suite in scripts/image/test-receipts.py scripts/test-device-portability.py scripts/test-device-transfer.py scripts/android/test-release-check.py; do
+for suite in scripts/image/test-receipts.py scripts/test-device-portability.py scripts/test-device-transfer.py scripts/android/test-release-check.py scripts/test-package-complete.py; do
     mkdir -p "$T/tree/$(dirname "$suite")"
     cat >"$T/tree/$suite" <<'PYTEST'
 import os, sys
@@ -144,6 +144,24 @@ grep -q 'gate: fast checks ok: i18n-extract.py reader-inventory.py' "$T/out" || 
 rm -f "$T/tree/scripts/reader-inventory.py"
 pass=$((pass + 1))
 echo 'ok a red fast check (reader inventory, translation audit) stops the gate before any build'
+# The CHANGELOG guard (20.11.2026): the queue's union merge put copies of [Unreleased] lines back under the published [0.5.1]
+# and the gate was green. The real scripts/check-changelog.py on a train-like tree: a published section changed = red, before
+# any build; the same tree with the section as recorded passes.
+cp "$ROOT/scripts/check-changelog.py" "$T/tree/scripts/check-changelog.py"
+printf '# Changelog\n\n## [Unreleased]\n\n- New line.\n\n## [0.5.1] - 2026-11-18\n\n- Old line.\n' >"$T/tree/CHANGELOG.md"
+python3 -I "$T/tree/scripts/check-changelog.py" --record v0.5.1 --from-file "$T/tree/CHANGELOG.md" >/dev/null
+printf '# Changelog\n\n## [Unreleased]\n\n- New line.\n\n## [0.5.1] - 2026-11-18\n\n- New line.\n- Old line.\n' >"$T/tree/CHANGELOG.md"
+: >"$T/cargo"; : >"$T/calls"
+GATE_PARALLEL=0 GATE_RUNNER=cargo GATE_PROFILE=gate sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 && { echo 'FAIL a union copy under a published CHANGELOG section passed the gate'; exit 1; }
+grep -q 'GATE: fast checks FAILED: scripts/check-changelog.py' "$T/out" && grep -q 'FINDING.published.CHANGELOG.md:7' "$T/out" \
+    && [ ! -s "$T/cargo" ] && [ ! -s "$T/calls" ] || { echo 'FAIL a red CHANGELOG guard must stop the gate before any build'; cat "$T/out"; exit 1; }
+printf '# Changelog\n\n## [Unreleased]\n\n- New line.\n\n## [0.5.1] - 2026-11-18\n\n- Old line.\n' >"$T/tree/CHANGELOG.md"
+: >"$T/cargo"; : >"$T/calls"
+GATE_PARALLEL=0 GATE_RUNNER=cargo GATE_PROFILE=gate sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 || { echo 'FAIL gate with a clean CHANGELOG'; cat "$T/out"; exit 1; }
+grep -q 'gate: fast checks ok: .*check-changelog.py' "$T/out" || { echo 'FAIL the CHANGELOG guard not reported'; cat "$T/out"; exit 1; }
+rm -f "$T/tree/scripts/check-changelog.py" "$T/tree/scripts/changelog-published.txt" "$T/tree/CHANGELOG.md"
+pass=$((pass + 1))
+echo 'ok a CHANGELOG with a changed published section stops the gate before any build'
 # The comment-only lane: a remote gate has no .git, so .gate-lane (written by tools/remote-gate.sh from scripts/gate-comments.py)
 # carries the proof. With "comments" the gate is compile stage + cheap checks + self-tests; anything else keeps the normal tiers.
 cp "$ROOT/scripts/gate-comments.py" "$T/tree/scripts/gate-comments.py"
@@ -197,10 +215,10 @@ echo 'ok a local gate proves the lane against the train base'
 rm -rf "$T/tree/.git" "$T/tree/scripts/gate-comments.py" "$T/tree/scripts/some.sh" "$T/tree/scripts/other.sh"
 rm -f "$T/tree/scripts/preflight.sh" "$T/tree/scripts/i18n-extract.py"
 : >"$T/cargo"
-check 'LICENSE still runs package tests' 17 fast LICENSE
-check 'NOTICE still runs package tests' 17 fast NOTICE.md
-check 'font licence runs package tests' 17 fast assets/fonts/OFL.txt
-check 'deleted or empty licence is rejected by required package suite' 17 fast LICENSE '' 1
+check 'LICENSE still runs package tests' 18 fast LICENSE
+check 'NOTICE still runs package tests' 18 fast NOTICE.md
+check 'font licence runs package tests' 18 fast assets/fonts/OFL.txt
+check 'deleted or empty licence is rejected by required package suite' 18 fast LICENSE '' 1
 check 'ordinary docs use only doc and i18n checks' 0 docs docs/DEVELOPING.md
 check 'root Markdown skips shell and integration tests' 0 docs README.md
 check 'manual changes leave the short path' 0 fast docs/user/settings.md
@@ -213,18 +231,18 @@ check 'Brick text regression changes run the merge gate' 0 fast tests/text_size.
 check 'a Rust test a script names runs no shell tests' 0 fast tests/shell_input.rs
 check 'unknown test data runs the merge gate without shell tests' 0 fast tests/new-input.txt
 check 'Rust test path with spaces runs the merge gate without shell tests' 0 fast 'tests/new input.rs'
-check 'Rust test changes cannot cancel deploy tests' 17 fast 'tests/layout_contract.rs
+check 'Rust test changes cannot cancel deploy tests' 18 fast 'tests/layout_contract.rs
 deploy/run-pocket-ui.sh'
-check 'full override retains shell tests after Rust test changes' 17 full tests/layout_contract.rs 1
+check 'full override retains shell tests after Rust test changes' 18 full tests/layout_contract.rs 1
 check 'non-Rust source input runs the merge gate without shell tests' 0 fast src/new-input.c
 check 'assets run the merge gate without shell tests' 0 fast assets/new-input.txt
 check 'unknown root files run the merge gate without shell tests' 0 fast new-input
-check 'deploy changes run shell tests' 17 fast deploy/run-pocket-ui.sh
-check 'gate script changes run every suite but the time budgets, with the shell tests' 17 fast scripts/test-gate-paths.sh
-check 'other script changes run shell tests' 17 fast scripts/device-check.sh
+check 'deploy changes run shell tests' 18 fast deploy/run-pocket-ui.sh
+check 'gate script changes run every suite but the time budgets, with the shell tests' 18 fast scripts/test-gate-paths.sh
+check 'other script changes run shell tests' 18 fast scripts/device-check.sh
 check 'Cargo metadata changes run every suite but the time budgets' 0 fast Cargo.toml
 check 'test harness changes run every suite but the time budgets' 0 fast tests/common/mod.rs
-check 'docs cannot cancel licence tests' 17 fast 'LICENSE
+check 'docs cannot cancel licence tests' 18 fast 'LICENSE
 README.md'
 check 'docs and an asset run the merge gate without shell tests' 0 fast 'assets/new-input
 README.md'
@@ -234,11 +252,11 @@ check 'unembedded translation audit notes use short path' 0 docs assets/i18n/ski
 check 'runtime translation tables leave the short path' 0 fast assets/i18n/de.tsv
 check 'mixed docs and Rust leave the short path' 0 fast 'docs/DEVELOPING.md
 src/main.rs'
-check 'no change list runs everything' 17 full ''
-check 'full override runs everything' 17 full docs/DEVELOPING.md 1
+check 'no change list runs everything' 18 full ''
+check 'full override runs everything' 18 full docs/DEVELOPING.md 1
 # Firmware and transfer failures must fail the real shell tier.
 printf '%s\n' scripts/device-check.sh >"$T/tree/.gate-changed"
-for suite in test-device-portability.py test-device-transfer.py; do
+for suite in test-device-portability.py test-device-transfer.py test-package-complete.py; do
     rc=0
     GATE_FIXTURE_DEVICE_FAIL="$suite" GATE_RUNNER=cargo sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 || rc=$?
     [ "$rc" = 1 ] && grep -q 'verify-device tests FAILED' "$T/out" || { echo "FAIL $suite failure hidden"; exit 1; }
@@ -600,6 +618,10 @@ out=$(printf 'scripts/i18n-extract.py\n' | python3 "$ROOT/scripts/gate-parts.py"
 case $out in *"shell_tests=1"*) ;; *) echo "FAIL a script the shell suites run no longer starts them: $out"; exit 1 ;; esac
 pass=$((pass + 1))
 echo 'ok the reader inventory runs neither the shell lanes nor the slow suites; other fixtures and scripts still do'
+out=$(printf 'scripts/check-changelog.py\nscripts/test-check-changelog.py\nscripts/changelog-published.txt\nCHANGELOG.md\n' | python3 "$ROOT/scripts/gate-parts.py" "$T/names")
+case $out in *"shell_tests=1"*|*"heavy='"[a-z]*) echo "FAIL the CHANGELOG guard picked shells or slow suites: $out"; exit 1 ;; esac
+pass=$((pass + 1))
+echo 'ok the CHANGELOG guard and its record run neither the shell lanes nor the slow suites'
 # Every source the input lists name is a real file (a misspelt or renamed one would quietly pick nothing), and every suite
 # they name is a HEAVY one.
 python3 - "$ROOT" <<'PY' || exit 1

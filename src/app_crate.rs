@@ -73,6 +73,17 @@ pub(crate) fn crate_art() -> &'static pocket_ui::system_art::Sprite {
     })
 }
 
+/// The crate on Home in the Shelf look stands on the board as the box itself, as high as this part of a case (19.11.2026:
+/// it was a plain case among the games, with "Crate" on its spine).
+pub(crate) const HOME_BOX_OF_CASE: f32 = 0.5;
+
+/// The box on Home at the row's scale `f`: its width (a multiple of four, as every spine's place) and its picture's scale.
+pub(crate) fn home_box(f: f32) -> (i32, f32) {
+    let k = pocket_ui::media::Medium::Keep.template_size().h as f32 * f * HOME_BOX_OF_CASE / crate_scene::ART_H as f32;
+    let w = ((crate_scene::ART_W as f32 * k).round() as i32 + 3) / 4 * 4;
+    (w, k)
+}
+
 /// Which column of the box picture is column `x` of a box `w` columns wide: the sides as they are, the tape in the
 /// middle, plain cardboard between.
 fn art_col(x: i32, w: i32) -> i32 {
@@ -91,6 +102,30 @@ fn art_col(x: i32, w: i32) -> i32 {
     // Plain cardboard: three of its columns in turn so the wall keeps its grain.
     let plain = if x < t0 { ART_SIDE + 2 } else { ART_TAPE.1 + 4 };
     plain + (x * 7 % 3)
+}
+
+/// `paths` as the games of `systems` (`Item::Game`), in `paths`' order; a path no system has is left out.
+pub(crate) fn items_in_order(systems: &[pocket_ui::library::System], paths: &[PathBuf]) -> Vec<Item> {
+    if paths.is_empty() {
+        return Vec::new();
+    }
+    let place: std::collections::HashMap<&std::path::Path, usize> = paths.iter().enumerate().rev().map(|(i, p)| (p.as_path(), i)).collect();
+    let mut found: Vec<Option<Item>> = vec![None; paths.len()];
+    let mut left = place.len();
+    'card: for (s, sys) in systems.iter().enumerate() {
+        for (g, game) in sys.games.iter().enumerate() {
+            if let Some(&i) = place.get(game.path.as_path()) {
+                if found[i].is_none() {
+                    found[i] = Some(Item::Game(s, g));
+                    left -= 1;
+                    if left == 0 {
+                        break 'card;
+                    }
+                }
+            }
+        }
+    }
+    found.into_iter().flatten().collect()
 }
 
 impl App {
@@ -112,9 +147,15 @@ impl App {
         out
     }
 
-    /// The games on the shelf, in its order.
+    /// How many games are in the crate (its card's line on Home), counted without making the list.
+    pub(crate) fn crate_count(&self) -> usize {
+        self.systems.iter().map(|sys| sys.games.iter().filter(|g| !self.shelf_space.on_shelf(&g.path)).count()).sum()
+    }
+
+    /// The games on the shelf, in its order. One pass over the card's games (the crate room asks on every frame): a search
+    /// through every game for each place was 500 × 179,000 path comparisons a frame on the R36S card.
     pub(crate) fn crate_shelf(&self) -> Vec<Item> {
-        self.shelf_space.shelf.iter().filter_map(|p| self.item_of_path(p)).collect()
+        items_in_order(&self.systems, &self.shelf_space.shelf)
     }
 
     pub(crate) fn item_of_path(&self, p: &std::path::Path) -> Option<Item> {
@@ -227,6 +268,63 @@ impl App {
     }
 
     /// The box picture `w` screen pixels wide at scale `k`, cut at its front's top edge: (back, front).
+    /// The crate on Home in the Shelf look (`home_box`): the box, its back and front in one picture, with "Crate" in marker
+    /// on its front as the crate's boxes have their system's name.
+    pub(crate) fn home_box_pic(&mut self, f: f32) -> Rc<Pic> {
+        let (w, k) = home_box(f);
+        self.box_pic(w, k)
+    }
+
+    /// The crate selected on Home, shown large in the room (`stand_front`): the box as wide as a case's front `fw`, on the
+    /// bottom of an `fw` x `fh` picture.
+    pub(crate) fn home_box_front(&mut self, fw: i32, fh: i32) -> Rc<Pic> {
+        let k = (fw as f32 / crate_scene::ART_W as f32).min(fh as f32 / crate_scene::ART_H as f32);
+        let w = ((crate_scene::ART_W as f32 * k).round() as i32).min(fw);
+        let pic = self.box_pic(w, k);
+        let mut out = Pic::new(fw, fh, 0);
+        let (x0, y0) = ((fw - pic.w) / 2, fh - pic.h);
+        for y in 0..pic.h {
+            for x in 0..pic.w {
+                if (0..fh).contains(&(y0 + y)) {
+                    out.px[((y0 + y) * fw + x0 + x) as usize] = pic.px[(y * pic.w + x) as usize];
+                }
+            }
+        }
+        out.changed();
+        Rc::new(out)
+    }
+
+    /// The box `w` wide at the picture's scale `k`, its back and front in one picture, "Crate" in marker on its front.
+    fn box_pic(&mut self, w: i32, k: f32) -> Rc<Pic> {
+        let (back, front) = self.crate_pics(w, k);
+        let mut pic = Pic::new(w, back.h + front.h, 0);
+        pic.px[..back.px.len()].copy_from_slice(&back.px);
+        pic.px[back.px.len()..back.px.len() + front.px.len()].copy_from_slice(&front.px);
+        let px = ((front.h as f32) * 0.3).clamp(12.0, 34.0) as u32;
+        let side = (crate_scene::ART_FRONT.0 as f32 * k) as i32 + 4;
+        let _fixed = pocket_ui::type_scale::fixed();
+        let word = self.text.fit(Face::Title, px, "Crate", w - 2 * side);
+        let tw = self.text.width(Face::Title, px, &word).max(1);
+        let th = (px as i32 * 3 / 2).max(1);
+        let mut buf = vec![0u32; (tw + 4) as usize * th as usize];
+        {
+            let mut c = Canvas::new(&mut buf, (tw + 4) as u32, th as u32);
+            self.text.draw(&mut c, Face::Title, px, 2, px as i32, 0xffffff, &word);
+        }
+        let ink = mix(0x3a2616, pal().void, 30);
+        let (x0, y0) = ((w - tw) / 2 - 2, back.h + front.h / 2 - px as i32 * 2 / 3);
+        for ty in 0..th {
+            for tx in 0..tw + 4 {
+                let a = buf[(ty * (tw + 4) + tx) as usize] & 0xff;
+                if a > 0 {
+                    pic.blend(x0 + tx, y0 + ty, ink, a);
+                }
+            }
+        }
+        pic.changed();
+        Rc::new(pic)
+    }
+
     fn crate_pics(&mut self, w: i32, k: f32) -> (Rc<Pic>, Rc<Pic>) {
         let key = (w, (k * 1000.0) as i32);
         if let Some((_, p)) = self.crate_ui.pics.iter().find(|(kk, _)| *kk == key) {
@@ -781,6 +879,12 @@ impl App {
                 self.sel = self.items.iter().position(|i| *i == Item::Crate).unwrap_or(0);
                 self.prev_sel = self.sel;
             }
+            // Home with the crate: every selection checked for what rests where, and the crate's size as recorded.
+            Some("home-rests") => {
+                self.screen = super::Screen::Home;
+                self.rebuild();
+                return self.home_rests(w, h);
+            }
             Some("ask") => {
                 self.leave = Some(pocket_ui::rescue::Dialog { sel: 1, ..pocket_ui::rescue::Dialog::new(pocket_ui::rescue::DialogKind::ShelfSpace(n)) });
             }
@@ -851,6 +955,40 @@ impl App {
     /// Nothing floats in the crate (`scene_check`, tests/scene_rests.rs): every selection of the crate at eight moments of
     /// its way up; picking each game of the shelf; a swap with the first, the middle and the last game of the shelf and
     /// one onto a free place, twenty moments each. Prints `rests frames=… faults=…`, what was seen and each fault.
+    /// `crate:<row>:home-rests`: Home in the Shelf look with Shelf space on, every selection at five moments of its way up,
+    /// checked by `scene_check`; and the crate as it stands in the row (`home crate <w>x<h>`): the box, wider than high.
+    fn home_rests(&mut self, w: u32, h: u32) {
+        let mut buf = vec![0u32; (w * h) as usize];
+        scene_check::record(true);
+        let (mut frames, mut faults, mut sizes) = (0, Vec::new(), Vec::new());
+        let at = self.items.iter().position(|i| *i == Item::Crate);
+        for i in 0..self.items.len() {
+            self.prev_sel = self.sel;
+            self.sel = i;
+            for ms in [0u64, 60, 160, 400, 800] {
+                self.moved_at = Instant::now() - Duration::from_millis(ms);
+                scene_check::take();
+                self.paint(&mut super::snap_canvas(&mut buf, w, h));
+                frames += 1;
+                let (objs, surfaces) = scene_check::take();
+                if let Some(o) = at.and_then(|c| objs.iter().find(|o| o.what == format!("case {c}") || o.what == format!("shelf 0 case {c}"))) {
+                    sizes.push((o.w, o.h));
+                }
+                for f in scene_check::check(&objs, &surfaces) {
+                    faults.push(format!("home, row {i} selected, {ms} ms: {f}"));
+                }
+            }
+        }
+        scene_check::record(false);
+        println!("rests frames={frames} faults={}", faults.len());
+        if let Some((cw, ch)) = sizes.iter().max_by_key(|s| s.0) {
+            println!("home crate {cw}x{ch}");
+        }
+        for f in faults.iter().take(40) {
+            println!("rests fault: {f}");
+        }
+    }
+
     fn crate_rests(&mut self, w: u32, h: u32) {
         let mut buf = vec![0u32; (w * h) as usize];
         scene_check::record(true);
@@ -928,3 +1066,53 @@ fn item_id(i: Item) -> u64 {
 }
 
 use pocket_ui::gfx::{mix, Canvas};
+
+#[cfg(test)]
+mod big_card_tests {
+    use super::*;
+    use pocket_ui::library::{Game, System};
+
+    fn card(systems: &[(&str, usize)]) -> Vec<System> {
+        systems
+            .iter()
+            .map(|&(name, n)| System {
+                name: name.into(),
+                fullname: name.into(),
+                emulator: None,
+                core: None,
+                emulators: Vec::new(),
+                games: (0..n).map(|i| Game { name: format!("{name} {i:06}"), path: format!("/storage/roms/{name}/Game {i:06}.zip").into() }).collect(),
+            })
+            .collect()
+    }
+
+    /// The crate room asks for the shelf's games on every frame (`paint_crate_room`). The R36S card: 179,000 games, a
+    /// full shelf of 500. A search through every game per place was 90 million path comparisons a frame; one pass is
+    /// cheap. Thread CPU, so a loaded host doesn't fail it.
+    #[test]
+    fn the_shelf_of_a_big_card_is_found_in_one_pass() {
+        let systems = card(&[("zxspectrum", 22_000), ("snes", 13_500), ("gba", 6_000), ("arcade", 137_000)]);
+        let paths: Vec<PathBuf> = systems.iter().flat_map(|s| s.games.iter().step_by(357).map(|g| g.path.clone())).take(500).collect();
+        assert_eq!(paths.len(), 500);
+        let t = crate::app_cabinet::thread_cpu();
+        let items = items_in_order(&systems, &paths);
+        let took = crate::app_cabinet::thread_cpu() - t;
+        assert_eq!(items.len(), 500);
+        assert!(took < Duration::from_millis(500), "500 shelf places on 178,500 games took {took:?} of CPU");
+    }
+
+    /// In the shelf's order, not the card's; a game gone from the card is left out; the same game in two places is
+    /// the first one, as the search by path found it.
+    #[test]
+    fn the_shelf_keeps_its_own_order_and_leaves_out_what_the_card_lost() {
+        let systems = card(&[("gba", 3), ("snes", 2)]);
+        let p = |s: &str, i: usize| PathBuf::from(format!("/storage/roms/{s}/Game {i:06}.zip"));
+        let shelf = [p("snes", 1), p("gba", 2), p("nes", 0), p("gba", 0)];
+        assert_eq!(items_in_order(&systems, &shelf), [Item::Game(1, 1), Item::Game(0, 2), Item::Game(0, 0)]);
+        assert!(items_in_order(&systems, &[]).is_empty());
+        let mut twice = systems.clone();
+        let again = twice[0].games[1].clone();
+        twice[1].games.push(again);
+        assert_eq!(items_in_order(&twice, &[p("gba", 1)]), [Item::Game(0, 1)]);
+    }
+}

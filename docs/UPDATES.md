@@ -188,6 +188,9 @@ Verified on the device (21.10.2026, channel via file://):
 
 ## OS: next start, never the bootloader
 
+The current app offers only app updates. The OS staging code and the offline `--check-os-update` command still
+use the checks below. The public app channels contain no OS release.
+
 The initramfs installs any `*.tar` in `/storage/.update` at boot: it copies KERNEL and SYSTEM to
 `/flash` and then runs **the new SYSTEM's** `usr/share/bootloader/update.sh`. ROCKNIX's SM8250
 version calls `/usr/bin/updateabl` unconditionally, which rewrites the ABL in the internal UFS,
@@ -199,6 +202,7 @@ opens the SYSTEM squashfs with `unsquashfs` and refuses the update if
 - `usr/bin/updateabl` exists in it at all, or
 - `update.sh` / `canupdate.sh` mention updateabl, abl_, block devices, partition labels,
   fastboot or `dd`, or
+- either hook directly removes the SD card's GRUB, EFI or OpenABL boot directories, or
 - `HW_DEVICE`/`HW_ARCH` in its os-release differ from the running system, or its version
   doesn't match the signed list.
 

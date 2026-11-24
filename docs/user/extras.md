@@ -1,273 +1,227 @@
 # Box art & downloads
 
-Settings → Games → **Box art & downloads**. These optional downloads are always here; the first start only points you to this page.
-Select a row with Up/Down. Its right side says what A does, and the line below explains the selected extra. B returns to Games.
-The list scrolls when the screen or Large text needs more room.
+Settings → Games → **Box art & downloads** is home to every optional download. First start only points here, and nothing is
+forced. Pick a row with Up/Down, check the action on the right and description below, press A to run, or B to return to
+Games.
 
-**Box art**, **Pictures** and **Starter pack** are available on every device. **PortMaster games** appears on ROCKNIX and
-TrimUI; **Cheats** appears only on TrimUI. Offline, downloads say **Needs Wi-Fi**. Pictures and installed cheats still work
-without a connection. The connection explanation stays above the rows while you change Pictures. No account is needed.
+**Box art**, **Pictures** and **Starter pack** appear on every handheld; **PortMaster games** appears on ROCKNIX and
+TrimUI; **Cheats** appears on TrimUI (ROCKNIX includes cheats built in). Offline, downloads show **Needs Wi-Fi**, while
+already-downloaded pictures and cheats keep working offline. No account needed.
 
-The pause menu has a separate group for fast-forward, rewind, rumble, fan and more; see [Options](options.md#speed-rumble-fan).
+For fast-forward, rewind, rumble and fan during play, see [Options](options.md#speed-rumble-fan).
 
 ## Starter pack
 
-Choose **Starter pack** to browse free games their authors share for anyone to play. Pick one or take them all with A.
-B stops a download safely and returns to its row in Box art & downloads. The same pack is offered on Home while the SD card has no games. See
-[Getting started](getting-started.md#nothing-on-the-sd-card-yet-the-starter-pack).
+Pick **Starter pack** to browse free homebrew games shared by their creators. Grab one or install the whole set with A,
+or press B to cancel cleanly. The same pack is also offered on Home while your card has no games yet
+([Getting started](getting-started.md#nothing-on-the-sd-card-yet-the-starter-pack)).
 
 ## Cheats
 
-On TrimUI, **Cheats** offers **Get · 30 MB**. A downloads codes for many games; use them from HOME → Options → Cheats.
-The pause menu offers the same Get row when the database is missing. Opening either page alone downloads nothing.
-The row shows progress, checking and saving. B stops a download safely; the next try continues from its saved checkpoint.
-The free-space check also reserves room to save that checkpoint.
+On TrimUI handhelds, **Cheats** offers **Get · 30 MB**: press A to download cheat codes for thousands of games (used via
+HOME → Options → Cheats, which offers the exact same button if missing; opening either page never downloads anything by
+itself). Shows live download, verification and save progress. Press B to pause/cancel safely; retrying resumes from your
+saved checkpoint (free-space checks reserve room for it too).
 
-**Without a network** the row says **Look on the card**: put the cheats file from pocketui.xyz/cheats (a
-`cheats-….pack` file) on the card, in its top folder or in the pocket-ui folder, then press A. pocket-ui checks it
-against the size and fingerprint this version expects, installs it and deletes it from the card. With no file there,
-or a file that doesn't match, the row says so and nothing is installed.
+**Offline?** The row offers **Look on the card**: grab the `cheats-….pack` file from pocketui.xyz/cheats, drop it onto
+the root of your SD card or inside the `pocket-ui` folder, and press A. pocket-ui verifies its size and checksum,
+installs it and removes the installer file.
 
-Once installed, the database works offline. A offers to remove it; a second A confirms. This removes the downloaded codes,
-while each game's saved cheat switches are kept. Reinstalling the codes restores those choices.
-A later app version can offer **Update** when its pinned database changes. A updates; X offers removal instead.
-The installed codes keep working until the replacement is fully checked and saved. Failed downloads leave them in place.
-Games and saves are never changed by installing or removing this database.
+Once installed, cheats work completely offline. Press A twice to uninstall the database (your per-game cheat toggles stay
+saved and return if you reinstall). Future app updates show **Update** when a newer database ships (A updates, X
+removes); your current codes stay active until the update finishes verifying, and games/saves are never touched.
 
 ## Box art
 
-"The front of each game's box, from a free collection online." No account is needed.
+Fetches front box covers automatically from a free community archive, with no account required.
 
 ### By itself
 
-Covers come without asking whenever the Pocket is online and some games have none yet, unless **Pictures** is
-[Off](#pictures):
+Unless **Pictures** is [Off](#pictures), pocket-ui downloads missing covers automatically in the background whenever
+you're online:
 
-- in the first start, once you have left Your games with Box art on,
-- when pocket-ui starts and Wi-Fi is up (it waits up to three minutes for the connection),
-- when the game list is read again and has new games, for example after Settings → Games → Add games.
+- right after first start (if you left Box art enabled on Your games),
+- on boot once Wi-Fi connects (waits up to three minutes),
+- after refreshing your library with newly added games (such as via Settings → Games → Add games).
 
-It runs in the background. The only sign is a small dot at the top right of the shelf, beside the clock, and
-the covers appearing as they arrive (no count, no words). It never runs while a game is played: starting a game stops it after the
-cover it is on, and it goes on when you are back on the shelf. A game it found nothing for is not looked up
-again (see below); a game it could not look up because the connection dropped is tried again at the next start.
+A quiet little dot beside the clock is the only sign it's working as covers fade onto your shelf. It pauses immediately
+when you launch a game and resumes once you return. Games not found in the archive aren't retried endlessly, while
+interrupted lookups retry automatically on next boot.
 
 ### Without Wi-Fi
 
-On a handheld without Wi-Fi (the RG28XX, the RG35XX 2024, the R36S) the Box art row says **From a computer**: let a
-scraper on your computer (Skraper, for example) make the covers, then copy them into a folder called `covers` beside
-the games of each system, each picture named like its game file: `roms/gba/covers/Golden Sun (USA).png` for
-`roms/gba/Golden Sun (USA).gba`. The folders `boxart`, `box2d` and an EmulationStation `images` folder are read too
-([Your EmulationStation gamelists](library-files.md#your-emulationstation-gamelists)). The PortMaster games and Starter pack
-rows say **No Wi-Fi** there.
+On offline handhelds (RG28XX, RG35XX 2024, R36S), Box art reads **From a computer**: scrape covers on your PC (for
+example with Skraper) and drop them into a `covers` folder inside each console folder with matching filenames
+(`roms/gba/covers/Golden Sun (USA).png` for `roms/gba/Golden Sun (USA).gba`). Folders named `boxart`, `box2d` and
+`images` work too ([Your gamelists](library-files.md#your-gamelists)). PortMaster games reads **From the card**
+([PortMaster games without Wi-Fi](#portmaster-games-without-wi-fi)); Starter pack shows **No Wi-Fi**.
 
 ### By hand
 
-1. Select **Box art** and press A ("Download"). If the automatic download is running, the page shows its
-   progress instead of starting a second one.
-2. pocket-ui looks up every game that has no cover yet (and, with Pictures on Box art and screenshots, no screenshot
-   or title screen) and shows its progress, for example "Looking up 3 of 120 covers" ("… pictures" with Pictures on, where a game can have up to three). At the end it reports "Found 42 new covers"
-   or "No new covers found" ("pictures" instead of "covers" while Pictures is Box art and screenshots, since both are counted).
-   When the picture server does not answer you see "Couldn't reach the picture server. Try again later." instead; nothing is marked as having no cover, and the games are asked for again at the next start.
+1. Highlight **Box art** and press A ("Download"). If background fetching is already running, this shows its live
+   progress instead of duplicating work.
+2. pocket-ui checks every game missing a cover (plus missing screenshots/title screens when **Pictures** is set to Box
+   art and screenshots), showing live progress ("Looking up 3 of 120 covers" / "… pictures") and finishing with "Found
+   42 new covers" or "No new covers found". If the server is unreachable ("Couldn't reach the picture server. Try again
+   later."), games aren't marked missing and retry automatically next boot.
 
-Good to know:
+How matching works:
 
-- Games are recognised **by their checksum** first, so an oddly named file still gets the right cover. For
-  cartridge consoles (Game Boy to Nintendo DS, NES, SNES, N64, Mega Drive, Master System, Game Gear, PC Engine and
-  the other handhelds) pocket-ui reads each game file once in the background, at the lowest priority and never
-  while a game runs (of a zip file only its table of contents, so it is quick), and looks the number up in that
-  console's list of known releases. That gives the release's usual name: "0902 - MM&B (U).gba" is found as "Mega Man &
-  Bass (USA)". The list is downloaded once for each console you have games for, when the Pocket is online (a few
-  hundred KB), and kept on the SD card. A file is read again only when it changes.
-- Games the list doesn't know, discs of the other consoles (Saturn, Dreamcast, PSP, GameCube, ...), 7z files and files
-  over 64 MB are matched **by the title in the file name**. Region and version tags in brackets are ignored, a
-  leading release number ("0902 - ") is dropped, and when several regions exist the original release is
-  preferred. Names in the usual "No-Intro" style, such as "Tetris (World) (Rev 1)", match best. If a name is
-  too different, no cover is chosen rather than a wrong one.
-- A **PlayStation 1 or 2** disc is recognised by the **serial on the disc** instead: pocket-ui reads the disc's
-  little boot file ("SLES_556.73"), looks it up in the console's list of releases, and the cover, the pictures and
-  the facts follow that release's name ([the game card](library-files.md#playstation-1-and-2-discs)). The discs of a
-  multi-disc game show "(Disc 2)".
-- A game for which nothing was found is remembered and skipped on later runs, so running it again
-  only looks up new games. A game recognised by its checksum later (once the console's list is on the SD card) is
-  looked up again by itself.
-- A wrong cover, or none for a game that should have one: open the game's card, press Y and choose **Wrong
-  pictures? Look up again** ([the game card](library.md#wrong-pictures-look-up-again)).
-- Covers are kept on the SD card, in `/storage/.config/pocket-ui/covers/<system>/<game file name>.png`.
-  You can put your own PNG image there under the same name.
-- Covers appear in every look. In the Shelf and Cabinet looks they are
-  also printed on the game's cartridge label and on its disc.
+- **Checksum first:** for cartridge consoles (GB through DS, NES, SNES, N64, Mega Drive, Master System, Game Gear, PC
+  Engine and other handhelds), pocket-ui hashes each ROM once in the background (for `.zip` and `.7z`, just its fast
+  header table) and looks it up in the console's cached release list (~a few hundred KB downloaded once per console).
+  Even cryptic filenames like `0902 - MM&B (U).gba` resolve cleanly to `Mega Man & Bass (USA)`.
+- **Title fallback:** unknown hashes, discs on Saturn/Dreamcast/PSP/GameCube and files over 64 MB match by cleaned
+  filename (ignoring region/revision tags and scene numbers; No-Intro naming matches best, preferring no cover over a
+  wrong one).
+- **PlayStation 1 & 2 discs:** identified directly from the serial inside `SYSTEM.CNF` (`SLES_556.73`), matching cover,
+  screenshots and facts to that exact release ([PlayStation 1 and 2 discs](library-files.md#playstation-1-and-2-discs));
+  multi-disc sets show "(Disc 2)".
+- Missing matches are remembered so reruns stay fast, and newly checksum-matched games auto-recheck once their console
+  list arrives.
+- Got a wrong cover? Open the game card, press Y and choose **Wrong pictures? Look up again**
+  ([the game card](library.md#wrong-pictures-look-up-again)).
+- Covers cache as PNGs in `/storage/.config/pocket-ui/covers/<system>/<game file name>.png`; drop your own PNG there to
+  override any game.
+- Box art shows in every layout and also prints onto cartridges and discs in Shelf and Cabinet.
 
 ### Pictures
 
-All pictures come from the free libretro collection (its thumbnail server), with no account. Only the name of a game
-is sent to look it up; the games themselves, your saves and anything about you stay on the Pocket. **Pictures**
-chooses what is downloaded by itself and what the shelf uses. The row shows its current choice; A (or
-Left/Right) moves to the next:
+All artwork comes from the free libretro thumbnail server (no account; only game names are sent, never your ROMs, saves
+or personal info). **Pictures** chooses what downloads automatically and what's displayed (cycle with A or Left/Right):
 
-- **Box art and screenshots** (the default): the box art and, after it, each game's screenshot and title
-  screen. Online only, never while a game is played, a game that starts stops it after the file it is on, a game
-  the collection has nothing for is remembered. Box art comes first, the pictures after it.
-- **Box art**: only box art is downloaded, and the screenshots and title screens already on the SD card are not shown.
-  Pictures that are there stay on the SD card; switching back shows them again. Switching to Box art and screenshots
-  starts the download at once when the Pocket is online.
-- **Off**: nothing is downloaded by itself, not box art either, and the same pictures as with Box art are shown.
-  What is on the SD card stays. The **Box art** row still looks up box art when you press A on it, and a game's
-  "Wrong pictures? Look up again" still works; those are things you ask for. Choosing another value starts the
-  download again.
+- **Box art and screenshots** (default): fetches box art first, then an in-game screenshot and title screen while online
+  and idle.
+- **Box art:** downloads and shows covers only (existing screenshots/titles stay on your card if you switch back later).
+- **Off:** stops all automatic artwork downloads while keeping existing covers visible; manual **Box art** downloads and
+  **Wrong pictures? Look up again** still work whenever you ask.
 
-On the first start, Your games has a simple Box art switch. The finer Pictures choice stays in Settings → Games → Box art & downloads.
+*(First start offers a simple Box art toggle; come here for the three-way Pictures control.)*
 
-Where they show:
+Where screenshots and title screens appear:
 
-- **Split**: the picture on the right shows the box art; when you stay on a game for a moment (about two and a half
-  seconds) it fades to the game running, then to the title screen, then back to the box art, a few seconds each. It makes one pass and rests until you select another game. The
-  next game starts again from its box art. With [Motion](settings.md#motion) Off nothing changes by itself: the box
-  art stays.
-- **The game card** ([What the card shows](library.md#what-the-card-shows)): the screenshot and the title screen under the facts,
-  as "In the game" and "Title screen".
-- **The web companion**: the game's page shows them under "Pictures" (read only).
+- **Split:** lingers ~2.5 seconds on box art, then gently cycles through gameplay screenshot → title screen → box art
+  once before resting (stays on box art when [Motion](settings.md#motion) is Off).
+- **Game card** ([What the card shows](library.md#what-the-card-shows)): shown under the facts as "In the game" and
+  "Title screen".
+- **Web companion:** displayed read-only under "Pictures".
 
-The "In the game" picture does not have to be the collection's: in your [screenshots](playing.md#looking-at-your-screenshots)
-**Y** makes one of your own the game's picture. It replaces the downloaded one (only while Game pictures shows
-screenshots); [Wrong pictures? Look up again](library.md#wrong-pictures-look-up-again) on the card takes it away again
-and fetches the collection's.
-
-A game the collection has no screenshot for shows its box art alone, exactly as before; a game with neither shows
-the console, as it did. Nothing is read from the SD card while you scroll through the list, only once you stay on a
-game.
+Want your own screenshot on a game card? Open your [screenshots](playing.md#looking-at-your-screenshots) and press **Y**
+to set any shot as that game's "In the game" picture (revert anytime via
+[Wrong pictures? Look up again](library.md#wrong-pictures-look-up-again)).
 
 Good to know:
 
-- They are matched exactly like the box art (by the checksum's name, then by the title in the file name, see above)
-  and kept next to it:
-  `/storage/.config/pocket-ui/snaps/<system>/<game file name>.png` for the screenshot and `.../titles/<system>/…`
-  for the title screen. A PNG of your own under the same name is used like a downloaded one; an absurdly large
-  file is ignored.
-- Box art takes about 450 KB a game. Screenshots and title screens add much less: about 20 KB a game for 8- and
-  16-bit consoles, 180 KB for Game Boy Advance, 400 KB for PlayStation. 330 games of a typical mix come to about
-  40 MB, a library of 8- and 16-bit games to under 10 MB, 330 PlayStation games to about 140 MB. The lists of the
-  collection are fetched compressed, a few hundred KB for every console.
+- Cached at `/storage/.config/pocket-ui/snaps/<system>/<game file name>.png` and `.../titles/<system>/…`; custom PNGs
+  drop right in (oversized files are ignored). Nothing reads off disk while scrolling fast; images load once you pause.
+- Typical storage footprint: ~450 KB per cover, plus ~20 KB per screenshot/title for 8/16-bit, ~180 KB for GBA and
+  ~400 KB for PS1 (~40 MB for a mixed 330-game library, under 10 MB for 8/16-bit, ~140 MB for 330 PS1 titles).
 
 <!-- TODO: the covers folder is not inside the shared roms folder, so adding your own covers needs
      another way to reach the SD card (SSH, or the SD card in a computer that reads ext4). -->
 
 ## PortMaster games
 
-An empty Ports shelf offers **Get PortMaster**, leading to this page with PortMaster games selected. B returns to the empty shelf.
+An empty Ports shelf offers **Get PortMaster** straight to this page (B returns to the shelf).
 
-PortMaster offers PC and indie games for handhelds. pocket-ui lists the ones that run on this device's
-processor type and are not marked experimental, in two lists:
+PortMaster brings indie and classic PC ports to handhelds. pocket-ui filters automatically to stable ports built for your
+chip across two tabs:
 
-- **Ready to play**: games that run as they are.
-- **Bring your own game files**: free engines and ports of games you own (from Steam, GOG, itch.io and so on).
-  They need files from your own copy of the game. pocket-ui shows what goes where; it never downloads game
-  files itself.
+- **Ready to play:** complete free games ready to launch right after installing.
+- **Bring your own game files:** free engines and wrappers for PC games you own (Steam, GOG, itch.io, …). pocket-ui
+  tells you exactly where to drop your files and never downloads commercial assets.
 
-1. Select **PortMaster games** and press A ("Browse"). The catalogue loads (it is refreshed at most
-   once a day).
-2. Left/Right switches between the two lists; each keeps its own place. Move with Up/Down, or a page at a
-   time with L1/R1. The right side shows a picture, the genres and a description. Each row shows the download
-   size, or **Installed**.
-3. Press A to **Install**. When it is done: "… is installed. Find it under Ports."
-4. Press A on an installed game to **Remove** it.
-5. When PortMaster has a newer version of an installed game, its row says **Update available** (and so does its
-   card, quietly, under Speed). Press A to update it, the same way it was installed; Y removes it instead. Nothing
-   updates by itself.
+1. Highlight **PortMaster games** and press A ("Browse"); the catalogue refreshes at most once per day.
+2. Switch tabs with Left/Right, browse with Up/Down or L1/R1, and preview art, genres, description and download size (or
+   **Installed**) on the right.
+3. Press A to **Install** ("… is installed. Find it under Ports.") or A on an installed port to **Remove** it.
+4. When a port has an update, its row (and game card under Speed) quietly notes **Update available**; press A to update
+   or Y to remove. Nothing updates behind your back.
 
-The shelf shows the game's cover from PortMaster (else its screenshot) as the box, and the colour of the spine comes from
-it. Pictures and update notes refresh in the background after a port is installed, updated or removed; the shelf stays
-responsive while the card is read. A game without any picture keeps the plain look.
+Installed ports live under **Ports** on Home with PortMaster cover art and colour-matched spines (refreshing cleanly in
+the background). On ROCKNIX, PortMaster initializes itself on your first install.
 
-Installed games appear on Home under the **Ports** system and start like any other game. On ROCKNIX,
-PortMaster itself is prepared automatically the first time you install something.
+On the standalone TrimUI card, accept the one-time **Get PortMaster (~300 MB, one time)** download first (requires Wi-Fi
+and at least 700 MiB free; B cancels while keeping checkpoints; pauses during games; survives pocket-ui updates and offers
+**Update PortMaster** when updated). On the original TrimUI Brick, staging writes gently to protect the SD card (~2.5
+minutes for 277 MB; **Preparing PortMaster…** shows live MB progress, B still cancels). Controls belong to each port
+(original Brick has no sticks; MENU opens the pause menu).
 
-On the standalone TrimUI card, accept **Get PortMaster (~300 MB, one time)** first. This optional download
-needs Wi-Fi and at least 700 MiB free while installing. Progress and errors appear here; B stops the download
-and returns to Box art & downloads. Retry keeps the completed download checkpoint. Downloads stop while a game is played. The runtime stays on this card across
-ordinary pocket-ui updates; a changed runtime version offers **Update PortMaster**.
-On the original Brick, preparation writes slowly to protect the SD card. Allow about 2½ minutes for
-277 MB, plus download and card delays. **Preparing PortMaster…** shows changing MB counts; B still cancels. It is not included in each
-app update. The list also checks this board's controls and firmware requirements; not every PC port will run.
-MENU opens the pause menu on TrimUI. Port controls are the game's own; the original Brick has no sticks.
+Port saves live in `Roms/ports/<game>` or `pocket-ui/storage/home` on TrimUI. Back up both folders when backing up ports
+(ports use in-game saving rather than universal save states). On TrimUI, press **X** on the PortMaster row (then A) to
+remove just the PortMaster runtime offline while leaving all installed games, game files and settings intact.
 
-Port saves belong to each engine: some keep them inside `Roms/ports/<game>`, others in
-`pocket-ui/storage/home` on the TrimUI card. Keep both when backing up ports. There are no general port
-savestates; use the game's own save feature.
+Press HOME in any running port for the [pause menu](pause-menu.md#portmaster-ports) (Continue, Options, Quit), or press
+START on its card for per-port **Performance & fan**, including one-tap Battery mode for busy-core ports
+([PortMaster ports](performance.md#portmaster-ports)).
 
-On TrimUI, **X** on the PortMaster row in Box art & downloads offers to remove PortMaster. **A** confirms; **B** cancels.
-Only PortMaster itself is removed. Games, their own files, engine runtimes and PortMaster settings stay on the card;
-the next Get uses them again. Removal also works offline.
+### PortMaster games without Wi-Fi
 
-HOME opens the [pause menu](pause-menu.md#portmaster-ports) over a running port (Continue, Options,
-Quit). Its performance and fan are in Options there, or on its card: X on the port, then START opens **Performance &
-fan** (Battery, Auto or Performance; Very quiet, Quiet, Auto or Cool). A port that keeps a processor core busy all the time is
-pointed out there once, with Battery in one press. See [PortMaster ports](performance.md#portmaster-ports).
+No Wi-Fi on your handheld (RG28XX, RG35XX 2024, R36S), or just keeping Wi-Fi off? You can install PortMaster games
+straight from your SD card, following PortMaster's offline setup:
+
+1. On a computer, download the game zip from [portmaster.games](https://portmaster.games) and **leave it zipped**.
+2. If the game needs a runtime (Godot, Mono, …), grab it there under **Runtimes** too: either the single `.squashfs`
+   file or a bundle (**All Runtimes** / **Popular Runtimes**). Make sure to pick the **aarch64** versions.
+3. Copy the files into a `ports/autoinstall` folder on the card:
+   - **RG28XX and RG35XX 2024:** on the **GAMES** drive ([The GAMES drive](games-drive.md)).
+   - **Other pocket-ui OS cards:** on the card's small first partition, or on your second games card (TF2, as on the
+     R36S).
+
+Put the card back in, open **PortMaster games** (or press A on an empty Ports shelf), and press A to **Install**.
+Runtimes install into PortMaster first, then each game sets up just like it came from the online catalogue: it shows up
+under **Ports** with controls, the pause menu and its own game files page. Each file you copied (game zip, runtime or
+runtime bundle) is removed from the card once it is installed.
+
+The screen lists every file it found and explains if anything can't be installed yet. Skipped files stay on the card:
+
+| Note | What to do |
+|---|---|
+| **Needs a runtime** | Download the named runtime from **Runtimes**, copy it into `ports/autoinstall`, and press X ("Look again"), or A when nothing else is ready. |
+| **Not for this handheld** | Built for PCs or a different handheld: download the **aarch64** version instead. |
+| **Damaged** | The copy is incomplete or damaged: copy the file onto the card again. |
+| **Not a game** | The zip isn't a PortMaster game or runtime pack. |
 
 ### Games that need your own files
 
-In the **Bring your own game files** list, the right side also shows PortMaster's instructions under
-"Your own game files". Press X ("How to copy") for the page **Copy your game files**. It also opens by
-itself after you install one of these games.
+In **Bring your own game files**, press **X** ("How to copy"), or finish installing, to open **Copy your game files**:
 
-- **On this Pocket**: the folder the files go into, for example `/storage/roms/ports/sprout/assets`. pocket-ui
-  reads it from the instructions; when they name no folder, it shows the game's own folder.
-- **From a computer**: over file sharing the same folder is in `ports`, and **you copy the files straight
-  there**. The page shows the address, user and password while file sharing is on; when it is off, press X on
-  the page to turn it on (the same switch as on Settings → Games → Add games). For -SPROUT-:
+- **On this Pocket:** exact destination folder (e.g. `/storage/roms/ports/sprout/assets`), parsed from PortMaster's
+  instructions.
+- **From a computer:** copy straight into `ports` over File sharing (press X right on this screen to toggle File sharing
+  and view credentials):
   - Windows: `\\<address>\games-roms\ports\sprout\assets`
-  - macOS and Linux: `smb://<address>/games-roms/ports/sprout/assets`
-- **From a browser**: the [web companion](web-companion.md)'s Upload page puts files into the same folder, over
-  Tailscale.
-- **PortMaster says**: the instructions as PortMaster wrote them. Up/Down scrolls when they are long.
+  - macOS / Linux: `smb://<address>/games-roms/ports/sprout/assets`
+- **From a browser:** upload directly via the [web companion](web-companion.md) over Tailscale.
+- **PortMaster says:** full official instructions (scroll with Up/Down).
 
-When the instructions name several folders (Counter-Strike: `valve` and `cstrike`), the address is the game's
-own folder: put those folders there. If you used `port-files` with an earlier version, your files are still
-there and pocket-ui no longer touches them: move them into the game's folder.
+If instructions call for multiple subfolders (like `valve` and `cstrike` for Counter-Strike), drop them into the game's
+root folder shown. Files left in `port-files` from older versions stay untouched; move them into the game folder.
 
 ### When the files are missing
 
-When you start one of these games and its files are definitely not there, pocket-ui shows **Copy your game
-files** ("… can't start yet") instead of starting into a black screen. A or B goes back to the shelf.
-Once the files are in the folder it names, start the game again.
-
-pocket-ui only stops a game when it is sure: the folder the instructions name is missing or holds nothing
-but the placeholder the game came with, or none of the files the instructions name is anywhere in the game's
-folder; and nothing in the game's folder has changed since it was installed, and the game has never run for a
-minute. In every other case the game starts as before. If it still doesn't work, check PortMaster's
-instructions with X in the list.
-
-Many of these games prepare your files the first time they start. That can take several minutes, and some
-empty the folder you copied into afterwards; that is normal.
+Try launching a port whose required commercial files are clearly missing and pocket-ui opens **Copy your game files**
+("… can't start yet") instead of a black screen. pocket-ui only intervenes when it's certain (empty/placeholder target
+folder, untouched since install, never ran for a minute); otherwise it launches normally. Note that many ports unpack or
+convert your files on first launch, so taking a few minutes and sometimes emptying the drop folder afterwards is completely
+normal.
 
 ## Tools
 
-Settings → Help & tools → **Tools** starts ROCKNIX's own tools, which used to need ROCKNIX's old menu (EmulationStation), and the
-tools you installed from the package installer. The right end of each row says what it is:
+Settings → Help & tools → **Tools** launches ROCKNIX's built-in utilities and installed package tools directly:
 
-- **Emulator**: an emulator's own menus, for settings pocket-ui has no page for: **RetroArch** (cores, shaders, input),
-  **Dolphin**, **PPSSPP**, **Azahar**, **ARMSX2**, DuckStation, melonDS, Flycast, ScummVM and more.
-- **Controls**: **Test gamepad** (every button and stick as you press it), **Calibrate gamepad** (the fix for a
-  drifting stick), **Test touch screen**.
-- **System**: **File manager**, **Terminal** (needs a USB keyboard), Mount NFS, the scans for ScummVM, id Tech and
-  Heroic games, installing Steam or Heroic, Remove ._ files, cloud backup and restore.
-- **Store**: tools installed from a store. They run without a window; what they say shows on the page.
-- **Unknown**: a script in ROCKNIX's tools folder that pocket-ui does not know.
+- **Emulator:** native menus for **RetroArch**, **Dolphin**, **PPSSPP**, **Azahar**, **ARMSX2**, DuckStation, melonDS,
+  Flycast, ScummVM and more.
+- **Controls:** **Test gamepad**, **Calibrate gamepad** (fixes stick drift) and **Test touch screen**.
+- **System:** **File manager**, **Terminal** (USB keyboard needed), Mount NFS, ScummVM/id Tech/Heroic scanners,
+  Steam/Heroic installers, Remove `._` files and cloud backup/restore.
+- **Store:** store-installed utilities (output shown right on the page).
+- **Unknown:** custom scripts in ROCKNIX's tools folder.
 
-Below the list: what the selected tool is for and how to leave it. **A** starts it: pocket-ui shows "Starting …"
-and the tool takes the screen, the way a game does. When it ends, you are back on this page. A tool that ends at once
-with an error (for example because its emulator is missing) is reported here in red.
+Press **A** to launch (destructive or network tools ask for a second A in red; **X** rescans). Exit a tool via its own
+Quit menu, **L1 + SELECT + START** (where supported), or by holding **HOME for 1 second** and releasing. Anything that
+could flash the bootloader, update the OS or wipe partitions (like ROCKNIX's installer) is intentionally hidden to keep
+your Pocket bootable.
 
-- **Leaving a tool:** its own Quit or Exit; or hold **L1** and press **SELECT + START** (ROCKNIX's way, for the tools
-  that support it); or hold **HOME** for a second and let go: pocket-ui stops the tool. HOME has no menu while a tool
-  runs.
-- **Tools that change or send something ask once more**: cloud backup and restore, installing or removing Steam and
-  Heroic, Mount NFS, Remove ._ files, Calibrate gamepad, and every Unknown script. The warning is red; A again starts
-  it, B keeps it closed.
-- **Never listed:** anything that updates the system or its bootloader, wipes a drive or resets the Pocket (ROCKNIX's
-  installer, for example). On this device such updates can make the Pocket unable to start.
-- **X** looks for the tools again.
-
-The emulators' menus change the emulators' own settings, as on ROCKNIX: games on those emulators use them, games on
-pocket-ui's own host don't. Calibrate gamepad pauses the menus' controls while it runs; they come back when it
-ends. **Scan ScummVM games** restarts pocket-ui at the end (ROCKNIX's script does that).
+Changes made inside standalone emulator menus affect those standalone emulators only (not pocket-core). Calibrate
+gamepad temporarily pauses menu inputs while running, and **Scan ScummVM games** restarts pocket-ui cleanly when done.

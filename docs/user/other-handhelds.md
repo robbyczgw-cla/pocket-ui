@@ -18,7 +18,7 @@ tested them directly on hardware yet.
   [latest release](https://github.com/robbyczgw-cla/pocket-ui/releases/latest). Hold Volume Down + Power to check
   Retroid's boot menu: if it shows **Loader**, boot the card right there (nothing gets flashed). If it only shows
   **Android** and **UEFI**, install OpenABL once using the `openabl` folder from a ROCKNIX SM8250 card (20261101 or
-  newer). It replaces `abl_a` and `abl_b`; Android apps and data stay. Back them up to a computer first. Then boot with
+  newer). It replaces `abl_a` and `abl_b`. Follow the backup steps in the install guide before flashing. Then boot with
   **Boot mode: Linux** and **Boot source: SD card**. Original screens only: 12 GB models with the Visionox screen stay
   black. Full steps and the risk: [install guide](../INSTALL-DUAL-BOOT.md#installing-openabl-once).
 - **What's different:** first start shows a one-time untested-device note (unless already hardware-tested in
@@ -41,8 +41,8 @@ Power) with **Secure Boot** off first; nothing gets flashed (it worked for one t
 with ours). If your unit drops back to the boot menu, install OpenABL once using the `openabl` folder from a ROCKNIX SM8550
 card (20261101 or newer), as ROCKNIX's "Flashing OpenABL" section says
 ([Pocket 6](https://rocknix.org/devices/retroid/retroid-pocket-6/),
-[Nova](https://rocknix.org/devices/retroid/retroid-pocket-nova/)). It replaces the bootloader while Android apps and data
-stay; back up to a computer first. Then boot with **Boot mode: Linux** and **Boot source: SD card**, and let us know how
+[Nova](https://rocknix.org/devices/retroid/retroid-pocket-nova/)). It replaces the bootloader. Follow the backup steps in
+the install guide before flashing. Then boot with **Boot mode: Linux** and **Boot source: SD card**, and let us know how
 it runs ([steps](../INSTALL-DUAL-BOOT.md#pocket-6-and-nova)).
 
 Pocket 6 and the Odin 2 lineup run at 1920×1080; Nova runs at 1280×960. **Stock ROCKNIX disables deep sleep on SM8550

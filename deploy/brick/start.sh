@@ -22,7 +22,8 @@
 #      confirmed itself (its first picture) but has never run STABLE_SECS on this card and then crashes three times before that
 #      goes back the same way (it writes update-pending again for boot.sh, which works the same on every card, also on one
 #      whose boot.sh is older than this file). A version that did run that long is the card's known good one (KNOWN_GOOD) and
-#      keeps its place: its crashes end on the picture as before.
+#      keeps its place. Repeated later crashes enter Safe mode; only a run of CRASH_RESET_SECS clears the crash
+#      count before another crash. If Safe mode itself fails, the failure picture takes over.
 # Plain sh (BusyBox ash). Everything outside the card is /tmp, /storage (one empty folder, below) and the firmware's own files.
 # Tests: scripts/test-brick-card.sh (BRICK_* variables below move every path, so it runs on a computer).
 
@@ -40,6 +41,7 @@ SHOW_FOR=${BRICK_SHOW_FOR:-600}      # seconds a failure picture stays before th
 FAST_END=${BRICK_FAST_END:-20}       # a pocket-ui that ends within this many seconds counts as "did not start"
 MAX_FAST=${BRICK_MAX_FAST:-3}
 STABLE_SECS=${BRICK_STABLE_SECS:-120} # a run this long makes its version the card's known good one (ROCKNIX's launcher: known-good)
+CRASH_RESET_SECS=${POCKETUI_CRASH_RESET_SECS:-600} # separate from the known-good timer
 LOG=$D/logs/boot.log
 STATE=$D/storage/.config/pocket-ui
 PENDING=$D/storage/pocket-ui/update-pending
@@ -421,7 +423,7 @@ else
   else say "GL: the probe failed (exit $gc): CPU copy"; fi
 fi
 
-fast=0; window_start=$(date +%s); crashes=0
+fast=0; crashes=0; stage=normal
 while :; do
   # The "starting" picture goes before the bridge takes the screen (the picture's end puts the screen back as it was).
   if [ -n "$STARTING" ]; then kill "$STARTING" 2>/dev/null; wait "$STARTING" 2>/dev/null; STARTING=; fi
@@ -439,13 +441,18 @@ while :; do
   else
     started=$(date +%s)
     say "pocket-ui starts"
-    # STABLE_SECS into the run this version becomes the card's known good one (ended early, the timer goes with it).
-    ( trap 'kill "$t" 2>/dev/null; exit 0' TERM; sleep "$STABLE_SECS" & t=$!; wait "$t" && cp "$P/RELEASE" "$KNOWN_GOOD.new" 2>/dev/null \
-      && mv -f "$KNOWN_GOOD.new" "$KNOWN_GOOD" && say "$(cat "$P/RELEASE" 2>/dev/null) ran $STABLE_SECS s: the known good version on this card" ) &
-    GOODPID=$!
-    "$P/bin/pocket-ui" >>"$LOG" 2>&1
-    rc=$?
-    kill "$GOODPID" 2>/dev/null; wait "$GOODPID" 2>/dev/null
+    if [ "$stage" = safe ]; then
+      "$P/bin/pocket-ui" --safe >>"$LOG" 2>&1
+      rc=$?
+    else
+      # STABLE_SECS into the run this version becomes the card's known good one (ended early, the timer goes with it).
+      ( trap 'kill "$t" 2>/dev/null; exit 0' TERM; sleep "$STABLE_SECS" & t=$!; wait "$t" && cp "$P/RELEASE" "$KNOWN_GOOD.new" 2>/dev/null \
+        && mv -f "$KNOWN_GOOD.new" "$KNOWN_GOOD" && say "$(cat "$P/RELEASE" 2>/dev/null) ran $STABLE_SECS s: the known good version on this card" ) &
+      GOODPID=$!
+      "$P/bin/pocket-ui" >>"$LOG" 2>&1
+      rc=$?
+      kill "$GOODPID" 2>/dev/null; wait "$GOODPID" 2>/dev/null
+    fi
     say "pocket-ui ended with $rc"
     kill "$FBPID" 2>/dev/null; wait "$FBPID" 2>/dev/null
   fi
@@ -456,9 +463,15 @@ while :; do
     say "pocket-ui installed an update: restarting from the program folder"
     exit 75
   fi
-  now=$(date +%s)
+  if [ "$stage" = safe ] && [ "$rc" = 0 ]; then
+    # Restart normally, from the rescue page.
+    stage=normal; fast=0; crashes=0
+    unset POCKETUI_SAFE_REASON
+    continue
+  fi
+  ran=$(($(date +%s) - started))
   gl_dropped=
-  if [ $((now - started)) -lt "$FAST_END" ]; then
+  if [ "$ran" -lt "$FAST_END" ]; then
     fast=$((fast + 1))
     [ -n "$FBGL" ] && { say "GL: pocket-ui ended at once with the GPU on: CPU copy from now on"; FBGL=; gl_dropped=1; }
   else fast=0; fi
@@ -468,8 +481,15 @@ while :; do
     kill "$HWPID" "$POWERPID" "$SLIDERPID" "$NETPID" 2>/dev/null
     give_up crashed
   fi
-  # A crash (not a restart pocket-ui asked for, exit 0) before STABLE_SECS; the GPU's way back above doesn't count.
-  [ "$rc" != 0 ] && [ -z "$gl_dropped" ] && [ $((now - started)) -lt "$STABLE_SECS" ] && crashes=$((crashes + 1))
+  # Let the CPU copy try Safe mode too if its first start tripped the GPU fallback.
+  if [ "$stage" = safe ]; then
+    [ -n "$gl_dropped" ] && continue
+    kill "$HWPID" "$POWERPID" "$SLIDERPID" "$NETPID" 2>/dev/null
+    give_up crashed
+  fi
+  # A normal restart or a long run clears earlier crashes. The GPU fallback isn't itself a crash.
+  if [ "$rc" = 0 ] || [ "$ran" -ge "$CRASH_RESET_SECS" ]; then crashes=0; fi
+  [ "$rc" != 0 ] && [ -z "$gl_dropped" ] && crashes=$((crashes + 1))
   # A version that confirmed itself but never ran long on this card and keeps ending (three crashes, or the three quick ends
   # that would show the failure picture): the previous one instead.
   if { [ "$crashes" -ge "$MAX_FAST" ] || [ "$fast" -ge "$MAX_FAST" ]; } && unproven; then
@@ -483,6 +503,11 @@ while :; do
   if [ "$fast" -ge "$MAX_FAST" ]; then
     kill "$HWPID" "$POWERPID" "$SLIDERPID" "$NETPID" 2>/dev/null
     give_up crashed
+  fi
+  if [ "$crashes" -ge "$MAX_FAST" ]; then
+    say "pocket-ui failed $crashes times in a row (exit $rc): starting it in safe mode"
+    export POCKETUI_SAFE_REASON="pocket-ui stopped $crashes times in a row (exit $rc)."
+    stage=safe
   fi
   sleep 1
 done

@@ -3,10 +3,10 @@
 //! the name the libretro thumbnail collection files its pictures under (`covers`, `game_pictures`) and the one the
 //! offline game list matches best (`gamedb`, Curator). A game the list does not know keeps its file name, as before.
 //!
-//! **The checksum.** For a zip, the CRC-32 its own directory states (`archive::rom_crc`: nothing is unpacked). For a
+//! **The checksum.** For a zip or a 7z, the CRC-32 its own directory states (`archive::rom_crc`: nothing is unpacked). For a
 //! loose file up to [`MAX_HASH`], the whole file read once, with a second CRC without a copier header (an iNES header,
 //! a 512-byte SNES or PC Engine copier header, a Lynx header) or in big-endian order (N64 `.v64`/`.n64`), so either form matches.
-//! Disc systems, 7z and bigger files are left to their file name. Done by a thread of the lowest CPU and I/O priority
+//! Disc systems, rar and bigger files are left to their file name. Done by a thread of the lowest CPU and I/O priority
 //! that stops when a game starts ([`run_until`]); the answers are kept in `<data>/identify/checksums.tsv` by path,
 //! size and modification time, so each file is read once and again only when it changes.
 //!
@@ -91,25 +91,29 @@ fn form(system: &str, first: &[u8], len: u64) -> Option<Form> {
     }
 }
 
-/// The checksums of a game file, or None when it is not worked out: a disc system, a 7z, a zip of several games, a
+/// The checksums of a game file, or None when it is not worked out: a disc system, a rar, a zip or 7z of several games, a
 /// file over [`MAX_HASH`]. An error is a file that could not be read (tried again next time).
 pub fn checksums(system: &str, rom: &Path) -> io::Result<Option<Sums>> {
+    checksums_until(system, rom, || false)
+}
+
+fn checksums_until(system: &str, rom: &Path, stop: impl Fn() -> bool) -> io::Result<Option<Sums>> {
     if dat_name(system).is_none() {
         return Ok(None);
     }
     let ext = rom.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
     match ext.as_str() {
-        "zip" => return Ok(crate::archive::rom_crc(rom, &[]).map(|(crc, _)| Sums { crc, alt: None })),
-        "7z" | "rar" => return Ok(None),
+        "zip" | "7z" => return Ok(crate::archive::rom_crc_until(rom, &[], stop).map(|(crc, _)| Sums { crc, alt: None })),
+        "rar" => return Ok(None),
         _ => {}
     }
-    let mut f = std::fs::File::open(rom)?;
+    let mut f = crate::background_io::open_until(rom, stop)?;
     let len = f.metadata()?.len();
     if len > MAX_HASH {
         return Ok(None);
     }
     let (mut full, mut alt) = (crc32fast::Hasher::new(), crc32fast::Hasher::new());
-    let mut buf = vec![0; 1 << 20];
+    let mut buf = vec![0; crate::background_io::READ_SIZE];
     let mut shape = None;
     let mut first = true;
     loop {
@@ -144,7 +148,7 @@ pub fn checksums(system: &str, rom: &Path) -> io::Result<Option<Sums>> {
 }
 
 /// Fills `buf` as far as the file goes (whole chunks keep the N64 byte pairs together).
-fn read_full(f: &mut std::fs::File, buf: &mut [u8]) -> io::Result<usize> {
+fn read_full(f: &mut impl Read, buf: &mut [u8]) -> io::Result<usize> {
     let mut n = 0;
     while n < buf.len() {
         match f.read(&mut buf[n..])? {
@@ -186,14 +190,14 @@ fn unhex(s: &str) -> Option<u32> {
 
 /// The size and modification time a cache line is valid for.
 fn stamp(rom: &Path) -> io::Result<(u64, u64)> {
-    let m = std::fs::metadata(rom)?;
+    let m = crate::background_io::metadata(rom)?;
     let mtime = m.modified()?.duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
     Ok((m.len(), mtime))
 }
 
 impl Cache {
     pub fn load(data_dir: &Path) -> Cache {
-        let text = std::fs::read_to_string(dir(data_dir).join("checksums.tsv")).unwrap_or_default();
+        let text = crate::background_io::read_to_string(dir(data_dir).join("checksums.tsv")).unwrap_or_default();
         let files = text
             .lines()
             .filter_map(|l| {
@@ -269,7 +273,7 @@ fn table_path(data_dir: &Path, dat: &str) -> PathBuf {
 
 /// The table of `dat` kept on the card, if any.
 pub fn load_table(data_dir: &Path, dat: &str) -> Option<HashMap<u32, String>> {
-    let text = std::fs::read_to_string(table_path(data_dir, dat)).ok()?;
+    let text = crate::background_io::read_to_string(table_path(data_dir, dat)).ok()?;
     Some(text.lines().filter_map(|l| l.split_once('\t')).filter_map(|(c, n)| Some((unhex(c)?, n.to_string()))).collect())
 }
 
@@ -282,7 +286,7 @@ fn store_table(data_dir: &Path, dat: &str, table: &HashMap<u32, String>) -> io::
 
 /// Whether the table of `dat` should be fetched (none yet, or older than [`DAT_MAX_AGE`]).
 fn table_due(data_dir: &Path, dat: &str) -> bool {
-    std::fs::metadata(table_path(data_dir, dat))
+    crate::background_io::metadata(table_path(data_dir, dat))
         .and_then(|m| m.modified())
         .ok()
         .and_then(|t| t.elapsed().ok())
@@ -337,27 +341,36 @@ pub struct Identified {
 
 /// Works out the checksums of `games` (system id, ROM path) that the cache doesn't have, gets the lists of their
 /// systems (`fetch`: the DAT's text, None offline; called only for a list missing or old) and names every game they
-/// know. `stop` is asked before each file. A game named for the first time is taken off the `.missing` lists so the
+/// know. `stop` is checked inside each file as well as between files. A new name is taken off the `.missing` lists so the
 /// pictures are looked up again under its proper name. `prune`: `games` is the whole library, so cache lines of
 /// other files go.
 pub fn run_until(data_dir: &Path, games: &[(String, PathBuf)], fetch: &dyn Fn(&str) -> Option<String>, prune: bool, stop: impl Fn() -> bool) -> Identified {
+    let stop = || stop() || crate::background_io::check().is_err();
+    if stop() {
+        return Identified { stopped: true, ..Default::default() };
+    }
     let mut cache = Cache::load(data_dir);
     let mut out = Identified::default();
     let mut fresh: std::collections::HashSet<&PathBuf> = Default::default();
     let mut unsaved = 0;
     let wanted: Vec<&(String, PathBuf)> = games.iter().filter(|(sys, _)| dat_name(sys).is_some()).collect();
     for game in &wanted {
+        if stop() {
+            out.stopped = true;
+            break;
+        }
         let (sys, rom) = (&game.0, &game.1);
         let Ok(at) = stamp(rom) else { continue };
         if cache.valid(rom, at).is_some() {
             continue;
         }
+        // A file that can't be read now (card busy, removed) is tried again next time.
+        let sums = checksums_until(sys, rom, &stop);
         if stop() {
             out.stopped = true;
             break;
         }
-        // A file that can't be read now (card busy, removed) is tried again next time.
-        let Ok(sums) = checksums(sys, rom) else { continue };
+        let Ok(sums) = sums else { continue };
         cache.files.insert(rom.clone(), Known { system: sys.clone(), size: at.0, mtime: at.1, sums });
         out.hashed += 1;
         fresh.insert(rom);
@@ -367,6 +380,7 @@ pub fn run_until(data_dir: &Path, games: &[(String, PathBuf)], fetch: &dyn Fn(&s
             unsaved = 0;
         }
     }
+    out.stopped |= stop();
     if prune && !out.stopped {
         let all: std::collections::HashSet<&PathBuf> = games.iter().map(|g| &g.1).collect();
         let before = cache.files.len();
@@ -376,6 +390,9 @@ pub fn run_until(data_dir: &Path, games: &[(String, PathBuf)], fetch: &dyn Fn(&s
     if unsaved > 0 {
         let _ = cache.save(data_dir);
     }
+    if out.stopped {
+        return out;
+    }
     // The lists of the systems the games are on, fetched when missing or old; a list fetched now names its games
     // for the first time.
     let mut tables: HashMap<&str, HashMap<u32, String>> = HashMap::new();
@@ -384,6 +401,10 @@ pub fn run_until(data_dir: &Path, games: &[(String, PathBuf)], fetch: &dyn Fn(&s
     dats.sort_unstable();
     dats.dedup();
     for dat in dats {
+        if stop() {
+            out.stopped = true;
+            return out;
+        }
         let mut table = load_table(data_dir, dat);
         // Not while a game runs: the download waits for the next run.
         if !out.stopped && table_due(data_dir, dat) && !stop() {
@@ -403,6 +424,10 @@ pub fn run_until(data_dir: &Path, games: &[(String, PathBuf)], fetch: &dyn Fn(&s
         }
     }
     for game in &wanted {
+        if stop() {
+            out.stopped = true;
+            return out;
+        }
         let (sys, rom) = (&game.0, &game.1);
         let Some(dat) = dat_name(sys) else { continue };
         let (Some(table), Some(Some(sums))) = (tables.get(dat), cache.files.get(rom).map(|k| k.sums)) else { continue };
@@ -436,7 +461,7 @@ fn missing_lists(data_dir: &Path, system: &str) -> [PathBuf; 3] {
 pub(crate) fn unlist_everywhere(data_dir: &Path, system: &str, rom: &Path) {
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
     for file in missing_lists(data_dir, system) {
-        let Ok(now) = std::fs::read_to_string(&file) else { continue };
+        let Ok(now) = crate::background_io::read_to_string(&file) else { continue };
         if now.lines().any(|l| l == stem) {
             let rest: String = now.lines().filter(|l| *l != stem).map(|l| format!("{l}\n")).collect();
             let _ = crate::fsutil::write_atomic(&file, rest.as_bytes());
@@ -618,7 +643,7 @@ game (
     }
 
     #[test]
-    fn disc_systems_big_files_and_7z_keep_their_file_names() {
+    fn disc_systems_big_files_and_broken_7z_keep_their_file_names() {
         let d = dir("skip");
         assert_eq!(dat_name("psx"), None);
         assert_eq!(dat_name("gba"), Some("Nintendo - Game Boy Advance"));
@@ -628,7 +653,12 @@ game (
         assert_eq!(checksums("psx", &iso).unwrap(), None);
         let seven = d.join("roms/gba/Game.7z");
         write(&seven, b"7z");
-        assert_eq!(checksums("gba", &seven).unwrap(), None);
+        assert_eq!(checksums("gba", &seven).unwrap(), None, "no 7z inside");
+        // A real 7z: the CRC-32 its header states, as for a zip (red before 7z support: None).
+        let game = d.join("roms/gba/Demo.7z");
+        write(&game, &std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/7z/game.7z")).unwrap());
+        let demo: Vec<u8> = (0..4096u32).map(|i| ((i * 31 + i / 7) & 255) as u8).collect();
+        assert_eq!(checksums("gba", &game).unwrap().map(|s| s.crc), Some(crc32fast::hash(&demo)));
         // Too big: a sparse file over the limit is not read.
         let big = d.join("roms/nds/Big.nds");
         std::fs::create_dir_all(big.parent().unwrap()).unwrap();
@@ -723,6 +753,37 @@ game (
     }
 
     #[test]
+    fn r36s_readers_cancellation_during_the_only_rom_does_not_cache_a_checksum() {
+        let d = dir("stop-inside-rom");
+        let rom = d.join("roms/gba/Large.gba");
+        write(&rom, &vec![1; 4 * 1024 * 1024]);
+        let games = [("gba".to_string(), rom)];
+        let checks = std::cell::Cell::new(0);
+        let run = run_until(&d, &games, &|_| None, true, || {
+            checks.set(checks.get() + 1);
+            checks.get() >= 8
+        });
+        assert!(run.stopped);
+        assert_eq!((run.hashed, Cache::load(&d).len()), (0, 0));
+        assert_eq!(run_until(&d, &games, &|_| None, true, || false).hashed, 1);
+    }
+
+    #[test]
+    fn a_game_starting_stops_even_when_every_file_is_already_cached() {
+        let d = dir("stop-with-cache");
+        let games: Vec<_> = (0..2).map(|i| {
+            let rom = d.join(format!("roms/n64/{i}.z64"));
+            write(&rom, &[0x80, 0x37, 0x12, 0x40, i]);
+            ("n64".to_string(), rom)
+        }).collect();
+        assert_eq!(run_until(&d, &games, &|_| None, true, || false).hashed, 2);
+        let stopped = run_until(&d, &games[..1], &|_| None, true, || true);
+        assert!(stopped.stopped, "a cached file must still observe cancellation");
+        assert_eq!(stopped.hashed, 0);
+        assert_eq!(Cache::load(&d).len(), 2, "no pruning from a cancelled pass");
+    }
+
+    #[test]
     fn a_game_starting_stops_the_run_and_keeps_what_it_did() {
         let d = dir("stop");
         let games: Vec<(String, PathBuf)> = (0..3)
@@ -732,13 +793,10 @@ game (
                 ("gba".to_string(), p)
             })
             .collect();
-        let n = std::cell::Cell::new(0);
-        let run = run_until(&d, &games, &|_| None, true, || {
-            n.set(n.get() + 1);
-            n.get() > 2
-        });
+        assert_eq!(run_until(&d, &games[..2], &|_| None, true, || false).hashed, 2);
+        let run = run_until(&d, &games, &|_| None, true, || true);
         assert!(run.stopped);
-        assert_eq!((run.hashed, Cache::load(&d).len()), (2, 2), "two read and kept, none pruned");
+        assert_eq!((run.hashed, Cache::load(&d).len()), (0, 2), "the two completed reads stay cached");
         assert_eq!(run_until(&d, &games, &|_| None, true, || false).hashed, 1, "the rest after the game");
     }
 

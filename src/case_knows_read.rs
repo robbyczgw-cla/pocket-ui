@@ -69,7 +69,7 @@ pub fn save_of(system: &str, rom: &Path) -> Option<(PathBuf, (u64, u64))> {
 }
 
 fn stamp(path: &Path) -> Option<(u64, u64)> {
-    let m = std::fs::metadata(path).ok().filter(|m| m.is_file())?;
+    let m = crate::background_io::metadata(path).ok().filter(|m| m.is_file())?;
     let mtime = m.modified().ok()?.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
     Some((m.len(), mtime))
 }
@@ -102,7 +102,7 @@ pub struct Reading {
 
 impl Reading {
     pub fn new(data_dir: &Path) -> Reading {
-        let text = std::fs::read_to_string(cache_path(data_dir)).unwrap_or_default();
+        let text = crate::background_io::read_to_string(cache_path(data_dir)).unwrap_or_default();
         let known = text
             .lines()
             .filter_map(|l| {
@@ -114,7 +114,7 @@ impl Reading {
                 Some((PathBuf::from(path), Known { rom: (size.parse().ok()?, mtime.parse().ok()?), release, memory: Memory { prints, current } }))
             })
             .collect();
-        let text = std::fs::read_to_string(art_path(data_dir)).unwrap_or_default();
+        let text = crate::background_io::read_to_string(art_path(data_dir)).unwrap_or_default();
         let places = text
             .lines()
             .filter_map(|l| {
@@ -169,21 +169,28 @@ impl Reading {
         // A DS game by the game code in its header: 512 bytes, never the whole ROM (`case_knows::ds_key`).
         if rom.extension().is_some_and(|e| e.eq_ignore_ascii_case("nds")) {
             let mut header = vec![0u8; 0x200];
-            let read = std::fs::File::open(rom).and_then(|mut f| std::io::Read::read_exact(&mut f, &mut header));
+            let read = crate::background_io::open(rom).and_then(|mut f| std::io::Read::read_exact(&mut f, &mut header));
             let release = read.ok().and_then(|_| case_knows::ds_key(&header)).and_then(|k| case_knows::release(k, None));
+            crate::background_io::check().ok()?;
             self.known.insert(rom.to_path_buf(), Known { rom: at, release: release.map(|r| r.crc), memory: Memory::default() });
             self.dirty = true;
             return release;
         }
         // The identify cache's sum first (it has read the file already); else read it through here, only when its size
         // is one of a release's.
-        let zip = rom.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"));
-        let identify = self.identify.get_or_insert_with(|| crate::rom_id::Cache::load(&self.data_dir));
+        let zip = crate::archive::archive_type(rom).is_some();
+        if self.identify.is_none() {
+            let cache = crate::rom_id::Cache::load(&self.data_dir);
+            crate::background_io::check().ok()?;
+            self.identify = Some(cache);
+        }
+        let identify = self.identify.as_ref()?;
         let sums = match identify.sums_of(rom, at) {
             Some(sums) => sums,
             None if !self.no_hashing && case_knows::worth_checking(system, at.0, zip) => crate::rom_id::checksums(system, rom).ok()?,
             None => None,
         };
+        crate::background_io::check().ok()?;
         let release = sums.and_then(|s| case_knows::release(s.crc, s.alt));
         self.known.insert(rom.to_path_buf(), Known { rom: at, release: release.map(|r| r.crc), memory: Memory::default() });
         self.dirty = true;
@@ -216,7 +223,7 @@ impl Reading {
                     // A DS ROM is 64 to 512 MiB: only its header, file tables and the parts that hold the icons are read.
                     case_knows_art::find_nds(rom, release.kind).map(|p| p.line())
                 } else {
-                    let bytes = std::fs::read(rom).ok()?;
+                    let bytes = crate::background_io::read(rom).ok()?;
                     let bytes = &bytes[header as usize..];
                     match release.kind {
                         case_knows::Kind::LinkToThePast => case_knows_art::find_zelda(bytes).map(|(s, p)| format!("zelda {s:x} {p:x}")),
@@ -224,6 +231,7 @@ impl Reading {
                         kind => case_knows_art::find(bytes, kind).map(|p| p.line()),
                     }
                 };
+                crate::background_io::check().ok()?;
                 self.places.insert(rom.to_path_buf(), (at, found.clone()));
                 self.places_dirty = true;
                 found
@@ -272,7 +280,7 @@ impl Reading {
                 return answer.clone();
             }
         }
-        let bytes = if at.0 <= MAX_SAVE { std::fs::read(&save).ok()? } else { Vec::new() };
+        let bytes = if at.0 <= MAX_SAVE { crate::background_io::read(&save).ok()? } else { Vec::new() };
         let before = self.known.get(rom).map(|k| k.memory.clone());
         let (answer, memory) = case_knows::read(release, &bytes, before.as_ref());
         if let Some(k) = self.known.get_mut(rom) {
@@ -301,11 +309,13 @@ impl Reader {
         let _ = std::thread::Builder::new().name("case-knows".into()).spawn(move || {
             #[cfg(target_os = "linux")]
             crate::web::lower_priority();
-            let mut reading = Reading::new(&data_dir);
+            let mut reading: Option<Reading> = None;
             let mut waiting: Vec<Ask> = Vec::new();
             loop {
                 if waiting.is_empty() {
-                    reading.keep();
+                    if !crate::background_io::paused() {
+                        if let Some(r) = &mut reading { r.keep(); }
+                    }
                     let Ok(ask) = rx.recv() else { break };
                     waiting.push(ask);
                 }
@@ -313,17 +323,23 @@ impl Reader {
                     waiting.retain(|old| old != &ask);
                     waiting.push(ask);
                 }
-                // The newest question first: the game the player looks at now. While a game runs only a save is read
-                // (a few KiB, for "Where was I?"), never a ROM through for its checksum: that waits for the game's end.
+                // The newest question first. A cancelled decode stays queued, without sending a
+                // missing picture or save to the UI.
                 let ask = waiting.pop().unwrap();
-                if crate::covers::game_on() && !reading.cheap(&ask.1) {
-                    waiting.insert(0, ask);
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                    continue;
+                if reading.is_none() {
+                    reading = crate::background_io::job(|| Reading::new(&data_dir));
                 }
-                let answer = reading.progress(&ask.0, &ask.1);
-                let art = answer.as_ref().and_then(|p| reading.art(&ask.1, p));
-                done(ask, answer, art);
+                let answer = reading.as_mut().and_then(|reading| crate::background_io::job(|| {
+                    let progress = reading.progress(&ask.0, &ask.1);
+                    let art = progress.as_ref().and_then(|p| reading.art(&ask.1, p));
+                    (progress, art)
+                }));
+                if let Some((progress, art)) = answer {
+                    done(ask, progress, art);
+                } else {
+                    waiting.insert(0, ask);
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                }
             }
         });
         Reader { tx }
@@ -411,6 +427,27 @@ mod tests {
         assert_eq!(r.progress("gba", &rom), None);
         assert_eq!(r.progress_from_save("gba", &rom, &save).unwrap().parts().join(" · "), "1 badge · Torchic Lv. 12 · game clock 2:05");
         assert_eq!(r.progress_from_save("gba", &rom, &d.join("missing.srm")), None, "a missing private save cannot invent progress");
+    }
+
+    #[test]
+    fn r36s_secondary_case_reader_leaves_even_a_known_rom_until_the_game_ends() {
+        let _lock = crate::covers::READER_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let d = dir("pause");
+        let (data, rom) = (d.join("data"), d.join("roms/gba/Pokemon Emerald.gba"));
+        rom_known_as(&data, &rom, "gba", 0x1F1C08FB);
+        let save = rom.with_extension("srm");
+        std::fs::write(&save, saves::gen3_save(Kind::Emerald, &[("TORCHIC", 12, false)], 1, (2, 5), 4)).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let reader = Reader::start(data, move |_, progress, _| { let _ = tx.send(progress); });
+        let timeout = crate::testutil::timeout(std::time::Duration::from_secs(3));
+        reader.request("gba", &rom);
+        assert!(rx.recv_timeout(timeout).unwrap().is_some());
+        crate::covers::set_game_on(true);
+        reader.request("gba", &rom);
+        let early = rx.recv_timeout(std::time::Duration::from_millis(350));
+        crate::covers::set_game_on(false);
+        assert!(matches!(early, Err(mpsc::RecvTimeoutError::Timeout)));
+        assert!(rx.recv_timeout(timeout).unwrap().is_some());
     }
 
     #[test]

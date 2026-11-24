@@ -116,6 +116,10 @@ pub fn size_label(bytes: u64) -> String {
     }
 }
 
+/// What the starter pack's page says in the dArkOS port, where pressing A would only meet a write error: the port reads
+/// dArkOS's games folders read only (deploy/darkos/start.sh), so it adds no game to them.
+pub const NOT_IN_DARKOS: &str = "The starter pack isn't available on dArkOS (pocket-ui only reads dArkOS's folders). Copy games into EASYROMS instead.";
+
 /// Why a game was not added. `message` is what the page says: calm, and what to do about it.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Failure {
@@ -137,11 +141,11 @@ impl Failure {
     pub fn message(&self) -> String {
         match self {
             Failure::Offline if crate::device::no_wifi_chip() => crate::device::NEEDS_NETWORK.into(),
-            Failure::Offline => "The Pocket isn't online. Connect to Wi-Fi in Settings, then try again.".into(),
+            Failure::Offline => "This Pocket is offline. Connect to Wi-Fi in Settings and try again.".into(),
             Failure::NoSpace { free, need } => format!("Not enough space on the SD card: {} MB free, {} MB needed.", free / 1_048_576, need.div_ceil(1_048_576)),
             Failure::Broke(m) => m.clone(),
-            Failure::Damaged => "The download is damaged or was changed. Nothing was added.".into(),
-            Failure::BadArchive => "The download doesn't contain the game it should. Nothing was added.".into(),
+            Failure::Damaged => "Download failed verification. Nothing was added.".into(),
+            Failure::BadArchive => "Download didn't match the expected game. Nothing was added.".into(),
             Failure::Disk(e) => format!("Couldn't save the game: {e}"),
         }
     }
@@ -218,7 +222,7 @@ pub fn install_cancellable(game: &Game, env: &Env, cancel: &crate::update::Cance
         preferred_sources: Vec::new(), sha256: game.file.sha256.clone(), size: game.file.size, notes: String::new() };
     let fetch = |_: &str, part: &Path, _: Option<u64>, progress: &dyn Fn(u64)| {
         crate::update::cheats::download_data(&rel, part, cancel, progress).map_err(|error| DownloadFailure::Broke(
-            if cancel.is_cancelled() { "The download was stopped. Try again.".into() }
+            if cancel.is_cancelled() { "Download interrupted. Try again.".into() }
             else if error == "There isn't enough free memory for cheats. Close the game and try again." {
                 "There isn't enough free memory. Close the game and try again.".into()
             } else { error }))
@@ -267,7 +271,7 @@ fn install_inner(game: &Game, env: &Env, fetch: Fetch, progress: &dyn Fn(u64), c
         }
         Some(_) => return Err(Failure::BadArchive),
     };
-    if cancel.is_some_and(|c| c.is_cancelled()) { return Err(Failure::Broke("The download was stopped. Try again.".into())); }
+    if cancel.is_some_and(|c| c.is_cancelled()) { return Err(Failure::Broke("Download interrupted. Try again.".into())); }
     std::fs::create_dir_all(env.dest_dir).map_err(|e| Failure::Disk(e.to_string()))?;
     // Looked at again: the player may have copied the same file in while it downloaded.
     if let Some(p) = on_card(env.dest_dir, &f.name_on_disk) {
@@ -473,11 +477,11 @@ mod tests {
         let down = |_: &str, _: &Path, _: Option<u64>, _: &dyn Fn(u64)| Err(DownloadFailure::Unreachable);
         assert_eq!(install(&g, &env(&dest, &work), &down, &|_| {}), Err(Failure::Offline));
         // A download that broke off keeps curl's words.
-        let broke = |_: &str, _: &Path, _: Option<u64>, _: &dyn Fn(u64)| Err(DownloadFailure::Broke("The download didn't finish. Check Wi-Fi and try again.".into()));
-        assert_eq!(install(&g, &env(&dest, &work), &broke, &|_| {}), Err(Failure::Broke("The download didn't finish. Check Wi-Fi and try again.".into())));
+        let broke = |_: &str, _: &Path, _: Option<u64>, _: &dyn Fn(u64)| Err(DownloadFailure::Broke("Download didn't finish. Check Wi-Fi and try again.".into()));
+        assert_eq!(install(&g, &env(&dest, &work), &broke, &|_| {}), Err(Failure::Broke("Download didn't finish. Check Wi-Fi and try again.".into())));
         assert!(names(&dest).is_empty() && names(&work).is_empty());
         let m = Failure::Offline.message();
-        assert!(m.contains("isn't online") && m.contains("Wi-Fi"), "{m}");
+        assert!(m.contains("offline") && m.contains("Wi-Fi"), "{m}");
     }
 
     /// A stored zip with one file, enough for `archive::extract_rom`.

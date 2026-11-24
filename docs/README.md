@@ -24,7 +24,7 @@ Start at [user/index.md](user/index.md).
 | [user/copy-games.md](user/copy-games.md) | Copying games without Wi-Fi: the second card |
 | [user/how-to.md](user/how-to.md) | Short steps: update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device |
 | [user/game-check.md](user/game-check.md) | Settings → Games → Game check: will your games start? |
-| [user/coming-from.md](user/coming-from.md) | Coming from ROCKNIX, ArkOS or Android: what happens to saves, states, favourites and settings, what needs a copy, what does not come over |
+| [user/coming-from.md](user/coming-from.md) | Coming from ROCKNIX, dArkOS or Android: what happens to saves, states, favourites and settings, what needs a copy, what does not come over |
 | [user/playing.md](user/playing.md) | Home, finding a game, the looks, starting a game, the game switcher, continuing, menu sounds |
 | [user/console-pages.md](user/console-pages.md) | The page about a console (X on a system) and its Credits & links |
 | [user/pause-menu.md](user/pause-menu.md) | The pause menu of each emulator, Quit and Settings → Playing → Continue where I quit, Pixel Path |
@@ -44,7 +44,7 @@ Start at [user/index.md](user/index.md).
 | [user/bluetooth.md](user/bluetooth.md) | Settings → Connections → Bluetooth: pairing controllers, headphones and speakers, reconnecting, forgetting |
 | [user/continue.md](user/continue.md) | Continue: an open case means your moment is waiting and A goes straight back; how long each system takes, what can't continue |
 | [user/quick-settings.md](user/quick-settings.md) | Quick settings (HOME), the power menu, sleep, power off and low battery |
-| [user/language.md](user/language.md) | Settings → System → Language: English, German, Spanish, Brazilian Portuguese, French or Italian, what stays English |
+| [user/language.md](user/language.md) | Settings → System → Language: English, German, Spanish, Brazilian Portuguese, French, Italian or Korean, what stays English |
 | [user/night-light.md](user/night-light.md) | Settings → Screen & sound → Night light: warmer, less blue colours in the evening, the schedule, the strength, how it fades and where it reaches |
 | [user/theme.md](user/theme.md) | Settings → Look → Colours and Font: the five colour sets and the three fonts |
 | [user/performance.md](user/performance.md) | Settings → Playing → Performance & fan: game defaults, the fan in the menus, Smooth fan, the readout |

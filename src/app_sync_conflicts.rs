@@ -447,7 +447,7 @@ impl App {
             let line = if p.message.is_some() { "Nothing else is waiting for a choice." } else { "Nothing is waiting for a choice." };
             self.text.draw(c, Face::Body, 28, left, y + 28 + pocket_ui::type_scale::grow(28), pal().dust, line);
             y += 64 + pocket_ui::type_scale::grow(28);
-            for line in self.text.wrap_prose(Face::Body, 26, "When a save changes on two devices before they sync, both versions show here.", right - left) {
+            for line in self.text.wrap_prose(Face::Body, 26, "When a save changes on two devices before syncing, both show up here.", right - left) {
                 self.text.draw(c, Face::Body, 26, left, y, pal().dust, &line);
                 y += pocket_ui::type_scale::line(26, 8);
             }
@@ -473,7 +473,7 @@ impl App {
         }
         self.hits.list(p.sel, p.entries.len(), 0.0, row as f32);
         y += p.entries.len() as i32 * row + 36;
-        for line in self.text.wrap_prose(Face::Body, 26, "Saves changed on two devices before they could sync. Choose which version to keep.", right - left) {
+        for line in self.text.wrap_prose(Face::Body, 26, "Saves changed on two devices before syncing. Pick which version to keep.", right - left) {
             self.text.draw(c, Face::Body, 26, left, y, pal().dust, &line);
             y += pocket_ui::type_scale::line(26, 8);
         }

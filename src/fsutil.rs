@@ -16,6 +16,30 @@ use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+/// Write to ROCKNIX's boot partition, leaving its mount mode as it was.
+pub(crate) fn with_writable_flash<T>(act: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    // The update worker can be removing a package while the report worker writes.
+    static FLASH: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _lock = FLASH.lock().unwrap_or_else(|e| e.into_inner());
+    retry_flash_write(act, |mode| {
+        let status = std::process::Command::new("mount").args(["-o", &format!("remount,{mode}"), "/flash"]).status()?;
+        if status.success() { Ok(()) } else { Err(io::Error::from_raw_os_error(libc::EROFS)) }
+    })
+}
+
+fn retry_flash_write<T>(mut act: impl FnMut() -> io::Result<T>, mount: impl Fn(&str) -> io::Result<()>) -> io::Result<T> {
+    match act() {
+        Err(e) if e.raw_os_error() == Some(libc::EROFS) => {}
+        result => return result,
+    }
+    mount("rw")?;
+    let result = act();
+    if let Err(e) = mount("ro") {
+        eprintln!("flash: could not restore read-only mount: {e}");
+    }
+    result
+}
+
 /// Renames, or copies when `to` is on another file system: `/storage/roms` can be the GAMES drive or a games card, and
 /// the emulators' own folders are on STORAGE.
 pub fn move_file(from: &Path, to: &Path) -> io::Result<()> {
@@ -57,7 +81,7 @@ pub fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
 /// A game file with nothing in it (0 bytes): a copy that never finished, or a placeholder. No emulator can start it, and
 /// no picture belongs to it (new-user test 2026-10-30: an empty Tetris got a cover and a box like a healthy game).
 pub fn is_empty_file(path: &Path) -> bool {
-    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() == 0)
+    crate::background_io::metadata(path).is_ok_and(|m| m.is_file() && m.len() == 0)
 }
 
 /// `path` with `suffix` appended to the file name (`favorites.json` -> `favorites.json.bak`).
@@ -197,7 +221,80 @@ pub(crate) fn crash_point(step: &str) {
 #[inline(always)]
 pub(crate) fn crash_point(_: &str) {}
 
+/// Writes of pocket-ui's own files that the card refused, the newest last: a full card, one that turned read-only, one
+/// that fails. Settings, Favourites, Recently played, play time and the other lists used to log that and go on, so the
+/// change was there until the next start and then gone without a word (review 21.11.2026). pocket-ui looks here
+/// ([`take_write_trouble`]) and says it once on the shelf. A failure of another kind (a folder that was just removed)
+/// is not counted: it says nothing about the card.
+static REFUSED: std::sync::Mutex<Vec<(PathBuf, crate::save_trouble::Trouble)>> = std::sync::Mutex::new(Vec::new());
+/// At most this many are kept: every write fails on a read-only card, and only the newest matter.
+const REFUSED_KEPT: usize = 16;
+
+/// The kind of card trouble an error is, if it is one.
+fn card_trouble(e: &io::Error) -> Option<crate::save_trouble::Trouble> {
+    use crate::save_trouble::Trouble;
+    match e.raw_os_error() {
+        Some(libc::ENOSPC) | Some(libc::EDQUOT) => Some(Trouble::Full),
+        Some(libc::EROFS) | Some(libc::EIO) | Some(libc::EACCES) | Some(libc::EPERM) => Some(Trouble::Unwritable),
+        _ => None,
+    }
+}
+
+fn note_refused(path: &Path, e: &io::Error) {
+    let Some(trouble) = card_trouble(e) else { return };
+    let mut refused = REFUSED.lock().unwrap_or_else(|e| e.into_inner());
+    refused.push((path.to_path_buf(), trouble));
+    let extra = refused.len().saturating_sub(REFUSED_KEPT);
+    refused.drain(..extra);
+}
+
+/// Whether a write under `dir` was refused by the card since the last call, and how: the card is full
+/// (`Trouble::Full`, it wins: freeing space helps) or can't be written to (`Trouble::Unwritable`). Takes those
+/// writes, so each is told once; writes elsewhere stay for their own caller.
+pub fn take_write_trouble(dir: &Path) -> Option<crate::save_trouble::Trouble> {
+    use crate::save_trouble::Trouble;
+    let mut refused = REFUSED.lock().unwrap_or_else(|e| e.into_inner());
+    let mut found = None;
+    refused.retain(|(path, trouble)| {
+        if !path.starts_with(dir) {
+            return true;
+        }
+        if found != Some(Trouble::Full) {
+            found = Some(*trouble);
+        }
+        false
+    });
+    found
+}
+
+/// Tests: every write under `dir` (on any thread, the card writer's too) fails with `errno`, as a full or read-only
+/// card would, until [`card_works_again`].
+#[cfg(test)]
+static FAIL_UNDER: std::sync::Mutex<Vec<(PathBuf, i32)>> = std::sync::Mutex::new(Vec::new());
+
+#[cfg(test)]
+pub fn card_refuses(dir: &Path, errno: i32) {
+    FAIL_UNDER.lock().unwrap().push((dir.to_path_buf(), errno));
+}
+
+#[cfg(test)]
+pub fn card_works_again(dir: &Path) {
+    FAIL_UNDER.lock().unwrap().retain(|(d, _)| d != dir);
+}
+
 fn write_via_temp(path: &Path, bytes: &[u8], durable: bool, bulk: bool) -> io::Result<()> {
+    let written = write_via_temp_inner(path, bytes, durable, bulk);
+    if let Err(e) = &written {
+        note_refused(path, e);
+    }
+    written
+}
+
+fn write_via_temp_inner(path: &Path, bytes: &[u8], durable: bool, bulk: bool) -> io::Result<()> {
+    #[cfg(test)]
+    if let Some(errno) = FAIL_UNDER.lock().unwrap().iter().find(|(d, _)| path.starts_with(d)).map(|(_, e)| *e) {
+        return Err(io::Error::from_raw_os_error(errno));
+    }
     #[cfg(feature = "brick")]
     let _idle = if bulk { Some(crate::update::brick_io::IdleIo::enter()?) } else { None };
     let write = |f: &mut File, data: &[u8]| -> io::Result<()> {
@@ -689,6 +786,94 @@ mod tests {
     use super::*;
     use crate::testutil::TestDir;
     use std::time::Duration;
+
+    #[test]
+    fn r36s_test7_a_flash_write_restores_the_read_only_mount_even_on_failure() {
+        for last_error in [None, Some(libc::ENOSPC)] {
+            let calls = std::cell::RefCell::new(Vec::new());
+            let mut first = true;
+            let result = retry_flash_write(
+                || {
+                    calls.borrow_mut().push("write".to_string());
+                    if std::mem::take(&mut first) { return Err(io::Error::from_raw_os_error(libc::EROFS)); }
+                    last_error.map_or(Ok(17), |code| Err(io::Error::from_raw_os_error(code)))
+                },
+                |mode| { calls.borrow_mut().push(mode.to_string()); Ok(()) },
+            );
+            assert_eq!(result.as_ref().err().and_then(io::Error::raw_os_error), last_error);
+            assert_eq!(*calls.borrow(), ["write", "rw", "write", "ro"]);
+        }
+        let result = retry_flash_write(|| Ok(17), |_| panic!("an already writable partition needs no remount"));
+        assert_eq!(result.unwrap(), 17);
+    }
+
+    #[test]
+    fn a_write_the_card_refuses_is_told_once_and_by_its_kind() {
+        use crate::save_trouble::Trouble;
+        let d = TestDir::new("card-refuses");
+        let (data, other) = (d.join("data"), d.join("other"));
+        card_refuses(&data, libc::EROFS);
+        assert!(write_json(&data.join("settings.json"), &1).is_err());
+        assert_eq!(take_write_trouble(&data), Some(Trouble::Unwritable), "a read-only card is said, not only logged");
+        assert_eq!(take_write_trouble(&data), None, "once: the next look finds nothing new");
+        // On the card writer (Recently played after a game) as well: a thread of its own.
+        write_json_soon(&data.join("recents.json"), &[1, 2]);
+        settle();
+        assert_eq!(take_write_trouble(&data), Some(Trouble::Unwritable));
+        card_works_again(&data);
+        // A full card wins over a failing one in the same look: freeing space is what helps.
+        card_refuses(&data, libc::EIO);
+        let _ = write_atomic(&data.join("a"), b"1");
+        card_works_again(&data);
+        card_refuses(&data, libc::ENOSPC);
+        let _ = write_atomic(&data.join("b"), b"1");
+        assert_eq!(take_write_trouble(&data), Some(Trouble::Full));
+        card_works_again(&data);
+        // Another folder's refusal is not this one's, and not every error is the card's.
+        card_refuses(&other, libc::ENOSPC);
+        let _ = write_atomic(&other.join("c"), b"1");
+        card_works_again(&other);
+        assert_eq!(take_write_trouble(&data), None);
+        assert_eq!(take_write_trouble(&other), Some(Trouble::Full));
+        card_refuses(&data, libc::ENOENT);
+        let _ = write_atomic(&data.join("d"), b"1");
+        card_works_again(&data);
+        assert_eq!(take_write_trouble(&data), None, "a folder that was just removed says nothing about the card");
+        assert!(write_json(&data.join("settings.json"), &2).is_ok());
+        assert_eq!(take_write_trouble(&data), None);
+    }
+
+    /// The whole class: every list and setting pocket-ui keeps in its data folder, through each way it saves (now, on
+    /// the card writer), reaches `take_write_trouble` when the card refuses it. Each used to be `let _ =` or a log line.
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn every_kept_list_and_setting_tells_a_refusing_card() {
+        use crate::save_trouble::Trouble;
+        let d = TestDir::new("card-refuses-all");
+        let data = d.join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        let savers: Vec<(&str, Box<dyn Fn()>)> = vec![
+            ("settings", Box::new(|| crate::settings::Settings::default().save(&data))),
+            ("favourites", Box::new(|| {
+                let mut f = crate::favorites::Favorites::load(&data);
+                f.toggle("gba", "Game", &data.join("Game.gba"));
+            })),
+            ("recently played", Box::new(|| crate::recents::Recents::load(&data).save())),
+            ("recently played after a game", Box::new(|| {
+                crate::recents::Recents::load(&data).save_soon();
+                settle();
+            })),
+            ("screen look", Box::new(|| crate::display::Look::default().save(&data))),
+        ];
+        for (name, save) in &savers {
+            for (errno, kind) in [(libc::ENOSPC, Trouble::Full), (libc::EROFS, Trouble::Unwritable)] {
+                card_refuses(&data, errno);
+                save();
+                card_works_again(&data);
+                assert_eq!(take_write_trouble(&data), Some(kind), "{name}: a refused save is lost silently at the next start");
+            }
+        }
+    }
 
     #[test]
     fn copy_if_absent_never_replaces_and_leaves_no_temp_file() {

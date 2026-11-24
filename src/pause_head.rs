@@ -302,7 +302,7 @@ mod tests {
         // The language is this thread's own in the unit tests (`i18n::for_this_thread`): no other test's words change.
         let mut text = Text::builtin();
         let mut cut = Vec::new();
-        for lang in [Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It] {
+        for lang in Lang::ALL {
             i18n::set(lang);
             for (w, h, density) in [(1240, 1080, 2.0), (1240, 1080, 2.5), (1920, 1080, 2.5), (1920, 1080, 3.0), (1280, 960, 2.0)] {
                 // Android's buttons at the side in landscape on a small screen (Mini V2: about 64 dp), or at the bottom.

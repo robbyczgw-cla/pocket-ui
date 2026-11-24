@@ -69,11 +69,14 @@ if [ -f scripts/check-leaks.sh ] && [ -z "${GATE_LEAKS_DONE:-}" ]; then
 fi
 # Fast checks (19.11.2026, fail-fast): the script checks that turned the most trains red, before any build - seconds, not the
 # 20 minutes until the suites reach the same verdict. The translation audit (a painted string without a German line) and the
-# reader inventory (tests/data_sources.rs runs the same script later). Each only when the tree has it; both at once.
+# reader inventory (tests/data_sources.rs runs the same script later). Each only when the tree has it; all at once.
+# 20.11.2026: the CHANGELOG guard (scripts/check-changelog.py): the queue's union merge had put copies of [Unreleased] lines
+# back under the published [0.5.1] with a green gate. Here it checks the train's tree after that merge; --no-vetoed keeps
+# its verdict the same on every gate host (the vetoed list is the maintainer's, the queue client checks it before queueing).
 fast_started=$(date +%s) fast_pids= fast_names=
-for fast_check in i18n-extract.py reader-inventory.py; do
+for fast_check in i18n-extract.py reader-inventory.py check-changelog.py test-check-changelog.py; do
     [ -f "scripts/$fast_check" ] || continue
-    case $fast_check in i18n-extract.py) fast_args=--check ;; *) fast_args= ;; esac
+    case $fast_check in i18n-extract.py) fast_args=--check ;; check-changelog.py) fast_args=--no-vetoed ;; *) fast_args= ;; esac
     # shellcheck disable=SC2086
     python3 -I "scripts/$fast_check" $fast_args >"/tmp/gate-fast-$name.$fast_check.log" 2>&1 &
     fast_pids="$fast_pids $!" fast_names="$fast_names $fast_check"

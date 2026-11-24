@@ -9,7 +9,7 @@
 //! - The sounds are sample files (`assets/ui-sounds/`, [`synth`] decodes them): warm, tactile hardware sounds
 //!   made with ElevenLabs sound effects; the cases' sounds ([`Sound::CaseOpen`], [`Sound::BoxOpen`]) and a disc's
 //!   ([`Sound::DiscIn`], [`Sound::DiscDrop`]) are ElevenLabs sound effects too (`media-sounds.tsv`: prompt and cut of
-//!   each). The hardware itself is heard in real recordings (CC0, `assets/ui-sounds/SOURCES.md`): a cartridge, card or
+//!   each). The hardware itself is heard in real recordings (licences in `assets/ui-sounds/SOURCES.md`): a cartridge, card or
 //!   lid going in and coming out, the CRT switching on and off, a power switch ([`is_ritual_sound`]). Both kinds are cut
 //!   and levelled by `scripts/ui-sounds/prep_media_sounds.py`. The mixer thread decodes all of them once when it starts.
 //! - Retro style (`retro::on()`, one atomic load when a sound starts): Nav, Confirm, Back, Menu and Error play synthesised
@@ -36,7 +36,7 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-use crate::pad::Button;
+use crate::{cabinet::FormFactor, media::Game, pad::Button};
 
 /// A and B as the Retroid prints them (see main.rs).
 const CONFIRM: Button = Button::East;
@@ -83,7 +83,7 @@ pub enum Sound {
     /// A sealed game's first start (`shrink_wrap`): the shop's plastic film ripped off its case. A CC0 recording
     /// (Freesound 431217 by buzzatsea, `assets/ui-sounds/SOURCES.md`), not generated.
     WrapTear,
-    // The ritual's mechanics (19.11.): real recordings of the hardware, CC0 (`assets/ui-sounds/SOURCES.md`), cut and
+    // The ritual's mechanics (19.11.): real recordings of the hardware (`assets/ui-sounds/SOURCES.md`), cut and
     // levelled like the rest. One place for the sounds of the start and the way back, whoever plays them.
     /// The Cozy launch on a handheld: a Game Boy-style cartridge slides into the back and seats.
     HandheldCartIn,
@@ -99,6 +99,18 @@ pub enum Sound {
     UmdOpen,
     /// The PSP's UMD door clicking shut.
     UmdShut,
+    /// The distinct movements of the front-loading NES.
+    NesSlide,
+    NesPress,
+    NesDoorShut,
+    /// The motor in a disc tray, on the way out and in.
+    TrayOpen,
+    TrayShut,
+    /// The hinge and catch on the two shapes of disc case.
+    JewelOpen,
+    JewelShut,
+    DvdOpen,
+    DvdShut,
     /// An old TV's static on an empty channel, quiet, before the picture comes (`crt_on`).
     TvStatic,
     /// An old TV switching off (`eject::tv_off`).
@@ -122,6 +134,8 @@ pub fn is_ritual_sound(sound: Sound) -> bool {
     matches!(
         sound,
         Sound::HandheldCartIn | Sound::CartOut | Sound::HandheldCartOut | Sound::CardOut | Sound::LidOpen | Sound::UmdOpen | Sound::UmdShut
+            | Sound::NesSlide | Sound::NesPress | Sound::NesDoorShut | Sound::TrayOpen | Sound::TrayShut
+            | Sound::JewelOpen | Sound::JewelShut | Sound::DvdOpen | Sound::DvdShut
             | Sound::TvStatic | Sound::TvOff | Sound::SwitchOn | Sound::SwitchOff
     )
 }
@@ -129,19 +143,32 @@ pub fn is_ritual_sound(sound: Sound) -> bool {
 /// How much quieter than the other UI sounds the Quick launch's click plays, in dB.
 pub const QUICK_DB: f32 = -6.0;
 
-/// The sound of opening the case `m` stands in: cardboard for a cartridge's box, plastic for every other case.
+/// The sound of opening the game's box, by the box's material and catch.
 pub fn opening(m: crate::media::Medium) -> Sound {
-    match crate::game_box::Hull::of(m) {
-        crate::game_box::Hull::CartBox => Sound::BoxOpen,
+    use crate::game_box::Hull;
+    match Hull::of(m) {
+        Hull::CartBox => Sound::BoxOpen,
+        Hull::Jewel => Sound::JewelOpen,
+        Hull::Dvd => Sound::DvdOpen,
         _ => Sound::CaseOpen,
     }
 }
 
-/// The sound of the game inside the case `m` (`Medium::game`) going into its console. Every kind named, so a new one
-/// gets a choice.
-pub fn going_in(m: crate::media::Medium) -> Sound {
-    use crate::media::Game as G;
-    match m.game() {
+/// The sound of closing the box. The other cases still use the same rustle or click either way.
+pub fn closing(m: crate::media::Medium) -> Sound {
+    use crate::game_box::Hull;
+    match Hull::of(m) {
+        Hull::Jewel => Sound::JewelShut,
+        Hull::Dvd => Sound::DvdShut,
+        _ => opening(m),
+    }
+}
+
+/// The sound of the game's own medium going into the console. Generic cartridges use the system's form factor.
+pub fn going_in(game: Game, form: FormFactor) -> Sound {
+    use Game as G;
+    match game {
+        G::Cart if form == FormFactor::HandheldCart => Sound::HandheldCartIn,
         G::Snes | G::SnesUs | G::N64 | G::Nes | G::Cart | G::MegaDrive | G::MasterSystem | G::HuCard | G::NeoGeo => Sound::CartIn,
         G::Gb | G::Gbc | G::Gba | G::GameGear | G::NeoGeoPocket | G::WonderSwan | G::Lynx => Sound::HandheldCartIn,
         G::Disc | G::MiniDisc | G::Umd => Sound::DiscIn,
@@ -149,16 +176,13 @@ pub fn going_in(m: crate::media::Medium) -> Sound {
     }
 }
 
-/// The sound of the game in the case `m` coming back out of its console on the way back: a cartridge pulled, a card
-/// popped out; a disc lifts off its spindle without a sound of its own (its lid's opening has one, [`Sound::LidOpen`]).
-pub fn coming_out(m: crate::media::Medium) -> Option<Sound> {
-    use crate::media::Game as G;
-    match m.game() {
-        G::Snes | G::SnesUs | G::N64 | G::Nes | G::Cart | G::MegaDrive | G::MasterSystem | G::HuCard | G::NeoGeo => Some(Sound::CartOut),
-        G::Gb | G::Gbc | G::Gba | G::GameGear | G::NeoGeoPocket | G::WonderSwan | G::Lynx => Some(Sound::HandheldCartOut),
-        G::Card | G::Card3ds | G::Memory => Some(Sound::CardOut),
-        G::Umd => Some(Sound::UmdOpen),
-        G::Disc | G::MiniDisc => None,
+/// The sound of the medium leaving its seat. Discs lift quietly after the drive opens.
+pub fn coming_out(game: Game, form: FormFactor) -> Option<Sound> {
+    match going_in(game, form) {
+        Sound::CartIn => Some(Sound::CartOut),
+        Sound::HandheldCartIn => Some(Sound::HandheldCartOut),
+        Sound::CardIn => Some(Sound::CardOut),
+        _ => None,
     }
 }
 
@@ -179,6 +203,15 @@ pub fn hit_at(sound: Sound) -> Duration {
         Sound::LidOpen => 301,
         Sound::UmdOpen => 141,
         Sound::UmdShut => 150,
+        Sound::NesSlide => 189,
+        Sound::NesPress => 41,
+        Sound::NesDoorShut => 37,
+        Sound::JewelOpen => 100,
+        Sound::JewelShut => 154,
+        Sound::DvdOpen => 166,
+        Sound::DvdShut => 111,
+        Sound::TrayOpen => 128,
+        Sound::TrayShut => 173,
         Sound::TvOff => 163,
         Sound::SwitchOn => 35,
         Sound::SwitchOff => 27,
@@ -390,6 +423,15 @@ fn wav(sound: Sound) -> &'static [u8] {
         Sound::LidOpen => include_bytes!("../assets/ui-sounds/lid-open.wav"),
         Sound::UmdOpen => include_bytes!("../assets/ui-sounds/umd-open.wav"),
         Sound::UmdShut => include_bytes!("../assets/ui-sounds/umd-shut.wav"),
+        Sound::NesSlide => include_bytes!("../assets/ui-sounds/nes-slide.wav"),
+        Sound::NesPress => include_bytes!("../assets/ui-sounds/nes-press.wav"),
+        Sound::NesDoorShut => include_bytes!("../assets/ui-sounds/nes-door-shut.wav"),
+        Sound::JewelOpen => include_bytes!("../assets/ui-sounds/jewel-open.wav"),
+        Sound::JewelShut => include_bytes!("../assets/ui-sounds/jewel-shut.wav"),
+        Sound::DvdOpen => include_bytes!("../assets/ui-sounds/dvd-open.wav"),
+        Sound::DvdShut => include_bytes!("../assets/ui-sounds/dvd-shut.wav"),
+        Sound::TrayOpen => include_bytes!("../assets/ui-sounds/tray-open.wav"),
+        Sound::TrayShut => include_bytes!("../assets/ui-sounds/tray-shut.wav"),
         Sound::TvStatic => include_bytes!("../assets/ui-sounds/tv-static.wav"),
         Sound::TvOff => include_bytes!("../assets/ui-sounds/tv-off.wav"),
         Sound::SwitchOn => include_bytes!("../assets/ui-sounds/switch-on.wav"),
@@ -421,7 +463,7 @@ pub fn synth_at(sound: Sound, rate: u32) -> Vec<i16> {
 
 // ---- playing ----------------------------------------------------------------------------------------------
 
-const ALL: [Sound; 29] = [
+const ALL: [Sound; 38] = [
     Sound::Nav,
     Sound::Confirm,
     Sound::Back,
@@ -447,6 +489,15 @@ const ALL: [Sound; 29] = [
     Sound::LidOpen,
     Sound::UmdOpen,
     Sound::UmdShut,
+    Sound::NesSlide,
+    Sound::NesPress,
+    Sound::NesDoorShut,
+    Sound::JewelOpen,
+    Sound::JewelShut,
+    Sound::DvdOpen,
+    Sound::DvdShut,
+    Sound::TrayOpen,
+    Sound::TrayShut,
     Sound::TvStatic,
     Sound::TvOff,
     Sound::SwitchOn,
@@ -1807,6 +1858,8 @@ mod tests {
         opens: Arc<std::sync::atomic::AtomicUsize>,
         active: Arc<std::sync::atomic::AtomicUsize>,
         loud_writes: Arc<std::sync::atomic::AtomicUsize>,
+        checks: Arc<std::sync::atomic::AtomicUsize>,
+        hold_check: Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>,
         tx: SyncSender<Msg>,
         mixer: Option<std::thread::JoinHandle<()>>,
     }
@@ -1829,10 +1882,11 @@ mod tests {
                 fn drop(&mut self) { self.0.fetch_sub(1, Ordering::SeqCst); }
             }
             let audible = Arc::new(AtomicBool::new(audible));
-            let (opens, active, loud) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+            let (opens, active, loud, checks) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+            let hold_check = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
             let (tx, rx) = sync_channel(16);
             let (quantum, _quantum_rx) = sync_channel(32);
-            let (a, o, l, ask) = (active.clone(), opens.clone(), loud.clone(), audible.clone());
+            let (a, o, l, ask, ch, hc) = (active.clone(), opens.clone(), loud.clone(), audible.clone(), checks.clone(), hold_check.clone());
             let mixer = std::thread::spawn(move || {
                 mixer_with(rx, move |_| {
                     a.fetch_add(1, Ordering::SeqCst);
@@ -1840,11 +1894,23 @@ mod tests {
                     Some(Silent(a.clone(), l.clone()))
                 }, move || {
                     let (tx, rx) = sync_channel(1);
-                    tx.send(ask.load(Ordering::SeqCst)).unwrap();
+                    ch.fetch_add(1, Ordering::SeqCst);
+                    if *hc.0.lock().unwrap() {
+                        let (ask, hc) = (ask.clone(), hc.clone());
+                        std::thread::spawn(move || {
+                            let mut held = hc.0.lock().unwrap();
+                            while *held {
+                                held = hc.1.wait(held).unwrap();
+                            }
+                            let _ = tx.send(ask.load(Ordering::SeqCst));
+                        });
+                    } else {
+                        tx.send(ask.load(Ordering::SeqCst)).unwrap();
+                    }
                     rx
                 }, quantum, Some(0), Duration::from_millis(20));
             });
-            Rig { audible, opens, active, loud_writes: loud, tx, mixer: Some(mixer) }
+            Rig { audible, opens, active, loud_writes: loud, checks, hold_check, tx, mixer: Some(mixer) }
         }
         fn press(&self) {
             self.tx.send(Msg::Play(Sound::Nav, 1.0, false, Instant::now(), Duration::ZERO)).unwrap();
@@ -1900,7 +1966,8 @@ mod tests {
         }
         assert!(rig.loud_writes.load(Ordering::SeqCst) > 0, "the press after unmuting is heard, not swallowed");
         assert_eq!(rig.opens(), opened + 1, "one stream for it");
-        assert!(t.elapsed() < Duration::from_millis(50), "and without a poll interval's wait: {:?}", t.elapsed());
+        // Still well below the 1500 ms mute-freshness / poll interval, with headroom for a loaded gate host.
+        assert!(t.elapsed() < crate::testutil::timeout(Duration::from_millis(200)), "and without a poll interval's wait: {:?}", t.elapsed());
         rig.finish();
     }
 
@@ -1909,10 +1976,22 @@ mod tests {
         let rig = Rig::start(false);
         rig.press();
         std::thread::sleep(Duration::from_millis(100));
+        // Hold the mute check open while Stop arrives so the test always exercises the held-sound path instead of
+        // racing an instant mock answer before Msg::Stop(true) reaches the mixer thread.
+        let before_checks = rig.checks.load(Ordering::SeqCst);
+        *rig.hold_check.0.lock().unwrap() = true;
         rig.audible.store(true, Ordering::SeqCst);
         rig.press();
+        let wait_start = Instant::now();
+        while rig.checks.load(Ordering::SeqCst) == before_checks && wait_start.elapsed() < crate::testutil::timeout(Duration::from_secs(2)) {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(rig.checks.load(Ordering::SeqCst) > before_checks, "the press started a mute check");
         rig.tx.send(Msg::Stop(true)).unwrap();
-        std::thread::sleep(Duration::from_millis(200));
+        std::thread::sleep(Duration::from_millis(20));
+        *rig.hold_check.0.lock().unwrap() = false;
+        rig.hold_check.1.notify_all();
+        std::thread::sleep(Duration::from_millis(100));
         assert_eq!(rig.loud_writes.load(Ordering::SeqCst), 0, "a sound held for the check did not play after the stop");
         rig.finish();
     }
@@ -2072,6 +2151,12 @@ mod tests {
             let least = match s {
                 Sound::DiscShut => 6000,
                 Sound::TvStatic => 2000,
+                // These recordings carry their level through the movement, with less of it in a single sample.
+                Sound::NesSlide | Sound::NesPress | Sound::NesDoorShut | Sound::TrayOpen => {
+                    let rms = loudest_rms_db(&pcm);
+                    assert!((-24.0..=-18.0).contains(&rms), "{s:?}: loudest 50 ms at {rms:.1} dBFS");
+                    10000
+                }
                 _ => 16000,
             };
             assert!(peak > least && peak <= 28500, "{s:?}: peak {peak} (-1 dBFS is 29204)");
@@ -2201,25 +2286,52 @@ mod tests {
         use crate::media::Medium as M;
         assert_eq!(opening(M::Snes), Sound::BoxOpen, "the cartridge systems' cardboard box");
         assert_eq!(opening(M::Gba), Sound::BoxOpen);
-        for m in [M::MegaDrive, M::Ps1, M::Ps2, M::Umd, M::Ds, M::Xbox] {
+        for m in [M::MegaDrive, M::Umd, M::Ds] {
             assert_eq!(opening(m), Sound::CaseOpen, "{m:?}: plastic");
         }
-        assert_eq!(going_in(M::N64), Sound::CartIn);
-        assert_eq!(going_in(M::MegaDrive), Sound::CartIn, "a cartridge in a plastic case");
-        assert_eq!(going_in(M::GameCube), Sound::DiscIn);
-        assert_eq!(going_in(M::Umd), Sound::DiscIn);
-        assert_eq!(going_in(M::Vita), Sound::CardIn);
+        assert_eq!((opening(M::Ps1), closing(M::Ps1)), (Sound::JewelOpen, Sound::JewelShut));
+        assert_eq!((opening(M::Ps2), closing(M::Ps2)), (Sound::DvdOpen, Sound::DvdShut));
+        assert_eq!(going_in(Game::of("n64", "game.rom"), FormFactor::of("n64")), Sound::CartIn);
+        assert_eq!(going_in(Game::of("megadrive", "game.rom"), FormFactor::of("megadrive")), Sound::CartIn, "a cartridge in a plastic case");
+        assert_eq!(going_in(Game::of("gamecube", "game.rom"), FormFactor::of("gamecube")), Sound::DiscIn);
+        assert_eq!(going_in(Game::of("psp", "game.rom"), FormFactor::of("psp")), Sound::DiscIn);
+        assert_eq!(going_in(Game::of("psvita", "game.rom"), FormFactor::of("psvita")), Sound::CardIn);
+    }
+
+    #[test]
+    fn every_embedded_sound_has_a_playback_route() {
+        // The menu, photo, CRT and wrap are triggered directly by their own flows.
+        let mut played = vec![Sound::Nav, Sound::Confirm, Sound::Back, Sound::Menu, Sound::Switcher, Sound::Error,
+            Sound::Volume, Sound::Shutter, Sound::CrtOn, Sound::TvStatic, Sound::WrapTear];
+        for system in ["nes", "snes", "gba", "nds", "psx", "ps2", "psp", "wii"] {
+            let medium = crate::media::Medium::of(system);
+            let game = Game::of(system, "game.rom");
+            let form = FormFactor::of(system);
+            let mechanism = crate::insert_rig::moving_kind(system, game);
+            for cozy in [false, true] {
+                played.extend(crate::insert_scene::cues(cozy, medium, game, form, mechanism, true).into_iter().map(|cue| cue.sound));
+            }
+            let way = crate::eject::Way::new(crate::eject::Screen::of(form), true, mechanism.is_some());
+            played.extend(way.sounds(medium, game, form, mechanism).into_iter().map(|(sound, _)| sound));
+            if crate::insert_scene::power_on_light(system, true, true, true).is_some() {
+                played.push(crate::insert_scene::switch_on_cue(system, game).sound);
+            }
+        }
+        let missing: Vec<_> = ALL.iter().filter(|sound| !played.contains(sound)).collect();
+        assert!(missing.is_empty(), "embedded sounds without a route: {missing:?}");
     }
 
     /// The launch queues the sound `hit_at` before the moment the animation shows: the loudest moment of the file is
     /// right there (the click), not before it (the slide) or long after.
     #[test]
     fn the_hit_is_where_hit_at_says() {
-        for s in [Sound::CartIn, Sound::DiscIn, Sound::DiscDrop, Sound::DiscShut, Sound::CardIn, Sound::Insert, Sound::WrapTear] {
+        for s in [Sound::CartIn, Sound::DiscIn, Sound::DiscDrop, Sound::DiscShut, Sound::CardIn, Sound::Insert, Sound::WrapTear,
+            Sound::NesSlide, Sound::NesPress, Sound::NesDoorShut, Sound::TrayOpen, Sound::TrayShut,
+            Sound::JewelOpen, Sound::JewelShut, Sound::DvdOpen, Sound::DvdShut] {
             let pcm = synth(s);
             let loudest = pcm.iter().enumerate().max_by_key(|(_, v)| v.unsigned_abs()).unwrap().0;
             let ms = loudest as f32 * 1000.0 / RATE as f32;
-            let hit = hit_at(s).as_secs_f32() * 1000.0;
+            let hit = hit_at(s).as_millis() as f32;
             assert!(ms >= hit && ms < hit + 12.0, "{s:?}: loudest at {ms:.1} ms, hit_at {hit} ms");
         }
     }

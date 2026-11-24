@@ -2,21 +2,18 @@
 
 ## Open Settings
 
-Press **START** on Home or in a system's game list. Settings is not an entry of the list. Settings opens straight on the
-entries of its first category, Connections, with their values on the right and the selected entry's line at the bottom.
-At the top the eight categories stand as small symbols in a row, the one you are in named beside its symbol, with **L1**
-and **R1** at the ends: L1 and R1 go to the previous and the next category (round at the ends), each opening on its
-first entry; a tap on a symbol goes to it. Without the shoulder buttons: **Up** on the first entry moves to the symbols,
-**Left/Right** there change the category (the entries under them change with it), and **Down** or **A** goes back into
-the entries. Up/Down move, A opens an entry (or switches it), and B comes back to where you were in one press. The symbols stay in the same place on every category: a long name is
-shortened there ("Screen" for Screen & sound, "Help" for Help & tools), and where even that doesn't fit beside the
-clock (large text in German, the TrimUI Brick), every category's name stands on its own line with the symbols in a slim
-line under it.
-The values ("Home" on Wi-Fi, "Shelf · Dark" on Look, "Auto · Quiet" on Performance & fan: what games run with)
-are short; one that is looked up comes a moment later. An entry that opens a page ends in an arrow **›** on every row;
-one without it changes right in the list: Appearance, Colours, Style, Text size, Motion, Screen frames, every On/Off
-and the like change with Left/Right (or A), and the selected one shows **‹ ›** round its value. The hint at the
-bottom says **A Open** or **‹ › Change**.
+Press **START** on Home or inside any console's game list (Settings is a dedicated button, not a shelf entry). It opens
+straight onto the first category, **Connections**, with live values on the right and a short description of the selected
+row at the bottom.
+
+Across the top sits a bar of icons for all eight categories (showing the active category's name beside its icon) framed
+by **L1** and **R1**: tap L1/R1 to flip categories (wrapping at the ends), or tap an icon on touchscreens. Prefer the
+D-pad? Press **Up** from the top row to focus the icon bar, move **Left/Right** to switch categories, then **Down** or
+**A** to drop into its rows. Press **B** to return straight to where you came from. On tighter layouts (like Large text
+in German or on the TrimUI Brick), category names sit cleanly above a slim icon row.
+
+Rows ending with **›** open a subpage (**A Open**); rows without **›** switch right in place with **Left/Right** or
+**A**, showing **‹ ›** around the selected value (**‹ › Change**).
 
 ![Settings: Connections' entries, the categories' symbols at the top with L1 and R1](pictures/settings.webp)
 
@@ -31,203 +28,170 @@ bottom says **A Open** or **‹ › Change**.
 | **System** | Back to EmulationStation (dArkOS only), Updates, Language, View (Android only), Sleep & power, Battery, Time, Storage, Backup & reset, Kids mode. See [System](settings-system.md#system) |
 | **Help & tools** | Manual, Tour, How you like to play, First-start setup, Tools, Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
 
-Every entry is in one category only, and no entry opens a list of more entries: a page opens from an entry only for a
-step of its own (choosing a network, a password, a QR code, a list to look through).
-**Screen & sound** (brightness, volume, the screen's colour, the menu sounds) and **Controls** (the buttons, the
-controllers and what you feel) share a page of their own: [Settings: Screen & sound, Controls](settings-sound.md). Connections, System and Help & tools are on
-[Settings: Connections, System and Help & tools](settings-system.md).
+On pocket-ui beta for dArkOS, some rows stay out of the way: Bluetooth, Remote access (SSH) and Time are configured in
+dArkOS itself; Tailscale, Sync, RomM and Screen frames aren't available in that port yet; Wi-Fi displays your dArkOS
+connection status; and games copy straight into dArkOS's own folders rather than via the Starter pack.
 
-A page that opens from somewhere else (a hint, a feature card, the pause menu) goes back with B to its category's
-list, as if you had opened it from Settings. In this guide a place in Settings is
-written as its path: Settings → System → **Battery** is the Battery entry in the System category.
+Every setting lives in exactly one category, and subpages only open for focused steps (picking a network, typing a
+password, scanning a QR code or browsing a list). See
+[Settings: Screen & sound, Controls](settings-sound.md) and
+[Settings: Connections, System and Help & tools](settings-system.md) for the remaining categories.
 
-The first start's pages (Wi-Fi, Add games, the look) are the same pages. Opened from Settings, B returns to the
-category's list instead of moving on. The first start's time zone has no page of its own here: Settings → System →
-**Time** does the same job. Settings → Help & tools → **First-start setup** runs the whole first start again
+Any settings page opened via a shortcut, feature card or pause menu returns cleanly to its category list on **B**.
+Throughout this guide, paths read like Settings → System → **Battery**.
+
+First-start screens (Wi-Fi, Add games, Layout) are the exact same pages; opened here, B simply goes back to Settings.
+Re-run the entire welcome flow anytime via Settings → Help & tools → **First-start setup**
 ([Getting started](getting-started.md#3-first-start)).
 
 ## Look
 
-Settings → **Look**. How pocket-ui looks: first how your games stand (the layout), then the style (appearance, colours, type),
-the reading aids (text size, zoom), what moves (motion, the game start) and the little touches you see. The screen's
-brightness and colour are in [Screen & sound](settings-sound.md#screen--sound). Every choice has a row of its own.
-Big text, Large text and Reduced motion together, is a card of the [Tour](tour.md) and a key of the first start.
+Settings → **Look** controls how your shelf looks, reads and moves, from layout and colours to text size, animations and
+cozy visual touches. Brightness, screen colour and audio live under [Screen & sound](settings-sound.md#screen--sound).
+For a one-switch readability preset (Large text + Reduced motion), see the **Big text** card in [Tour](tour.md) or
+press **L2** during first start.
 
 | Entry | What it holds |
 |---|---|
-| **Layout** | How your games stand: Shelf, Easy, Split or Cabinet, each a live preview of your own shelf. See [Choose a look](#choose-a-look) |
-| **Appearance** | **Dark** (the default), **Light** or **Automatic**. A or Left/Right switches it. See [Appearance](#appearance) |
-| **Colours** | The colours of every page: Warm, Indigo Cube, Grey Brick, Green X or Blue Station; with the Retro style, Cocoa or Pea. A or Left/Right switches it. See [Colours and style](theme.md) |
-| **Style** | Barlow type, or **Retro**: pixel letters, frames and icons everywhere, with its own colours and menu sounds; **Retro Pixelify** is Retro with Pixelify's rounder letters. A or Left/Right switches it. See [Colours and style](theme.md#style) |
-| **Text size** | **Normal** (the default), **Medium** or **Large**: larger text on every screen, fewer rows on a page. A or Left/Right switches it. See [Text size](#text-size) |
-| **Motion** | **Full** (the default), **Reduced** or **Off**: how much the menus move. A or Left/Right switches it. See [Motion](#motion) |
-| **Game start animation** | **Cozy**: watch your game slide into the console, and after Quit come back out of it into its case, and the pages, the box and the menus move a little slower and softer. **Quick**: straight into the game, the animations as short as they get. A or Left/Right switches it. Cozy in the Shelf and Cabinet looks until you choose, Quick in the others. See [Game start animation](#game-start-animation) |
-| **Cozy extras** | The little touches you see, each on or off on its own: the TV on the cabinet (and whether it plays a game you haven't played), stickers, printed discs, playful cases, the old-TV switch-on, the handheld switch-on, power lights, light by time of day, decorations, progress from your saves, game connections, Rediscover. See [Cozy extras](#cozy-extras) |
-| **Lived-in shelf** | **Off** (starts off) or **On**: in the Shelf layout some cases of a row of games lean on their neighbour, a few lie on a small stack, and the spaces between them differ a little, like a shelf at home. A or Left/Right switches it. See [Lived-in shelf](#lived-in-shelf) |
+| **Layout** | Pick Shelf, Easy, Split or Cabinet with a live preview of your own games. See [Choose a look](#choose-a-look) |
+| **Appearance** | **Dark** (default), **Light** or **Automatic** (follows time of day). Switch with A or Left/Right. See [Appearance](#appearance) |
+| **Colours** | Colour palette across every screen: Warm, Indigo Cube, Grey Brick, Green X or Blue Station (Cocoa or Pea in Retro style). See [Colours and style](theme.md) |
+| **Style** | Crisp Barlow font, or **Retro** (pixel fonts, frames, icons, palettes and blip sounds; **Retro Pixelify** uses rounder pixel letters). See [Colours and style](theme.md#style) |
+| **Text size** | **Normal** (default), **Medium** or **Large** for easier reading on compact screens. See [Text size](#text-size) |
+| **Motion** | **Full** (default), **Reduced** or **Off** to dial back or disable UI movement. See [Motion](#motion) |
+| **Game start animation** | **Cozy**: watch cartridges and discs slide into your console (and back out on Quit) with gentler transitions. **Quick**: launch straight in with minimal animation. Defaults to Cozy in Shelf and Cabinet, Quick elsewhere. See [Game start animation](#game-start-animation) |
+| **Cozy extras** | Toggle individual touches on or off: cabinet TV (and live preview), case stickers, printed discs, playful cases, old-TV switch-on/off, handheld switch-on, power lights, time-of-day lighting, evening TV glow, shelf decorations, save progress, game connections, Rediscover and GBA model. See [Cozy extras](#cozy-extras) |
+| **Lived-in shelf** | Starts **Off**. Turn **On** in Shelf layout to let occasional cases lean on neighbours, stack sideways at row ends and vary spacing naturally like a real home shelf. See [Lived-in shelf](#lived-in-shelf) |
 
 ### Choose a look
 
-Settings → Look → **Layout** is the first start's last page ("How your games stand"): a scaled-down picture of your shelf in each look, drawn by
-the shelf itself with a few of your systems and one game (with its box art when it has one; on an SD card without
-games, a built-in set of "Sample game"s). It works like every list: Left/Right switch between the four looks, and the
-shelf behind Settings takes the look at once. See [Playing](playing.md#looks) for what each look does. The
-[appearance](#appearance), the [motion](#motion) and the [animations](#game-start-animation) are entries of their own in Settings,
-not rows of this page. A keeps the look as shown; B ("Cancel") goes back to Settings and puts back the look you came with.
+Settings → Look → **Layout** opens the same live preview from first start ("How your games stand"), rendered with your
+actual consoles and box art (or sample games on an empty card). Flip through the four looks with Left/Right to preview
+live behind Settings, press A to keep it, or B ("Cancel") to revert. See [Playing](playing.md#looks) for a breakdown of
+all four layouts.
 
 ### Appearance
 
-Settings → Look → **Appearance**; A or Left/Right switches it. It applies to every look.
+Settings → Look → **Appearance** applies across every layout (switch with A or Left/Right):
 
-- **Dark**, the default: black pages. On the Mini V2's OLED screen black pixels are off, so Dark uses the
-  least battery.
-- **Light**: warm paper pages with dark text, easier to read in daylight. Lit pixels use power, so Light uses more
-  battery than Dark.
-- **Automatic**: light from 07:00, dark from 20:00, by the clock of your time zone ([Time](settings-system.md#time)). It changes
-  only after a few seconds in which nothing was pressed, with a short fade; during a game it changes unseen.
+- **Dark** (default): true black pages, saving battery on OLED panels like the Mini V2.
+- **Light**: warm paper background with dark ink for easy daylight reading (uses more power on OLED).
+- **Automatic**: switches to Light at 07:00 and Dark at 20:00 based on your [Time](settings-system.md#time) zone,
+  fading gently once you pause pressing buttons (or quietly behind a running game).
 
-The choice is saved at once. The pause menu, the power menu and the small messages that appear over the screen
-(volume, brightness, notices) stay dark in both, since they sit over the game's picture.
+The pause menu, power menu and in-game overlays always stay dark so they look right over gameplay.
 
 ### Colours
 
-Settings → Look → **Colours** switches the colour set in place; the whole screen shows it at once. See
-[Colours and style](theme.md#colours).
+Settings → Look → **Colours** changes palettes live across every page. See [Colours and style](theme.md#colours).
 
 ### Style
 
-Settings → Look → **Style** switches the type, or the whole Retro style, in place. See [Colours and style](theme.md#style).
+Settings → Look → **Style** switches between Barlow, Retro and Retro Pixelify live. See
+[Colours and style](theme.md#style).
 
 ### Text size
 
-On small screens such as the Anbernic H700 handhelds, the shelf, game cards and menus keep their full layout,
-scaled down to fit the screen. If the writing feels small, choose Medium or Large here.
+On compact 640×480 screens (like Anbernic H700 handhelds), pocket-ui scales its full layout to fit; bump up **Text size**
+here anytime if labels feel small. Changes apply immediately and persist across reboots and updates:
 
-Settings → Look → **Text size** makes the text larger on every screen. A or Right goes on to the next size,
-Left back to the one before, and the screen shows the new size at once; the choice is saved at once and kept across restarts and updates.
+- **Normal** (default): standard proportions.
+- **Medium:** ~12% larger everywhere, a gentle boost without sacrificing much screen room.
+- **Large:** ~25% larger across shelves, lists, Settings, pause menu, Quick settings, game cards, Curator, search,
+  console pages, alerts and this manual (giant headers like battery percentages and jump letters stay put).
 
-- **Normal**, the default: the sizes pocket-ui is designed with.
-- **Medium**: the text is about an eighth larger everywhere you read it, for when Normal is a little small and Large
-  is more than you need. It changes the same things as Large, a step less.
-- **Large**: the text is about a quarter larger everywhere you read it: the shelf and the game lists, Settings and
-  its pages, the pause menu and its pages, the quick settings, the game card, Curator (the Lens, Echoes, Versions, play
-  history), the search and its keyboard, the console pages, notices and this manual. The large titles (a pulled-out
-  label's name, the big letter of a jump, the battery figure) are big enough already and stay as they are.
-
-With Medium and Large the rows are taller, so a page shows fewer of them and scrolls a little sooner. A name or value that is
-too long for its row ends with "…" and a long text is wrapped, never cut in the middle of a word; where a hint bar has no
-room for every hint, whole hints give way (the least needed first; A, B, HOME and START last), never a button without its word. A few things keep their size because they
-belong to a picture of a fixed size: the titles on the cases' spines and the shelf cards in the Cabinet look, the
-pictures on the Tour's cards and the look previews' shrunken screens, and what is drawn over a running game by
-pocket-core (the in-game messages and Pixel Path's line over the game).
-
-The first start has **Big text** on every page (**L2**, and a row on its first page), so larger text is there from
-the start.
-Safe mode uses the size chosen here too.
+Larger text means slightly taller rows and earlier scrolling; long text wraps cleanly or ends in "…", and crowded hint
+bars drop lower-priority hints whole (keeping A, B, HOME and START last). Fixed-size graphics (case spine labels,
+cabinet shelf cards, Tour thumbnails and in-game pocket-core overlays) keep their designed size. Safe mode respects your
+Text size too, and **L2** toggles **Big text** on every first-start page.
 
 ### Motion
 
-Settings → Look → **Motion**; A or Left/Right switches it (the first start keeps the default; its Big text,
-L2, switches Reduced on with Large text).
+Settings → Look → **Motion** controls menu transitions (A or Left/Right):
 
-- **Full**, the default: the selection glides to the row you move to, lists scroll smoothly, pages slide in,
-  the game card rises out of its label, the hints and small messages fade.
-- **Reduced**: only fades. Pages and messages still fade in, but nothing slides, grows or glides.
-- **Off**: no animation at all; every press shows its result in the next frame.
+- **Full** (default): smooth gliding highlights, scrolling lists, sliding pages, rising game cards and gentle fades.
+- **Reduced**: soft fades only, with no sliding, gliding or growing.
+- **Off**: zero animations; every press snaps immediately to the next frame.
 
-Moving menus aim for up to 60 frames a second. Still pages rest until something changes.
-
-None of them makes anything slower: a press changes what is selected or opened at once, whichever you choose,
-and pressing again in the middle of a movement takes it straight to the new place. The choice is saved at once.
+Animated menus target 60 fps while static screens rest idle. None of these add input lag: presses register immediately
+and interrupt any motion mid-flight.
 
 ### Game start animation
 
-Settings → Look → **Game start animation**. The first start doesn't ask: the look decides until you choose here.
+Settings → Look → **Game start animation** sets the pacing when launching and quitting games:
 
-- **Cozy**: when you start a game in the Shelf or the Cabinet look, you watch its case open and the cartridge or disc slide into the console
-  (about a second, with a click). Pages, the game's box and the menus take about a third longer and ease in more softly.
-- **Quick**: straight into the game; the animations as short as they get.
+- **Cozy:** in Shelf and Cabinet, your case opens and slides its cartridge or disc straight into the console (~1 second
+  with a satisfying click), and page transitions ease a little softer.
+- **Quick:** jumps straight into the game with minimal animation.
 
-Until you choose, the look decides: Cozy for Shelf and Cabinet, Quick for Split. Once you choose, it stays
-yours, whatever look you pick later. With Cozy, a game of pocket-core's is shown once the animation is over, so it starts
-about a second later than with Quick (a game that needs longer to load is not held at all); any button skips the rest.
-The shelf fades to black before the picture comes on like an old TV, in a third of a second: a bright line grows out of
-the middle, and the picture opens out of it, squeezed at first. A handheld's game (Game Boy, GBA, DS, PSP) has no TV and
-no tube: once the game is in, the console's power light comes on and its display lights up (a muted tone, nothing else gets bright),
-the rest of the screen goes dark round it and the picture comes up out of the dark, a little sooner than the tube's would have. Continue follows the same order: an open case plays the whole scene too, its moment waiting, still, until the game is in; the saved picture behind a reminder stays visible
-(with Motion on Full; Quick and Reduced skip it, and a button press cuts it short).
-**Motion** (Reduced, Off) still overrides it: nothing slides where Motion says so.
+Defaults to Cozy for Shelf and Cabinet and Quick for Split until you pick your own preference (which then sticks across
+layouts). On Cozy, pocket-core finishes the ~1 s ritual before showing the game (slower-loading games aren't held back;
+press any button to skip). TV consoles warm up like a vintage CRT in a third of a second (from a bright line expanding
+into the picture), while handhelds (Game Boy, GBA, DS, PSP) click on their power light and glow their screen up from dark.
+Continuing an open case plays the same ritual while your saved moment waits ready underneath (skipped on Quick or
+Reduced/Off motion, or on any button press).
 
-After Quit, Cozy plays the way back in every look that puts games into consoles, including Easy and Kids Mode.
-The shelf is already usable: any button or touch ends the effect and takes its usual action. A handheld display
-goes dark; with Old-TV switch-on enabled a TV picture closes to a line and a dot. The cartridge or disc returns
-to its case, which stays a little open when Continue waits. Quick and Motion Reduced or Off show the shelf at once.
+After Quit, Cozy plays the return trip: TV shrinking to a glowing dot (when Old-TV switch-on is enabled) or handheld
+going dark, and the cartridge or disc sliding back into its case (left ajar if Continue is waiting). Your shelf is
+live right away, so any button press or tap skips straight to action.
 
 ### Lived-in shelf
 
-Settings → Look → **Lived-in shelf** makes the Shelf layout's rows of games look like a shelf at home, calm and still easy
-to read: now and then a case leans a few degrees on its neighbour, the last two or three of a long row (and in a long row
-often a few in the middle) lie on a small stack with their spines to you, smaller cases on bigger ones, the spaces between
-the cases differ a little and a few stand a little further back or forward. **Off** (the default): every case stands
-straight, as before. A or Left/Right switches it; it takes effect at once and is kept across restarts.
+Settings → Look → **Lived-in shelf** gives Shelf rows the organic charm of a real game collection at home: occasional
+cases lean slightly against their neighbour, two or three cases at the end (or middle) of long rows stack flat with
+spines facing you (smaller boxes perched on larger ones), and spacing varies subtly. Starts **Off** for crisp, straight
+rows; toggle **On** with A or Left/Right for instant effect.
 
-It is the same at every start: each game's place and pose come from the game itself, so nothing moves while you scroll,
-and a game you add only changes the row around it. It is in every row of games, Favourites included; Home's row of
-systems and short rows (fewer than six games) stay straight, and a game whose case stands open (Continue waits) always
-stands up. A row that fits on the shelf standing straight never has to scroll for a stack: it gets no stack then. Select
-a leaning case and it comes out of the row as any other; select a lying one and it slides out of its stack sideways,
-like a book, and stays on what it lay on. The leaning and lying cases are drawn ahead in the
-moments after you open a row, so scrolling along it stays smooth.
+Every game's pose is deterministic, so nothing shifts randomly as you scroll (adding a game only nudges its immediate
+neighbours). Applies to game rows and Favourites while keeping Home's console row, short rows (<6 games) and open
+Continue cases standing straight, and a row that fits on screen standing up never adds a stack that would force
+scrolling. Highlighting a leaning case lifts it cleanly; highlighting a stacked case slides it out sideways like pulling
+a book from a pile. Leaning and stacked boxes pre-render right after opening a row so scrolling stays silky smooth.
 
 ### Cozy extras
 
-Settings → Look → **Cozy extras** switches the little touches you see, one by one, for when you like some of them and
-not others. Up/Down move, A (or Left/Right) switches the selected one **On** or **Off**; it takes effect at once and is
-kept across restarts. The line under the list says what the selected one does and in which looks you see it. Reset
-settings (System → Backup & reset) puts them back as they start. Playful cases and the old-TV switch-on and switch-off need the
-[animations](#game-start-animation) or the [motion](#motion) to be seen; while one of those keeps them from showing, the line at
-the bottom says which. Case sounds, the one you hear, is an entry of [Screen & sound](settings-sound.md#screen--sound), beside Menu sounds.
+Settings → Look → **Cozy extras** lets you cherry-pick every cozy touch individually. Move with Up/Down, toggle **On**
+or **Off** with A or Left/Right (applies immediately and persists across reboots; **Reset settings** restores defaults).
+If Game start animation or Motion currently suppresses an effect, the footer tells you which setting to check. Audio
+toggles (**Case sounds**) live under [Screen & sound](settings-sound.md#screen--sound) beside Menu sounds.
 
 ![Settings → Look → Cozy extras: Sealed new games and Progress from saves in the list, the selected one explained below](pictures/cozy-extras.webp)
 
 | Extra | What it does | Start |
 |---|---|---|
-| **TV on the cabinet** | A small old TV on top of the cabinet shows the selected game. Cabinet look only | On |
-| **TV plays the game** | The TV on the cabinet shows a game you have never played running live, without sound, after you rest on it for two seconds, for 25 seconds at most ([The TV on the cabinet](playing.md#the-tv-on-the-cabinet)). It runs a second, hidden player, so the handheld works harder and the battery drains faster while it plays. Off: no second player is ever started and nothing extra runs; the TV shows its still picture as before. Cabinet look only | Off |
-| **Stickers on cases** | Your stickers on the cases. Off hides them on the shelf and the box; they stay on the game and on its card's Stickers row. Shelf and Cabinet looks only | On |
-| **Printed discs** | Discs printed with their cover's art and title. Off: a plain disc in its console's colour. Shelf and Cabinet looks only | On |
-| **Playful cases** | Cases spring out and wiggle, each game goes into its console its own way, the open box's disc turns, spines lean as you scroll, stickers you put on are pressed onto the case in the game box ([Playing](playing.md#starting-a-game)). Shelf and Cabinet looks only, with Motion on Full | On with Cozy, Off with Quick |
-| **Sealed new games** | A game you have never played stands in the shop's clear plastic wrap: on the shelf, in the cabinet, in Easy, on Split's box art and on its card, and the box's front and back. The first time you start it the wrap tears off with a rip (with Animations on Cozy and Motion on Full; otherwise it is simply gone), for good. A game counts as played when it has playing time, a status you chose, a save or state, a clock file, a memory card or known progress, or is in your recent games | On |
-| **Old-TV switch-on** | The game's picture comes on like an old TV when it starts: a bright dot in the dark, a line, the empty blue channel with a moment of snow, then the game's picture comes through (under half a second; the game already runs). A handheld (Game Boy, GBA, DS, PSP …) switches on like a handheld instead: its power light and display come on in the console, then the picture comes up. In looks with the insertion animation, with Animations on Cozy and Motion on Full | On |
-| **Old-TV switch-off** | After Quit a TV picture closes to a line and a dot that glows on a moment, like an old TV; a handheld's game just goes dark. Off: the way back starts from black. Shelf and Cabinet looks, with Animations on Cozy and Motion on Full | On |
-| **Handheld switch-on** | A handheld's display switches on and off like the real one, over the game's first half second: the Game Boy's olive glass goes dark green and its picture rises out of it, the Game Boy Color's and the GBA's glass comes up from grey, the SP's front light glows on before its picture, the PSP's picture fades in softly, the Game Gear's and the Lynx's backlight flickers on, the DS's two screens light up. After Quit the Game Boy's picture sinks back into its green, the SP's front light drops at once, the Game Gear's backlight cuts out, the PSP fades to black. Off: the picture just comes up out of the dark and goes dark. Shelf and Cabinet looks, with Animations on Cozy and Motion on Full | On |
-| **Power lights** | The power light of a handheld's screen frame in the game (Game Boy, Game Boy Color, GBA, SP, PSP, Game Gear, Lynx and the other handheld frames) does what the real one did: it shows your battery, and when the battery reaches the "Battery low" level (5 %) the Game Boy's red light dims, the GBA's and the SP's green light turns red, the PSP's blinks orange and the Game Gear's flashes red. When a moment is saved it blinks twice, briefly. Off: the light stays steadily on. Without a frame (Screen frames off or full screen) there is no light | On |
-| **Light by time of day** | The room's light follows your Pocket's clock: cool and bright in the morning, warm in the evening with the lamp glowing, dim at night. Very gentle: covers and text keep their colours. Shelf and Cabinet looks only | On |
-| **Evening TV glow** | After dark by your Pocket's clock, while the TV on the cabinet is on, the room dims a little and the TV's warm light falls on the boards and the cases near it. Gentle: covers and text stay readable. Cabinet look only | On |
-| **Decorations** | Things on your shelves that grow with your play: the plant grows with your hours, a trophy after your first completed game, a framed "100 %" after your first 100 % sticker, a small figurine for each system you played for 10 hours. Only where a shelf has room. This works with Light by time of day on or off. Off: the shelves as they were. Shelf and Cabinet looks only | On |
-| **Progress from saves** | Where you are, from your own save: on the box's back, beside Continue and on Where was I? ([details](library.md#where-you-are-in-the-game)). Off: no line anywhere and no save is read, so nothing is given away | On |
-| **Game connections** | The developer, publisher, series and genre on the info page and the box's back lead to your other games with the same one ([Connections](library.md#connections)). Off: they are only shown | On |
-| **Rediscover** | Games you haven't played for a long time, as a row in Curator's list | On |
-| **GBA console** | **Game Boy Advance** or **Game Boy Advance SP**. Changes the GBA hardware picture everywhere, including the shelf, console page and cabinet. The SP opens before its cartridge slides into the bottom slot, label facing the underside. Up/Down reaches the row; A or Left/Right changes it and keeps the choice across restarts. Your games and emulator stay the same | Game Boy Advance |
+| **TV on the cabinet** | Places a mini retro TV atop the cabinet previewing your selected game (Cabinet layout only) | On |
+| **TV plays the game** | Runs unplayed games live (muted) on the cabinet TV for up to 25 seconds after resting 2 seconds ([The TV on the cabinet](playing.md#the-tv-on-the-cabinet)). Launches a background player, so it works harder and uses more battery; Off keeps a crisp still preview (Cabinet only) | Off |
+| **Stickers on cases** | Shows your stickers on boxes in Shelf and Cabinet. Off hides them visually while keeping them saved on the game card | On |
+| **Printed discs** | Prints cover art and titles directly onto game discs. Off shows clean console-coloured discs (Shelf and Cabinet) | On |
+| **Playful cases** | Springy case wiggles, console-specific loading animations, spinning discs inside open cases, leaning spines while scrolling and tactile sticker-pressing ([Playing](playing.md#starting-a-game)). Shelf and Cabinet, with Motion Full | On with Cozy, Off with Quick |
+| **Sealed new games** | Wraps unplayed games in clear shop cellophane across Shelf, Cabinet, Easy, Split and game cards, ripping open with a tear on first launch (when Game start animation is Cozy and Motion Full; otherwise vanishes cleanly). Any play time, status, save, state, clock file, memory card, progress or recent entry counts as played | On |
+| **Old-TV switch-on** | Warms up TV console games like a real CRT: bright dot, horizontal line, blue AV channel and quick burst of snow before the game appears (<0.5 s while the game already runs). Handhelds light up their own screen and power light instead. Requires Cozy + Motion Full | On |
+| **Old-TV switch-off** | Collapses TV games back to a horizontal line and glowing dot after Quit (handhelds simply darken). Off returns from black. Shelf and Cabinet, with Cozy + Motion Full | On |
+| **Handheld switch-on** | Authentic handheld power-on/off curves over the first half-second: Game Boy olive glass darkening in, GBC/GBA rising from grey, GBA SP frontlight glow, PSP soft fade, Game Gear/Lynx backlight flicker, DS dual screens lighting, plus matching shutoff fades on Quit. Off fades cleanly from black. Shelf and Cabinet, Cozy + Motion Full | On |
+| **Power lights** | Brings handheld frame LEDs to life: dims Game Boy/Pocket red at Battery low (5%), turns GBA/SP green to red, blinks PSP orange and flashes Game Gear red, plus a quick double-blink whenever you save a state. Off keeps the LED steady (requires a handheld screen frame) | On |
+| **Light by time of day** | Shifts room lighting subtly with your clock: cool morning light, warm evening lamp glow, dim late-night tone while keeping covers and text true (Shelf and Cabinet) | On |
+| **Evening TV glow** | After dark, dims the room slightly while the cabinet TV casts a warm glow onto nearby boards and cases (Cabinet only) | On |
+| **Decorations** | Living shelf mementos: a plant that grows with play hours, a trophy for your first completed game, a framed "100 %" for your first 100% sticker, and a mini figurine for every console you play 10+ hours (where space allows; Shelf and Cabinet) | On |
+| **Progress from saves** | Reads your in-game saves to show real milestones on the box back, beside Continue and on Where was I? ([details](library.md#where-you-are-in-the-game)). Off hides progress and stops reading saves | On |
+| **Game connections** | Turns developer, publisher, series and genre on game cards and box backs into clickable links to matching games in your library ([Connections](library.md#connections)). Off displays them as plain text | On |
+| **Rediscover** | Surfaces games you played a year ago or haven't touched in ages inside Curator | On |
+| **GBA console** | Pick **Game Boy Advance** or **Game Boy Advance SP** across shelves, console pages and Cabinet (the SP flips open and loads cartridges into its bottom slot label-down). Persists across reboots without affecting games or emulators | Game Boy Advance |
 
 #### Sealed new games
 
-A game you have never played comes in the shop's clear plastic wrap, like a new one off the shelf, so your untouched games
-look different from the ones you have played. The first time you start it, the wrap tears off with a rip (with
-Animations on Cozy and Motion on Full; otherwise it is simply gone) and stays off for good, also if you never finish the game.
-A game counts as played when it has playing time, a session, a status you chose or a place in your recent games,
-or when a save, save state, clock file or memory card belongs to it, or pocket-ui knows its progress. Saves copied
-from another device or frontend count too, even with no recent entry or measured time here. The shelf, box and
-"Never played" lists use this same rule. A save without a timed session says "Not here yet" for its play time;
-pocket-ui does not invent a duration or last-played date. "Where was I?" still needs a known date and a resumable moment.
+Unplayed games arrive wrapped in crisp retail plastic wrap so untouched treasures stand out on your shelf. The first
+time you launch one, the cellophane tears away for good (animated with Cozy + Motion Full, or gone instantly otherwise),
+even if you only play a minute. Any play time, chosen status, recent entry, save, state, RTC file, memory card or
+detected progress counts as played, including saves imported from another handheld or frontend (which show "Not here yet"
+for play time rather than inventing a fake duration; "Where was I?" still needs a known date and resumable moment).
 
 ![A game you have never played: Super Mario Kart's box in its wrap, the cartridge beside it](pictures/sealed-case.webp)
 
 #### Console colours
 
-Some consoles come in more than one colour, as the real ones did: the **Game Boy Advance** (Original, Milky Blue, Pink), the
-**Game Boy Color** (Original, Dandelion), the **Nintendo 64** (Original, Ice Blue, Jungle Green) and the **GameCube**
-(Original, Jet Black). It is not a row here: on the console's page (X on the system) a line under the picture, like
-**‹ Milky Blue ›**, names the colour, and **Left** and **Right** go to the next one and round again to the Original (a tap on
-the left or right half of that line does the same). The colour shows everywhere: the console on the shelf, its page, the
-cabinet's TV, and the moment a game goes into it and comes out again. It is kept across restarts. The Advance SP (GBA console
-above) has its own picture. A colour a later version does not know yet shows the Original.
+Several consoles offer authentic colourways: **Game Boy Advance** (Original, Milky Blue, Pink), **Game Boy Color**
+(Original, Dandelion), **Nintendo 64** (Original, Ice Blue, Jungle Green) and **GameCube** (Original, Jet Black).
+Open the console's page (X on the system) and press **Left/Right** on the colour line beneath its picture
+(**‹ Milky Blue ›**, or tap left/right on touchscreens). Your chosen colour updates everywhere (shelf, console page,
+cabinet TV and start/quit animations) and stays saved across reboots. *(GBA SP uses its own artwork via GBA console
+above.)*

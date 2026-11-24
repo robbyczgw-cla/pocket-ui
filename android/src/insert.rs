@@ -78,9 +78,10 @@ fn png_size(png: &[u8]) -> Option<(i32, i32)> {
 pub fn play_cues(cozy: bool, game: &Game) {
     let system = rig_system(game);
     let kind = media::Game::of(system, &game.relative);
-    let disc_rig = cozy && pocket_ui::playful::on() && ir::takes_disc(system, kind);
+    let playful = pocket_ui::playful::on();
+    let mechanism = (cozy && playful).then(|| ir::moving_kind(system, kind)).flatten();
     let ctx = ui_sound::Ctx { config: Default::default(), in_game: false, pause_menu: false, asleep: false };
-    for cue in insert_scene::cues(cozy, Medium::of(system), disc_rig, pocket_ui::playful::on()) {
+    for cue in insert_scene::cues(cozy, Medium::of(system), kind, FormFactor::of(system), mechanism, playful) {
         let after = if cue.after.is_zero() { cue.after } else { cue.after + PICTURE_LATE };
         ui_sound::play_after(cue.sound, &ctx, after, cue.db);
     }

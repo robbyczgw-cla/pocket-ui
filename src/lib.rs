@@ -1,5 +1,6 @@
 //! Shared pocket-ui library with target-owned composition.
 pub mod trace;
+pub mod background_io;
 
 /// The public contact address, the only place in the code that spells it (report.rs, report_phone.rs and the Android help use it). A macro, so `concat!` can put it into the
 /// constants below and into `android`'s help text. Changing it also means the translated lines in `assets/i18n/*.tsv`

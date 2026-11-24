@@ -277,9 +277,9 @@ impl SyncPage {
     /// The line under the list for the selected row.
     pub fn describe(&self, row: Row) -> &'static str {
         match row {
-            Row::Switch => "Saves and states, in step across devices.",
-            Row::AfterPlay => "Look for new saves as soon as a game ends.",
-            Row::Versions if self.waiting() > 0 => "Saves changed on two devices. Choose which to keep.",
+            Row::Switch => "Sync saves and states across devices.",
+            Row::AfterPlay => "Check for new saves right after quitting.",
+            Row::Versions if self.waiting() > 0 => "Save conflict between devices. Pick which to keep.",
             Row::Versions => "Nothing is waiting for a choice.",
             Row::Share(s) => self.describe_pause(s).unwrap_or(s.blurb()),
         }

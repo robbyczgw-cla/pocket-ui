@@ -2,7 +2,9 @@
 
 Settings → Games → **RomM** (user guide: [docs/user/romm.md](user/romm.md)). The games on the player's own
 [RomM](https://romm.app) server stand on the shelf beside the card's; a game downloads at its first start and is a file on
-the card from then on. Shared code for Linux (ROCKNIX, the Brick, dArkOS) and Android's handheld view.
+the card from then on. Shared code for Linux (ROCKNIX, the Brick) and Android's handheld view. Not in the dArkOS port: there
+each system's games folder is read only (start.sh's view), so a download has nowhere to go and the row is left out
+(`darkos::LEAVES_OUT`, [DARKOS.md](DARKOS.md#settings-in-the-port)).
 
 | Module | What it does |
 |---|---|

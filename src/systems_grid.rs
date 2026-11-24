@@ -119,7 +119,7 @@ const OWN_CORES_WITHOUT_BIOS: [&str; 5] = ["gb", "gbc", "gba", "nes", "snes"];
 fn bios(id: &str, bios_dir: &Path) -> Bios {
     if let Some(sys) = crate::hostsys::find(id) {
         // "None needed" only for systems played through on the device; an unchecked one may still want one
-        // (Neo Geo's neogeo.zip, say).
+        // (an arcade board's set, say).
         if sys.bios.is_empty() {
             return if sys.verified { Bios::NotNeeded } else { Bios::Unknown };
         }
@@ -300,7 +300,9 @@ mod tests {
 
         let msx = info("msx", "MSX", &["rom"]);
         assert_eq!(details(&msx, &bios).1, Bios::Unknown, "not one pocket-ui knows");
+        let fbn = info("fbn", "Arcade", &["zip"]);
+        assert_eq!(details(&fbn, &bios).1, Bios::Unknown, "wired in hostsys but not played through: no promise");
         let neogeo = info("neogeo", "Neo Geo", &["zip"]);
-        assert_eq!(details(&neogeo, &bios).1, Bios::Unknown, "wired in hostsys but not played through: no promise");
+        assert!(matches!(details(&neogeo, &bios).1, Bios::Needed { missing: Some(_), .. }), "Neo Geo games need neogeo.zip");
     }
 }

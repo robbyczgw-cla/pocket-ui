@@ -69,7 +69,7 @@ fn missing_file(data_dir: &Path, kind: Kind, system: &str) -> PathBuf {
 
 /// The games a `.missing` list of this kind names, by ROM stem.
 pub fn listed_missing(data_dir: &Path, kind: Kind, system: &str) -> HashSet<String> {
-    std::fs::read_to_string(missing_file(data_dir, kind, system)).unwrap_or_default().lines().map(str::to_string).collect()
+    crate::background_io::read_to_string(missing_file(data_dir, kind, system)).unwrap_or_default().lines().map(str::to_string).collect()
 }
 
 fn is_png(file: &Path) -> bool {
@@ -99,7 +99,7 @@ fn missing_with_policy(data_dir: &Path, games: &[(String, PathBuf)], tried: &Has
             }
             let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
             Kind::ALL.iter().any(|&kind| {
-                !path(data_dir, kind, sys, rom).exists()
+                !crate::background_io::exists(path(data_dir, kind, sys, rom))
                     && (retry_missing || !listed.entry((kind, sys.as_str())).or_insert_with(|| listed_missing(data_dir, kind, sys)).contains(stem))
             })
         })
@@ -138,7 +138,7 @@ pub(crate) enum Lookup {
 pub(crate) struct Catalog {
     playlist: String,
     kind: Kind,
-    names: Vec<String>,
+    names: covers::Index,
     available: Option<bool>,
 }
 
@@ -147,7 +147,7 @@ impl Catalog {
         current: &'a mut Option<Self>, remote: &dyn Remote, playlist: &str, kind: Kind,
     ) -> &'a mut Self {
         if current.as_ref().is_none_or(|c| c.playlist != playlist) {
-            *current = Some(Self { playlist: playlist.into(), kind, names: remote.index(playlist, kind), available: None });
+            *current = Some(Self { playlist: playlist.into(), kind, names: covers::Index::new(remote.index(playlist, kind)), available: None });
         }
         current.as_mut().unwrap()
     }
@@ -167,7 +167,7 @@ impl Catalog {
             };
         }
         let available = self.available.get_or_insert_with(|| {
-            self.names.first().is_some_and(|name| remote.available(&self.playlist, self.kind, name, &dest.with_extension("probe")))
+            self.names.names().first().is_some_and(|name| remote.available(&self.playlist, self.kind, name, &dest.with_extension("probe")))
         });
         if *available { Lookup::Missing } else { Lookup::Failed }
     }
@@ -216,7 +216,8 @@ pub struct Scraped {
 
 fn note_missing(data_dir: &Path, kind: Kind, system: &str, stem: &str) {
     let file = missing_file(data_dir, kind, system);
-    let now = std::fs::read_to_string(&file).unwrap_or_default();
+    let now = crate::background_io::read_to_string(&file).unwrap_or_default();
+    if crate::background_io::cancelled() { return; }
     if !now.lines().any(|l| l == stem) {
         let _ = crate::fsutil::write_atomic(&file, format!("{now}{stem}\n").as_bytes());
     }
@@ -254,8 +255,9 @@ fn scrape_with_policy(
         let Some(list) = covers::playlist(sys) else { continue };
         let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
         for (kind, index) in Kind::ALL.into_iter().zip(&mut indexes) {
+            if stop() { break 'games; }
             let dest = path(data_dir, kind, sys, rom);
-            if dest.exists() || (!retry_missing && listed_missing(data_dir, kind, sys).contains(stem)) {
+            if crate::background_io::exists(&dest) || (!retry_missing && listed_missing(data_dir, kind, sys).contains(stem)) {
                 continue;
             }
             if stop() {
@@ -437,6 +439,7 @@ mod tests {
     /// starts (`covers::set_game_on`) ends the run after the picture in flight, also the first start's.
     #[test]
     fn a_game_that_starts_stops_the_picture_run_after_the_picture_in_flight() {
+        let _lock = covers::READER_TEST.lock().unwrap_or_else(|e| e.into_inner());
         let d = dir("game-on");
         let games = vec![game("gba", "Advance Wars (USA)"), game("gba", "Wario Land 4 (USA, Europe)"), game("gba", "Tekken Advance (USA)")];
         let fake = Fake::new(&["Advance Wars (USA)", "Wario Land 4 (USA, Europe)", "Tekken Advance (USA)"]);

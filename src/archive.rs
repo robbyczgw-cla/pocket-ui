@@ -1,6 +1,7 @@
-//! Reads one ROM out of a .zip, for cores that take ROM data but do not open archives themselves
-//! (most 8/16-bit cores: the frontend is expected to unpack, as RetroArch does). Stored and deflated
-//! entries; no ZIP64, no encryption. 7z is not supported: pocket-ui leaves those games to RetroArch.
+//! Reads one ROM out of a .zip for cores that leave archive extraction to the frontend.
+//! The caller can pass the extracted ROM in memory or stage it for a file-based core. Stored and deflated
+//! entries; no ZIP64, no encryption. A .7z is read the same way by `seven_zip` (`extract_rom`, `rom_crc`, `refusal_in`
+//! hand it over by its name).
 //!
 //! Which entry is the game is not decided by archive order: one file of the system's extensions is the game, and
 //! readmes, pictures and checksum files next to it do not count; two or more candidates are refused. The unpacked
@@ -14,7 +15,7 @@
 use std::path::Path;
 
 /// Largest ROM we unpack into memory.
-const MAX_ROM: usize = 64 << 20;
+pub(crate) const MAX_ROM: usize = 64 << 20;
 /// Largest zip read into memory to unpack it: the ROM inside is at most [`MAX_ROM`]; this leaves room for a manual or
 /// pictures beside it. Checked by size before a byte is read (security review M5: a 9 GB "zip" was read whole first).
 pub const MAX_ZIP: u64 = 128 << 20;
@@ -24,12 +25,25 @@ pub const MAX_IN_MEMORY: u64 = 512 << 20;
 
 /// The whole of `path`, refused before anything is read when it is larger than `max` bytes.
 pub fn read_bounded(path: &Path, max: u64) -> Result<Vec<u8>, String> {
+    check_size(path, max)?;
+    std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// `read_bounded`'s refusal of a file larger than `max` bytes, without reading it.
+pub(crate) fn check_size(path: &Path, max: u64) -> Result<(), String> {
     let len = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?.len();
     if len > max {
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         return Err(format!("{name} is too big to load ({} MB; at most {} MB)", len >> 20, max >> 20));
     }
-    std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))
+    Ok(())
+}
+
+/// The archive type of `path` by its name, "zip" or "7z", when pocket-core unpacks the game out of it for a core that
+/// doesn't open that type itself (`extract_rom`); None for any other file.
+pub fn archive_type(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?;
+    ["zip", "7z"].into_iter().find(|t| ext.eq_ignore_ascii_case(t))
 }
 
 fn le16(b: &[u8], at: usize) -> Option<usize> {
@@ -153,6 +167,12 @@ pub(crate) fn is_clutter(ext: &str) -> bool {
 /// The game among a zip's entries: the one file whose extension is in `wanted`, else the one file that is not a readme,
 /// picture or checksum; a refusal for the player otherwise (`extract_rom`).
 fn pick<'a>(list: &'a [Entry], wanted: &[&str], zip_name: &str) -> Result<&'a Entry, String> {
+    let names: Vec<&str> = list.iter().map(|e| e.name.as_str()).collect();
+    pick_name(&names, wanted, zip_name).map(|i| &list[i])
+}
+
+/// `pick` over an archive's entry names (folders end in '/'): the game's place in `names`. Also the 7z's (`seven_zip`).
+pub(crate) fn pick_name(names: &[&str], wanted: &[&str], zip_name: &str) -> Result<usize, String> {
     let ext_of = |n: &str| {
         Path::new(n)
             .extension()
@@ -160,15 +180,15 @@ fn pick<'a>(list: &'a [Entry], wanted: &[&str], zip_name: &str) -> Result<&'a En
             .map(str::to_ascii_lowercase)
             .unwrap_or_default()
     };
-    let files: Vec<&Entry> = list.iter().filter(|e| !e.name.ends_with('/') && !is_junk(&e.name)).collect();
-    let mut candidates: Vec<&Entry> = files.iter().copied().filter(|e| wanted.contains(&ext_of(&e.name).as_str())).collect();
+    let files: Vec<usize> = (0..names.len()).filter(|&i| !names[i].ends_with('/') && !is_junk(names[i])).collect();
+    let mut candidates: Vec<usize> = files.iter().copied().filter(|&i| wanted.contains(&ext_of(names[i]).as_str())).collect();
     if candidates.is_empty() {
-        candidates = files.iter().copied().filter(|e| !is_clutter(&ext_of(&e.name))).collect();
+        candidates = files.iter().copied().filter(|&i| !is_clutter(&ext_of(names[i]))).collect();
     }
     match candidates[..] {
         [] if files.is_empty() => Err(message("empty", zip_name)),
         [] => Err(message("none", zip_name)),
-        [e] => Ok(e),
+        [i] => Ok(i),
         _ => Err(refusal(format!("{zip_name} holds {} game files.", candidates.len()), 0)),
     }
 }
@@ -180,18 +200,20 @@ const MAX_DIRECTORY: usize = 4 << 20;
 /// of the file: nothing is unpacked, so a 30 MB zip costs one or two small reads (`rom_id`). The game is the entry
 /// `extract_rom` would take; None when it would refuse (several games, no game) or the file is no zip it can read.
 pub fn rom_crc(zip_path: &Path, wanted: &[&str]) -> Option<(u32, u64)> {
-    let list = directory_of(zip_path).ok()??;
+    rom_crc_until(zip_path, wanted, || false)
+}
+
+pub(crate) fn rom_crc_until(zip_path: &Path, wanted: &[&str], stop: impl Fn() -> bool) -> Option<(u32, u64)> {
+    let mut file = crate::background_io::open_until(zip_path, stop).ok()?;
+    if crate::seven_zip::is_7z(zip_path) {
+        return crate::seven_zip::rom_crc_in(&mut file, wanted);
+    }
+    let list = directory_in(&mut file).ok()??;
     let e = pick(&list, wanted, "").ok()?;
     Some((e.crc, e.usize as u64))
 }
 
-/// The entries of the zip at `zip_path`, read from the end of the file. Outer None: no end record, so the file was cut
-/// off or is no zip. An error: it could not be read, or its directory doesn't read as one.
-fn directory_of(zip_path: &Path) -> Result<Option<Vec<Entry>>, String> {
-    directory_in(&mut std::fs::File::open(zip_path).map_err(|e| e.to_string())?)
-}
-
-/// `directory_of` over anything that reads and seeks: a file, or an open Android document.
+/// A ZIP's entries, read from the end of a file or an open Android document.
 fn directory_in(f: &mut (impl std::io::Read + std::io::Seek)) -> Result<Option<Vec<Entry>>, String> {
     use std::io::SeekFrom;
     let bad = |e: std::io::Error| e.to_string();
@@ -257,6 +279,9 @@ pub fn refusal_of(zip_path: &Path, wanted: &[&str], only_cut_off: bool) -> Optio
 
 /// `refusal_of` for a zip that is open already; `zip_name` is how the sentence calls it.
 pub fn refusal_in(zip: &mut (impl std::io::Read + std::io::Seek), zip_name: &str, wanted: &[&str], only_cut_off: bool) -> Option<String> {
+    if crate::seven_zip::is_7z(Path::new(zip_name)) {
+        return crate::seven_zip::refusal_in(zip, zip_name, wanted, only_cut_off);
+    }
     let list = match directory_in(zip) {
         Ok(Some(list)) => list,
         Ok(None) => return Some(message("incomplete", zip_name)),
@@ -278,8 +303,11 @@ pub fn refusal_in(zip: &mut (impl std::io::Read + std::io::Seek), zip_name: &str
 /// The ROM inside `zip_path`: the one file whose extension is in `wanted` (lower case, no dot), else the one file
 /// that is not a readme, picture or checksum. Several candidates, an encrypted or unsupported entry, or bytes that do
 /// not match the entry's CRC-32 are refused with a message for the player (`is_refusal`). Returns its name inside the
-/// archive and its contents.
+/// archive and its contents. A .7z goes to `seven_zip`, which does the same.
 pub fn extract_rom(zip_path: &Path, wanted: &[&str]) -> Result<(String, Vec<u8>), String> {
+    if crate::seven_zip::is_7z(zip_path) {
+        return crate::seven_zip::extract_rom(zip_path, wanted);
+    }
     let z = read_bounded(zip_path, MAX_ZIP)?;
     let zip_name = zip_path.file_name().and_then(|n| n.to_str()).unwrap_or("The zip file");
     // No end record: the file was cut off (a copy or a download that stopped). Nothing opens it, RetroArch neither (its
@@ -664,6 +692,52 @@ fn runtime_raw<'a>(bytes: &'a [u8], entry: &Entry, directory_at: usize) -> Resul
     }
     if entry.method == 0 && entry.csize != entry.usize { return Err(bad()); }
     bytes.get(start..end).ok_or_else(bad)
+}
+
+/// What a zip says about itself without unpacking it: every entry's name and unpacked size, the zip's comment, and the
+/// unpacked bytes of the first entry `wanted` accepts (stored or deflated, at most 1 MB). For a PortMaster game or a
+/// runtime package put on the card (`ports_card`): its `port.json`, and PortMaster's architecture in the comment.
+pub struct Listing {
+    pub entries: Vec<(String, u64)>,
+    pub comment: String,
+    pub picked: Option<(String, Vec<u8>)>,
+}
+
+/// [`Listing`] of the zip at `path`. None: no zip directory at the end (no zip, or cut off on the way).
+pub fn listing(path: &Path, wanted: impl Fn(&str) -> bool) -> Result<Option<Listing>, String> {
+    use std::io::{Read, Seek, SeekFrom};
+    const MAX_PICKED: usize = 1 << 20;
+    let bad = |e: std::io::Error| e.to_string();
+    let mut f = std::fs::File::open(path).map_err(bad)?;
+    let Some(list) = directory_in(&mut f)? else { return Ok(None) };
+    let len = f.seek(SeekFrom::End(0)).map_err(bad)?;
+    let tail_len = len.min(22 + 65535);
+    let mut tail = vec![0; tail_len as usize];
+    f.seek(SeekFrom::Start(len - tail_len)).map_err(bad)?;
+    f.read_exact(&mut tail).map_err(bad)?;
+    let comment = find_end(&tail)
+        .and_then(|at| tail.get(at + 22..at + 22 + le16(&tail, at + 20)?))
+        .map(|c| String::from_utf8_lossy(c).trim().to_string())
+        .unwrap_or_default();
+    let mut picked = None;
+    if let Some(e) = list.iter().find(|e| wanted(&e.name) && e.flags & 1 == 0 && e.csize <= MAX_PICKED && e.usize <= MAX_PICKED) {
+        let mut head = [0u8; 30];
+        f.seek(SeekFrom::Start(e.local as u64)).map_err(bad)?;
+        f.read_exact(&mut head).map_err(bad)?;
+        if !head.starts_with(b"PK\x03\x04") { return Err("not a valid zip file".into()); }
+        let skip = le16(&head, 26).unwrap_or(0) + le16(&head, 28).unwrap_or(0);
+        f.seek(SeekFrom::Current(skip as i64)).map_err(bad)?;
+        let mut raw = vec![0; e.csize];
+        f.read_exact(&mut raw).map_err(bad)?;
+        let data = match e.method {
+            0 => raw,
+            8 => miniz_oxide::inflate::decompress_to_vec_with_limit(&raw, MAX_PICKED).map_err(|_| "not a valid zip file".to_string())?,
+            _ => return Err("not a valid zip file".into()),
+        };
+        if crc32fast::hash(&data) != e.crc { return Err("not a valid zip file".into()); }
+        picked = Some((e.name.clone(), data));
+    }
+    Ok(Some(Listing { entries: list.into_iter().map(|e| (e.name, e.usize as u64)).collect(), comment, picked }))
 }
 
 #[cfg(test)]

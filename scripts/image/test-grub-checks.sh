@@ -56,5 +56,33 @@ check "a BLS entry with an initrd GRUB does not load is refused" '! bls_matches_
 sed 's|^linux .*|linux      /KERNEL|' "$BLS" >"$T/bls-kernel.conf"
 check "a BLS entry starting ROCKNIX's /KERNEL instead of GRUB's Image is refused" '! bls_matches_grub "$T/bls-kernel.conf" "$CFG"'
 
+# GRUB itself (scripts/make-sd-efi.sh): the pinned Debian packages, never "whatever trixie has today". 22.11.2026: trixie had
+# moved on to 2.12-9+deb13u4, so every card's BOOTAA64.EFI differed from the device's and the release refused the warning.
+. "$ROOT/scripts/image/pins.sh"
+hex64() { printf '%s' "$1" | grep -Eq '^[0-9a-f]{64}$'; }
+check "pins.sh pins GRUB 2.12-9+deb13u2 (the device's) on snapshot.debian.org" \
+  '[ "${GRUB_DEB_VERSION:-}" = 2.12-9+deb13u2 ] && case ${GRUB_DEB_URL:-} in https://snapshot.debian.org/archive/debian/*/pool/main/g/grub2) true ;; *) false ;; esac'
+check "pins.sh has the sha256 of grub-efi-arm64-bin (arm64) and grub-common (amd64, arm64)" \
+  'hex64 "${GRUB_EFI_ARM64_DEB_SHA256:-}" && hex64 "${GRUB_COMMON_AMD64_DEB_SHA256:-}" && hex64 "${GRUB_COMMON_ARM64_DEB_SHA256:-}"'
+check "make-sd-efi.sh no longer takes the newest GRUB (no apt-get download, no grub-common from the archive)" \
+  '! grep -q "apt-get download" "$ROOT/scripts/make-sd-efi.sh" && ! grep -Eq "apt-get install .*[^/]grub-common( |$)" "$ROOT/scripts/make-sd-efi.sh"'
+# A package with the wrong bytes is refused before any container runs (fake docker and curl, nothing is downloaded).
+mkdir -p "$T/bin" "$T/debs"
+printf '#!/bin/sh
+[ "$1" = version ] && { echo amd64; exit 0; }
+echo "$@" >>"%s/docker-calls"
+' "$T" >"$T/bin/docker"
+printf '#!/bin/sh
+exit 22
+' >"$T/bin/curl"
+chmod +x "$T/bin/docker" "$T/bin/curl"
+for f in "grub-efi-arm64-bin_${GRUB_DEB_VERSION:-x}_arm64.deb" "grub-common_${GRUB_DEB_VERSION:-x}_amd64.deb"; do echo "not the package" >"$T/debs/$f"; done
+printf 'ANDROID!' >"$T/kernel"
+: >"$T/tree.dtb"
+PATH="$T/bin:$PATH" GRUB_DEB_CACHE="$T/debs" sh "$ROOT/scripts/make-sd-efi.sh" "$T/kernel" "$T/tree.dtb" "$T/sd" >"$T/wrong.log" 2>&1
+rc=$?
+check "make-sd-efi.sh refuses GRUB packages whose sha256 is not the pinned one, before Docker runs" \
+  '[ $rc != 0 ] && [ ! -e "$T/docker-calls" ] && grep -q "sha256" "$T/wrong.log"'
+
 echo
 if [ $fails -eq 0 ]; then echo "all grub-checks tests passed"; else echo "$fails grub-checks tests failed"; exit 1; fi

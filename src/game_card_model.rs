@@ -51,6 +51,12 @@ impl Summary {
     /// the text speaks for itself. A game without an article and a game whose text is only not here yet (no Wi-Fi) read
     /// differently: the one stays without, the other gets it with the next connection.
     pub fn note(&self) -> Option<String> {
+        self.note_in(crate::device::no_wifi_chip())
+    }
+
+    /// [`note`](Self::note) on a handheld with (`no_chip` false) or without Wi-Fi: there the text never comes "with Wi-Fi"
+    /// (tests/no_wifi_walk.rs).
+    pub fn note_in(&self, no_chip: bool) -> Option<String> {
         Some(match self {
             Summary::Wikipedia { title, .. } => format!("Text: Wikipedia, “{title}”, CC BY-SA 4.0"),
             Summary::Gamelist(_) => "From your EmulationStation gamelist".into(),
@@ -59,6 +65,7 @@ impl Summary {
             Summary::None => "No Wikipedia article for this game".into(),
             Summary::Unavailable(why) => match why.as_str() {
                 "not cached" => return None,
+                "offline" | "no curl" if no_chip => "No Wi-Fi here, so no description from Wikipedia".into(),
                 "offline" | "no curl" => "Offline: the description comes with Wi-Fi".into(),
                 "no article" | "no text" => "No Wikipedia article for this game".into(),
                 why => format!("No description from Wikipedia: {why}"),
@@ -272,10 +279,15 @@ pub enum RowKind {
     SaveVersions,
     /// "Screenshots (3)": the game's own, after Curator's rows (`app_gallery`).
     Screenshots,
-    /// "Into the crate": Shelf space's, while the game is on the shelf (`app_crate`), before Hide or delete.
+    /// "Into the crate": Shelf space's, while the game is on the shelf (`app_crate`), before Delete.
     Crate,
-    /// "Hide or delete": the last thing on the card, under everything else (`app_storage`).
-    Manage,
+    /// "Setting up Dolphin": Android, a GameCube or Wii game that plays in the Dolphin app (`rescue::DialogKind::Dolphin`).
+    Dolphin,
+    /// "Delete from the card": the last but one row (`app_storage`); A opens the delete sheet. Only where the game's
+    /// folder can be written (`game_files::can_delete`): not on dArkOS's read-only view, not on Android.
+    Delete,
+    /// "Hide from the shelf": the last row (`app_storage`); the file stays, Settings › System › Storage shows it again.
+    Hide,
 }
 
 /// A Curator row on the card: "Echoes" and what it holds in one line ("Burnout 3 · Need for Speed · R4").
@@ -394,6 +406,28 @@ mod played_tests {
             assert!(card.was_played());
             assert_eq!(card.not_played(), "Not here yet");
             assert_eq!(card.played, None, "a save does not invent measured play time");
+        }
+    }
+}
+
+#[cfg(test)]
+mod no_wifi_tests {
+    use super::Summary;
+
+    /// 22.11.2026: on the RG28XX and the R36S (no Wi-Fi chip) a game card whose Wikipedia text was never loaded said
+    /// "Offline: the description comes with Wi-Fi". The snapshot walk (tests/no_wifi_walk.rs) paints no card that is
+    /// still waiting for its text, so only this caught it.
+    #[test]
+    fn a_card_without_its_text_names_no_wifi_where_there_is_none() {
+        for why in ["offline", "no curl"] {
+            let s = Summary::Unavailable(why.into());
+            assert_eq!(s.note_in(false).as_deref(), Some("Offline: the description comes with Wi-Fi"));
+            let none = s.note_in(true).unwrap();
+            assert!(none.starts_with("No Wi-Fi here"), "{none}");
+        }
+        // Everything else reads the same on both.
+        for s in [Summary::None, Summary::Loading, Summary::Unavailable("timeout".into()), Summary::Unavailable("not cached".into())] {
+            assert_eq!(s.note_in(true), s.note_in(false));
         }
     }
 }

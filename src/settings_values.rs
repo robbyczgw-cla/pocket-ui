@@ -155,6 +155,9 @@ pub fn read(hw: &dyn Hw, net: &Arc<NetState>, data_dir: &Path, connected: bool) 
     let mock = std::env::var_os("POCKETUI_MOCK").is_some();
     let wifi = if connected {
         Wifi::Connected(if mock { Some("Home".into()) } else { crate::wifi::connected_ssid() })
+    } else if crate::device::darkos_port() {
+        // dArkOS's Wi-Fi, not connected: the radio is dArkOS's, not "none on this device" (its page, `setup::DARKOS_WIFI`).
+        Wifi::NotConnected
     } else if radio_of(net) == Radio::Absent {
         Wifi::Absent
     } else if radio_of(net).is_off() {
@@ -298,8 +301,9 @@ pub fn split_decoration(value: &str) -> (&str, &str, &str) {
     }
 }
 
-/// `words` in `lang` where the code can say it without the table's patterns: "Auto · Quiet" is two lines of the table
-/// with a dot between, "2 min" a figure with a unit that no language writes differently. `None`: a line of the table
+/// `words` in `lang` where the code can say it: "Auto · Quiet" is two lines of the table with a dot between, "2 min" a
+/// figure with a unit, in the language's own way ("2분": the Korean table's "{n} min" line; 22.11.2026 the System page
+/// said "2 min" in Korean because a figure was taken to read the same in every language). `None`: a line of the table
 /// itself (its exact lookup is no pattern), English, or something only the patterns know ("332 games").
 pub fn translated_in_code(lang: crate::i18n::Lang, words: &str) -> Option<String> {
     let table = lang.table()?;
@@ -310,7 +314,11 @@ pub fn translated_in_code(lang: crate::i18n::Lang, words: &str) -> Option<String
     for part in words.split(" · ") {
         match table.exact(part) {
             Some(t) => out.push(t.to_string()),
-            None if is_measure(part) => out.push(part.to_string()),
+            // Written as in English (French's no-break space aside: the painter keeps that one's "2 min" as it was).
+            None if is_measure(part) => match table.translate(part).filter(|t| t.replace('\u{a0}', " ") != part) {
+                Some(own) => out.push(own.into_owned()),
+                None => out.push(part.to_string()),
+            },
             None => return None,
         }
     }
@@ -365,6 +373,10 @@ mod tests {
             assert_eq!(translated_in_code(lang, "Auto · Zzz"), None, "{lang:?}");
         }
         assert_eq!(translated_in_code(Lang::En, "Auto · Quiet"), None);
+        // A language that writes a figure's unit its own way says it so (Korean, not offered yet but with its lines).
+        assert_eq!(translated_in_code(Lang::Ko, "2 min").as_deref(), Some("2분"));
+        assert_eq!(translated_in_code(Lang::Ko, "30 s").as_deref(), Some("30초"));
+        assert_eq!(translated_in_code(Lang::Ko, "Auto · 8 h").as_deref(), Some("자동 · 8시간"));
     }
 
     #[test]

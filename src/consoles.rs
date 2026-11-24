@@ -464,7 +464,7 @@ pub fn bios_status(system: &str, bios_dir: &std::path::Path) -> Option<String> {
     let parts: Vec<String> = s
         .bios
         .iter()
-        .map(|b| match b.files.iter().find(|f| bios_dir.join(f).is_file()) {
+        .map(|b| match b.found(bios_dir, &s.game_folders(bios_dir)) {
             Some(f) => format!("{f} found"),
             None if s.default_without_bios => "None found; the standalone emulator doesn't need one".to_string(),
             None => {

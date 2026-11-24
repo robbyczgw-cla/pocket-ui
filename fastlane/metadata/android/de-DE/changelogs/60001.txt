@@ -1,0 +1,7 @@
+• Ein Erststart für Android: findet deine Spieleordner, bietet deine Emulator-Apps für PS2, GameCube und mehr an, zeigt fehlende BIOS
+• Spiele gehen rein wie echt: alter Fernseher an und aus, echte Modul-, Disc- und Röhrengeräusche
+• Mode 7 HD fürs Super Nintendo
+• RomM: Server einmal koppeln, seine Spiele stehen im Regal
+• Pocket Sync mit deinen anderen Pockets
+• Neue Installationen öffnen die Handheld-Ansicht
+• Fehler behoben: Before load, Spielstände, Zeitzonen

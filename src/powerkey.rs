@@ -44,11 +44,14 @@ pub struct Gate {
 pub struct PowerKey {
     down: Option<Instant>,
     fired: bool,
+    /// The input devices (`PadEvent`'s source) that have the key down now.
+    holding: Vec<usize>,
 }
 
 impl PowerKey {
-    /// The key went down. A second report of the same press (two input devices) keeps the first one's time.
-    pub fn press(&mut self, now: Instant, gate: Gate) -> Step {
+    /// The key went down on input device `source`. A second report of the same press (two input devices) keeps the first
+    /// one's time.
+    pub fn press(&mut self, source: usize, now: Instant, gate: Gate) -> Step {
         if gate.menu_open || !gate.ours {
             return Step::Pass;
         }
@@ -58,13 +61,27 @@ impl PowerKey {
         if self.down.is_none() {
             self.down = Some(now);
             self.fired = false;
+            self.holding.clear();
+        }
+        if !self.holding.contains(&source) {
+            self.holding.push(source);
         }
         Step::Swallow
     }
 
-    /// The key went up: `Short` for a short press, `Long` for a long one the timer hadn't caught yet,
-    /// `LongEnd` for one `poll` told already, `Pass` for a release whose press was not ours.
-    pub fn release(&mut self, now: Instant) -> Step {
+    /// The key went up on `source`: `Short` for a short press, `Long` for a long one the timer hadn't caught yet,
+    /// `LongEnd` for one `poll` told already, `Pass` for a release whose press was not ours. While another device still
+    /// holds the key the press goes on (`Swallow`): a second device that reports the key down and up at once (an echo)
+    /// made a held key a short press, which sleeps instead of opening the power menu (R36S hand test 20.11.2026 #16, one
+    /// way it can happen; not seen on the device yet).
+    pub fn release(&mut self, source: usize, now: Instant) -> Step {
+        if self.down.is_none() {
+            return Step::Pass;
+        }
+        self.holding.retain(|s| *s != source);
+        if !self.holding.is_empty() {
+            return Step::Swallow;
+        }
         let Some(since) = self.down.take() else { return Step::Pass };
         if std::mem::take(&mut self.fired) {
             Step::LongEnd
@@ -91,6 +108,11 @@ impl PowerKey {
         self.down.filter(|_| !self.fired).map(|since| since + LONG_PRESS)
     }
 
+    /// How long the key has been down (None: it isn't), for the log.
+    pub fn held_for(&self, now: Instant) -> Option<Duration> {
+        self.down.map(|since| now.saturating_duration_since(since))
+    }
+
     pub fn is_down(&self) -> bool {
         self.down.is_some()
     }
@@ -99,6 +121,7 @@ impl PowerKey {
     pub fn cancel(&mut self) {
         self.down = None;
         self.fired = false;
+        self.holding.clear();
     }
 }
 
@@ -119,90 +142,118 @@ mod tests {
     #[test]
     fn a_short_press_is_told_when_the_key_goes_up() {
         let (mut k, t0) = (PowerKey::default(), Instant::now());
-        assert_eq!(k.press(t0, OURS), Step::Swallow);
+        assert_eq!(k.press(0, t0, OURS), Step::Swallow);
         assert_eq!(k.poll(t0 + ms(100)), Step::Pass, "nothing yet while it may still become a long press");
-        assert_eq!(k.release(t0 + ms(120)), Step::Short);
+        assert_eq!(k.release(0, t0 + ms(120)), Step::Short);
         assert!(!k.is_down());
         // The next press starts from scratch.
-        assert_eq!(k.press(t0 + ms(2000), OURS), Step::Swallow);
-        assert_eq!(k.release(t0 + ms(2100)), Step::Short);
+        assert_eq!(k.press(0, t0 + ms(2000), OURS), Step::Swallow);
+        assert_eq!(k.release(0, t0 + ms(2100)), Step::Short);
     }
 
     #[test]
     fn a_long_press_is_told_while_held_and_its_release_once_more() {
         let (mut k, t0) = (PowerKey::default(), Instant::now());
-        k.press(t0, OURS);
+        k.press(0, t0, OURS);
         assert_eq!(k.poll(t0 + LONG_PRESS - ms(1)), Step::Pass);
         assert_eq!(k.poll(t0 + LONG_PRESS), Step::Long);
         assert_eq!(k.poll(t0 + LONG_PRESS + ms(500)), Step::Pass, "only once");
-        assert_eq!(k.release(t0 + LONG_PRESS + ms(900)), Step::LongEnd, "never a short press after a long one");
+        assert_eq!(k.release(0, t0 + LONG_PRESS + ms(900)), Step::LongEnd, "never a short press after a long one");
         assert!(!k.is_down());
     }
 
     #[test]
     fn a_release_after_the_threshold_that_the_timer_missed_is_still_a_long_press() {
         let (mut k, t0) = (PowerKey::default(), Instant::now());
-        k.press(t0, OURS);
-        assert_eq!(k.release(t0 + LONG_PRESS + ms(50)), Step::Long);
-        assert_eq!(k.release(t0 + LONG_PRESS + ms(60)), Step::Pass, "a second release has no press");
+        k.press(0, t0, OURS);
+        assert_eq!(k.release(0, t0 + LONG_PRESS + ms(50)), Step::Long);
+        assert_eq!(k.release(0, t0 + LONG_PRESS + ms(60)), Step::Pass, "a second release has no press");
     }
 
     #[test]
     fn the_deadline_is_the_threshold_while_the_key_is_down_and_unfired() {
         let (mut k, t0) = (PowerKey::default(), Instant::now());
         assert_eq!(k.deadline(), None);
-        k.press(t0, OURS);
+        k.press(0, t0, OURS);
         assert_eq!(k.deadline(), Some(t0 + LONG_PRESS));
         k.poll(t0 + LONG_PRESS);
         assert_eq!(k.deadline(), None, "fired");
-        k.release(t0 + ms(2000));
-        k.press(t0 + ms(3000), OURS);
-        k.release(t0 + ms(3050));
+        k.release(0, t0 + ms(2000));
+        k.press(0, t0 + ms(3000), OURS);
+        k.release(0, t0 + ms(3050));
         assert_eq!(k.deadline(), None, "released");
     }
 
     #[test]
     fn a_second_device_reporting_the_same_press_does_not_restart_the_clock() {
         let (mut k, t0) = (PowerKey::default(), Instant::now());
-        k.press(t0, OURS);
-        assert_eq!(k.press(t0 + ms(500), OURS), Step::Swallow);
+        k.press(0, t0, OURS);
+        assert_eq!(k.press(0, t0 + ms(500), OURS), Step::Swallow);
         assert_eq!(k.poll(t0 + LONG_PRESS), Step::Long);
+    }
+
+    /// R36S hand test 20.11.2026 #16: held, the power key slept instead of opening the menu. If a second device reports the
+    /// press and its release at once, the release of that one must not end the press the real key still holds.
+    #[test]
+    fn an_echo_from_a_second_device_does_not_cut_a_held_press_short() {
+        let (mut k, t0) = (PowerKey::default(), Instant::now());
+        k.press(1, t0, OURS);
+        assert_eq!(k.press(2, t0 + ms(2), OURS), Step::Swallow);
+        assert_eq!(k.release(2, t0 + ms(3)), Step::Swallow, "the echo's release: the real key is still down");
+        assert_eq!(k.poll(t0 + LONG_PRESS), Step::Long, "held: the power menu");
+        assert_eq!(k.release(1, t0 + ms(1500)), Step::LongEnd);
+        // A short press on both still is a short press, once.
+        k.press(1, t0 + ms(3000), OURS);
+        k.press(2, t0 + ms(3001), OURS);
+        assert_eq!(k.release(2, t0 + ms(3002)), Step::Swallow);
+        assert_eq!(k.release(1, t0 + ms(3120)), Step::Short);
+        assert_eq!(k.release(2, t0 + ms(3130)), Step::Pass, "no second short press");
+    }
+
+    /// What can't be told apart here: a driver that sends the press and the release together only when the key goes up.
+    /// Then pocket-ui never sees the key held, and every press is a short one (the next hand test's log says so: `sleep:
+    /// power key down` and `up after N ms`).
+    #[test]
+    fn a_press_and_release_in_the_same_moment_is_a_short_press() {
+        let (mut k, t0) = (PowerKey::default(), Instant::now());
+        k.press(1, t0 + ms(1500), OURS);
+        assert_eq!(k.release(1, t0 + ms(1500)), Step::Short);
     }
 
     #[test]
     fn a_release_without_a_press_is_not_ours() {
         let (mut k, t0) = (PowerKey::default(), Instant::now());
-        assert_eq!(k.release(t0), Step::Pass, "the release of the press that woke the device");
+        assert_eq!(k.release(0, t0), Step::Pass, "the release of the press that woke the device");
     }
 
     #[test]
     fn presses_that_are_not_ours_are_not_tracked() {
         let (mut k, t0) = (PowerKey::default(), Instant::now());
         // logind handles the key (no inhibitor): the event goes on, nothing sleeps or opens.
-        assert_eq!(k.press(t0, Gate { ours: false, ..OURS }), Step::Pass);
+        assert_eq!(k.press(0, t0, Gate { ours: false, ..OURS }), Step::Pass);
         assert_eq!(k.poll(t0 + LONG_PRESS), Step::Pass);
-        assert_eq!(k.release(t0 + ms(900)), Step::Pass);
+        assert_eq!(k.release(0, t0 + ms(900)), Step::Pass);
         // The press that woke the device: swallowed, and its release neither sleeps nor opens the menu.
-        assert_eq!(k.press(t0 + ms(1000), Gate { guarded: true, ..OURS }), Step::Swallow);
+        assert_eq!(k.press(0, t0 + ms(1000), Gate { guarded: true, ..OURS }), Step::Swallow);
         assert_eq!(k.poll(t0 + ms(3000)), Step::Pass);
-        assert_eq!(k.release(t0 + ms(3100)), Step::Pass);
+        assert_eq!(k.release(0, t0 + ms(3100)), Step::Pass);
     }
 
     #[test]
     fn with_the_menu_open_a_press_goes_to_the_menu_and_never_sleeps() {
         let (mut k, t0) = (PowerKey::default(), Instant::now());
         let open = Gate { menu_open: true, ..OURS };
-        assert_eq!(k.press(t0, open), Step::Pass, "the menu closes on it");
+        assert_eq!(k.press(0, t0, open), Step::Pass, "the menu closes on it");
         assert_eq!(k.poll(t0 + LONG_PRESS), Step::Pass);
-        assert_eq!(k.release(t0 + ms(100)), Step::Pass, "and the release is not a short press");
+        assert_eq!(k.release(0, t0 + ms(100)), Step::Pass, "and the release is not a short press");
     }
 
     #[test]
     fn cancel_forgets_a_key_that_was_down() {
         let (mut k, t0) = (PowerKey::default(), Instant::now());
-        k.press(t0, OURS);
+        k.press(0, t0, OURS);
         k.cancel();
         assert_eq!(k.poll(t0 + LONG_PRESS), Step::Pass);
-        assert_eq!(k.release(t0 + ms(2000)), Step::Pass);
+        assert_eq!(k.release(0, t0 + ms(2000)), Step::Pass);
     }
 }

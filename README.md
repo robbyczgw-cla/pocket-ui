@@ -66,8 +66,8 @@ pull it off the shelf, click it in, and pick up right where you left off.</p>
 Plus Retro mode in one toggle, phone-to-handheld ROM uploads, your own RomM server right on the shelf, Game check, Kids
 Mode and one-press Wi-Fi updates. [See everything it does](https://pocketui.xyz/features).
 
-Free and open source, with no account and no tracking. Menus in English, German, Spanish, Brazilian Portuguese, French
-and Italian.
+Free and open source, with no account and no tracking. Menus in English, German, Spanish, Brazilian Portuguese, French,
+Italian and Korean.
 
 **Supported systems:** Game Boy, GBC, GBA, NES, SNES, Mega Drive, Master System, Game Gear, PC Engine, PlayStation, N64,
 PSP, Dreamcast, Nintendo DS, Saturn, arcade and PortMaster ports. Stronger handhelds like the AYN Odin 2 also play PS2,

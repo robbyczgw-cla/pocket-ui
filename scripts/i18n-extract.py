@@ -25,7 +25,8 @@ KEEP = os.path.join(ROOT, "assets", "i18n", "keep.txt")
 SKIP = os.path.join(ROOT, "assets", "i18n", "skip.txt")
 
 # Files that show nothing on the screen (tools, tests, the docs check).
-SKIP_FILES = {"doc_checks.rs", "bin/hello_pad.rs", "bin/store_tool.rs", "manual.rs", "curator/tests.rs", "web/tests.rs", "testutil.rs",
+SKIP_FILES = {"doc_checks.rs", "bin/hello_pad.rs", "bin/store_tool.rs", "manual.rs", "curator/tests.rs", "web/tests.rs", "web/saves_tests.rs",
+              "web/tests/cover_diagnostics_tests.rs", "testutil.rs",
               # Android's way back on a host (`#[cfg(test)]` only): fixture games, never painted by the app.
               "android_eject_tests.rs",
               # Where the UI is: machine codes for `@where`, /tmp/pocket-ui.status and logs, never painted (DEVICE-TESTS.md).

@@ -7,9 +7,11 @@
 //! Cheap by construction: the light is a handful of vertical strips, each mixed towards [`WARM`] row by row
 //! (`Canvas::shade_rows`), so every pixel under it is touched once and no picture is made; [`Glow`] is kept until the
 //! TV moves, the screen changes or the darkness steps (it is quantised, so the clock moves it a few times an evening).
+//! Its pixels are worked out once for the screen (`Canvas::shade_plan`), so a frame mixes each screen row in one run
+//! rather than 24 short ones: strip by strip it was 3.6 ms of a move on the RG35XX Plus.
 //! The room's dimming is the room's light ([`dimmed`]): the wood is tinted once for it, as for the time of day.
 
-use crate::gfx::Canvas;
+use crate::gfx::{Canvas, ShadePlan};
 use crate::room_light::Light;
 
 /// The TV's light: a warm, slightly orange white, as a tube's picture looks from across a dark room.
@@ -43,6 +45,8 @@ pub fn dimmed(l: Light, dark: f32) -> Light {
 pub struct Glow {
     key: (i32, i32, i32, i32, i32, i32, u8),
     strips: Vec<(i32, i32, i32, Vec<u8>)>,
+    /// Its pixels on the screen it was last painted on (`Canvas::shade_plan`).
+    plan: Option<ShadePlan>,
 }
 
 impl Glow {
@@ -53,14 +57,14 @@ impl Glow {
         let key = (cx, cy, tv_w, w, h, top, peak);
         let mut strips = Vec::new();
         if peak == 0 || tv_w <= 0 {
-            return Glow { key, strips };
+            return Glow { key, strips, plan: None };
         }
         let tw = tv_w as f32;
         let (rx, up, down) = (tw * REACH.0, tw * REACH.1, tw * REACH.2);
         let (x0, x1) = (((cx as f32 - rx) as i32).max(0) & !1, ((cx as f32 + rx) as i32).min(w));
         let (y0, y1) = (((cy as f32 - up) as i32).max(top).max(0), ((cy as f32 + down) as i32).min(h));
         if x0 >= x1 || y0 >= y1 {
-            return Glow { key, strips };
+            return Glow { key, strips, plan: None };
         }
         // Even widths, so a strip's edges fall between screen pixels at 2 design pixels a screen pixel too.
         let sw = (((x1 - x0) + STRIPS - 1) / STRIPS + 1) & !1;
@@ -81,7 +85,7 @@ impl Glow {
             }
             x += ww;
         }
-        Glow { key, strips }
+        Glow { key, strips, plan: None }
     }
 
     /// Whether it was made for this place, screen and strength.
@@ -89,8 +93,21 @@ impl Glow {
         self.key == (cx, cy, tv_w, w, h, top, (MAX as f32 * strength.clamp(0.0, 1.0)).round() as u8)
     }
 
-    /// Paints it over what is there.
-    pub fn paint(&self, c: &mut Canvas) {
+    /// Paints it over what is there: the strips' `shade_rows`, pixel for pixel, as worked out once for this canvas.
+    pub fn paint(&mut self, c: &mut Canvas) {
+        if self.plan.as_ref().is_some_and(|p| c.shade_planned(WARM, p)) {
+            return;
+        }
+        let y = self.strips.first().map_or(0, |s| s.1);
+        let strips: Vec<(i32, i32, &[u8])> = self.strips.iter().map(|(x, _, w, rows)| (*x, *w, rows.as_slice())).collect();
+        self.plan = c.shade_plan(y, &strips);
+        if !self.plan.as_ref().is_some_and(|p| c.shade_planned(WARM, p)) {
+            self.paint_strips(c);
+        }
+    }
+
+    /// The strips one by one (`shade_rows`): what `paint` paints.
+    pub fn paint_strips(&self, c: &mut Canvas) {
         for (x, y, w, rows) in &self.strips {
             c.shade_rows(*x, *y, *w, WARM, rows);
         }
@@ -108,6 +125,75 @@ impl Glow {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The glow is mixed over most of the Cabinet's screen in every frame after dark, so it must cost well under painting
+    /// the screen's wood once (`cabinet_art::blit`, the walls behind the shelves). Strip by strip (24 short runs per row,
+    /// `paint_strips`) it was 0.73x the wood on the Air (0.36x worked out at once) and 3.6 ms of a move in the evening on
+    /// the RG35XX Plus (0.6.0:
+    /// the Cabinet's p50 13.0 ms, 9.4 ms without the glow). At 640x480 painted natively (2 design pixels a screen pixel),
+    /// with the TV about where it stands there. Only in an optimised build (`--profile gate`): unoptimised timings say
+    /// nothing.
+    #[test]
+    fn the_glow_costs_well_under_the_wood_behind_it() {
+        if cfg!(debug_assertions) {
+            return;
+        }
+        use crate::cabinet_art::{blit, Pic};
+        let (pw, ph) = (640u32, 480u32);
+        let (w, h) = (pw as i32 * 2, ph as i32 * 2);
+        let wood = Pic::of(w, h, (0..w * h).map(|i| 0xff00_0000 | ((i as u32).wrapping_mul(2_654_435_761) >> 8 & 0xff_ffff)).collect());
+        let mut glow = Glow::new((1060, 260), 320, (w, h), 0, 1.0);
+        let mut buf = vec![0x30_2418u32; (pw * ph) as usize];
+        let mut best = |paint: &mut dyn FnMut(&mut Canvas)| {
+            (0..15)
+                .map(|_| {
+                    let mut c = Canvas::screen(&mut buf, (pw, ph), 2);
+                    let t = std::time::Instant::now();
+                    paint(&mut c);
+                    t.elapsed().as_secs_f64() * 1e6
+                })
+                .fold(f64::MAX, f64::min)
+        };
+        let wood_us = best(&mut |c| blit(c, &wood, 0, 0, 230, (0, h)));
+        let strips_us = best(&mut |c| glow.paint_strips(c));
+        let glow_us = best(&mut |c| glow.paint(c));
+        let covered = glow.strips.iter().map(|(_, _, sw, rows)| *sw as usize * rows.iter().filter(|a| **a > 0).count()).sum::<usize>();
+        println!(
+            "glow {glow_us:.0} us ({:.2}x the wood), strip by strip {strips_us:.0} us ({:.2}x), over {:.0} % of the screen, wood {wood_us:.0} us",
+            glow_us / wood_us,
+            strips_us / wood_us,
+            100.0 * covered as f64 / (w * h) as f64
+        );
+        assert!(covered * 2 > (w * h) as usize, "the test's glow covers most of the screen, as on the Plus");
+        assert!(glow_us <= wood_us * GLOW_PER_WOOD, "the glow {glow_us:.0} us, the wood {wood_us:.0} us: {:.2}x", glow_us / wood_us);
+    }
+    const GLOW_PER_WOOD: f64 = 0.55;
+
+    /// `paint` is `paint_strips` pixel for pixel: at 1 and 2 design pixels a screen pixel, on a band of the screen, in
+    /// the frame that works its pixels out and the ones after it, and again once the canvas changes shape.
+    #[test]
+    fn painted_at_once_as_strip_by_strip() {
+        let (pw, ph) = (160u32, 120u32);
+        let start: Vec<u32> = (0..pw * ph).map(|i| i.wrapping_mul(2_654_435_761) >> 8).collect();
+        for n in [1u32, 2] {
+            let (w, h) = ((pw * n) as i32, (ph * n) as i32);
+            let mut glow = Glow::new((w * 3 / 4 + 1, h / 4 + 1), w / 4 + 3, (w, h), 7, 1.0);
+            assert!(glow.strips.len() > 10);
+            let (mut want, mut got) = (start.clone(), start.clone());
+            glow.paint_strips(&mut Canvas::screen(&mut want, (pw, ph), n));
+            for frame in 0..3 {
+                got.copy_from_slice(&start);
+                glow.paint(&mut Canvas::screen(&mut got, (pw, ph), n));
+                assert!(got == want, "n = {n}, frame {frame}");
+            }
+            // A band from an odd design row: another shape, worked out again.
+            let (mut want, mut got) = (start.clone(), start.clone());
+            glow.paint_strips(&mut Canvas::screen(&mut want, (pw, ph), n).rows(13, h - 9));
+            glow.paint(&mut Canvas::screen(&mut got, (pw, ph), n).rows(13, h - 9));
+            assert!(got == want, "n = {n}, a band");
+            assert_ne!(want, start, "the glow mixed something");
+        }
+    }
 
     #[test]
     fn dark_only_in_the_evening_and_at_night() {
@@ -156,7 +242,7 @@ mod tests {
     fn paint_is_gentle() {
         let (w, h) = (640, 480);
         let mut buf = vec![0x202020u32; (w * h) as usize];
-        let g = Glow::new((500, 120), 100, (w, h), 0, 1.0);
+        let mut g = Glow::new((500, 120), 100, (w, h), 0, 1.0);
         g.paint(&mut Canvas::new(&mut buf, w as u32, h as u32));
         let p = buf[(124 * w + 500) as usize];
         let (r, b) = ((p >> 16 & 0xff) as i32, (p & 0xff) as i32);

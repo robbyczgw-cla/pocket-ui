@@ -242,7 +242,7 @@ impl Store {
         let _changing = Changing::start();
         self.usable()?;
         if sha256_hex(data) != p.sha256.to_lowercase() {
-            return Err("The download is damaged or was changed. Nothing was installed.".into());
+            return Err("Download failed verification. Nothing was installed.".into());
         }
         // The id names files of ours (`.staging-<id>`), so it may not be a path.
         if p.id.is_empty() || p.id.starts_with('.') || !p.id.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c)) {
@@ -505,7 +505,8 @@ pub fn resolve(catalog_url: &str, url: &str) -> String {
 
 #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 fn download(url: &str) -> Result<Vec<u8>, String> {
-    let out = Command::new("curl").args(["-fsSL", "--max-time", "60", url]).output().map_err(|e| e.to_string())?;
+    // A network that drops the packets gives up after 15 s, not the whole minute (`platform::http::CONNECT_TIMEOUT`).
+    let out = Command::new("curl").args(["-fsSL", "--connect-timeout", "15", "--max-time", "60", url]).output().map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok(out.stdout)
     } else {
@@ -551,8 +552,8 @@ pub(crate) fn unreachable_code(code: Option<i32>) -> bool {
 #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 fn download_to(url: &str, dest: &Path, max: Option<u64>, progress: &dyn Fn(u64)) -> Result<(), String> {
     download_with_cause(url, dest, max, progress).map_err(|f| match f {
-        DownloadFailure::Unreachable => crate::net_check::refine("The download didn't finish. Check Wi-Fi and try again."),
-        DownloadFailure::Broke(m) if m == "The download didn't finish. Check Wi-Fi and try again." => crate::net_check::refine(&m),
+        DownloadFailure::Unreachable => crate::net_check::refine("Download didn't finish. Check Wi-Fi and try again."),
+        DownloadFailure::Broke(m) if m == "Download didn't finish. Check Wi-Fi and try again." => crate::net_check::refine(&m),
         DownloadFailure::Broke(m) => m,
     })
 }
@@ -592,7 +593,7 @@ fn download_network(url: &str, dest: &Path, max: Option<u64>, progress: &dyn Fn(
         match status {
             Some(s) if s.success() => return Ok(()),
             Some(s) if unreachable_code(s.code()) => return Err(DownloadFailure::Unreachable),
-            Some(_) => return Err(DownloadFailure::Broke("The download didn't finish. Check Wi-Fi and try again.".into())),
+            Some(_) => return Err(DownloadFailure::Broke("Download didn't finish. Check Wi-Fi and try again.".into())),
             None if std::time::Instant::now() > end => {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -640,7 +641,7 @@ pub fn fetch_catalog(url: &str, data_dir: &Path) -> Result<Catalog, String> {
     let sig = download(&format!("{url}.sig"))?;
     let cat = verify_catalog(&json, &String::from_utf8_lossy(&sig), &PUBLIC_KEY).map_err(|e| {
         if e.starts_with("catalog signature") {
-            "The store list's signature doesn't match, so it wasn't used. Nothing was changed.".to_string()
+            "Store catalogue failed signature check, so it was skipped. Nothing changed.".to_string()
         } else {
             format!("The store list can't be read ({e}).")
         }
@@ -655,7 +656,7 @@ pub fn fetch_catalog(url: &str, data_dir: &Path) -> Result<Catalog, String> {
 /// works until a store starts numbering its catalogs.
 pub fn check_fresh(cat: &Catalog, url: &str, data_dir: &Path, now: u64) -> Result<(), String> {
     if cat.expires.is_some_and(|t| now > t) {
-        return Err("The store list has expired, so it wasn't used. Nothing was changed.".into());
+        return Err("Store catalogue has expired, so it was skipped. Nothing changed.".into());
     }
     let path = data_dir.join("store").join("catalog-serials.json");
     // Written atomically, so damage is unlikely; read as empty, it only loses the replay guard.
@@ -663,7 +664,7 @@ pub fn check_fresh(cat: &Catalog, url: &str, data_dir: &Path, now: u64) -> Resul
     let serial = cat.serial.unwrap_or(0);
     let last = seen.get(url).copied();
     if last.is_some_and(|last| serial < last) {
-        return Err("The store list is older than one this device already had, so it wasn't used. Nothing was changed.".into());
+        return Err("Store catalogue is older than what you already have, so it was skipped. Nothing changed.".into());
     }
     if last.map_or(serial > 0, |last| serial > last) {
         seen.insert(url.to_string(), serial);

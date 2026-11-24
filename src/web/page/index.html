@@ -11,7 +11,12 @@
 <link rel="icon" href="/icon.svg?v={{v}}" type="image/svg+xml">
 <link rel="manifest" href="/manifest.webmanifest?v={{v}}">
 <link rel="stylesheet" href="/app.css?v={{v}}">
+<link rel="stylesheet" href="/saves.css?v={{v}}">
+<link rel="stylesheet" href="/media-update.css?v={{v}}">
+<script src="/saves.js?v={{v}}" defer></script>
+<script src="/cover-diagnostics.js?v={{v}}" defer></script>
 <script src="/app.js?v={{v}}" defer></script>
+<script src="/media-update.js?v={{v}}" defer></script>
 </head>
 <body>
 <header class="top">
@@ -23,7 +28,9 @@
     <a href="#/library" data-tab="library">Library</a>
     <a href="#/shelves" data-tab="shelves">Shelves</a>
     <a href="#/upload" data-tab="upload">Upload</a>
+    <a href="#/saves" data-tab="saves" id="tab-saves">Saves</a>
     <a href="#/stats" data-tab="stats">Stats</a>
+    <a href="#/more" data-tab="more" id="tab-more">More</a>
   </nav>
 </header>
 <section id="now" class="now" hidden></section>
@@ -33,6 +40,7 @@
 <footer class="foot">
   <span id="who"></span>
   <span id="version"></span>
+  <a id="diagnostics" href="#/diagnostics" hidden></a>
 </footer>
 <noscript><p class="quiet">The web companion needs JavaScript.</p></noscript>
 </body>

@@ -155,6 +155,8 @@ relies on it first, then the row.
 | setsettings.sh reads the Runs on page's keys | emu_choice::RA_SETTINGS | `/usr/bin/setsettings.sh` reads `ratio`, `integerscale`, `smooth`, `shaderset`, `rewind`, `runahead`, `autosave` | `keys` |
 | setsettings.sh has NO_REWIND | emu_choice NO_REWIND | `/usr/bin/setsettings.sh` has a line matching `NO_REWIND=\(` | `grep` |
 | setsettings.sh has NO_RUNAHEAD | emu_choice NO_RUNAHEAD | `/usr/bin/setsettings.sh` has a line matching `NO_RUNAHEAD=\(` | `grep` |
+| setsettings.sh writes the RetroArch hotkeys only with system.autohotkeys 1 | ra_hotkeys::prepare (system.autohotkeys=0 keeps pocket-ui's lines) | `/usr/bin/setsettings.sh` has a line matching `get_setting system\.autohotkeys\)" == "1"` | `grep` |
+| setsettings.sh takes the hotkey button from the pad's autoconfig | ra_hotkeys::Pad (input_enable_hotkey_btn, else Select) | `/usr/bin/setsettings.sh` has a line matching `input_enable_hotkey_btn` | `grep` |
 | start_armsx2.sh | standalone.rs, emu_settings (PS2) | `/usr/bin/start_armsx2.sh` is an executable file | `exec` |
 | start_armsx2.sh reads the PS2 options | emu_settings PS2 table | `/usr/bin/start_armsx2.sh` reads `internal_resolution`, `graphics_backend`, `enable_widescreen_patches`, `aspect_ratio`, `show_fps` | `keys` |
 | start_azahar.sh | standalone.rs, emu_settings (3DS) | `/usr/bin/start_azahar.sh` is an executable file | `exec` |

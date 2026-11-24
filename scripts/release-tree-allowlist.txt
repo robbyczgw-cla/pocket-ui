@@ -20,3 +20,5 @@ usr/config/drastic/system/drastic_bios_arm9.bin   # open BSD replacement BIOS, n
 # A 43 KB stand-in disc for the reader fault rules (tests/data_sources.rs "playlist"): an ISO 9660 volume whose only file is a
 # SYSTEM.CNF line naming a boot serial, zeros otherwise. Written for the test; no game data, nothing copied.
 tests/fixtures/reader-disc.iso   # own test data: an ISO 9660 with one SYSTEM.CNF line, no content
+
+testdata/7z/*   # own test data: 7z files made by testdata/7z/make.sh from a byte pattern, no game

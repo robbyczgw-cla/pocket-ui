@@ -1,220 +1,206 @@
 # Settings: Playing and Games
 
-The **Playing** and **Games** categories of [Settings](settings.md) (what happens when you start and quit, how a game goes in and what is drawn over it, how fast games run, achievements; your games, their pictures, the shelf's systems and the Curator). Look and how Settings opens are on [the first page](settings.md#open-settings).
+The **Playing** and **Games** sections of [Settings](settings.md): startup and quit behaviour, overlays, performance,
+achievements, adding games, box art, shelf space and Curator. For Look and how Settings opens, see
+[Settings](settings.md#open-settings).
 
 ## Playing
 
-Settings → **Playing**. What happens when you start and quit, how a game goes in and what is drawn over it, how fast games run, and achievements.
+Settings → **Playing** controls how games launch, pause, save and run.
 
 | Entry | What it holds |
 |---|---|
-| **On start** | What you see when the Pocket starts: **Home** (the default) or **Last game**, straight back into the game you played last. A or Left/Right switches it. See [On start](#on-start) |
-| **Continue where I quit** | Whether the pause menu's Quit keeps the moment you are at for the next start: **On** (the default) or **Off**, only the game's own saves. A or Left/Right switches it. See [Continue where I quit](#continue-where-i-quit) |
-| **Console boot screen** | Whether a fresh start of a Game Boy, Game Boy Color, Game Boy Advance, PlayStation, Dreamcast, Saturn, Mega-CD or PC Engine CD game runs through the console's own boot screen (needs your own BIOS file): **Off** (the default) or **On**. A or Left/Right switches it. See [Console boot screen](#console-boot-screen) |
-| **Remind me where I was** | Back to a game after more than two weeks: when you played it last and your note, while its moment loads. **Off** (the default) or **On**. A or Left/Right switches it. See [Remind me where I was](#remind-me-where-i-was) |
-| **Screen frames** | Where a game gets a frame when you haven't chosen one: **Off** (the default), **Handhelds** or **Every console**. A or Left/Right switches it. See [Screen frames](#screen-frames) |
-| **Over the game** | The frame rate, the sensors or (with Pixel Path in the pause menu) Pixel Path's line over every game, or nothing (the default). See [Over the game](#over-the-game) |
-| **Zoom in the pause menu** | Whether the pause menu's first page lists Zoom: **Off** (the default) or **On**. Zoom is always under Options, and listed here too while Big text is on. A or Left/Right switches it. See [Zoom in the pause menu](#zoom-in-the-pause-menu) |
-| **Performance & fan** | How fast the processor runs and how early the fan starts in games, the fan in the menus, and the temperatures right now. See [Performance and fan](performance.md) |
-| **RetroAchievements** | Sign in to retroachievements.org to earn achievements in pocket-core games. See [RetroAchievements](#retroachievements) |
+| **On start** | What opens when you power on: **Home** (default) or **Last game** (jumps straight back into your last game). Toggle with A or Left/Right. See [On start](#on-start) |
+| **Continue where I quit** | Whether Quit saves your exact moment for next time: **On** (default) or **Off** (in-game saves only). Toggle with A or Left/Right. See [Continue where I quit](#continue-where-i-quit) |
+| **Console boot screen** | Play the original console boot logo on a fresh start (GB, GBC, GBA, PS1, Dreamcast, Saturn, Mega-CD, PC Engine CD; requires your own BIOS files): **Off** (default) or **On**. Toggle with A or Left/Right. See [Console boot screen](#console-boot-screen) |
+| **Remind me where I was** | Returning to a game after 2+ weeks? Shows when you last played, play time and your note while it loads: **Off** (default) or **On**. Toggle with A or Left/Right. See [Remind me where I was](#remind-me-where-i-was) |
+| **Screen frames** | Automatic default frame when you haven't picked one: **Off** (default), **Handhelds** or **Every console**. Cycle with A or Left/Right. See [Screen frames](#screen-frames) |
+| **Over the game** | On-screen stats while playing: **Off** (default), **FPS**, **FPS + sensors**, or **Pixel Path** (when enabled in Curator). See [Over the game](#over-the-game) |
+| **Zoom in the pause menu** | Pin Zoom onto the first page of the pause menu: **Off** (default) or **On** (always available under Options, and auto-shown with Big text). Toggle with A or Left/Right. See [Zoom in the pause menu](#zoom-in-the-pause-menu) |
+| **Performance & fan** | Default CPU speed, game and menu fan curves, Smooth fan and live temperatures. See [Performance and fan](performance.md) |
+| **RetroAchievements** | Sign in to retroachievements.org to unlock achievements in pocket-core games. See [RetroAchievements](#retroachievements) |
 
 ### On start
 
-Settings → Playing → **On start** chooses what the Pocket shows when it starts:
+Settings → Playing → **On start** chooses what greets you on power-on:
 
-- **Home**, the default: the shelf.
-- **Last game**: the game you played last opens right away and continues where you left off, like a console woken
-  from standby. The shelf shows for a moment and fades into the game's last picture.
+- **Home** (default): opens to your shelf.
+- **Last game**: drops straight back into the last game you played, just like waking a console from standby (the shelf
+  flashes briefly before fading into your saved frame).
 
-To keep a game that went wrong from starting over and over, Last game only opens it when the Pocket was really
-started (switched on or restarted), and only when that game ended normally last time. The Pocket shows Home
-instead when the game stopped with an error, when pocket-ui stopped unexpectedly and started again, when the
-device shut down unexpectedly, or after an update of pocket-ui.
+To avoid crash loops, **Last game** only triggers on a clean boot after a normal exit; if a game errored out, pocket-ui
+restarted after a crash, power cut out unexpectedly or you just updated pocket-ui, you land safely on Home instead.
 
-A game you left by **Power off** in the power menu opens again at the next start whatever this setting says,
-as described under [Sleep and power](quick-settings.md#sleep-and-power).
+Leaving a game via **Power off** in the power menu always reopens that game next boot regardless of this setting
+([Sleep and power](quick-settings.md#sleep-and-power)).
 
 ### Continue where I quit
 
-Settings → Playing → **Continue where I quit** decides what the pause menu's **Quit** does with the moment you are at. A
-switches it.
+Settings → Playing → **Continue where I quit** controls whether **Quit** in the pause menu saves an auto-state (toggle
+with A):
 
-- **On**, the default: Quit saves the moment ("Saving and quitting…"). The next start of the game, and
-  **Last game** under [On start](#on-start), continue from there.
-- **Off**: Quit writes only the game's own saves (its save feature, memory cards) and leaves the moment out
-  ("Quitting…"). On pocket-ui's own host the next start is as if no moment had been kept; the older moment stays
-  under **Load** as **Where I quit**, until a Quit saves a new one. On PlayStation 2, GameCube, Wii and 3DS the next start still
-  continues from the moment of your last Quit with the switch on. A moment saved by sleep counts as that last Quit. The
-  details per emulator are in [The pause menu](pause-menu.md#the-pause-menu-home).
+- **On** (default): Quit saves your exact spot ("Saving and quitting…"), so your next launch (and **Last game** under
+  [On start](#on-start)) picks right up there.
+- **Off:** Quit flushes only in-game saves and memory cards ("Quitting…"). In pocket-core, your next start boots fresh
+  (your previous auto-state stays under **Load → Where I quit** until overwritten). On PS2, GameCube, Wii and 3DS, the
+  next launch still resumes from your last saved Quit/sleep moment. See [The pause menu](pause-menu.md#the-pause-menu-home)
+  for per-emulator details.
 
-This is how NextUI and MinUI quit: their in-game menu has one Quit that writes the game's own saves, and they keep a
-moment to resume only when the device sleeps or switches off. With the switch off, the Pocket does the same.
+Even with this Off, putting your handheld to sleep or using Power off still saves your spot safely.
 
 ### Console boot screen
 
-Settings → Playing → **Console boot screen**: with **On**, a game that starts from the beginning runs through its console's own boot
-screen first: the Nintendo logo of the Game Boy, Game Boy Color and Game Boy Advance, the start-up of the PlayStation, the
-Dreamcast's swirl, the Saturn's and the Mega-CD's logo, the PC Engine CD's System Card. **Off** is the default and starts the
-game at once. A switches it. The game's display or TV switches on as always, and the boot screen comes up on it.
+Settings → Playing → **Console boot screen** (**Off** by default; toggle with A) plays the real console boot animation
+on a fresh start (Game Boy, GBC and GBA Nintendo logos, the PlayStation startup, Dreamcast swirl, Saturn and Mega-CD
+intros, and the PC Engine CD System Card), right after the TV or handheld screen switches on.
 
-It needs your own BIOS file in the BIOS folder (`roms/bios`; pocket-ui ships none). The file must be the original, of exactly this size:
+You supply your own dumped BIOS files inside `roms/bios` (pocket-ui ships none), matching these exact files and sizes:
 
 | Console | File | Size |
 |---|---|---|
-| Game Boy (and games without Color) | `gb_bios.bin` | 256 bytes |
-| Game Boy Color (a game with Color support runs through this one) | `gbc_bios.bin` | 2304 bytes |
+| Game Boy (and non-Color games) | `gb_bios.bin` | 256 bytes |
+| Game Boy Color (Color-capable titles) | `gbc_bios.bin` | 2304 bytes |
 | Game Boy Advance | `gba_bios.bin` | 16384 bytes |
-| PlayStation | `scph5501.bin` or another usual PlayStation BIOS name (`scph1001.bin`, `scph5500.bin`, …) | 512 KB |
-| Dreamcast (Flycast) | `dc/dc_boot.bin` (in a folder `dc` inside the BIOS folder) | 2 MB |
-| Saturn | `saturn_bios.bin`, `sega_101.bin` or `mpr-17933.bin` (Beetle Saturn reads only the last two) | 512 KB |
-| Mega-CD | `bios_CD_E.bin`, `bios_CD_U.bin` or `bios_CD_J.bin`: the one of the disc's region, as its name says it (`(Europe)`, `(USA)`, `(Japan)`) | 128 KB |
+| PlayStation | `scph5501.bin` or another standard PS1 BIOS (`scph1001.bin`, `scph5500.bin`, …) | 512 KB |
+| Dreamcast (Flycast) | `dc/dc_boot.bin` (inside `roms/bios/dc/`) | 2 MB |
+| Saturn | `saturn_bios.bin`, `sega_101.bin` or `mpr-17933.bin` (Beetle Saturn uses the last two) | 512 KB |
+| Mega-CD | `bios_CD_E.bin`, `bios_CD_U.bin` or `bios_CD_J.bin` matching disc region (`(Europe)`, `(USA)`, `(Japan)`) | 128 KB |
 | PC Engine CD | `syscard3.pce` | 256 KB |
 
-Without the file the game starts as before and a short note on the game's first picture names the file it needs. The other
-consoles (SNES, Mega Drive, N64 and the rest) have no boot screen to run and start as before. The Dreamcast, Saturn, Mega-CD and
-PC Engine CD use your BIOS file for every start once it is there (the last two can't start a disc without it); with **On** no
-built-in replacement skips its boot screen. The DS is not among them: its emulators either start the game directly or stop in
-the DS's own menu, which waits for a touch.
+Missing a BIOS? The game still launches normally (where possible) and briefly tells you which filename it looked for.
+Consoles without a boot screen (SNES, Mega Drive, N64, …) launch straight in as usual. Dreamcast, Saturn, Mega-CD and
+PC Engine CD always use your real BIOS once present (Mega-CD and PC Engine CD require one); turning this On stops any
+built-in HLE shortcut from skipping the logo. Nintendo DS isn't included because DS emulators either boot direct or stop
+at the DS touchscreen menu.
 
-On Android the handheld view's switch is the same, and the BIOS files come from the folders you chose (Game check copies them).
+On Android's Handheld view, this switch works identically using the BIOS folders you set up (Game check copies them in).
 
-Only a fresh start runs it, never one that continues a moment: with [Continue where I quit](#continue-where-i-quit) **On** (the
-default) the next start picks up the moment Quit kept, so there is no boot screen. For a game that always starts fresh, with the
-logo, switch **Continue where I quit** **Off** and set [On start](#on-start) to **Last game**: the Pocket then starts into
-the last game through its boot screen. A game's own saves (battery, memory card) carry on as usual.
+Boot screens only play on a **fresh start**, never when resuming a saved state. Want to boot straight into your last
+game through its classic startup logo every time? Turn **Continue where I quit** **Off** and set [On start](#on-start)
+to **Last game**; your in-game battery and memory card saves stay intact as usual.
 
 ### Remind me where I was
 
-Settings → Playing → **Remind me where I was**: when a game continues its moment and you last played it more than two
-weeks ago, a quiet card shows while the moment loads: when you played it last, how long you have played it, and your note
-from the game card if there is one. On pocket-ui’s own host the game stands still at that moment until you press any button. That button just starts play. **Off** is the default; A switches it. See [Where was I?](continue.md#where-was-i).
+Settings → Playing → **Remind me where I was** (**Off** by default; toggle with A) shows a quiet recap card whenever you
+resume a game you haven't touched in over two weeks: when you last played, total play time and your own game-card note.
+In pocket-core, the game holds still on its resumed frame until you press any button to jump right in. See
+[Where was I?](continue.md#where-was-i).
 
-The switch applies to pocket-ui's own host and to PlayStation 2, GameCube, Wii and 3DS. **RetroArch games still save
-the moment on Quit** with the switch off: ROCKNIX sets RetroArch to save on every exit, and RetroArch has no way to
-leave it out. Sleep, Power off and [Recent games](playing.md#recent-games) always keep the moment, whatever
-the switch says.
+Applies to pocket-core plus PS2, GameCube, Wii and 3DS. **RetroArch games always auto-save on Quit** regardless of
+Continue where I quit (ROCKNIX configures RetroArch that way). Sleep, Power off and
+[Recent games](playing.md#recent-games) always keep your moment too.
 
 ### Over the game
 
-Settings → Playing → **Over the game**: what is drawn over every game while you play, **Off** (the default),
-**FPS** or **FPS + sensors**, and **Pixel Path** with Settings → Games → Curator → **Pixel Path in the pause menu** on (the
-Enthusiast profile turns it on); what each shows is in [Over the game](pause-menu.md#over-the-game). Right
-or A goes on, Left goes back. A console or game with its own choice under Options → Speed, rumble, fan keeps it, and **HOME + Y**
-switches to the next level while you play. The [Easy](easy.md) look never draws any of it, whatever this says, and leaves the setting alone.
+Settings → Playing → **Over the game** chooses the live overlay drawn during gameplay: **Off** (default), **FPS**,
+**FPS + sensors**, or **Pixel Path** (available when Settings → Games → Curator → **Pixel Path in the pause menu** is
+On; enabled by Enthusiast). See [Over the game](pause-menu.md#over-the-game) for what each displays. Cycle with
+Left/Right or A. Per-game or per-console choices under Options → Speed, rumble, fan take priority, and **HOME + Y**
+cycles levels live mid-game. The [Easy](easy.md) layout keeps overlays hidden without changing your setting.
 
 ### Zoom in the pause menu
 
-Settings → Playing → **Zoom in the pause menu**: the [pause menu](pause-menu.md) on pocket-ui's own host lists **Zoom** before
-Quit. **Off** is the default, because the magnifier is a help for small text and most players never need it: then Zoom is a
-row of Options, next to Picture and Controls, and can be a [shortcut](options.md#shortcuts) (HOME + X). While
-[Big text](big-text.md#big-text) is on, the row is on the first page whatever this switch says. A or Left/Right switches it.
-See [Zoom](big-text.md#zoom).
+Settings → Playing → **Zoom in the pause menu** (**Off** by default; toggle with A or Left/Right) adds **Zoom** right to
+the first page of pocket-core's [pause menu](pause-menu.md) above Quit. Even when Off, Zoom stays accessible under
+Pause menu → Options and via the optional **HOME + X** [shortcut](options.md#shortcuts), and appears automatically on the
+first page whenever [Big text](big-text.md#big-text) is On. See [Zoom](big-text.md#zoom).
 
 ### Screen frames
 
-Settings → Playing → **Screen frames** says which games get a [screen frame](options-screen.md#screen-frame) when you haven't chosen
-one yourself. A or Left/Right switches it.
+Settings → Playing → **Screen frames** picks which systems get an automatic
+[screen frame](options-screen.md#screen-frame) when you haven't chosen one manually (cycle with A or Left/Right):
 
-- **Off**, the default: no console starts with a frame, so games show a clean picture on black.
-- **Handhelds**: the handhelds (Game Boy, Game Boy Advance, Game Gear and the others) start with frame Auto, the home
-  consoles with None.
-- **Every console**: every console starts with frame Auto. The home consoles get the monitor surround, the Nintendo DS
-  its DS frame.
+- **Off** (default): clean gameplay on black bars.
+- **Handhelds**: handheld consoles (Game Boy, GBA, Game Gear, …) default to Auto frames; home consoles stay clean.
+- **Every console**: every system starts with Auto: monitor surrounds for home consoles and the DS frame for Nintendo DS.
 
-A frame saved for a console or a game in the pause menu (Options → Picture, kept for the game or the console) stays as it is either
-way. The choice applies from the next game you start.
+Any frame saved for a specific game or console under Pause menu → Options → Picture always wins. Applies on your next
+game launch.
 
 ### Performance and fan
 
-Settings → Playing → **Performance & fan**: how fast the processor runs and how early the fan starts in games, the fan in the
-menus, **Smooth fan**, and the temperatures right now. It has its own page: [Performance and fan](performance.md).
+Settings → Playing → **Performance & fan** sets default CPU clocks, game and menu fan speeds, **Smooth fan** and live
+hardware readouts. Full guide: [Performance and fan](performance.md).
 
 ### RetroAchievements
 
-Settings → Playing → **RetroAchievements** signs the Pocket in to your free account on retroachievements.org, so the games on
-pocket-ui's own host count achievements. See [Achievements](achievements.md) for everything that follows.
+Settings → Playing → **RetroAchievements** links your free retroachievements.org account so pocket-core games track and
+unlock achievements. Full guide: [Achievements](achievements.md).
 
-1. Select **Sign in** and press A. Type your user name on the gamepad keyboard, START; then your password, START.
-   The Pocket needs Wi-Fi for this.
-2. The page shows **Signed in as** your name. The password is not kept: only the sign-in key the site answers with.
-3. **Log out** asks twice and removes the key. Your unlocks stay on the site.
+1. Select **Sign in**, press A, enter your username (START), then your password (START). Requires Wi-Fi.
+2. Once signed in, the page shows **Signed in as** your username. Your password is never stored; only the returned login
+   token.
+3. **Log out** asks twice and clears the token from your Pocket; all unlocks remain on retroachievements.org.
 
-In the Playing list the row shows your name when you are signed in, "Off" otherwise.
+In the Playing menu, the row shows your username when connected or "Off" when signed out.
 
 ## Games
 
-Settings → **Games**. Getting games and what runs them onto the Pocket, which systems are on the shelf, and the tools around them.
+Settings → **Games** manages your library, box art, visible consoles, Shelf space and Curator.
 
 | Entry | What it holds |
 |---|---|
-| **Add games** | A tile per system with its folder, file types and BIOS needs, file sharing, sending games from your phone (Y), and folders or disc games it can't read. See [Getting started](getting-started.md#the-systems-grid) and [From your phone](phone-upload.md) |
-| **Box art & downloads** | Box art, the Pictures choice and Starter pack; PortMaster games on ROCKNIX and TrimUI, and optional Cheats on TrimUI. The row was called Extras. See [Box art & downloads](extras.md) |
-| **Game check** | "Will my games start?": goes through your card and says, in plain words, what is missing and what to do. Only looks; it can hide a duplicate from the shelf when you press A. See [Getting started](game-check.md) |
-| **Systems on the shelf** | Which systems are on Home, a tick each. The row says "1 hidden" (or 2, 3...) while a system with games is off the shelf: this is the way back. See [Systems on the shelf](#systems-on-the-shelf) |
-| **Shelf space** | **Off** (the default), **10**, **20** or **50**: only so many games stand on the shelf, the rest wait in a crate under it. A or Left/Right changes it. See [Shelf space](#shelf-space) |
-| **Curator** | The Lens and smart shelves, Echoes, versions and play history, each on or off. See [Curator](#curator) |
-| **Screenshots** | The pictures you took with HOME + A, newest first, in groups by day, with a small picture each. A opens one full screen, X deletes it. The first row, **My shelf as a picture**, makes one square picture (1440 × 1440, in the colours of your page, whichever look the shelf is in) of your shelf to post: up to 20 of your games, the favourites, stickered and box-art ones first, with the trophy, the plant and a small pocket-ui mark. A shelf with no game says so. The value at the right is how many there are; with none the page says how to take one. See [Looking at your screenshots](playing.md#looking-at-your-screenshots) |
-| **From EmulationStation** | The favourites and ratings in your EmulationStation `gamelist.xml` files: A adds the favourites to Favourites or uses the ratings as My rating, without changing a thing in EmulationStation. Says "No gamelist" when there is none. See [Your EmulationStation gamelists](library-files.md#your-emulationstation-gamelists) |
-| **Android games** | Only in pocket-ui for Android: the apps on your device, A puts a game on its own Android shelf beside your consoles or takes it off. The same list as the Mobile view's. |
-| **RomM** | The games on your own RomM server, on the shelf: type its address, pair with a QR code (or a code on RomM 4.8 and 4.9), and each game downloads the first time you start it. The value says how many games it found, or "Not paired". Refresh the games, Unpair. See [Games from your RomM server](romm.md) |
+| **Add games** | System grid showing folders, file extensions and BIOS needs, plus File sharing, From your phone (Y) and unreadable-file notices. See [Getting started](getting-started.md#the-systems-grid) and [From your phone](phone-upload.md) |
+| **Box art & downloads** | Box art, Pictures downloads and Starter pack, plus PortMaster games (ROCKNIX/TrimUI) and optional Cheats (TrimUI). *(Previously called Extras.)* See [Box art & downloads](extras.md) |
+| **Game check** | Scans your card and reports missing BIOS files, bad zips, broken disc sheets or duplicates in plain English (press A to hide duplicates). See [Game check](game-check.md) |
+| **Systems on the shelf** | Show or hide individual consoles on Home (displays "1 hidden" etc. when any console is unchecked). See [Systems on the shelf](#systems-on-the-shelf) |
+| **Shelf space** | **Off** (default), **10**, **20** or **50**; limits your active shelf to a curated handful while tucking the rest into a crate underneath. Cycle with A or Left/Right. See [Shelf space](#shelf-space) |
+| **Curator** | Individual switches for Lens, smart shelves, Just Play, Echoes, Versions, Pixel Path and Play history. See [Curator](#curator) |
+| **Screenshots** | Browse screenshots taken with HOME + A grouped by day (A views full screen, X deletes). Top row **My shelf as a picture** renders a shareable 1440×1440 square portrait of up to 20 games (favourites, stickered and boxed titles first) with trophy, plant and a small pocket-ui mark. See [Looking at your screenshots](playing.md#looking-at-your-screenshots) |
+| **From EmulationStation** | Imports favourites and star ratings from existing `gamelist.xml` files without touching them (shows "No gamelist" if none exist). See [Your gamelists](library-files.md#your-gamelists) |
+| **Android games** | pocket-ui for Android only: pick Android apps to place on an Android shelf beside your consoles (shared with Mobile view) |
+| **RomM** | Connect your self-hosted RomM server via QR code (5.0+) or token code (4.8/4.9) so remote games stand on your shelf and download on first launch. Shows game count or "Not paired", plus Refresh and Unpair. See [Games from your RomM server](romm.md) |
 
 ### Systems on the shelf
 
-Settings → Games → **Systems on the shelf** . The list has every system that has games, each with a tick
-box, its console and the number of games. All are ticked by default. When Moonlight is installed, the last row is
-**PC streaming**, unticked by default: tick it to have the [PC streaming](pc-streaming.md) entry on Home.
+Settings → Games → **Systems on the shelf** lists every console that has games on your card, all checked by default.
+When Moonlight is installed, **PC streaming** sits unchecked at the bottom; tick it to put
+[PC streaming](pc-streaming.md) on Home.
 
-- **A** unticks the selected system: its card leaves Home, and its games leave Home's recent games and the game
-  switcher (SELECT). A again puts it back.
-- The games themselves stay where they are. **Starred games stay in Favourites**, even those of a hidden system:
-  a star is a choice for that one game. A recent game of a hidden system comes back the moment its system is
-  ticked again.
-- The last ticked system cannot be unticked; the page says why.
-- The choice is saved at once (in `settings.json`) and kept across restarts and updates.
-- **B** goes back to the Settings list.
+- Press **A** to hide a system from Home, recent games and the game switcher (SELECT); press A again to bring it back.
+- Nothing is deleted. **Starred games stay in Favourites** even if their console is hidden, and recent history returns
+  immediately when you re-enable the console.
+- At least one console must stay checked.
+- Saves immediately to `settings.json` and survives reboots and updates. Press **B** to return.
 
-The first start does not have this list; every system is on the shelf until you change it here.
-
-When no system has games yet, the page says so and shows how they come: once games are on the SD card, their systems
-show up here.
+First-start setup leaves every system checked by default. If your card has no games yet, the page explains how systems
+appear once games are copied over.
 
 ### Shelf space
 
-Settings → Games → **Shelf space** is for a smaller pile of games to choose from: only 10, 20 or 50 games stand on the
-shelf, and the rest wait in the **crate**, cardboard boxes on the floor under it, one per console. **Off** (the default):
-every game stands on the shelf, as before.
+Settings → Games → **Shelf space** cures choice paralysis: keep just **10**, **20** or **50** games out on your shelf
+while the rest sit neatly in the **crate**, as cardboard boxes on the floor underneath, one per console. **Off** (default)
+shows your whole library on the shelf.
 
-- **Switching it on** asks which games go on the shelf: **The games I played last** or **My favourites** (then the others
-  by name, until the shelf is full). Cancel leaves it off.
-- **Home** gets a **Crate** row before your systems ("12 games in the crate, the shelf is full"). The systems' rows show
-  only the games on the shelf; a system with none of its games on the shelf is not on Home. Search still finds every game.
-- **In the crate** (A on Crate): Left/Right goes through the boxes; the selected case comes up out of its box with its
-  cover above it. **A** takes it out. With a free place it goes straight onto the shelf. With the shelf full the shelf
-  shows over the boxes and the game you played longest ago is picked to make room; Left/Right picks another, **A**
-  swaps them: the old one goes into its box, then the new one takes its place on the shelf. **B** cancels.
-- **On a game's card**, above Hide or delete at its end: **Into the crate** puts the game into the crate and leaves its place free.
-- Switching between 10, 20 and 50 keeps what is on the shelf (as far as it fits; more places fill up with the games you
-  played last). **Off** puts every game back on the shelf; switched on again, the shelf is as you left it.
-- Games you copy onto the card later go into the crate. A game deleted from the card frees its place.
-- The crate with nothing in it shows its empty box and says that every game is on the shelf.
+- **Turning it on:** choose whether to stock your shelf with **The games I played last** or **My favourites** (filled
+  alphabetically to your limit; Cancel leaves it Off).
+- **Home** adds a **Crate** entry before your consoles ("12 games in the crate, the shelf is full"; appears as a
+  cardboard box on the shelf in the Shelf layout). Console rows show only shelved games and hide consoles whose games
+  are all boxed up; Search still finds every game.
+- **Opening the crate:** browse boxes with Left/Right as each highlighted case rises out with its cover. Press **A** to
+  pull it onto the shelf. If the shelf is full, it lifts into view with your least-recently-played game selected to swap
+  out (Left/Right picks another, **A** swaps them into the box and onto the shelf, **B** cancels).
+- **From a game card:** pick **Into the crate** (above Delete from the card) to box a game and free up a shelf slot.
+- Changing between 10, 20 and 50 preserves your current shelf (topping up open slots with recent games). Turning it
+  **Off** puts everything back on the shelf while remembering your curated selection if you turn it back on later.
+- Newly copied games land in the crate; deleting a shelved game frees its spot. An empty crate simply shows an empty box
+  confirming everything is on the shelf.
 
-It works in the Shelf, Split and Cabinet layouts (the crate looks the same in each); the Easy layout keeps every game in
-its one row. Where the shelf is kept: `shelf_space.json` in the data folder.
+Works across Shelf, Split and Cabinet layouts (Easy displays only your shelved games). Saved in `shelf_space.json`.
 
 ### Curator
 
-Settings → Games → **Curator** turns the parts of [Curator](curator.md#curator) on or off. A (or Left/Right) switches the selected
-row; the line under the list says what it does. Changes apply at once.
+Settings → Games → **Curator** toggles each piece of [Curator](curator.md#curator) individually (press A or Left/Right;
+changes apply live):
 
 | Row | Default | What it does |
 |---|---|---|
-| **Lens & smart shelves** | Off | The Curator row on Home, with the Lens, and your pinned smart shelves. On with Enthusiast, and on a Pocket that was set up before this became a choice |
-| **Just Play on Home** | On | The row on Home: A starts a game that suits you now, X shows it first with the reason ([Just Play](curator.md#just-play)). Off after an update only if the Lens was off before |
-| **Echoes on the game card** | Off | "More like this" on every card |
-| **Merge versions in mixed lists** | Off | A game you own on several systems shows once in Favourites, smart shelves and Echoes, and starts its preferred version |
-| **Games not on this device in Echoes** | Off | Echoes also names a few games you don't have. Names only |
-| **Pixel Path in the pause menu** | Off | Adds Pixel Path to the pause menu: how a game's picture and sound reach you, stage by stage, graded in colour. See [Pixel Path](pause-menu.md#pixel-path). It also adds the Pixel Path level to [Over the game](#over-the-game), the line beside the picture while you play; switched off, that level draws the FPS line |
-| **Play history** | On | Curator → History and the Year in review: what you played this week, month and year. Kept on this Pocket only. Off: nothing new is recorded, and what was recorded stays. See [Play history](curator.md#play-history) |
+| **Lens & smart shelves** | Off | Adds Curator (with Lens and pinned smart shelves) to Home. Starts On in Enthusiast or on upgraded pre-switch setups |
+| **Just Play on Home** | On | Puts Just Play on Home: A launches a smart pick immediately, X previews it with a reason ([Just Play](curator.md#just-play)). Stays Off after upgrading only if Lens was previously Off |
+| **Echoes on the game card** | Off | Shows "More like this" recommendations on every game card |
+| **Merge versions in mixed lists** | Off | Combines multi-console copies of the same game into one entry in Favourites, smart shelves and Echoes, launching your preferred version |
+| **Games not on this device in Echoes** | Off | Lets Echoes suggest a few matching titles you don't own yet (names only, no store) |
+| **Pixel Path in the pause menu** | Off | Adds [Pixel Path](pause-menu.md#pixel-path) to the pause menu and unlocks the Pixel Path overlay under [Over the game](#over-the-game) (falling back to FPS when Off) |
+| **Play history** | On | Powers Curator → History and Year in review on-device ([Play history](curator.md#play-history)). Turning it Off pauses recording without deleting past history |
 
-Switching a part off hides it; your smart shelves and preferred versions stay and come back when you
-switch it on again.
+Turning any piece off simply hides it; your smart shelves and preferred versions wait safely until you switch it back on.

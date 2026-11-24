@@ -11,7 +11,7 @@ mod local;
 #[path = "common/data_extra.rs"]
 mod extra;
 
-const SOURCES: &[&str] = &["settings", "favorites", "recents", "systems", "gamelist", "library-cache", "installed", "cheats", "disc", "ips", "bps", "ups", "archive", "cover", "frame-cache", "update", "case-knows", "moments", "game-settings", "console-settings", "curator", "update-hint", "checksums", "case-cache", "art-cache", "disc-cache", "playlist", "own-cheats", "play-log", "cover-missing"];
+const SOURCES: &[&str] = &["settings", "favorites", "recents", "systems", "gamelist", "library-cache", "installed", "cheats", "disc", "ips", "bps", "ups", "archive", "7z", "cover", "frame-cache", "update", "case-knows", "moments", "game-settings", "console-settings", "curator", "update-hint", "checksums", "case-cache", "art-cache", "disc-cache", "playlist", "own-cheats", "play-log", "cover-missing"];
 
 #[path = "common/data_faults.rs"]
 mod data_faults;
@@ -79,6 +79,8 @@ fn seed(source: &str, d: &Path) -> Vec<u8> {
         "bps" => footer(b"BPS1\x83\x83\x80\x89xyz".to_vec(), b"abc", b"xyz"),
         "ups" => footer(b"UPS1\x83\x83\x80\x19\x1b\x19\0".to_vec(), b"abc", b"xyz"),
         "archive" => zip(),
+        // A real 7-Zip file (testdata/7z/make.sh): Demo.gba, LZMA.
+        "7z" => include_bytes!("../testdata/7z/lzma.7z").to_vec(),
         "cover" => {
             let mut b = Vec::new(); { let mut e = png::Encoder::new(&mut b, 1, 1); e.set_color(png::ColorType::Rgb); let mut w = e.write_header().unwrap(); w.write_image_data(&[60, 100, 40]).unwrap(); } b
         }
@@ -133,30 +135,65 @@ fn all_read_sites_remain_in_the_reviewed_inventory() {
 #[test]
 fn data_source_rule_faults_terminate() {
     let start = Instant::now(); let dir = tempfile::tempdir().unwrap(); let d = dir.path(); prepare(d);
-    let mut failures = Vec::new(); let mut count = 0;
     let only=std::env::var("POCKET_READER_ONLY").ok();
+    let mut jobs: Vec<(&'static str, String, Option<Vec<u8>>)> = Vec::new();
     for source in SOURCES.iter().chain(local::SOURCES).chain(extra::SOURCES) {
         if only.as_deref().is_some_and(|only|*source!=only) { continue; }
         for (label, bytes) in faults(&seed(source, d)) {
-            let fault = d.join("fault"); let _ = std::fs::remove_file(&fault); if let Some(bytes) = bytes { std::fs::write(&fault, bytes).unwrap(); }
-            let log = std::fs::File::create(d.join("probe.log")).unwrap();
-            let mut cmd = Command::new(std::env::current_exe().unwrap());
-            cmd.args(["--exact", "data_source_probe", "--nocapture"])
-                .env("POCKET_READER_FAULT", &fault).env("POCKET_READER_SOURCE", source).env("POCKET_READER_LABEL", &label).env("POCKET_READER_VALID", if label == "valid" {"1"} else {"0"})
-                .stdout(log.try_clone().unwrap()).stderr(log);
-            parent_lifetime(&mut cmd);
-            let mut child = cmd.spawn().unwrap();
-            let deadline = Instant::now() + Duration::from_secs(15);
-            loop {
-                if let Some(status) = child.try_wait().unwrap() { if !status.success() { failures.push(format!("{source}/{label}: {}", std::fs::read_to_string(d.join("probe.log")).unwrap())); } break; }
-                if Instant::now() > deadline { let _ = child.kill(); let _ = child.wait(); panic!("{source}/{label}: reader hung (15s deadline)"); }
-                std::thread::sleep(Duration::from_millis(5));
-            }
-            count += 1;
-            assert!(failures.len() < 5, "five failed probes; stopping: {}", failures.join("\n"));
+            jobs.push((*source, label, bytes));
         }
     }
+    let count = jobs.len();
     assert!(count>0,"no registered source matched POCKET_READER_ONLY={only:?}");
+    let exe = std::env::current_exe().unwrap();
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let failed_count = std::sync::atomic::AtomicUsize::new(0);
+    let failures = std::sync::Mutex::new(Vec::new());
+    let workers = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).clamp(1, 4).min(count);
+    std::thread::scope(|scope| {
+        for _ in 0..workers {
+            let (jobs, next, failed_count, failures, exe) = (&jobs, &next, &failed_count, &failures, &exe);
+            scope.spawn(move || {
+                loop {
+                    if failed_count.load(std::sync::atomic::Ordering::Relaxed) >= 5 { break; }
+                    let idx = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some((source, label, bytes)) = jobs.get(idx) else { break };
+                    let fault = d.join(format!("fault-{idx}"));
+                    let log_path = d.join(format!("probe-{idx}.log"));
+                    let _ = std::fs::remove_file(&fault);
+                    if let Some(bytes) = bytes { std::fs::write(&fault, bytes).unwrap(); }
+                    let log = std::fs::File::create(&log_path).unwrap();
+                    let mut cmd = Command::new(exe);
+                    cmd.args(["--exact", "data_source_probe", "--nocapture"])
+                        .env("POCKET_READER_FAULT", &fault).env("POCKET_READER_SOURCE", source).env("POCKET_READER_LABEL", label).env("POCKET_READER_VALID", if label == "valid" {"1"} else {"0"})
+                        .stdout(log.try_clone().unwrap()).stderr(log);
+                    parent_lifetime(&mut cmd);
+                    let mut child = cmd.spawn().unwrap();
+                    let deadline = Instant::now() + Duration::from_secs(15);
+                    loop {
+                        if let Some(status) = child.try_wait().unwrap() {
+                            if !status.success() {
+                                let out = std::fs::read_to_string(&log_path).unwrap_or_default();
+                                failures.lock().unwrap().push(format!("{source}/{label}: {out}"));
+                                failed_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            }
+                            break;
+                        }
+                        if Instant::now() > deadline {
+                            let _ = child.kill(); let _ = child.wait();
+                            failures.lock().unwrap().push(format!("{source}/{label}: reader hung (15s deadline)"));
+                            failed_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    let _ = std::fs::remove_file(&fault);
+                    let _ = std::fs::remove_file(&log_path);
+                }
+            });
+        }
+    });
+    let failures = failures.into_inner().unwrap();
     eprintln!("data source faults: {count} probes in {:?}", start.elapsed());
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
@@ -201,6 +238,7 @@ fn data_source_probe() {
         "cheats" => { let got = cheats::collect("gb", &d.join("gb/Reader Rule Game.gb"), &[d.join("cht")]); if valid { assert_eq!(got.cheats.len(), 1); } }
         "disc" => { let got = disc::Discs::parse(&text, &d.join("gb/Reader Rule Game.gb")); if valid { assert_eq!(got.unwrap().count, 2); } }
         "ips" | "bps" | "ups" => { let format = match source.as_str() { "ips" => softpatch::Format::Ips, "bps" => softpatch::Format::Bps, _ => softpatch::Format::Ups }; let got = softpatch::apply(format, bytes.as_deref().unwrap_or_default(), b"abc"); if valid { assert!(got.is_ok(), "{got:?}"); } let _ = softpatch::apply_files(&[file], b"abc".to_vec()); }
+        "7z" => { let got = archive::extract_rom(&file, &["gba"]); if valid { assert_eq!(got.unwrap().1.len(), 4096); } else if let Err(e) = &got { assert!(!e.is_empty()); } let _ = archive::rom_crc(&file, &["gba"]); let _ = archive::refusal_of(&file, &["gba"], false); }
         "archive" => { let got = archive::extract_rom(&file, &["gb"]); if valid { assert_eq!(got.unwrap().1, b"reader rule game"); } let _ = archive::stored_entries(&file); let _ = archive::rom_crc(&file, &["gb"]); }
         "cover" => { let got = image::load_image(&file); if valid { assert!(got.is_some()); } let _ = covers::parse_index(&text); }
         "frame-cache" => { let got = frame_cache::load(&d.join("frames"), "rule"); if valid { assert!(got.is_some()); } }

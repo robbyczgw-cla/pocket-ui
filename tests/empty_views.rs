@@ -27,7 +27,7 @@ struct Card {
 impl Card {
     fn new() -> Card {
         // A short path: the stub's socket has to fit.
-        let dir = tempfile::Builder::new().prefix("pui-empty-").tempdir_in("/tmp").unwrap();
+        let dir = tempfile::Builder::new().prefix("pui-empty-").tempdir().unwrap();
         let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
         assert!(status.success());
         let stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {
@@ -136,10 +136,10 @@ fn the_tour_explains_six_basics_then_offers_easier_reading() {
     for (id, words) in [
         ("play", "Play, and HOME is the menu"),
         ("continue", "Continue where you stopped"),
-        ("saving", "Save and Load are in the pause menu"),
+        ("saving", "Save and Load live in the pause menu"),
         ("quick", "Brightness, volume, Wi-Fi"),
-        ("add_games", "Games go in each system's folder"),
-        ("settings", "Everything on these cards"),
+        ("add_games", "Drop games in each system's folder on the SD card"),
+        ("settings", "Every feature here, and everything else"),
     ] {
         let screen = card.screen(&format!("tour:{id}"), "");
         assert!(screen.contains("The basics in 7 cards") && screen.contains(words), "{id}: {screen}");
@@ -193,7 +193,7 @@ fn the_pause_controls_page_starts_with_the_stick_and_button_rows() {
     }
 }
 
-/// The game card has no Controls row any more (the controls card is gone): from its top down to its end, Hide or delete,
+/// The game card has no Controls row any more (the controls card is gone): from its top down to its end, Hide from the shelf,
 /// no row says which button does what.
 #[test]
 fn the_game_card_has_no_controls_row() {
@@ -203,7 +203,7 @@ fn the_game_card_has_no_controls_row() {
         seen += &card.screen(&format!("curator:card:snes:chrono:{downs}"), "640x480");
         seen.push('\n');
     }
-    assert!(seen.contains("Hide or delete"), "the card's end: {seen}");
+    assert!(seen.contains("Hide from the shelf"), "the card's end: {seen}");
     assert!(!seen.contains("Which button of the") && !seen.lines().any(|l| l.trim() == "Controls"), "no Controls row on the card: {seen}");
 }
 
@@ -333,7 +333,7 @@ fn missing_connections_and_history_always_explain_the_next_step_in_both_styles()
     let card = sparse_card(&["Pocket Homebrew Demo.gba"]);
     for font in ["barlow", "retro"] {
         for (state, expected) in [
-            ("switcher", &["Nothing played yet", "The games you play"][..]),
+            ("switcher", &["Nothing played yet", "Games you play land here"][..]),
             ("setup:wifi-empty", &["No networks", "Scan again"][..]),
             ("setup:first-wifi-empty", &["No networks", "Continue offline", "Skip the rest"][..]),
             ("curator:history-empty", &["Nothing played", "Games you play"][..]),

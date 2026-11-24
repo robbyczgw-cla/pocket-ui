@@ -534,14 +534,14 @@ impl App {
                 if s.cut {
                     lines.push(("Only the first 50000 are on the shelf.".into(), pal().dust));
                 }
-                lines.push(("Each game downloads the first time you start it, then it stays on the card.".into(), pal().dust));
+                lines.push(("Games download on first launch, then stay cached on your SD card.".into(), pal().dust));
             }
             (Some(_), None) => lines.push(("The list of games hasn't been read yet.".into(), pal().dust)),
             (None, _) => {
                 if pocket_ui::device::no_wifi_chip() {
                     lines.push((pocket_ui::device::NEEDS_NETWORK.into(), pal().dust));
                 }
-                lines.push(("RomM is a game server you run yourself. Pair this Pocket once, and its games stand on your shelf beside the ones on the card.".into(), pal().dust));
+                lines.push(("RomM is a self-hosted game server. Pair once and your RomM games appear right beside local ones.".into(), pal().dust));
             }
         }
         for (text, colour) in lines {

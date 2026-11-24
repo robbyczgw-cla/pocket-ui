@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ui"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 authors = ["Robby Czesany"]
 license = "GPL-2.0-or-later"
@@ -60,6 +60,9 @@ libloading = "0.8"
 miniz_oxide = "0.8"
 # ZIP entry checksums (`archive`); already in the tree through png and flate2.
 crc32fast = "1"
+# 7z games (`seven_zip`, the R36S's card has every GBA game as a 7z): pure Rust, LZMA/LZMA2 (lzma-rust2) and PPMd
+# (ppmd-rust). Without the default features: no passwords, no BZip2/Zstd/Brotli, no C library.
+sevenz-rust2 = { version = "0.25", default-features = false, features = ["ppmd"] }
 glow = "0.14"
 raw-window-handle = "0.6"
 qrcode = { version = "0.14.1", default-features = false }

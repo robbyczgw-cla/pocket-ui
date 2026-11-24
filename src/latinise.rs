@@ -1,6 +1,7 @@
 //! Letters no font of ours can draw: what the player sees instead of "?" and empty boxes.
 //!
-//! Barlow, Departure Mono and Pixelify have no kana, hangul or kanji. The system's Noto Sans CJK fills in where it is
+//! Barlow, Departure Mono and Pixelify have no kana, hangul or kanji. Hangul comes from the Korean fonts pocket-ui
+//! ships (`text_fallback::korean`, KS X 1001's 2,350 syllables), the rest from the system's Noto Sans CJK where it is
 //! installed (ROCKNIX, `text_fallback`); everywhere else (a computer, the Brick, a phone's own fonts missing) a name like
 //! "ニンテンドーゲームキューブ" used to be painted as "???????????", which reads as a bug. Two things happen now, both
 //! without a font of CJK glyphs in the binary:
@@ -35,9 +36,10 @@ fn faces() -> &'static [Face<'static>] {
     })
 }
 
-/// Whether every embedded face (any style of Settings → Look) has a glyph for `ch`.
+/// Whether every embedded face (any style of Settings → Look) has a glyph for `ch`, or the Korean fonts pocket-ui
+/// ships do (`text_fallback::korean`: hangul is drawn in every style, with or without a system font).
 pub fn base_covers(ch: char) -> bool {
-    ch.is_ascii() || faces().iter().all(|f| f.glyph_index(ch).is_some_and(|g| g.0 != 0))
+    ch.is_ascii() || crate::text_fallback::korean_has(ch) || faces().iter().all(|f| f.glyph_index(ch).is_some_and(|g| g.0 != 0))
 }
 
 /// `base_covers`, or the system's fallback font (`text_fallback::path`) has `ch`; the font is opened only for a letter
@@ -310,9 +312,15 @@ mod tests {
 
     #[test]
     fn hangul_becomes_revised_romanization() {
+        // A painter without the Korean fonts (`text_fallback::korean`): hangul in Latin letters.
+        let f = |s: &str| fold(s, &mut |c| base_covers(c) && !crate::text_fallback::is_korean(c)).into_owned();
         assert_eq!(f("한국어"), "Hangukeo");
         assert_eq!(f("마리오 카트"), "Mario Kateu");
         assert_eq!(f("젤다의 전설"), "Jeldaui Jeonseol");
+        // pocket-ui's own painter has them: Korean stays as written, a syllable outside KS X 1001 ("똠") is spelled out.
+        let ours = |s: &str| fold(s, &mut bare).into_owned();
+        assert_eq!(ours("젤다의 전설"), "젤다의 전설");
+        assert!(!ours("똠").is_empty() && ours("똠").is_ascii(), "{}", ours("똠"));
     }
 
     #[test]

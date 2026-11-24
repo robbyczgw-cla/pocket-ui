@@ -588,16 +588,19 @@ mod tests {
     fn the_ui_threads_clock_stands_at_each_sixtieth_and_the_others_run_on() {
         let _l = TEST_LOCK.lock().unwrap();
         assert!(clock::install(), "this build can fix its clock");
-        let t = std::thread::spawn(|| {
+        let (go_tx, go_rx) = sync_channel(1);
+        let t = std::thread::spawn(move || {
             clock::start_here();
             let a = std::time::Instant::now();
             clock::set(clock::real_ns() + tick_ns(1));
             let b = std::time::Instant::now();
+            go_rx.recv().unwrap();
             std::thread::sleep(std::time::Duration::from_millis(30));
             let c = std::time::Instant::now();
             (b - a, c - b)
         });
         let other = std::time::Instant::now();
+        go_tx.send(()).unwrap();
         let (step, slept) = t.join().unwrap();
         assert!(step >= std::time::Duration::from_nanos(tick_ns(1)) && step < std::time::Duration::from_millis(18), "one tick: {step:?}");
         assert_eq!(slept, std::time::Duration::ZERO, "the fixed clock stands within a tick");

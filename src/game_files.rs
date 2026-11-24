@@ -12,6 +12,12 @@
 //!   RetroArch's, Dolphin's and Azahar's own, with their pictures), [`is_state_of`]. PS2 states are named after the
 //!   disc's serial and can't be told from the file; they stay. Kept unless asked for.
 //! * Its box art, game pictures and kept frame (pocket-ui's own copies) always go with it.
+//! * Its entry in the system folder's `gamelist.xml` (EmulationStation's), and the pictures, video and manual that entry
+//!   names in the system folder and no other entry does (`gamelist::without_games`). The file is written whole and
+//!   renamed into place; anything else in it stays as it was.
+//! * Only where the game's folder can be written ([`can_delete`]): dArkOS shows the games read only, and on Android the
+//!   games are in shared folders other apps use (pocket-ui has no copies of its own there), so the card offers no
+//!   Delete there.
 //!
 //! Two games of one system with one file name share their states and pictures: neither takes them with it (`Places::shared`).
 //!
@@ -56,6 +62,26 @@ pub struct Plan {
     pub pictures: Vec<PathBuf>,
     /// The folder the game had to itself, removed when nothing else is left in it.
     pub own_folder: Option<PathBuf>,
+    /// The system folder the game is in: its `gamelist.xml` loses the game's entry.
+    pub rom_dir: Option<PathBuf>,
+}
+
+/// Whether the card may offer "Delete from the card" for `path`: not on Android (shared folders, no copies of our own),
+/// and only when its folder can be written (dArkOS binds the games read only into pocket-ui's view; a card that went
+/// read only after an error).
+pub fn can_delete(path: &Path) -> bool {
+    !cfg!(target_os = "android") && path.parent().is_some_and(folder_writable)
+}
+
+/// `dir` is there, on a file system mounted for writing, and this process may write into it.
+pub fn folder_writable(dir: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c) = std::ffi::CString::new(dir.as_os_str().as_bytes()) else { return false };
+    // SAFETY: `c` is a valid NUL-terminated path for the duration of both calls; `st` is written by statvfs.
+    unsafe {
+        let mut st: libc::statvfs = std::mem::zeroed();
+        libc::access(c.as_ptr(), libc::W_OK) == 0 && libc::statvfs(c.as_ptr(), &mut st) == 0 && st.f_flag & libc::ST_RDONLY == 0
+    }
 }
 
 impl Plan {
@@ -87,6 +113,10 @@ pub struct Places<'a> {
     pub protected: &'a [PathBuf],
     /// Another game of the system has this file name: its states and pictures, named after that alone, are its too.
     pub shared: bool,
+    /// The folder the game's saves are in when it is not the game's own (the Brick's and dArkOS's
+    /// `POCKET_CORE_SAVE_DIR/<system>`): `web::saves::save_dir`, the rule the web companion's saves and Pocket Sync
+    /// use. None: beside the game.
+    pub saves_dir: Option<PathBuf>,
 }
 
 /// What deleting the game `path` of `system` would take, with sizes. Reads a sheet or two and lists two folders: run
@@ -104,13 +134,20 @@ pub fn plan(system: &str, path: &Path, places: &Places) -> Result<Plan, String> 
             let bytes = fs::symlink_metadata(&f).map_or(0, |m| m.len());
             plan.game.push(Item { path: f, bytes });
         }
-        plan.saves = saves_of(path).into_iter().map(|p| item(&p)).collect();
+        let beside = match (&places.saves_dir, path.file_name()) {
+            (Some(dir), Some(file)) => dir.join(file),
+            _ => path.to_path_buf(),
+        };
+        plan.saves = saves_of(&beside).into_iter().map(|p| item(&p)).collect();
     }
     if !places.shared {
         plan.states = states_of(system, path, places.states).into_iter().map(|p| item(&p)).collect();
         plan.pictures = pictures_of(system, path, places.data).into_iter().filter(|p| p.exists()).collect();
     }
+    // A custom cover belongs to this exact file even when other games share the automatic artwork.
+    plan.pictures.extend(crate::covers::custom::existing(places.data, system, path));
     plan.own_folder = own_folder(path, places.protected);
+    plan.rom_dir = places.protected.iter().filter(|p| path.starts_with(p) && p.as_path() != path).max_by_key(|p| p.as_os_str().len()).cloned();
     Ok(plan)
 }
 
@@ -272,11 +309,33 @@ pub fn delete(plan: &Plan, with_saves: bool, protected: &[PathBuf]) -> Result<u6
     for p in &plan.pictures {
         let _ = fs::remove_file(p);
     }
+    if let Some(dir) = &plan.rom_dir {
+        forget_in_gamelist(dir, &plan.game.iter().map(|i| i.path.clone()).collect::<Vec<_>>());
+    }
     if let Some(dir) = &plan.own_folder {
         // Only when empty: remove_dir refuses anything else.
         let _ = fs::remove_dir(dir);
     }
     Ok(freed)
+}
+
+/// `<dir>/gamelist.xml` without the entries of `games`, and the media only they named (in `dir`) deleted. A gamelist
+/// that can't be read or written stays as it is: the game is gone either way, and ES drops entries whose file is gone.
+fn forget_in_gamelist(dir: &Path, games: &[PathBuf]) {
+    let file = dir.join("gamelist.xml");
+    let Ok(text) = fs::read_to_string(&file) else { return };
+    let Some((kept, media)) = crate::gamelist::without_games(&text, dir, games) else { return };
+    let tmp = dir.join(".gamelist.xml.pocket-ui");
+    if let Err(e) = fs::write(&tmp, kept).and_then(|()| fs::rename(&tmp, &file)) {
+        eprintln!("library: {} not written: {e}", file.display());
+        let _ = fs::remove_file(&tmp);
+        return;
+    }
+    for m in media {
+        if m.is_file() && !is_save(&m) {
+            let _ = fs::remove_file(m);
+        }
+    }
 }
 
 /// A game's folder: every file but saves (unless `with_saves`), then the folders left empty. The bytes it freed.
@@ -410,7 +469,7 @@ mod tests {
         t.put("roms/savestates/psx/Saga II.pstate", 50);
         t.put("data/covers/psx/Saga.png", 3);
         let protected = t.protected();
-        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false };
+        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false, saves_dir: None };
         let plan = plan("psx", &m3u, &places).unwrap();
         assert_eq!(plan.game.len(), 5);
         assert_eq!(plan.game_bytes(), 2000 + fs::metadata(&m3u).unwrap().len() + 2 * fs::metadata(t.0.join("roms/psx/Saga/Saga (Disc 1).cue")).unwrap().len());
@@ -430,6 +489,112 @@ mod tests {
         assert!(t.has("roms/psx/Saga"), "the folder stays while a save is in it");
     }
 
+    /// 21.11.: a deleted game kept its entry in EmulationStation's gamelist.xml and the scraped pictures in the system
+    /// folder (`images/`), so ES's own list and the card's space were left with a ghost. A multi-disc game: every disc and
+    /// its entry go, the other game's entry and a picture both name stay, the saves stay.
+    #[test]
+    fn a_deleted_games_gamelist_entry_and_its_own_scraped_media_go_too() {
+        let t = Tree::new("gamelist");
+        let m3u = t.text("roms/psx/Saga/Saga.m3u", "Saga (Disc 1).chd\nSaga (Disc 2).chd\n");
+        t.put("roms/psx/Saga/Saga (Disc 1).chd", 1000);
+        t.put("roms/psx/Saga/Saga (Disc 2).chd", 1000);
+        t.put("roms/psx/Saga.srm", 8);
+        t.put("roms/psx/Other.chd", 70);
+        t.put("roms/psx/images/Saga-image.png", 30);
+        t.put("roms/psx/videos/Saga-video.mp4", 40);
+        t.put("roms/psx/images/shared-logo.png", 5);
+        t.put("roms/psx/images/Other-image.png", 30);
+        let xml = "<?xml version=\"1.0\"?>\n<gameList>\n\t<game>\n\t\t<path>./Saga/Saga.m3u</path>\n\t\t<name>Saga</name>\n\t\t<image>./images/Saga-image.png</image>\n\t\t<video>./videos/Saga-video.mp4</video>\n\t\t<marquee>./images/shared-logo.png</marquee>\n\t</game>\n\t<game>\n\t\t<path>./Other.chd</path>\n\t\t<name>Other &amp; Co</name>\n\t\t<image>./images/Other-image.png</image>\n\t\t<marquee>./images/shared-logo.png</marquee>\n\t</game>\n</gameList>\n";
+        t.text("roms/psx/gamelist.xml", xml);
+        let protected = t.protected();
+        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false, saves_dir: None };
+        let plan = plan("psx", &m3u, &places).unwrap();
+        assert_eq!(plan.rom_dir.as_deref(), Some(t.0.join("roms/psx").as_path()), "the system folder, not the game's own");
+        delete(&plan, false, &protected).unwrap();
+        for gone in ["roms/psx/Saga/Saga.m3u", "roms/psx/Saga/Saga (Disc 1).chd", "roms/psx/Saga/Saga (Disc 2).chd", "roms/psx/images/Saga-image.png", "roms/psx/videos/Saga-video.mp4"] {
+            assert!(!t.has(gone), "{gone}");
+        }
+        for kept in ["roms/psx/Saga.srm", "roms/psx/Other.chd", "roms/psx/images/shared-logo.png", "roms/psx/images/Other-image.png"] {
+            assert!(t.has(kept), "{kept} kept");
+        }
+        let left = fs::read_to_string(t.0.join("roms/psx/gamelist.xml")).unwrap();
+        assert_eq!(left, "<?xml version=\"1.0\"?>\n<gameList>\n\t<game>\n\t\t<path>./Other.chd</path>\n\t\t<name>Other &amp; Co</name>\n\t\t<image>./images/Other-image.png</image>\n\t\t<marquee>./images/shared-logo.png</marquee>\n\t</game>\n</gameList>\n");
+        assert!(!t.has("roms/psx/.gamelist.xml.pocket-ui"), "no temporary file left");
+    }
+
+    /// The gamelist reader's damaged cases: missing, empty, cut off inside the game's entry, Latin-1 (not UTF-8). The game
+    /// goes every time; a gamelist that can't be read whole is left exactly as it was, never half rewritten.
+    #[test]
+    fn a_damaged_or_odd_gamelist_is_left_alone_and_the_game_still_goes() {
+        let cut = "<gameList>\n  <game>\n    <path>./Tiny.gba</path>\n    <name>Ti";
+        let latin1: &[u8] = b"<gameList>\n  <game>\n    <path>./Tiny.gba</path>\n    <desc>Caf\xe9</desc>\n  </game>\n</gameList>\n";
+        for (case, bytes) in [("missing", None), ("empty", Some(&b""[..])), ("cut", Some(cut.as_bytes())), ("latin1", Some(latin1))] {
+            let t = Tree::new(&format!("gamelist-{case}"));
+            let rom = t.put("roms/gba/Tiny.gba", 10);
+            if let Some(b) = bytes {
+                fs::write(t.0.join("roms/gba/gamelist.xml"), b).unwrap();
+            }
+            let protected = t.protected();
+            let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false, saves_dir: None };
+            let plan = plan("gba", &rom, &places).unwrap();
+            delete(&plan, false, &protected).unwrap();
+            assert!(!t.has("roms/gba/Tiny.gba"), "{case}: the game goes");
+            assert_eq!(fs::read(t.0.join("roms/gba/gamelist.xml")).ok().as_deref(), bytes, "{case}: the gamelist as it was");
+            assert!(!t.has("roms/gba/.gamelist.xml.pocket-ui"), "{case}");
+        }
+    }
+
+    /// The Brick (and dArkOS): pocket-core keeps the saves in `POCKET_CORE_SAVE_DIR/<system>/`, not beside the game. "Delete
+    /// too" found none there before (21.11. review): the sheet said "None found" while the save stayed. Now the plan
+    /// asks the rule the web companion's saves and Pocket Sync use (`web::saves::save_dir`): the save there and the
+    /// game's states (a slot and the Continue state) go with "Delete too" and stay with "Keep".
+    #[test]
+    fn on_the_brick_delete_too_finds_the_saves_in_their_own_folder() {
+        for with_saves in [false, true] {
+            let t = Tree::new(if with_saves { "brick-delete-too" } else { "brick-keep" });
+            let rom = t.put("roms/gba/Tiny.gba", 100);
+            t.put("saves/gba/Tiny.srm", 32);
+            t.put("saves/gba/Tiny.rtc", 16);
+            t.put("saves/gba/Other.srm", 32);
+            t.put("roms/savestates/gba/Tiny.pstate1", 50);
+            t.put("roms/savestates/gba/Tiny.pstate.auto", 60);
+            let mut roots = crate::web::files::Roots::under(&t.0.join("roms"));
+            roots.saves = Some(t.0.join("saves"));
+            let saves_dir = crate::web::saves::save_dir(&roots, &rom);
+            assert_eq!(saves_dir.as_deref(), Some(t.0.join("saves/gba").as_path()), "the shared rule");
+            let protected = t.protected();
+            let places = Places { states: &roots.states, data: &t.0.join("data"), protected: &protected, shared: false, saves_dir };
+            let plan = plan("gba", &rom, &places).unwrap();
+            assert_eq!(names(&plan.saves), ["Tiny.rtc", "Tiny.srm"], "found in the saves folder, not Other's");
+            assert_eq!(names(&plan.states), ["Tiny.pstate.auto", "Tiny.pstate1"]);
+            assert_eq!(plan.kept_bytes(), 32 + 16 + 50 + 60, "the sheet's \"Delete too\" size counts them");
+            delete(&plan, with_saves, &protected).unwrap();
+            assert!(!t.has("roms/gba/Tiny.gba"));
+            for f in ["saves/gba/Tiny.srm", "saves/gba/Tiny.rtc", "roms/savestates/gba/Tiny.pstate1", "roms/savestates/gba/Tiny.pstate.auto"] {
+                assert_eq!(t.has(f), !with_saves, "{f} with_saves={with_saves}");
+            }
+            assert!(t.has("saves/gba/Other.srm"), "another game's save stays");
+        }
+    }
+
+    /// The card offers Delete only where the game's folder can be written (dArkOS binds the games read only).
+    #[test]
+    fn delete_is_offered_only_where_the_games_folder_can_be_written() {
+        let t = Tree::new("writable");
+        let rom = t.put("roms/gba/Tiny.gba", 10);
+        assert!(can_delete(&rom));
+        assert!(!can_delete(&t.0.join("roms/nowhere/Gone.gba")), "a folder that isn't there");
+        assert!(!folder_writable(Path::new("/proc/self/fdinfo/no-such")));
+        // A folder without write permission (as dArkOS's view is for pocket-ui); root may write anyway, so only then.
+        if unsafe { libc::geteuid() } != 0 {
+            use std::os::unix::fs::PermissionsExt;
+            let dir = t.0.join("roms/gba");
+            fs::set_permissions(&dir, fs::Permissions::from_mode(0o555)).unwrap();
+            assert!(!can_delete(&rom), "read only");
+            fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+
     #[test]
     fn with_saves_everything_of_the_game_goes_and_its_empty_folder_too() {
         let t = Tree::new("all");
@@ -441,7 +606,7 @@ mod tests {
         t.put("roms/gba/Tiny.sav", 64);
         t.put("roms/gba/Other.gba", 100);
         let protected = t.protected();
-        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false };
+        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false, saves_dir: None };
         let plan = plan("psx", &cue, &places).unwrap();
         assert_eq!(plan.freed(true), plan.game_bytes() + 8 + 30);
         delete(&plan, true, &protected).unwrap();
@@ -462,7 +627,7 @@ mod tests {
         t.put("roms/dos/Keen/data/LEVEL1.DAT", 300);
         t.put("roms/dos/Keen/SAVEGAM1.sav", 10);
         let protected = t.protected();
-        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false };
+        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false, saves_dir: None };
         let plan = plan("dos", &t.0.join("roms/dos/Keen"), &places).unwrap();
         assert_eq!(plan.game_bytes(), 1210);
         assert_eq!(delete(&plan, false, &protected).unwrap(), 1200);
@@ -476,7 +641,7 @@ mod tests {
         let t = Tree::new("refuse");
         t.put("roms/gba/A.gba", 1);
         let protected = t.protected();
-        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false };
+        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: false, saves_dir: None };
         assert!(plan("gba", &t.0.join("roms/gba"), &places).is_err());
         assert!(plan("gba", &t.0.join("roms"), &places).is_err());
         assert!(plan("gba", &t.0.join("roms/gba/Gone.gba"), &places).unwrap_err().contains("no longer"));
@@ -504,7 +669,7 @@ mod tests {
         let (slot, auto, ra) = (t.put("roms/savestates/gba/Game.pstate", 4), t.put("roms/savestates/gba/Game.pstate.auto", 4), t.put("roms/savestates/gba/Game.state", 4));
         let cover = t.put("data/covers/gba/Game.png", 3);
         let protected = t.protected();
-        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: true };
+        let places = Places { states: &t.0.join("roms/savestates"), data: &t.0.join("data"), protected: &protected, shared: true, saves_dir: None };
         let plan = plan("gba", &a, &places).unwrap();
         assert!(plan.states.is_empty() && plan.pictures.is_empty());
         assert_eq!(names(&plan.saves), ["Game.srm"], "the battery save beside it is its own");

@@ -274,12 +274,16 @@ pub fn paint_graph(c: &mut Canvas, text: &mut Text, samples: &[Sample], now: u64
         7..=24 => 3,
         _ => 6,
     };
-    for k in (0..=hours).step_by(step as usize) {
-        let gx = x + w - (w as u64 * k / hours) as i32;
-        c.rect(gx, y, 2, h, grid);
-        let label = if k == 0 { "now".to_string() } else { format!("-{k} h") };
-        let lw = text.width(Face::Body, 24, &label);
-        text.draw(c, Face::Body, 24, (gx - lw / 2).clamp(x - 20, x + w - lw), y + h + 36, label_c, &label);
+    let ticks: Vec<(i32, String)> = (0..=hours)
+        .step_by(step as usize)
+        .map(|k| (x + w - (w as u64 * k / hours) as i32, if k == 0 { "now".to_string() } else { format!("-{k} h") }))
+        .collect();
+    let spots: Vec<(i32, i32)> = ticks.iter().map(|(gx, label)| (*gx, text.width(Face::Body, 24, label))).collect();
+    for ((gx, label), at) in ticks.iter().zip(axis_label_xs(&spots, x, w)) {
+        c.rect(*gx, y, 2, h, grid);
+        if let Some(lx) = at {
+            text.draw(c, Face::Body, 24, lx, y + h + 36, label_c, label);
+        }
     }
     // On the long ranges several samples share a column; each column is drawn once, or the fill adds up.
     // Each column: (x, the line's y, its colour); painted below as one shape per colour.
@@ -340,8 +344,46 @@ pub fn details(s: &Sample) -> String {
     parts.join("  ·  ")
 }
 
+/// Where the time axis' labels go: each `(tick x, label width)` centred under its tick inside the chart (a little past
+/// its left edge), from "now" at the right to the left; `None` for a label that would touch the one to its right. Korean
+/// at Large text on the Brick (22.11.2026) painted "-21시간" into "-24시간": the labels had no room of their own.
+fn axis_label_xs(spots: &[(i32, i32)], x: i32, w: i32) -> Vec<Option<i32>> {
+    const GAP: i32 = 4;
+    let mut left_of_last = i32::MAX;
+    spots
+        .iter()
+        .map(|&(gx, lw)| {
+            let lx = (gx - lw / 2).clamp(x - 20, x + w - lw);
+            (lx + lw + GAP <= left_of_last).then(|| {
+                left_of_last = lx;
+                lx
+            })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn the_time_axis_labels_never_touch_and_keep_what_fits() {
+        // English on a wide chart: every label stays where it was (centred under its tick, clamped inside).
+        let spots: Vec<(i32, i32)> = (0..=8).map(|k| (1000 - k * 100, 50)).collect();
+        let xs = super::axis_label_xs(&spots, 200, 800);
+        assert!(xs.iter().all(Option::is_some), "{xs:?}");
+        assert_eq!(xs[0], Some(950), "now at the right edge");
+        assert_eq!(xs[1], Some(875));
+        // Labels wider than the ticks' distance (Korean "-21시간" at Large): every other one goes, none touch.
+        let wide: Vec<(i32, i32)> = (0..=8).map(|k| (1000 - k * 100, 120)).collect();
+        let xs = super::axis_label_xs(&wide, 200, 800);
+        assert!(xs.iter().any(Option::is_none) && xs[0].is_some(), "{xs:?}");
+        let kept: Vec<(i32, i32)> = xs.iter().zip(&wide).filter_map(|(lx, (_, lw))| lx.map(|lx| (lx, *lw))).collect();
+        for pair in kept.windows(2) {
+            assert!(pair[1].0 + pair[1].1 < pair[0].0, "{kept:?}");
+        }
+        assert!(kept.len() >= 4, "{kept:?}");
+    }
+
     use super::*;
     use crate::testutil::TestDir;
 

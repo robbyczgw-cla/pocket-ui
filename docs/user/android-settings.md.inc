@@ -16,6 +16,13 @@ under it that says what it does.
 | System | Updates, Language, View (handheld or Mobile) and Kids mode. |
 | Help & tools | The first-start setup again, how you like to play, the Tour, this guide and About. |
 
+## Case sound credits
+
+The NES door sound comes from "NES door slam.mp3" by florn (freesound.org/s/454468/),
+under CC BY 3.0 (creativecommons.org/licenses/by/3.0/). It was trimmed, mixed to mono,
+filtered, faded and levelled. The other new recordings are CC0 1.0, by XenosNS (NES),
+lartti (tray), ottoojala (jewel case), and ryanharding95 and ewellis (DVD cases).
+
 ## Quick settings
 
 **HOME** on the shelf opens quick settings: brightness and volume. Left and Right change them.

@@ -169,7 +169,7 @@ const CURL_PROTOCOL: i32 = 1;
 const CURL_HTTP_ERROR: i32 = 22;
 
 const NOT_HTTPS: &str = "The update server sent an address that isn't https. Nothing was changed.";
-const DAMAGED: &str = "The download is damaged or was changed. Nothing was installed.";
+const DAMAGED: &str = "Download failed verification. Nothing was installed.";
 /// curl's exit code 23: it could not write what it got, which on the device is a full SD card.
 const CURL_WRITE_ERROR: i32 = 23;
 const CARD_WRITE: &str = "The update couldn't be saved: the SD card is full or can't be written. Nothing was installed.";
@@ -179,9 +179,12 @@ const TOO_SLOW: &str = "The download is too slow on this network. Nothing was in
 const CURL_TLS: [i32; 2] = [35, 60];
 const CLOCK_WRONG: &str = "The clock looks wrong, so the update server can't be checked. Set it in Settings › System › Time, or wait for network time over Wi-Fi.";
 
+/// [`CLOCK_WRONG`] in the dArkOS port: the clock is dArkOS's (no Time row there).
+const CLOCK_WRONG_DARKOS: &str = "The clock looks wrong, so the update server can't be checked. Set it in dArkOS, or wait for network time over Wi-Fi.";
+
 /// The clock, when it is clearly wrong and curl's secure connection failed (exit `code`).
 fn clock_reason(code: Option<i32>, clock_wrong: bool) -> Option<&'static str> {
-    code.filter(|c| clock_wrong && CURL_TLS.contains(c)).map(|_| CLOCK_WRONG)
+    code.filter(|c| clock_wrong && CURL_TLS.contains(c)).map(|_| if crate::device::darkos_port() { CLOCK_WRONG_DARKOS } else { CLOCK_WRONG })
 }
 
 /// What a failed connection says: the clock (`clock_reason`), else `generic` (or the network's sign-in page).
@@ -195,7 +198,8 @@ fn unreachable_because(code: Option<i32>, generic: &str) -> String {
 pub const NO_WIFI_HERE: &str = "No Wi-Fi on this handheld: put the update file from pocketui.xyz/install on the card, then choose Look on the card.";
 
 fn no_wifi_here(generic: &str) -> Option<&'static str> {
-    no_wifi_for(generic, crate::device::current().has_wifi(), crate::wifi::ip().is_some())
+    // `no_wifi_chip`: dArkOS's own Wi-Fi counts (`darkos::wifi_here`), there "Check Wi-Fi" is the right advice.
+    no_wifi_for(generic, !crate::device::no_wifi_chip(), crate::wifi::ip().is_some())
 }
 
 fn no_wifi_for(generic: &str, has_wifi: bool, online: bool) -> Option<&'static str> {
@@ -232,7 +236,7 @@ mod runtime;
 pub mod payload;
 pub mod observation;
 pub mod card;
-pub use runtime::{BytesScope, Cancel, CancelBoundary, Step, WorkerPhase, WorkerSnapshot};
+pub use runtime::{time_left, BytesScope, Cancel, CancelBoundary, Download, Step, WorkerPhase, WorkerSnapshot};
 
 /// A channel inside a tailnet (a `*.ts.net` name: the Brick card's private channel, docs/TRIMUI-BRICK-REMOTE.md) is reached
 /// through Tailscale's local proxy (`proxy`, from POCKETUI_TS_PROXY): with userspace networking nothing else on the device
@@ -479,7 +483,12 @@ fn bridged(bridge: Bridge, url: &str, dest: &Path, size: u64, cancel: &Cancel, p
 fn download_checked(tools: &Tools, rel: &Release, manifest_url: &str, dest: &Path, cancel: &Cancel, progress: &dyn Fn(u64)) -> Result<(), String> {
     cancel.begin_file(rel.size);
     let report = |n| { cancel.bytes(n); progress(n); };
-    let progress: &dyn Fn(u64) = &report;
+    let result = download_checked_reporting(tools, rel, manifest_url, dest, cancel, &report);
+    if result.is_ok() { cancel.file_done(); }
+    result
+}
+
+fn download_checked_reporting(tools: &Tools, rel: &Release, manifest_url: &str, dest: &Path, cancel: &Cancel, progress: &dyn Fn(u64)) -> Result<(), String> {
     // An install from the update file on the card takes the file from there, checked the same way (`card`).
     if let Some(result) = card::from_bundle(rel, dest, cancel, progress) {
         return result;
@@ -507,6 +516,7 @@ fn download_checked(tools: &Tools, rel: &Release, manifest_url: &str, dest: &Pat
             }
             progress(0);
         }
+        if i > 0 { cancel.retrying(i as u32 + 1, urls.len() as u32); }
         cancel.set_phase(if i == 0 { WorkerPhase::Connecting } else { WorkerPhase::Fallback });
         let attempt = || {
             download(tools, url, dest, rel.size, cancel, progress).and_then(|()| {
@@ -995,7 +1005,21 @@ fn cmdline_has_nodtbo(cmdline: &str) -> bool {
 const BOOTLOADER_MARKERS: [&str; 12] =
     ["updateabl", "abl_", "/dev/block", "/dev/mmcblk", "/dev/sd", "/dev/ufs", "ufshc", "partlabel", "by-name", "fastboot", "flash_image", "dd "];
 
-/// Refuses an OS update whose boot-time scripts could write a bootloader or a partition.
+/// Recognize direct removal of the SD boot directories in the known update hooks.
+fn removes_sd_boot_files(code: &str) -> bool {
+    code.split(['\n', ';', '&', '|']).any(|command| {
+        let mut words = command.split_whitespace().take_while(|word| !word.starts_with('#'));
+        let name = words.find(|word| !matches!(*word, "if" | "then" | "else" | "do" | "command" | "busybox" | "/usr/bin/busybox" | "/bin/busybox"));
+        matches!(name, Some("rm" | "/bin/rm" | "/usr/bin/rm" | "rmdir" | "/bin/rmdir" | "/usr/bin/rmdir"))
+            && words.any(|word| {
+                let path = word.replace(['\'', '"'], "");
+                let relative = ["$boot_root/", "${boot_root}/", "/flash/"].iter().find_map(|root| path.strip_prefix(root));
+                relative.is_some_and(|p| matches!(p.trim_end_matches('/'), "boot" | "efi" | "loader" | "boot/*" | "efi/*" | "loader/*" | "*"))
+            })
+    })
+}
+
+/// Refuses an OS update whose boot-time scripts could write a bootloader or remove SD boot directories.
 /// `update_sh`/`canupdate_sh` are the new SYSTEM's usr/share/bootloader scripts, which the
 /// initramfs runs while installing; `ships_updateabl` says whether usr/bin/updateabl exists in it.
 pub fn bootloader_check(update_sh: Option<&str>, canupdate_sh: Option<&str>, ships_updateabl: bool) -> Result<(), String> {
@@ -1005,6 +1029,9 @@ pub fn bootloader_check(update_sh: Option<&str>, canupdate_sh: Option<&str>, shi
     for script in [update_sh, canupdate_sh].into_iter().flatten() {
         let lower = script.to_lowercase();
         let code: String = lower.lines().filter(|l| !l.trim_start().starts_with('#')).collect::<Vec<_>>().join("\n");
+        if removes_sd_boot_files(&code.replace("\\\n", "")) {
+            return Err("This system update would remove the SD card's boot files. It was not installed.".into());
+        }
         if let Some(m) = BOOTLOADER_MARKERS.iter().find(|m| code.contains(*m)) {
             return Err(format!("This system update would touch the bootloader or a partition (\"{}\"). It was not installed.", m.trim()));
         }
@@ -2010,7 +2037,7 @@ mod tests {
         let bad = Release { url: rel.url.replace("app.tar.gz", "bad.tar.gz"), ..rel.clone() };
         let _ = std::fs::remove_file(&dest);
         let err = download_checked(&tools, &bad, &url, &dest, &Cancel::new(), &|_| {}).unwrap_err();
-        assert!(err.contains("damaged"), "{err}");
+        assert!(err.contains("failed verification"), "{err}");
         assert!(!dest.exists());
 
         // A part with junk in it (a power cut on a FAT card can leave that): continued, refused, and once more from nothing.
@@ -2163,7 +2190,7 @@ mod tests {
             let err = download_checked(&tools, &rel, "file:///x/update.json", &dest, &Cancel::new(), &|_| {}).unwrap_err();
             // One byte too many may also be seen while curl still runs (under load), which `download` refuses itself.
             let too_large_while_running = size == 9 && err.contains("larger than announced");
-            assert!(err.contains("damaged") || too_large_while_running, "{err}");
+            assert!(err.contains("failed verification") || too_large_while_running, "{err}");
             assert!(!dest.exists());
         }
         // The hash in the list may be upper case.
@@ -2413,6 +2440,36 @@ esac"#;
     }
 
     #[test]
+    fn staging_refuses_updates_that_remove_sd_boot_directories() {
+        let os = os_release("20261101", "SM8250", "aarch64");
+        for (hook, script) in [
+            ("update.sh", r#"[ -d "$BOOT_ROOT/boot" ] && rm -rf "$BOOT_ROOT/boot""#),
+            ("update.sh", r#"[ -d "$BOOT_ROOT/EFI" ] && rm -rf "$BOOT_ROOT/EFI""#),
+            ("canupdate.sh", r#"rm -rf -- "${BOOT_ROOT}/EFI/""#),
+            ("update.sh", "rm -rf /flash/boot/*"),
+        ] {
+            let tmp = TempDir::new("stage-sd-boot-cleanup");
+            let path = format!("usr/share/bootloader/{hook}");
+            let system = image(&[("etc/os-release", &os), (&path, script)]);
+            let (rel, url) = os_tar(tmp.path(), "20261101", &system, true);
+            let (_, update_dir, result) = stage(&tmp, &rel, &url, CURRENT);
+            assert!(result.unwrap_err().contains("SD card's boot files"), "{script}");
+            assert!(!update_dir.exists(), "no approval or tar for the initramfs");
+        }
+    }
+
+    #[test]
+    fn bootloader_check_allows_safe_sd_boot_maintenance() {
+        let script = r#"
+# rm -rf /flash/boot
+echo "Checking $BOOT_ROOT/EFI"
+rm -f "$BOOT_ROOT/boot/obsolete.cfg" /flash/boot.log
+cp "${SYSTEM_ROOT}/boot/new.cfg" "$BOOT_ROOT/boot/new.cfg"
+"#;
+        assert!(bootloader_check(Some(script), None, false).is_ok());
+    }
+
+    #[test]
     fn staging_an_os_update_replaces_the_waiting_one_and_cleans_up() {
         let tmp = TempDir::new("stage-ok");
         let (rel, url) = os_tar(tmp.path(), "20261101", &good_system("20261101"), true);
@@ -2473,7 +2530,7 @@ esac"#;
         let (mut rel, url) = os_tar(tmp.path(), "20261101", &good_system("20261101"), true);
         rel.sha256 = "0".repeat(64);
         let (_, update_dir, result) = stage(&tmp, &rel, &url, CURRENT);
-        assert!(result.unwrap_err().contains("damaged"));
+        assert!(result.unwrap_err().contains("failed verification"));
         assert!(staged_os_in(&update_dir).is_none());
         for name in ["update.tar.gz", "a..b.tar", "update"] {
             let rel = Release {
@@ -3002,7 +3059,7 @@ mod brick_card_tests {
         let (mut rel, _) = app_tarball(&dir, "2", Some("2"), START);
         rel.sha256 = "0".repeat(64);
         let err = install(&rel, &dir, &p).unwrap_err();
-        assert!(err.contains("damaged"), "{err}");
+        assert!(err.contains("failed verification"), "{err}");
         assert_eq!(release_of(&p, "app"), "1");
         assert!(!p.join("app.new").exists() && !p.join("app.previous").exists());
     }

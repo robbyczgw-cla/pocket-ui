@@ -145,72 +145,84 @@ fn every_choice_is_a_row_and_shows_whole() {
         .expect("python3 for scripts/curator-fake-library.py");
     assert!(ok.success());
     let stub = wayland(&tmp);
-    let mut failed = Vec::new();
-    for (lang, size, text) in [("en", "1280x720", "normal"), ("de", "1280x720", "normal"), ("de", "640x480", "large")] {
-        let tr = |s: &str| if lang == "de" { german(if s == "Look" { "Look\u{200b}" } else { s }) } else { s.to_string() };
-        // START shows the first category's rows at once (SETTINGS-IA package 2); every category's list has the symbols at
-        // the top with its name whole and L1 and R1 drawn as keys, nothing cut or run together.
-        for g in 0..TREE.len() {
-            header(&tmp, &stub, g, lang, size, text, &tr, &mut failed);
-        }
-        // Cozy extras and Sleep & power: each row whole when selected (9 rows at Large text on 640x480 scroll, as every
-        // list of 9 does), its line never cut.
-        for (state, rows) in [("cozy", &COZY[..]), ("sleep", &SLEEP[..])] {
-            for (r, row) in rows.iter().enumerate() {
-                let s = shot(&tmp, &stub, &format!("{state}:{r}"), lang, size, text, true);
-                if !s.visible.iter().any(|v| *v == tr(row)) {
-                    failed.push(format!("{lang} {size} {text} {state}:{r}: row {row:?} not shown whole: {:?}", s.visible));
+    let failed = std::sync::Mutex::new(Vec::new());
+    let configs = [("en", "1280x720", "normal"), ("de", "1280x720", "normal"), ("de", "640x480", "large")];
+    std::thread::scope(|scope| {
+        for (lang, size, text) in configs {
+            let (tmp, stub, failed) = (&tmp, &stub, &failed);
+            scope.spawn(move || {
+                let mut local = Vec::new();
+                let tr = |s: &str| if lang == "de" { german(if s == "Look" { "Look\u{200b}" } else { s }) } else { s.to_string() };
+                // Cozy extras and Sleep & power: each row whole when selected (9 rows at Large text on 640x480 scroll, as every
+                // list of 9 does), its line never cut.
+                for (state, rows) in [("cozy", &COZY[..]), ("sleep", &SLEEP[..])] {
+                    for (r, row) in rows.iter().enumerate() {
+                        let s = shot(tmp, stub, &format!("{state}:{r}"), lang, size, text, true);
+                        if !s.visible.iter().any(|v| *v == tr(row)) {
+                            local.push(format!("{lang} {size} {text} {state}:{r}: row {row:?} not shown whole: {:?}", s.visible));
+                        }
+                        if s.visible.iter().any(|v| v.ends_with('…')) {
+                            local.push(format!("{lang} {size} {text} {state}:{r} ({row}): a line is cut: {:?}", s.visible));
+                        }
+                        local.extend(s.faults.iter().map(|f| format!("{lang} {size} {text} {state}:{r}: {f}")));
+                    }
                 }
-                if s.visible.iter().any(|v| v.ends_with('…')) {
-                    failed.push(format!("{lang} {size} {text} {state}:{r} ({row}): a line is cut: {:?}", s.visible));
+                let sp = shot(tmp, stub, &format!("cozy:{}::a", COZY.len() - 1), lang, size, text, true);
+                if !sp.visible.iter().any(|line| line.contains("Game Boy Advance SP")) {
+                    local.push(format!("{lang} {size} {text}: the full selected SP model name must be readable"));
                 }
-                failed.extend(s.faults.iter().map(|f| format!("{lang} {size} {text} {state}:{r}: {f}")));
-            }
-        }
-        let sp = shot(&tmp, &stub, &format!("cozy:{}::a", COZY.len() - 1), lang, size, text, true);
-        if !sp.visible.iter().any(|line| line.contains("Game Boy Advance SP")) {
-            failed.push(format!("{lang} {size} {text}: the full selected SP model name must be readable"));
-        }
-        failed.extend(sp.faults.iter().map(|f| format!("{lang} {size} {text} GBA SP choice: {f}")));
-        for (g, (cat, rows)) in TREE.iter().copied().enumerate() {
-            for (r, row) in rows.iter().enumerate() {
-                let state = format!("settings:{g}:{r}");
-                let s = shot(&tmp, &stub, &state, lang, size, text, true);
-                let (cat_name, row_name) = (if cat == "Look" { german("Look\u{200b}") } else { tr(cat) }, if lang == "de" { german(row) } else { row.to_string() });
-                let cat_name = if lang == "de" { cat_name } else { cat.to_string() };
-                // Or its short name beside its symbol (the part before " & ", `tab_label`) where the whole one doesn't fit.
-                let short = cat.split(" & ").next().filter(|s| *s != cat).map(|s| if lang == "de" { german(s) } else { s.to_string() });
-                if !s.visible.iter().any(|v| v.trim_end_matches('\u{200b}') == cat_name || Some(v.as_str()) == short.as_deref()) {
-                    failed.push(format!("{lang} {size} {text} {state}: title {cat_name:?} not shown"));
+                local.extend(sp.faults.iter().map(|f| format!("{lang} {size} {text} GBA SP choice: {f}")));
+                for (g, (cat, rows)) in TREE.iter().copied().enumerate() {
+                    for (r, row) in rows.iter().enumerate() {
+                        let state = format!("settings:{g}:{r}");
+                        let s = shot(tmp, stub, &state, lang, size, text, true);
+                        let (cat_name, row_name) = (if cat == "Look" { german("Look\u{200b}") } else { tr(cat) }, if lang == "de" { german(row) } else { row.to_string() });
+                        let cat_name = if lang == "de" { cat_name } else { cat.to_string() };
+                        // Or its short name beside its symbol (the part before " & ", `tab_label`) where the whole one doesn't fit.
+                        let short = cat.split(" & ").next().filter(|s| *s != cat).map(|s| if lang == "de" { german(s) } else { s.to_string() });
+                        if !s.visible.iter().any(|v| v.trim_end_matches('\u{200b}') == cat_name || Some(v.as_str()) == short.as_deref()) {
+                            local.push(format!("{lang} {size} {text} {state}: title {cat_name:?} not shown"));
+                        }
+                        if r == 0 {
+                            // First row also covers the category header check (`settings:{g}` == `settings:{g}:0`), saving 24 duplicate renders.
+                            for key in ["L1", "R1"] {
+                                if !s.visible.iter().any(|v| v == key) {
+                                    local.push(format!("{lang} {size} {text} settings:{g}: no {key} at the top: {:?}", s.visible));
+                                }
+                            }
+                        }
+                        if !s.visible.iter().any(|v| *v == row_name) {
+                            local.push(format!("{lang} {size} {text} {state}: row {row_name:?} not shown whole: {:?}", s.visible));
+                        }
+                        // The row's line at the bottom is never cut short.
+                        if s.visible.iter().any(|v| v.ends_with('…') && !v.starts_with('…')) {
+                            local.push(format!("{lang} {size} {text} {state}: a line is cut: {:?}", s.visible));
+                        }
+                        local.extend(s.faults.iter().map(|f| format!("{lang} {size} {text} {state}: {f}")));
+                    }
                 }
-                if !s.visible.iter().any(|v| *v == row_name) {
-                    failed.push(format!("{lang} {size} {text} {state}: row {row_name:?} not shown whole: {:?}", s.visible));
+                // Controls → Buttons: both rows, and which button confirms, in words and on the picture.
+                for state in ["buttons:0", "buttons:1:r"] {
+                    let s = shot(tmp, stub, state, lang, size, text, true);
+                    for want in ["Button layout", "Button symbols", "Confirm", "Back"] {
+                        if !s.visible.iter().any(|v| *v == tr(want)) {
+                            local.push(format!("{lang} {size} {text} {state}: {want:?} not shown: {:?}", s.visible));
+                        }
+                    }
+                    local.extend(s.faults.iter().map(|f| format!("{lang} {size} {text} {state}: {f}")));
                 }
-                // The row's line at the bottom is never cut short.
-                if s.visible.iter().any(|v| v.ends_with('…') && !v.starts_with('…')) {
-                    failed.push(format!("{lang} {size} {text} {state}: a line is cut: {:?}", s.visible));
+                // Systems on the shelf without any games: a line says so, the page is never empty.
+                let s = shot(tmp, stub, "setup:look-systems", lang, size, text, false);
+                let empty = tr("No games on the SD card yet. Add some and their systems will appear here.");
+                let first_word = empty.split_whitespace().next().unwrap().to_string();
+                if !s.visible.iter().any(|v| v.starts_with(&first_word)) {
+                    local.push(format!("{lang} {size} {text} setup:look-systems without games: no line saying so: {:?}", s.visible));
                 }
-                failed.extend(s.faults.iter().map(|f| format!("{lang} {size} {text} {state}: {f}")));
-            }
+                failed.lock().unwrap().extend(local);
+            });
         }
-        // Controls → Buttons: both rows, and which button confirms, in words and on the picture.
-        for state in ["buttons:0", "buttons:1:r"] {
-            let s = shot(&tmp, &stub, state, lang, size, text, true);
-            for want in ["Button layout", "Button symbols", "Confirm", "Back"] {
-                if !s.visible.iter().any(|v| *v == tr(want)) {
-                    failed.push(format!("{lang} {size} {text} {state}: {want:?} not shown: {:?}", s.visible));
-                }
-            }
-            failed.extend(s.faults.iter().map(|f| format!("{lang} {size} {text} {state}: {f}")));
-        }
-        // Systems on the shelf without any games: a line says so, the page is never empty.
-        let s = shot(&tmp, &stub, "setup:look-systems", lang, size, text, false);
-        let empty = tr("No systems with games yet. Once games are on the SD card, their systems show up here.");
-        let first_word = empty.split_whitespace().next().unwrap().to_string();
-        if !s.visible.iter().any(|v| v.starts_with(&first_word)) {
-            failed.push(format!("{lang} {size} {text} setup:look-systems without games: no line saying so: {:?}", s.visible));
-        }
-    }
+    });
+    let failed = failed.into_inner().unwrap();
     assert!(failed.is_empty(), "{} problem(s):\n{}", failed.len(), failed.join("\n"));
 }
 
@@ -228,17 +240,26 @@ fn the_categories_header_fits_at_large_text_in_german() {
         .expect("python3 for scripts/curator-fake-library.py");
     assert!(ok.success());
     let stub = wayland(&tmp);
-    let mut failed = Vec::new();
-    for (lang, size, text) in [("de", "640x480", "large"), ("de", "1024x768", "large"), ("es", "640x480", "large"), ("en", "1280x720", "normal")] {
-        let tr = |s: &str| match lang {
-            "de" => german(s),
-            "es" => spanish(s),
-            _ => s.to_string(),
-        };
-        for g in 0..TREE.len() {
-            header(&tmp, &stub, g, lang, size, text, &tr, &mut failed);
+    let failed = std::sync::Mutex::new(Vec::new());
+    let configs = [("de", "640x480", "large"), ("de", "1024x768", "large"), ("es", "640x480", "large"), ("en", "1280x720", "normal")];
+    std::thread::scope(|scope| {
+        for (lang, size, text) in configs {
+            let (tmp, stub, failed) = (&tmp, &stub, &failed);
+            scope.spawn(move || {
+                let mut local = Vec::new();
+                let tr = |s: &str| match lang {
+                    "de" => german(s),
+                    "es" => spanish(s),
+                    _ => s.to_string(),
+                };
+                for g in 0..TREE.len() {
+                    header(tmp, stub, g, lang, size, text, &tr, &mut local);
+                }
+                failed.lock().unwrap().extend(local);
+            });
         }
-    }
+    });
+    let failed = failed.into_inner().unwrap();
     assert!(failed.is_empty(), "{} problem(s):\n{}", failed.len(), failed.join("\n"));
 }
 
@@ -320,7 +341,7 @@ fn the_line_under_continue_where_i_quit_says_what_off_does() {
     let tmp = dir.path().to_path_buf();
     std::fs::write(tmp.join("none.cfg"), "<systemList></systemList>").unwrap();
     let stub = wayland(&tmp);
-    for (forget, want, not) in [(false, "Quit keeps the moment for the next start.", "Quit keeps no moment"), (true, "Quit keeps no moment: the next start is fresh", "Quit keeps the moment for the next start.")] {
+    for (forget, want, not) in [(false, "Quit keeps the moment for the next start.", "Quit won't auto-save"), (true, "Quit won't auto-save: next launch starts fresh", "Quit keeps the moment for the next start.")] {
         let data = tmp.join(format!("data-{forget}"));
         std::fs::create_dir_all(&data).unwrap();
         std::fs::write(data.join("settings.json"), format!(r#"{{"onboarded": true, "forget_where_quit": {forget}}}"#)).unwrap();

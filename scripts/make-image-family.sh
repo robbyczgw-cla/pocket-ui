@@ -36,6 +36,7 @@ set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/scripts/image/pins.sh"
 . "$ROOT/scripts/image/tools.sh"
+. "$ROOT/scripts/image/card-texts.sh"
 UA=pocket-ui-image-build/0.1
 TARGET=aarch64-unknown-linux-gnu
 
@@ -269,8 +270,9 @@ for MODEL in $MODELS; do
     cp -r "$W/grub" "$W/sd-efi"
     rm -f "$W/sd-efi/boot/pocket/"*.dtb "$W/sd-efi/SHA256SUMS"
     cp "$W/$EFI_DTB_FILE" "$W/sd-efi/boot/pocket/$EFI_DTB_FILE"
-    sed "s/rp6-noufs.dtb/$EFI_DTB_FILE/g" "$ROOT/deploy/sd-efi-sm8550/grub.cfg" >"$W/sd-efi/boot/grub/grub.cfg"
-    sed "s/rp6-noufs.dtb/$EFI_DTB_FILE/g" "$ROOT/deploy/sd-efi-sm8550/loader/entries/pocket-ui.conf" >"$W/sd-efi/loader/entries/pocket-ui.conf"
+    # Written for the Pocket 6: this card's model and tree go in (scripts/image/card-texts.sh).
+    sm8550_efi_card_text <"$ROOT/deploy/sd-efi-sm8550/grub.cfg" >"$W/sd-efi/boot/grub/grub.cfg"
+    sm8550_efi_card_text <"$ROOT/deploy/sd-efi-sm8550/loader/entries/pocket-ui.conf" >"$W/sd-efi/loader/entries/pocket-ui.conf"
   fi
   rm -rf "$W/info"
   mkdir -p "$W/info"

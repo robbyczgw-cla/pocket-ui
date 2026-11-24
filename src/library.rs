@@ -1,6 +1,6 @@
 //! Game library read from ROCKNIX's es_systems.cfg: systems, their ROM folders and default cores.
 
-use std::fs;
+use crate::background_io as fs;
 use std::path::{Path, PathBuf};
 
 #[path = "library_systems.rs"]
@@ -94,15 +94,23 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
             if let Some(dirs) = foreign.get(&name) {
                 let mut have: std::collections::HashSet<PathBuf> = games.iter().map(|g| g.path.clone()).collect();
                 for dir in dirs {
-                    games.extend(scan_for(&name, dir, &exts).into_iter().filter(|g| have.insert(g.path.clone())));
+                    let next = scan_for(&name, dir, &exts);
+                    if path.parent() == dir.parent() {
+                        games.extend(next.into_iter().filter(|g| have.insert(g.path.clone())));
+                        continue;
+                    }
+                    // A copy on the other card has the same relative filename and extension.
+                    // Keep the established path so its history and saves still identify it.
+                    let existing: std::collections::HashSet<_> = games.iter()
+                        .filter_map(|g| g.path.strip_prefix(&path).ok())
+                        .map(|p| p.to_string_lossy().to_lowercase()).collect();
+                    games.extend(next.into_iter().filter(|g| {
+                        let relative = g.path.strip_prefix(dir).expect("scanned inside this folder");
+                        !existing.contains(&relative.to_string_lossy().to_lowercase()) && have.insert(g.path.clone())
+                    }));
                 }
             }
             games.retain(|g| !crate::hostsys::not_a_game(&name, &g.path));
-            #[cfg(feature = "brick")]
-            if crate::darkos::host() && name == "ports" {
-                games.retain(|g| !g.path.starts_with("/storage/roms/ports/pocket-ui")
-                    && g.path.file_name().is_none_or(|n| !n.eq_ignore_ascii_case("pocket-ui.sh")));
-            }
             let listed: Vec<PathBuf> = games.iter().map(|g| g.path.clone()).collect();
             let roms = Path::new("/storage/roms");
             for dir in crate::hostsys::folder_games(&name, &path, roms, &listed) {
@@ -111,12 +119,20 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
             }
             // The names the gamelist gives are kept as they are; the others are file names, cased for the shelf below.
             let mut from_list = std::collections::HashSet::new();
-            if let Some(g) = gamelists {
-                let data = crate::gamelist::system(g.data_dir, g.places, &name, &path);
-                for game in games.iter_mut() {
-                    if let Some(better) = data.get(&game.path).and_then(|e| crate::gamelist::better_name(&game.name, &e.name)) {
+            let numbered_titles = name == "snes";
+            {
+                let data = gamelists.map(|g| crate::gamelist::system(g.data_dir, g.places, &name, &path));
+                for game in games.iter_mut().filter(|_| data.is_some() || numbered_titles) {
+                    let without_number = numbered_titles.then(|| collection_title(&game.name)).flatten();
+                    let better = data.as_ref().and_then(|entries| entries.get(&game.path)).and_then(|e| {
+                        if without_number.is_some() { crate::gamelist::usable_name(&e.name, None) }
+                        else { crate::gamelist::better_name(&game.name, &e.name) }
+                    });
+                    if let Some(better) = better {
                         game.name = better;
                         from_list.insert(game.path.clone());
+                    } else if let Some(title) = without_number {
+                        game.name = title.to_string();
                     }
                 }
             }
@@ -150,17 +166,10 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
             let identifiable = crate::disc_serial::dat(&name).is_some() || (crate::rom_id::dat_name(&name).is_some() && NAMES_READY.load(std::sync::atomic::Ordering::Relaxed));
             if let Some(g) = gamelists.filter(|_| identifiable) {
                 let identifiable: Vec<(String, PathBuf)> = games.iter().filter(|g| !from_list.contains(&g.path)).map(|g| (name.clone(), g.path.clone())).collect();
-                for (path, title) in crate::rom_id::known(g.data_dir, &identifiable) {
-                    if let Some(game) = games.iter_mut().find(|g| g.path == path) {
-                        let proper = crate::disc_serial::shelf_name(&title);
-                        if crate::covers::normalize(&proper) != crate::covers::normalize(&game.name) {
-                            game.name = proper;
-                        }
-                    }
-                }
+                take_known_names(&mut games, &crate::rom_id::known(g.data_dir, &identifiable));
             }
             games.sort_by_key(|g| g.name.to_lowercase());
-            tell_apart(&mut games);
+            tell_apart(&mut games, numbered_titles);
             for game in games.iter_mut().filter(|g| !from_list.contains(&g.path)) {
                 game.name = title_case(&game.name);
             }
@@ -178,8 +187,26 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
         .collect();
     let mut systems = join_same_systems(systems);
     systems.sort_by_key(|s| s.fullname.to_lowercase());
+    fs::check().map_err(|e| e.to_string())?;
     learn_names(&systems);
     Ok(systems)
+}
+
+/// The names the checksums or serials gave (`rom_id::known`, by path) onto `games`; a name that only differs from the
+/// file's in case, tags and punctuation leaves the file's spelling. By the map, not a search through `games` for every
+/// name: that was quadratic, 13,500 identified SNES games were 90 million path comparisons on a 1 GB handheld.
+fn take_known_names(games: &mut [Game], known: &crate::rom_id::Names) {
+    if known.is_empty() {
+        return;
+    }
+    for game in games.iter_mut() {
+        if let Some(title) = known.get(&game.path) {
+            let proper = crate::disc_serial::shelf_name(title);
+            if crate::covers::normalize(&proper) != crate::covers::normalize(&game.name) {
+                game.name = proper;
+            }
+        }
+    }
 }
 
 /// Entries of one system in several folders are one system on the shelf (Android's handheld view lists a system's folder on
@@ -191,7 +218,7 @@ fn join_same_systems(systems: Vec<System>) -> Vec<System> {
             Some(first) => {
                 first.games.extend(s.games);
                 first.games.sort_by_key(|g| g.name.to_lowercase());
-                tell_apart(&mut first.games);
+                tell_apart(&mut first.games, first.name == "snes");
             }
             None => out.push(s),
         }
@@ -222,6 +249,14 @@ fn foreign_by_system(es_systems: &Path) -> std::collections::HashMap<String, Vec
 /// card of another system in the second slot (`card_folders`).
 pub fn other_folders(roms: Option<&Path>, catalog: &[SysInfo]) -> Vec<(String, PathBuf)> {
     let mut out = roms.map(|r| foreign_folders(r, catalog)).unwrap_or_default();
+    if let Some(roms) = roms.filter(|p| p.file_name().is_some_and(|n| n == "roms")) {
+        // When ROCKNIX binds the external card over roms, its internal backing directory is still readable.
+        // foreign_folders skips the backing directory's systems when roms is already bound to them.
+        let internal = roms.with_file_name("games-internal").join("roms");
+        if dir_identity(&internal).is_some_and(|id| Some(id) != dir_identity(roms)) {
+            out.extend(foreign_folders(&internal, catalog));
+        }
+    }
     if let Some(top) = games_card_root().filter(|t| roms != Some(t.as_path())) {
         out.extend(card_folders(&top, catalog));
     }
@@ -238,7 +273,7 @@ pub const GAMES_CARD_MARKER: &str = "/run/pocket-ui/games-card-root";
 pub fn games_card_root() -> Option<PathBuf> {
     let named = std::env::var("POCKETUI_GAMES_CARD_ROOT").ok().filter(|v| !v.trim().is_empty())
         .or_else(|| fs::read_to_string(GAMES_CARD_MARKER).ok().and_then(|t| t.lines().next().map(str::to_string)))?;
-    Some(PathBuf::from(named.trim())).filter(|p| p.is_absolute() && p.is_dir())
+    Some(PathBuf::from(named.trim())).filter(|p| p.is_absolute() && fs::is_dir(p))
 }
 
 /// The folders at the top of a games card that are a system's, read in place like another card's (`foreign_folders`): its
@@ -450,7 +485,7 @@ pub fn stray_folders(roms: &Path, catalog: &[SysInfo]) -> Vec<StrayFolder> {
     let mut out: Vec<StrayFolder> = entries
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.is_dir() && !known.contains(p))
+        .filter(|p| fs::is_dir(p) && !known.contains(p))
         .filter_map(|p| {
             let name = p.file_name()?.to_str()?.to_string();
             if name.starts_with(['.', '_']) || NOT_STRAYS.contains(&name.to_lowercase().as_str()) || system_for_folder(&name, catalog).is_some() || !holds_games(&p, &exts) {
@@ -472,7 +507,7 @@ fn holds_games(dir: &Path, exts: &std::collections::HashSet<&str>) -> bool {
     let Ok(entries) = fs::read_dir(dir) else { return false };
     let mut subs = Vec::new();
     for p in entries.flatten().map(|e| e.path()) {
-        if p.is_dir() {
+        if fs::is_dir(&p) {
             if !p.file_name().and_then(|n| n.to_str()).is_some_and(computer_litter) {
                 subs.push(p);
             }
@@ -480,7 +515,7 @@ fn holds_games(dir: &Path, exts: &std::collections::HashSet<&str>) -> bool {
             return true;
         }
     }
-    subs.iter().any(|s| fs::read_dir(s).is_ok_and(|e| e.flatten().any(|e| e.path().is_file() && takes(&e.path()))))
+    subs.iter().any(|s| fs::read_dir(s).is_ok_and(|e| e.flatten().any(|e| fs::is_file(e.path()) && takes(&e.path()))))
 }
 
 /// The system of `catalog` a folder called `name` is: a system's folder or full name written another way ("GBA",
@@ -507,20 +542,18 @@ pub(crate) fn system_for_folder<'a>(name: &str, catalog: &'a [SysInfo]) -> Optio
 /// moved or written. (system id, folder), sorted by folder. A folder that is one system's folder already (also on a card that
 /// ignores case, where `GBA` is `gba`) is not in the list. Reads `roms` only.
 pub fn foreign_folders(roms: &Path, catalog: &[SysInfo]) -> Vec<(String, PathBuf)> {
-    use std::os::unix::fs::MetadataExt;
     let Ok(entries) = fs::read_dir(roms) else { return Vec::new() };
-    let same = |p: &Path| fs::metadata(p).map(|m| (m.dev(), m.ino())).ok();
-    let known: std::collections::HashSet<(u64, u64)> = catalog.iter().filter_map(|s| same(&s.path)).collect();
+    let known: std::collections::HashSet<(u64, u64)> = catalog.iter().filter_map(|s| dir_identity(&s.path)).collect();
     let mut out: Vec<(String, PathBuf)> = entries
         .flatten()
-        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir() || (t.is_symlink() && e.path().is_dir())))
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir() || (t.is_symlink() && fs::is_dir(e.path()))))
         .filter_map(|e| {
             let path = e.path();
             let name = e.file_name().to_str()?.to_string();
             if name.starts_with(['.', '_']) || NOT_STRAYS.contains(&name.to_lowercase().as_str()) || computer_litter(&name) {
                 return None;
             }
-            if catalog.iter().any(|s| s.path == path) || same(&path).is_some_and(|id| known.contains(&id)) {
+            if catalog.iter().any(|s| s.path == path) || dir_identity(&path).is_some_and(|id| known.contains(&id)) {
                 return None;
             }
             Some((system_for_folder(&name, catalog)?.id.clone(), path))
@@ -528,6 +561,11 @@ pub fn foreign_folders(roms: &Path, catalog: &[SysInfo]) -> Vec<(String, PathBuf
         .collect();
     out.sort_by_key(|(_, p)| p.to_string_lossy().to_lowercase());
     out
+}
+
+fn dir_identity(path: &Path) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
 }
 
 fn default_core(sys: roxmltree::Node) -> (Option<String>, Option<String>) {
@@ -703,16 +741,27 @@ fn sheet_text(bytes: Vec<u8>) -> String {
 pub use crate::library_names::{display_name, name_extras, shelf_name, split_version, strip_inner_ext, title_case, SysInfo};
 pub(crate) use crate::library_names::sheet_references;
 
+/// A stock SNES collection can start a file name with its four-digit position.
+fn collection_title(name: &str) -> Option<&str> {
+    let (number, title) = name.split_at_checked(4)?;
+    if !number.bytes().all(|b| b.is_ascii_digit()) { return None; }
+    let title = title.strip_prefix(' ')?.trim_start();
+    (!title.is_empty()).then_some(title)
+}
 
 /// What a game's name was made from: its file name without the extension, or for a game named after its folder
 /// (a folder per game, `scan`; a DOS folder) that folder's name.
-fn name_source(g: &Game) -> String {
+fn name_source(g: &Game, numbered_titles: bool) -> String {
+    let matches = |raw: &str| {
+        let name = display_name(raw);
+        name == g.name || (numbered_titles && collection_title(&name) == Some(g.name.as_str()))
+    };
     let stem = g.path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
-    if display_name(stem) == g.name {
+    if matches(stem) {
         return stem.to_string();
     }
     let folder = g.path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()).unwrap_or_default();
-    if display_name(folder) == g.name {
+    if matches(folder) {
         folder.to_string()
     } else {
         stem.to_string()
@@ -721,11 +770,11 @@ fn name_source(g: &Game) -> String {
 
 /// The ways `tell_apart` may lengthen a game's name, in its order: what `display_name` left out of it, then
 /// the file type ("(ZIP)"), then the folder it is in ("(Hacks)").
-fn name_suffixes(g: &Game) -> [Vec<String>; 3] {
+fn name_suffixes(g: &Game, numbered_titles: bool) -> [Vec<String>; 3] {
     let ext = g.path.extension().and_then(|e| e.to_str());
     let folder = g.path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str());
     [
-        name_extras(&name_source(g)),
+        name_extras(&name_source(g, numbered_titles)),
         ext.map(|e| format!("({})", e.to_uppercase())).into_iter().collect(),
         folder.map(|f| format!("({f})")).into_iter().collect(),
     ]
@@ -736,14 +785,14 @@ fn name_suffixes(g: &Game) -> [Vec<String>; 3] {
 /// if that is not enough, the file type and the folder. `games` is sorted by name; each group keeps its place, its
 /// games ordered by their new names, and every other game is left as it is. Only the name changes: what is kept
 /// about a game (favourites, play time, covers, Curator) goes by its path.
-fn tell_apart(games: &mut [Game]) {
+fn tell_apart(games: &mut [Game], numbered_titles: bool) {
     let same = |a: &str, b: &str| a.len() == b.len() && a.chars().flat_map(char::to_lowercase).eq(b.chars().flat_map(char::to_lowercase));
     let mut start = 0;
     while start < games.len() {
         let end = start + games[start..].iter().take_while(|g| same(&g.name, &games[start].name)).count();
         if end - start > 1 {
             let group = &mut games[start..end];
-            let suffixes: Vec<[Vec<String>; 3]> = group.iter().map(name_suffixes).collect();
+            let suffixes: Vec<[Vec<String>; 3]> = group.iter().map(|g| name_suffixes(g, numbered_titles)).collect();
             let mut names: Vec<String> = group.iter().map(|g| g.name.clone()).collect();
             // `level` picks the same kind of suffix of every game of the group.
             #[allow(clippy::needless_range_loop)]
@@ -838,6 +887,35 @@ mod tests {
             ],
             "no folder needed, Tools left out, extensions lowercase and once"
         );
+    }
+
+    #[test]
+    fn r36s_test7_snes_collection_numbers_are_only_removed_from_filename_titles() {
+        use super::{load_with, Gamelists};
+        let dir = TestDir::new("stock-snes-titles");
+        let snes = dir.join("roms/snes");
+        let other = dir.join("roms/nes");
+        std::fs::create_dir_all(&snes).unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+        for file in ["0239 Tiny Toon Adventures.sfc", "0240 Reported Name.sfc", "2020.sfc", "12345 Longer.sfc", "123 Abbreviated.sfc", "0239-Other.sfc"] {
+            std::fs::write(snes.join(file), b"fixture").unwrap();
+        }
+        std::fs::write(other.join("0239 Another Game.sfc"), b"fixture").unwrap();
+        std::fs::write(snes.join("gamelist.xml"), "<gameList><game><path>./0240 Reported Name.sfc</path><name>0240 Hand-picked title</name></game></gameList>").unwrap();
+        let cfg = dir.join("es_systems.cfg");
+        std::fs::write(&cfg, format!("<systemList><system><name>snes</name><path>{}</path><extension>.sfc</extension></system><system><name>nes</name><path>{}</path><extension>.sfc</extension></system></systemList>", snes.display(), other.display())).unwrap();
+        let places = crate::gamelist::Locations::none();
+        let data = dir.join("data");
+        let systems = load_with(&cfg, Some(&Gamelists { data_dir: &data, places: &places })).unwrap();
+        let title = |system: &str, file: &str| systems.iter().find(|s| s.name == system).unwrap().games.iter()
+            .find(|g| g.path.file_name().unwrap() == file).unwrap().name.as_str();
+        assert_eq!(title("snes", "0239 Tiny Toon Adventures.sfc"), "Tiny Toon Adventures");
+        assert_eq!(title("snes", "0240 Reported Name.sfc"), "0240 Hand-picked title");
+        assert_eq!(title("snes", "2020.sfc"), "2020");
+        assert_eq!(title("snes", "12345 Longer.sfc"), "12345 Longer");
+        assert_eq!(title("snes", "123 Abbreviated.sfc"), "123 Abbreviated");
+        assert_eq!(title("snes", "0239-Other.sfc"), "0239-Other");
+        assert_eq!(title("nes", "0239 Another Game.sfc"), "0239 Another Game");
     }
 
     /// EmulationStation's gamelist.xml in a ROM folder: a cryptic file name gets the name it gives, a file name that
@@ -982,6 +1060,27 @@ mod tests {
         let fresh = dir.join("fresh-data");
         let plain = load_with(&cfg, Some(&Gamelists { data_dir: &fresh, places: &places })).unwrap();
         assert_eq!(names(plain), ["Homebrew Thing", "Metroid - Fusoin", "Supar Mario Land 2", "Tetris"]);
+    }
+
+    /// A big card where the checksums named every game (the R36S card: 13,500 SNES games): naming them looked each one
+    /// up by a search through the whole system, 90 million path comparisons on every library read. Thread CPU, so a
+    /// loaded host doesn't fail it; the quadratic search took seconds here.
+    #[test]
+    fn naming_every_game_of_a_big_system_by_checksum_is_linear() {
+        let mut games: Vec<super::Game> =
+            (0..30_000).map(|i| super::Game { name: format!("Gaem {i:05}"), path: format!("/storage/roms/snes/Gaem {i:05}.sfc").into() }).collect();
+        let known: crate::rom_id::Names = games.iter().enumerate().map(|(i, g)| (g.path.clone(), format!("Game {i:05} (USA)"))).collect();
+        let cpu = || {
+            let mut ts: libc::timespec = unsafe { std::mem::zeroed() };
+            assert_eq!(unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut ts) }, 0);
+            std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
+        };
+        let t = cpu();
+        super::take_known_names(&mut games, &known);
+        let took = cpu() - t;
+        assert_eq!(games[0].name, "Game 00000");
+        assert_eq!(games[29_999].name, "Game 29999");
+        assert!(took < std::time::Duration::from_millis(1500), "naming 30,000 games took {took:?} of CPU");
     }
 
     #[test]

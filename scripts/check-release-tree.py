@@ -253,7 +253,11 @@ def check_nested(ck, full, rel, depth):
             ck.found.append(Finding("ARCHIVE", rel, f"cannot be read: {e}"))
     elif low.endswith((".7z", ".rar")):
         names = list_with_7z(full)
-        if names is None:
+        reason = ck.allow_reason(rel)
+        if names is None and reason is not None:
+            # An allowlisted 7z whose names are encrypted (testdata/7z/locked-names.7z): listed as let through.
+            ck.allowed.append(("ARCHIVE", rel, reason))
+        elif names is None:
             ck.found.append(Finding("ARCHIVE", rel, "7z/rar cannot be inspected here (install 7-Zip)"))
         else:
             for n in names:
@@ -309,7 +313,8 @@ def list_with_7z(path):
     exe = shutil.which("7zz") or shutil.which("7z") or shutil.which("7za")
     if not exe:
         return None
-    r = subprocess.run([exe, "l", "-slt", "-ba", str(path)], capture_output=True)
+    # -p with no password and no stdin: an encrypted 7z fails at once instead of asking for one.
+    r = subprocess.run([exe, "l", "-slt", "-ba", "-p", str(path)], capture_output=True, stdin=subprocess.DEVNULL)
     if r.returncode not in (0, 1):  # 1 = warnings (e.g. trailing data), the list is still good
         return None
     names = []

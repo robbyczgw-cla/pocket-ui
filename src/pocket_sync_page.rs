@@ -305,12 +305,12 @@ impl PocketPage {
     /// The line for the selected row, in the hint bar.
     pub fn describe(&self, row: Row) -> &'static str {
         match row {
-            Row::Switch => "Saves go to your other Pockets after a game. No account.",
-            Row::What => "What goes over, and what not yet.",
-            Row::Pair if self.prefs.enabled => "Open it on both, then type one's code on the other.",
+            Row::Switch => "Syncs saves with your other Pockets. No account.",
+            Row::What => "What syncs now, and what doesn't.",
+            Row::Pair if self.prefs.enabled => "Open on both Pockets, then enter the pairing code.",
             Row::Pair | Row::Pocket(_) if !self.prefs.enabled => "Switch it on first.",
             Row::Pair => "",
-            Row::Pocket(_) => "A: how it stands, its last saves. X: forget it.",
+            Row::Pocket(_) => "A: sync status and recent saves. X: unpair.",
         }
     }
 
@@ -396,7 +396,7 @@ pub const WHAT: [(&str, &str); 4] = [
     ("Synced", "The saves inside your games: battery saves, the cartridge clock and PS1 memory cards beside your games. The same game under another file name is found by its contents."),
     ("Not synced yet", "Continue moments and save states, play time, favourites, stickers and notes, saves of PS2, GameCube, Wii and 3DS, BIOS files."),
     ("Which Pockets", "Pockets with pocket-ui OS, pocket-ui on the TrimUI Brick and on dArkOS, and pocket-ui for Android, on the same Wi-Fi or in your Tailscale."),
-    ("Each Pocket", "A paired Pocket is listed by its model. Nothing is overwritten when you played on both: you choose."),
+    ("Each Pocket", "Paired Pockets show by model. Played on both? Nothing gets overwritten: you choose."),
 ];
 
 /// "Which Pockets" on a handheld without Wi-Fi (`device::no_wifi_chip`): no network to name, and why (docs/DEVICES.md).
@@ -700,7 +700,7 @@ mod tests {
         lines.extend(["Last saves", "None yet. A syncs now.", "None yet. Switch Pocket Sync on first.", "Synced"].map(String::from));
         lines.extend(WHAT.iter().flat_map(|(h, t)| [h.to_string(), t.to_string()]));
         assert!(lines.len() > 30);
-        for lang in [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It] {
+        for lang in [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko] {
             for l in &lines {
                 let t = tr_in(lang, l);
                 assert_ne!(&t, l, "{lang:?}: {l}");
@@ -724,7 +724,7 @@ mod tests {
         let without = all(true);
         assert!(!without.contains("same Wi-Fi") && !without.contains("Tailscale"), "{without}");
         assert!(without.contains(crate::device::NEEDS_NETWORK) && without.contains("pocket-ui for Android"), "{without}");
-        for lang in [crate::i18n::Lang::De, crate::i18n::Lang::Es, crate::i18n::Lang::Pt, crate::i18n::Lang::Fr, crate::i18n::Lang::It] {
+        for lang in [crate::i18n::Lang::De, crate::i18n::Lang::Es, crate::i18n::Lang::Pt, crate::i18n::Lang::Fr, crate::i18n::Lang::It, crate::i18n::Lang::Ko] {
             assert_ne!(crate::i18n::tr_in(lang, WHICH_NO_WIFI), WHICH_NO_WIFI, "{lang:?}");
         }
     }

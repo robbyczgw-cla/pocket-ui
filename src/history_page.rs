@@ -21,6 +21,12 @@ const CONFIRM: Button = Button::East;
 const CANCEL: Button = Button::South;
 /// Games listed on the History page.
 pub const ROWS: usize = 5;
+const REVIEW_DOT_OFFSET: i32 = 150;
+
+/// The Brick paints this short 4:3 canvas natively. The Plus uses a taller logical canvas, even at 640x480.
+fn compact_history(c: &Canvas) -> bool {
+    (740..900).contains(&c.h) && c.w * 3 == c.h * 4
+}
 
 /// A touch target a page painted.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -394,25 +400,25 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
     let line = text.fit(Face::Body, 28, &numbers(s, page.today), c.w - 2 * MARGIN);
     text.draw(c, Face::Body, 28, MARGIN, 208, p.dust, &line);
 
-    if s.is_empty() {
-        c.rect(cx, cy + ch, cw, 2, p.pick(0x26262a, 0xdcd6ca));
-        let msg = empty_chart(s);
-        let lw = text.width(Face::Body, 28, msg);
-        // An open blank notebook above the words, inside the chart's box (`ui_art`).
-        let base = cy + ch / 2 + crate::type_scale::base(10, 28);
-        let mut band = c.rows(0, cy + ch);
-        let dy = crate::ui_art::above_words(&mut band, crate::ui_art::Art::History, cx + cw / 2, true, cy + 4, base, 28);
-        text.draw(c, Face::Body, 28, cx + (cw - lw) / 2, (base + dy).min(cy + ch - 12), p.dust, msg);
+    let ch = if s.is_empty() {
+        paint_empty_chart(c, text, empty_chart(s), (cx, cy, cw, ch))
     } else {
         paint_chart(c, text, s, page.today, (cx, cy, cw, ch));
         crate::shares::mark("history-chart", cx, cy, cw, ch);
-    }
+        ch
+    };
     for (b, x0, x1) in [(Button::Left, 0, c.w / 2), (Button::Right, c.w / 2, c.w)] {
         hits.push((Area::new(x0, cy, x1 - x0, ch + 50), Hit::Button(b)));
     }
 
     // The most played games, left.
-    let (lx, lw) = (MARGIN, 620);
+    let compact = compact_history(c);
+    let (lw, column_gap) = if compact {
+        ((c.w - 2 * MARGIN) * 620 / (1280 - 2 * MARGIN), c.w * 44 / 1280)
+    } else {
+        (620, 44)
+    };
+    let lx = MARGIN;
     let top = if on_768 { cy + ch + label_gap } else { 548 - short };
     if !s.games.is_empty() {
         text.draw(c, Face::Body, 21, lx, top, p.dust, "Most played");
@@ -446,28 +452,66 @@ pub fn paint_history(c: &mut Canvas, text: &mut Text, page: &HistoryPage, names:
         }
     }
     // The facts, right (or across, when nothing was played).
-    let fx = if s.games.is_empty() { MARGIN } else { lx + lw + 44 };
+    let fx = if s.games.is_empty() { MARGIN } else { lx + lw + column_gap };
     let fw = c.w - MARGIN - fx;
+    let bottom = crate::kit::content_bottom(c.h);
+    let (step, tail, fact_gap) = if compact {
+        let gap = c.h / 192;
+        (crate::type_scale::line(28, gap), c.h / 80, crate::type_scale::line(21, gap))
+    } else {
+        (crate::type_scale::line(28, 10), 30, 56)
+    };
+    let mut entries = facts(s, page.today, names);
+    if compact {
+        // On the Brick, the streak gets room before the genre summary.
+        if let Some(i) = entries.windows(2).position(|pair| pair[0].0 == "Mostly" && pair[1].0 == "Streak") {
+            entries.swap(i, i + 1);
+        }
+    }
     let mut y = top;
-    for (head, line) in facts(s, page.today, names) {
+    for (head, line) in entries {
+        let max_lines = if compact && head == "Systems" { 3 } else { 2 };
         let lines = fact_lines(text, &line, fw);
-        let step = crate::type_scale::line(28, 10);
-        let need = 30 + lines.len().min(2) as i32 * step;
-        if y + need > crate::kit::content_bottom(c.h) {
+        let height = lines.len().min(max_lines) as i32 * step;
+        if y + height + tail > bottom {
             break;
         }
         text.draw(c, Face::Body, 21, fx, y, p.dust, &head);
-        for (k, l) in lines.iter().take(2).enumerate() {
+        for (k, l) in lines.iter().take(max_lines).enumerate() {
             text.draw(c, Face::Body, 28, fx, y + step + k as i32 * step, p.chalk, l);
         }
-        y += need + 26;
+        y += height + fact_gap;
     }
     hits
 }
 
+/// The empty chart fits the notebook and its sentence together. On the Brick the empty chart can borrow space
+/// from the missing game rows, so the notebook stays whole even with large text.
+fn paint_empty_chart(c: &mut Canvas, text: &mut Text, msg: &str, (cx, cy, cw, ch): (i32, i32, i32, i32)) -> i32 {
+    let p = pal();
+    let art = crate::ui_art::Art::History;
+    let mid = cx + cw / 2;
+    let lw = text.width(Face::Body, 28, msg);
+    let (ch, baseline) = if compact_history(c) {
+        let (aw, ah) = crate::ui_art::size(art, 1);
+        let gap = c.h / 80;
+        let baseline = cy + 2 * gap + ah + crate::type_scale::px(28) as i32;
+        crate::ui_art::paint(c, art, mid - aw / 2, cy + gap, 1);
+        (ch.max(baseline - cy + gap), baseline)
+    } else {
+        let base = cy + ch / 2 + crate::type_scale::base(10, 28);
+        let mut band = c.rows(0, cy + ch);
+        let dy = crate::ui_art::above_words(&mut band, art, mid, true, cy + 4, base, 28);
+        (ch, (base + dy).min(cy + ch - 12))
+    };
+    c.rect(cx, cy + ch, cw, 2, p.pick(0x26262a, 0xdcd6ca));
+    text.draw(c, Face::Body, 28, cx + (cw - lw) / 2, baseline, p.dust, msg);
+    ch
+}
+
 /// A fact's lines in a column `fw` wide: a list ("SNES 3 h 39 min · N64 1 h 36 min", "Futuristic racing · score chasing")
 /// breaks between its items, so a line never starts or ends with the dot and an item stays whole where it fits (the
-/// Brick's narrow column put a lone "·" on the second line, 20.11.2026); a single item wider than the column wraps.
+/// Brick's former narrow column put a lone "·" on the second line, 20.11.2026); a single item wider than the column wraps.
 fn fact_lines(text: &mut Text, line: &str, fw: i32) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut cur = String::new();
@@ -731,12 +775,20 @@ pub fn paint_review(c: &mut Canvas, text: &mut Text, page: &ReviewPage, names: N
     let edge = system.as_deref().map_or(mix(p.dust, p.void, 90), stripe);
     c.rect(0, 0, 24, c.h, edge);
     header(c, text);
+    let dots_y = c.h - REVIEW_DOT_OFFSET;
+    let (art_y, art_w, art_h) = if compact_history(c) {
+        let top = c.h * 300 / 960;
+        let bottom = (dots_y - c.h * 22 / 960).min(crate::kit::content_bottom(c.h));
+        (top, c.w * 340 / 1280, (c.h * 460 / 960).min(bottom - top))
+    } else {
+        (300, 340, 460)
+    };
     let mut right = c.w - MARGIN;
     let art = card_art(r, card);
     let k = crate::ui_art::empty_scale(c.h);
     if let Some(img) = cover {
-        let (w, h) = img.fit(340, 460);
-        let (x, y) = (c.w - MARGIN - w, 300 + (460 - h) / 2);
+        let (w, h) = img.fit(art_w, art_h);
+        let (x, y) = (c.w - MARGIN - w, art_y + (art_h - h) / 2);
         c.blit_scaled(img, x, y, w, h);
         right = x - 48;
         // A milestone's sticker on the box's top left corner, as if stuck on it.
@@ -748,7 +800,7 @@ pub fn paint_review(c: &mut Canvas, text: &mut Text, page: &ReviewPage, names: N
     } else if let Some(a) = art {
         // No box art: the sticker (or the empty notebook) stands where it would be.
         let (aw, ah) = crate::ui_art::size(a, k);
-        crate::ui_art::paint(c, a, c.w - MARGIN - 40 - aw, 300 + (460 - ah) / 2, k);
+        crate::ui_art::paint(c, a, c.w - MARGIN - 40 - aw, art_y + (art_h - ah) / 2, k);
         right = c.w - MARGIN - 40 - aw - 48;
     }
     let width = right - MARGIN;
@@ -769,8 +821,8 @@ pub fn paint_review(c: &mut Canvas, text: &mut Text, page: &ReviewPage, names: N
     } else {
         330 + 110 + (nb - 1).max(0) * (big_px as i32 + 14)
     };
-    // ... and clear of the row of dots (at `c.h - 150`) as well.
-    let up = (last - (crate::kit::hint_bar_top(c.h) - 16).min(c.h - 150 - 22)).clamp(0, 330 - 150);
+    // ... and clear of the row of dots as well.
+    let up = (last - (crate::kit::hint_bar_top(c.h) - 16).min(dots_y - 22)).clamp(0, 330 - 150);
     text.draw(c, Face::Body, 28, MARGIN, 330 - up, p.dust, &kicker);
     let mut y = 330 + 110 - up;
     for line in &big_lines {
@@ -794,7 +846,7 @@ pub fn paint_review(c: &mut Canvas, text: &mut Text, page: &ReviewPage, names: N
     let mut dx = (c.w - total) / 2;
     for i in 0..n {
         let on = i as usize == page.card;
-        c.disc(dx + dot / 2, c.h - 150, dot / 2, if on { p.chalk } else { mix(p.dust, p.void, 120) });
+        c.disc(dx + dot / 2, dots_y, dot / 2, if on { p.chalk } else { mix(p.dust, p.void, 120) });
         dx += dot + gap;
     }
     vec![(Area::new(0, 100, c.w / 3, c.h - 220), Hit::Button(Button::Left)), (Area::new(c.w * 2 / 3, 100, c.w / 3, c.h - 220), Hit::Button(Button::Right)), (Area::new(c.w / 3, 260, c.w / 3, 500), Hit::Button(CONFIRM))]
@@ -815,6 +867,95 @@ mod tests {
         let mut p = HistoryPage::new(Period::of(span, today), today);
         assert!(p.set(summarise(log, p.period, today, &Plain)));
         p
+    }
+
+    #[test]
+    fn brick_review_cover_keeps_the_plus_share_above_the_dots() {
+        let today = day_of(2026, 12, 20);
+        let log = demo_log(today);
+        let names = |id: &str| (id.to_uppercase(), id.to_uppercase());
+        let cover = Image { w: 340, h: 460, px: vec![0x12ab34; 340 * 460] };
+        for span in [Span::Month, Span::Year] {
+            let mut page = ReviewPage::new(Period::of(span, today), today);
+            assert!(page.set(review(&log, page.period, today, &Plain)));
+            page.press(Button::Right);
+            assert!(page.current().and_then(card_game).is_some());
+            let paint = |w: u32, h: u32| {
+                let mut pixels = vec![0; (w * h) as usize];
+                let mut c = Canvas::new(&mut pixels, w, h);
+                paint_review(&mut c, &mut Text::new(), &page, &names, None, Some(&cover));
+                let mut cover_rows = pixels.chunks_exact(w as usize).enumerate()
+                    .filter_map(|(y, row)| row.contains(&cover.px[0]).then_some(y as i32));
+                let first = cover_rows.next().expect("cover is visible");
+                let last = cover_rows.last().expect("cover is more than a line");
+                (last, (last - first + 1) as f32 / h as f32)
+            };
+            let (_, plus_share) = paint(1280, 960);
+            let (last, brick_share) = paint(1024, 768);
+            assert!(last < 768 - REVIEW_DOT_OFFSET - 6, "{span:?} cover ends at {last}, in the dots or hints");
+            assert!((brick_share - plus_share).abs() <= 0.05, "{span:?}: {brick_share} vs {plus_share}");
+        }
+    }
+
+    #[test]
+    fn brick_empty_history_keeps_the_notebook_clear_of_the_sentence() {
+        let today = day_of(2026, 10, 23);
+        let page = page(&Log::default(), Span::Week, today);
+        let names = |id: &str| (id.to_uppercase(), id.to_uppercase());
+        for size in [crate::type_scale::TextSize::Normal, crate::type_scale::TextSize::Large] {
+            crate::type_scale::set(size);
+            let mut pixels = vec![0; 1024 * 768];
+            let mut c = Canvas::new(&mut pixels, 1024, 768);
+            paint_history(&mut c, &mut Text::new(), &page, &names, None);
+            let rows = || pixels.chunks_exact(1024).enumerate().skip(240);
+            let art_bottom = rows().filter(|(_, row)| row[494..602].contains(&0xfdf6ec)).map(|(y, _)| y).last()
+                .expect("notebook paper is visible");
+            let first_word = rows().find(|(_, row)| row[320..480].iter().any(|&px| px != pal().void))
+                .expect("sentence is visible").0;
+            assert!(art_bottom < first_word, "{size:?}: notebook ends at {art_bottom}, sentence starts at {first_word}");
+        }
+    }
+
+    #[test]
+    fn brick_history_shows_whole_system_times_and_the_streak() {
+        let today = day_of(2026, 10, 23);
+        let mut page = page(&demo_log(today), Span::Week, today);
+        let summary = page.summary.as_mut().unwrap();
+        summary.systems.truncate(3);
+        for (system, (id, mins)) in summary.systems.iter_mut().zip([("snes", 219), ("n64", 96), ("gba", 90)]) {
+            system.system = id.into();
+            system.secs = mins * 60;
+        }
+        summary.leaned_into = "Japanese RPG · score chasing".into();
+        let names = |id: &str| (id.to_uppercase(), id.to_uppercase());
+        for size in [crate::type_scale::TextSize::Normal, crate::type_scale::TextSize::Large] {
+            crate::type_scale::set(size);
+            let mut pixels = vec![0; 1024 * 768];
+            let mut c = Canvas::new(&mut pixels, 1024, 768);
+            let mut text = Text::new();
+            let hits = paint_history(&mut c, &mut text, &page, &names, None);
+            let row = hits.iter().find(|(_, hit)| *hit == Hit::Row(0)).expect("first game").0;
+            assert!((row.w as f32 / 1024.0 - 620.0 / 1280.0).abs() <= 0.05, "games column: {row:?}");
+            let systems = "SNES 3 h 39 min · N64 1 h 36 min · GBA 1 h 30 min";
+            let facts_width = 1024 - MARGIN - row.x - row.w - 44 * 1024 / 1280;
+            let lines = fact_lines(&mut text, systems, facts_width);
+            for system in systems.split(" · ") {
+                assert!(lines.iter().any(|line| line.contains(system)), "{size:?}: {system} in {lines:?}");
+            }
+
+            let p = pal();
+            // Look for the heading's raster in the facts column. Paint the reference with the same font and colours.
+            let mut reference = [p.void; 128 * 32];
+            let mut c = Canvas::new(&mut reference, 128, 32);
+            text.draw(&mut c, Face::Body, 21, 0, 26, p.dust, "Streak");
+            let ink = reference.chunks_exact(128).position(|line| line.iter().any(|&px| px != p.void)).unwrap();
+            let x_start = (row.x + row.w) as usize;
+            let x_end = (1024 - MARGIN) as usize - 128;
+            let bottom = crate::kit::content_bottom(768) as usize;
+            assert!((row.y as usize..bottom).any(|y| {
+                (x_start..=x_end).any(|x| pixels[y * 1024 + x..y * 1024 + x + 128] == reference[ink * 128..(ink + 1) * 128])
+            }), "{size:?}: the Streak heading should be visible above the hints");
+        }
     }
 
     /// A list of facts breaks between its items in a narrow column (the Brick's, 264 px): no line is a lone dot or

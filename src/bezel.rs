@@ -1030,56 +1030,65 @@ mod tests {
             (Rect { x: 220, y: 15, w: 800, h: 1050 }, 5.0),
             (Rect { x: 300, y: 320, w: 640, h: 440 }, 2.0),
         ];
-        for style in new_styles() {
-            for (game, px) in cases {
-                let b = generate(style, 1240, 1080, game, px).unwrap_or_else(|| panic!("{style:?} has room at {game:?}"));
-                assert_eq!((b.w, b.h, b.hole), (1240, 1080, game), "{style:?}: the hole is the picture");
-                assert!(b.inlay.is_none(), "{style:?} {game:?}: only stacked DS screens have an inlay");
-                for y in game.y..game.y + game.h {
-                    for x in game.x..game.x + game.w {
-                        assert_eq!(alpha(&b, x, y), 0, "{style:?} {game:?} drew on the picture at {x},{y}");
+        let styles = new_styles();
+        let next = std::sync::atomic::AtomicUsize::new(0);
+        let threads = std::thread::available_parallelism().map_or(4, |n| n.get().min(4));
+        std::thread::scope(|s| {
+            for _ in 0..threads {
+                s.spawn(|| loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(&style) = styles.get(i) else { break };
+                    for (game, px) in cases {
+                        let b = generate(style, 1240, 1080, game, px).unwrap_or_else(|| panic!("{style:?} has room at {game:?}"));
+                        assert_eq!((b.w, b.h, b.hole), (1240, 1080, game), "{style:?}: the hole is the picture");
+                        assert!(b.inlay.is_none(), "{style:?} {game:?}: only stacked DS screens have an inlay");
+                        for y in game.y..game.y + game.h {
+                            for x in game.x..game.x + game.w {
+                                assert_eq!(alpha(&b, x, y), 0, "{style:?} {game:?} drew on the picture at {x},{y}");
+                            }
+                        }
+                        // The panel's edge stays black beside the picture's middle wherever the picture leaves room.
+                        let (cx, cy) = (game.x + game.w / 2, game.y + game.h / 2);
+                        for (x, y, room) in [(0, cy, game.x), (1239, cy, 1240 - game.x - game.w), (cx, 0, game.y), (cx, 1079, 1080 - game.y - game.h)] {
+                            if room > 0 {
+                                assert_eq!(alpha(&b, x, y), 0, "{style:?} {game:?} edge {x},{y}");
+                            }
+                        }
+                        for (x, y) in [(0, 0), (1239, 0), (0, 1079), (1239, 1079)] {
+                            assert_eq!(alpha(&b, x, y), 0, "{style:?} {game:?} corner {x},{y}");
+                        }
+                        // Reuse this render for the band and power-light contracts instead of regenerating the same
+                        // style/geometry in two further tests.
+                        if [GBA_5X, GB_7X, SNES_4X, GBA_4X, NES_3X, SNES_3X].contains(&game) {
+                            assert_bands_drawn(style, game, &b);
+                        }
+                        if [Rect { x: 140, y: 108, w: 960, h: 864 }, GBA_4X, Rect { x: 140, y: 268, w: 960, h: 544 }].contains(&game) {
+                            // The Twin falls back to the lens (and its light) where the screens aren't stacked.
+                            let lit = matches!(style, Style::Brick(_) | Style::PocketSlim(_) | Style::Clamshell(_) | Style::Wide | Style::Gloss | Style::Swan(_) | Style::Handheld)
+                                || (style == Style::Twin && b.inlay.is_none());
+                            assert_eq!(b.led.is_some(), lit, "{style:?} {game:?}");
+                        }
+                        if game == GB_7X && matches!(style, Style::Brick(BrickColour::Grey) | Style::PocketSlim(SlimFinish::Clear)) {
+                            assert!(b.led.is_some(), "{style:?}");
+                        }
+                        if game == GB_7X && style == Style::Brick(BrickColour::Grey) {
+                            let led = b.led.as_ref().unwrap();
+                            let i = (((led.spot.y as u32) * b.w + led.spot.x as u32) * 4) as usize;
+                            // The Game Boy's light is red (`frame_led::Model::RedDims`), drawn in for a full battery.
+                            assert!(b.rgba[i] > 200 && b.rgba[i] > b.rgba[i + 1] + 60, "red: {:?}", &b.rgba[i..i + 4]);
+                            let j = (((led.spot.y as u32 - led.rect.y) * led.rect.w + (led.spot.x as u32 - led.rect.x)) * 4) as usize;
+                            assert!(led.base[j] < 150, "the frame under the light is not red: {:?}", &led.base[j..j + 4]);
+                        }
+                        if let Some(led) = &b.led {
+                            // The light is in the frame, clear of the picture, and its square inside the image.
+                            let (lx, ly) = (led.spot.x as u32, led.spot.y as u32);
+                            assert!(!in_rect(game, lx, ly) && alpha(&b, lx, ly) == 255, "{style:?} {game:?} light at {lx},{ly}");
+                            assert!(led.rect.x + led.rect.w <= 1240 && led.rect.y + led.rect.h <= 1080);
+                        }
                     }
-                }
-                // The panel's edge stays black beside the picture's middle wherever the picture leaves room.
-                let (cx, cy) = (game.x + game.w / 2, game.y + game.h / 2);
-                for (x, y, room) in [(0, cy, game.x), (1239, cy, 1240 - game.x - game.w), (cx, 0, game.y), (cx, 1079, 1080 - game.y - game.h)] {
-                    if room > 0 {
-                        assert_eq!(alpha(&b, x, y), 0, "{style:?} {game:?} edge {x},{y}");
-                    }
-                }
-                for (x, y) in [(0, 0), (1239, 0), (0, 1079), (1239, 1079)] {
-                    assert_eq!(alpha(&b, x, y), 0, "{style:?} {game:?} corner {x},{y}");
-                }
-                // Reuse this render for the band and power-light contracts instead of regenerating the same
-                // style/geometry in two further tests.
-                if [GBA_5X, GB_7X, SNES_4X, GBA_4X, NES_3X, SNES_3X].contains(&game) {
-                    assert_bands_drawn(style, game, &b);
-                }
-                if [Rect { x: 140, y: 108, w: 960, h: 864 }, GBA_4X, Rect { x: 140, y: 268, w: 960, h: 544 }].contains(&game) {
-                    // The Twin falls back to the lens (and its light) where the screens aren't stacked.
-                    let lit = matches!(style, Style::Brick(_) | Style::PocketSlim(_) | Style::Clamshell(_) | Style::Wide | Style::Gloss | Style::Swan(_) | Style::Handheld)
-                        || (style == Style::Twin && b.inlay.is_none());
-                    assert_eq!(b.led.is_some(), lit, "{style:?} {game:?}");
-                }
-                if game == GB_7X && matches!(style, Style::Brick(BrickColour::Grey) | Style::PocketSlim(SlimFinish::Clear)) {
-                    assert!(b.led.is_some(), "{style:?}");
-                }
-                if game == GB_7X && style == Style::Brick(BrickColour::Grey) {
-                    let led = b.led.as_ref().unwrap();
-                    let i = (((led.spot.y as u32) * b.w + led.spot.x as u32) * 4) as usize;
-                    // The Game Boy's light is red (`frame_led::Model::RedDims`), drawn in for a full battery.
-                    assert!(b.rgba[i] > 200 && b.rgba[i] > b.rgba[i + 1] + 60, "red: {:?}", &b.rgba[i..i + 4]);
-                    let j = (((led.spot.y as u32 - led.rect.y) * led.rect.w + (led.spot.x as u32 - led.rect.x)) * 4) as usize;
-                    assert!(led.base[j] < 150, "the frame under the light is not red: {:?}", &led.base[j..j + 4]);
-                }
-                if let Some(led) = &b.led {
-                    // The light is in the frame, clear of the picture, and its square inside the image.
-                    let (lx, ly) = (led.spot.x as u32, led.spot.y as u32);
-                    assert!(!in_rect(game, lx, ly) && alpha(&b, lx, ly) == 255, "{style:?} {game:?} light at {lx},{ly}");
-                    assert!(led.rect.x + led.rect.w <= 1240 && led.rect.y + led.rect.h <= 1080);
-                }
+                });
             }
-        }
+        });
     }
 
     #[test]

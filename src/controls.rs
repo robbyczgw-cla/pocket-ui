@@ -262,7 +262,7 @@ impl ControlsPage {
             let phys = physical_label(id);
             let desc = match target {
                 Some(crate::ds_pad::STYLUS) => "Switch the D-pad between the game and the DS stylus. In stylus mode, the button mapped to A touches and holds.".into(),
-                Some(crate::ds_pad::LAYOUT) => "Show the next Nintendo DS screen layout.".into(),
+                Some(crate::ds_pad::LAYOUT) => "Tap to swap the two Nintendo DS screens. Hold to show the next layout.".into(),
                 _ if name == "None" => format!("{phys} does nothing in this game."),
                 _ => format!("{phys} presses {name}."),
             };
@@ -279,7 +279,7 @@ impl ControlsPage {
         rows.push((
             "Hold to toggle".into(),
             self.mapping.hold_toggle.map_or("Off".into(), |id| self.target_name(Some(id))),
-            "Pick a button: one press holds it down, the next lets go.\nFor buttons you would hold, like run.".into(),
+            "Pick a button: tap once to hold, tap again to let go.\nHandy for run or charge buttons.".into(),
         ));
         rows.push(("Reset controls".into(), String::new(), if self.system == "nds" { "Restore the DS buttons and actions." } else { "Every button does what it says, as it did before any change." }.into()));
         rows

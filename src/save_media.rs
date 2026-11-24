@@ -62,7 +62,7 @@ impl Kind {
             "gamecube" | "gc" => return Kind::Card(Card::GameCube),
             "dreamcast" | "naomi" => return Kind::Card(Card::Vmu),
             "xbox" => return Kind::Card(Card::Xbox),
-            "psp" | "pspockets" => return Kind::Card(Card::MemoryStick),
+            "psp" | "pspminis" => return Kind::Card(Card::MemoryStick),
             _ => {}
         }
         match FormFactor::of(system) {

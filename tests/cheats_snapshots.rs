@@ -93,7 +93,7 @@ fn extras_optional_data_states_are_readable_in_all_languages_at_640x480_large() 
                     let reason = match lang {
                         "de" => "Der Bilderserver ist nicht erreichbar. Versuch es später noch einmal.",
                         "es" => "No se pudo conectar con el servidor de imágenes. Inténtalo más tarde.",
-                        _ => "Couldn't reach the picture server. Try again later.",
+                        _ => "Couldn't reach the artwork server. Try again later.",
                     };
                     assert!(text.contains(reason), "{file}: Retry explains the picture-server failure: {text}");
                 }
@@ -150,7 +150,7 @@ fn optional_cheats_explain_every_state_in_dark_and_light_at_large_text() {
             ("cheats-downloading", "50%", "You can go back. The next try continues the download."),
             ("cheats-offline", "Needs Wi-Fi", "Connect to Wi-Fi first to use these."),
             ("cheats-unavailable", "Retry", "Cheats aren't available in this build. Try updating pocket-ui."),
-            ("cheats-empty", "No cheats found for this game", "The cheat database has no matching codes. You can keep playing normally."),
+            ("cheats-empty", "No cheats found for this game", "No matching codes in the cheat database. Play on as normal."),
         ] {
             let png = shots.join(format!("{appearance}-{state}.png"));
             let visible = shots.join(format!("{appearance}-{state}.txt"));

@@ -38,7 +38,7 @@ puts A at the bottom and B on the right in every menu of pocket-ui; games keep t
 | X | Open the selected game's [card](library.md): facts, play status, your note, related games you own. On a system: its [console page](console-pages.md); on a console page: its [Credits & links](console-pages.md#credits--links). On a smart shelf or label: its options (rename, delete …). |
 | SELECT (press and release) | Open [Recent games](playing.md#recent-games). |
 | START (press and release) | Open [Settings](controls-settings.md#in-settings), from Home and from a system's game list or Favourites alike. Settings is a button, not an entry of the list. It opens on the rows of its first category, L1/R1 (or Up to the symbols at the top, then Left/Right) go to the others; B comes back to the list you came from. START held together with SELECT or a volume key is a combo, not this. |
-| SELECT + START, held for 1 second | Asks what to do: **Cancel**, **Restart pocket-ui** or **Open EmulationStation** (ROCKNIX's own menu, with a warning first; see [Safe mode and EmulationStation](safe-mode.md#opening-emulationstation)). Escape on a keyboard does the same. |
+| SELECT + START, held for 1 second | Asks what to do: **Cancel**, **Restart pocket-ui** or **Report a problem**. Escape on a keyboard does the same. |
 
 In the **Cabinet** look, Left / Right move along a shelf and Up / Down go to the shelf above or below
 (to the case standing nearest). L1 / R1 jump to the previous / next first letter, and so do L2 / R2. Up on the

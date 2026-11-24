@@ -2,18 +2,69 @@
 //! log line next to "first frame after" (docs/dev/start-time.md, Start time). A handful of `Instant`s in a mutex, written
 //! only during the start; costs nothing measurable.
 
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock, atomic::{AtomicBool, Ordering}};
 use std::time::{Duration, Instant};
 
 static MARKS: Mutex<Vec<(&'static str, Instant)>> = Mutex::new(Vec::new());
+static N64_START: OnceLock<Instant> = OnceLock::new();
+static N64_PRESENTED: AtomicBool = AtomicBool::new(false);
+
+pub fn is_r36s_n64(system: &str) -> bool {
+    cfg!(target_os = "linux") && system == "n64" && crate::device::current().model.is_some_and(|m| m.is_rk3326())
+}
+
+/// The usual summary only reaches the log after a swap. On the R36S, log N64 phases live, and sample Linux's
+/// counters during a long wait so the report still has evidence if the player has to quit or reboot.
+pub fn watch_r36s_n64(started: Instant) {
+    if N64_START.set(started).is_err() { return; }
+    let _ = std::thread::Builder::new().name("n64-start-watch".into()).spawn(move || {
+        std::thread::sleep(Duration::from_secs(3));
+        while n64_start_pending() && started.elapsed() < Duration::from_secs(120) {
+            let (phase, since) = MARKS.lock().ok().and_then(|m| m.last().copied()).unwrap_or(("process start", started));
+            let sample = n64_wait_sample(std::path::Path::new("/proc"));
+            println!("n64 start: waiting phase={phase} phase_ms={} {sample}", since.elapsed().as_millis());
+            std::thread::sleep(Duration::from_secs(5));
+        }
+    });
+}
+
+fn n64_wait_sample(proc: &std::path::Path) -> String {
+    let stat = std::fs::read_to_string(proc.join("self/stat")).unwrap_or_default();
+    let state = stat.rsplit_once(')').and_then(|(_, rest)| rest.split_whitespace().next())
+        .filter(|s| matches!(*s, "R" | "S" | "D" | "Z" | "T" | "t" | "X" | "x" | "K" | "W" | "P" | "I")).unwrap_or("?");
+    let io = std::fs::read_to_string(proc.join("self/io")).unwrap_or_default();
+    let memory = std::fs::read_to_string(proc.join("meminfo")).unwrap_or_default();
+    format!("main={state} rchar={} read_bytes={} mem_available_kib={}",
+        proc_field(&io, "rchar:"), proc_field(&io, "read_bytes:"), proc_field(&memory, "MemAvailable:"))
+}
+
+fn proc_field<'a>(text: &'a str, key: &str) -> &'a str {
+    text.lines().find_map(|l| l.strip_prefix(key)?.split_whitespace().next())
+        .filter(|v| v.parse::<u64>().is_ok()).unwrap_or("?")
+}
+
+pub fn n64_start_pending() -> bool {
+    N64_START.get().is_some() && !N64_PRESENTED.load(Ordering::Relaxed)
+}
+
+/// Only a successful swap containing the game's picture ends the watch (early blank swaps don't).
+pub fn n64_game_presented() {
+    if n64_start_pending() {
+        mark("first game picture");
+        N64_PRESENTED.store(true, Ordering::Relaxed);
+    }
+}
 
 /// Notes that the step `label` of the start has just ended.
 pub fn mark(label: &'static str) {
+    let now = Instant::now();
     if let Ok(mut m) = MARKS.lock() {
-        // Only the start is traced; later calls (a second window, a test) are ignored.
         if m.len() < 64 {
-            m.push((label, Instant::now()));
+            m.push((label, now));
         }
+    }
+    if let Some(started) = N64_START.get().filter(|_| n64_start_pending()) {
+        println!("n64 start: {label} at {} ms", now.saturating_duration_since(*started).as_millis());
     }
 }
 
@@ -345,6 +396,38 @@ impl<T: Send + 'static> std::ops::DerefMut for Later<T> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn n64_wait_samples_survive_missing_and_damaged_proc_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("self")).unwrap();
+        let inputs: [(&str, &[u8], &str); 3] = [
+            ("self/stat", b"234 (core) test) D 1 22 22 0 0 0\n", "main=D"),
+            ("self/io", b"rchar: 2000\nread_bytes: 1000\n", "rchar=2000 read_bytes=1000"),
+            ("meminfo", b"MemAvailable: 432100 kB\n", "mem_available_kib=432100"),
+        ];
+        for (name, seed, expected) in inputs {
+            for (fault, bytes) in crate::file_faults::faults(seed) {
+                let file = dir.path().join(name);
+                if let Some(bytes) = bytes {
+                    std::fs::write(&file, bytes).unwrap();
+                } else {
+                    std::fs::remove_file(&file).unwrap();
+                }
+                let sample = n64_wait_sample(dir.path());
+                assert_eq!(sample.split_whitespace().count(), 4, "{name} {fault}: {sample}");
+                if fault == "valid" { assert!(sample.contains(expected), "{sample}"); }
+                if matches!(fault.as_str(), "missing" | "empty" | "encoding") {
+                    let unknown = match name {
+                        "self/stat" => "main=?",
+                        "self/io" => "rchar=? read_bytes=?",
+                        _ => "mem_available_kib=?",
+                    };
+                    assert!(sample.contains(unknown), "{name} {fault}: {sample}");
+                }
+            }
+        }
+    }
 
     #[test]
     #[ignore = "timing tier: scripts/test-timing.sh (serial)"]

@@ -1,10 +1,16 @@
-//! The page itself: one HTML file, one style sheet, one script (vanilla JS), the two Barlow faces of the device and an
+//! The page itself: one HTML file, one style sheet, scripts (vanilla JS), the two Barlow faces of the device and an
 //! icon, all compiled into pocket-ui (`include_str!`/`include_bytes!`). Nothing is fetched from anywhere else, which
 //! the Content-Security-Policy (`http::SECURITY_HEADERS`) enforces in the browser too.
 
 pub const INDEX_HTML: &str = include_str!("page/index.html");
 pub const APP_CSS: &str = include_str!("page/app.css");
+pub const COVER_DIAGNOSTICS_JS: &str = include_str!("page/cover-diagnostics.js");
 pub const APP_JS: &str = include_str!("page/app.js");
+/// Saves and Pocket Sync (`saves.rs`, `pockets.rs`), loaded before app.js.
+pub const SAVES_JS: &str = include_str!("page/saves.js");
+pub const SAVES_CSS: &str = include_str!("page/saves.css");
+pub const MEDIA_UPDATE_CSS: &str = include_str!("page/media-update.css");
+pub const MEDIA_UPDATE_JS: &str = include_str!("page/media-update.js");
 pub const ICON_SVG: &str = include_str!("page/icon.svg");
 pub const MANIFEST: &str = include_str!("page/manifest.webmanifest");
 pub const FONT_BODY: &[u8] = include_bytes!("../../assets/fonts/Barlow-Medium.ttf");
@@ -15,7 +21,12 @@ pub fn find(path: &str) -> Option<(&'static str, &'static [u8], bool)> {
     Some(match path {
         "/" | "/index.html" => ("text/html; charset=utf-8", INDEX_HTML.as_bytes(), false),
         "/app.css" => ("text/css; charset=utf-8", APP_CSS.as_bytes(), true),
+        "/cover-diagnostics.js" => ("text/javascript; charset=utf-8", COVER_DIAGNOSTICS_JS.as_bytes(), true),
         "/app.js" => ("text/javascript; charset=utf-8", APP_JS.as_bytes(), true),
+        "/saves.js" => ("text/javascript; charset=utf-8", SAVES_JS.as_bytes(), true),
+        "/saves.css" => ("text/css; charset=utf-8", SAVES_CSS.as_bytes(), true),
+        "/media-update.css" => ("text/css; charset=utf-8", MEDIA_UPDATE_CSS.as_bytes(), true),
+        "/media-update.js" => ("text/javascript; charset=utf-8", MEDIA_UPDATE_JS.as_bytes(), true),
         "/icon.svg" | "/favicon.ico" => ("image/svg+xml", ICON_SVG.as_bytes(), true),
         "/manifest.webmanifest" => ("application/manifest+json", MANIFEST.as_bytes(), true),
         "/fonts/body.ttf" => ("font/ttf", FONT_BODY, true),

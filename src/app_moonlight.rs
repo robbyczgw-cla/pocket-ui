@@ -324,7 +324,7 @@ impl App {
                 };
                 let head = self.text.fit(Face::Title, 44, &head, width);
                 self.text.draw(c, Face::Title, 44, left, 320, pal().chalk, &head);
-                for (i, l) in self.text.wrap_prose(Face::Body, NU_SMALL, "The PC must be on, on the same network, with Sunshine or GeForce Experience running. The PIN comes up here in a moment.", width).iter().enumerate() {
+                for (i, l) in self.text.wrap_prose(Face::Body, NU_SMALL, "Make sure your PC is on the same network running Sunshine or GeForce Experience. Your PIN will appear shortly.", width).iter().enumerate() {
                     self.text.draw(c, Face::Body, NU_SMALL, left, 380 + i as i32 * (pocket_ui::type_scale::line(NU_SMALL, 14)), pal().dust, l);
                 }
             }
@@ -384,7 +384,7 @@ impl App {
             match page.row() {
                 Row::Pair => (
                     "Pair a PC".into(),
-                    vec!["Once per PC, with a PIN shown here. The PC needs Sunshine (any PC) or GeForce Experience, on the same network.".into()],
+                    vec!["Pair once per PC using the PIN shown here. Needs Sunshine or GeForce Experience on the same network.".into()],
                     pal().chalk,
                 ),
                 Row::Pc(k) => (

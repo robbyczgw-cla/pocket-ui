@@ -26,6 +26,104 @@ pub fn mix(a: u32, b: u32, t: u32) -> u32 {
     ch(16) | ch(8) | ch(0)
 }
 
+/// [`mix`] of every pixel of `px` towards `b` by the same `t`, bit for bit the same pixels. Without a branch or a
+/// division per pixel, so the compiler does several pixels at a time: `v / 255` is `(v + 1 + (v >> 8)) >> 8` for every
+/// `v` up to 255 × 255 (the test below goes through all of them). The evening TV glow mixes most of the Cabinet's
+/// screen in every frame; one `mix` per pixel was 3.6 ms of a move there on the RG35XX Plus (0.6.0 at 21:00: p50
+/// 13.0 ms, 9.4 ms without the glow).
+#[inline]
+pub fn mix_run(px: &mut [u32], b: u32, t: u32) {
+    debug_assert!(t <= 255, "mix amount {t}");
+    let t = t.min(255);
+    let s = 255 - t;
+    let (br, bg, bb) = (((b >> 16) & 0xff) * t, ((b >> 8) & 0xff) * t, (b & 0xff) * t);
+    let div = |v: u32| (v + 1 + (v >> 8)) >> 8;
+    for p in px {
+        let a = *p;
+        *p = div(((a >> 16) & 0xff) * s + br) << 16 | div(((a >> 8) & 0xff) * s + bg) << 8 | div((a & 0xff) * s + bb);
+    }
+}
+
+/// [`mix`] of each pixel of `px` towards `b` by its own amount in `ts`, bit for bit the same pixels; several at a time
+/// as [`mix_run`].
+#[inline]
+pub fn mix_each(px: &mut [u32], b: u32, ts: &[u8]) {
+    let (br, bg, bb) = ((b >> 16) & 0xff, (b >> 8) & 0xff, b & 0xff);
+    let div = |v: u32| (v + 1 + (v >> 8)) >> 8;
+    for (p, &t) in px.iter_mut().zip(ts) {
+        let (a, t) = (*p, t as u32);
+        let s = 255 - t;
+        *p = div(((a >> 16) & 0xff) * s + br * t) << 16 | div(((a >> 8) & 0xff) * s + bg * t) << 8 | div((a & 0xff) * s + bb * t);
+    }
+}
+
+/// A canvas's shape as far as which buffer pixels a design rectangle covers (`Canvas::shade_plan`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Geometry {
+    w: i32,
+    h: i32,
+    n: i32,
+    stride: usize,
+    oy: i32,
+    sy0: i32,
+    len: usize,
+}
+
+/// `Canvas::shade_plan`'s pixels: runs of buffer pixels (start, length) and their amounts, one after the other.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShadePlan {
+    geometry: Geometry,
+    runs: Vec<(usize, usize)>,
+    amounts: Vec<u8>,
+}
+
+/// The buffer pixels the band `x, y, w, h` of a canvas of shape `g` mixes, row `y + k` by `amount(k)`: per screen row
+/// `f(start, length, (first, inner, last))`, the first and the last pixel by their own amounts and the ones between by
+/// `inner` (at `n` = 1 all three are the row's amount). At `n` > 1 a screen pixel the band covers only in part goes by
+/// the share of its design pixels it covers, a screen row by the sum of its design rows' amounts; rows whose sum is 0
+/// are left alone.
+fn shade_segments(g: Geometry, x: i32, y: i32, w: i32, h: i32, amount: &dyn Fn(i32) -> u8, mut f: impl FnMut(usize, usize, (u32, u32, u32))) {
+    if g.n == 1 {
+        let (x0, x1) = (x.max(0), x.saturating_add(w).min(g.w));
+        if x0 >= x1 {
+            return;
+        }
+        for row in y.max(0)..y.saturating_add(h).min(g.h) {
+            let t = amount(row - y) as u32;
+            f((row * g.w + x0) as usize, (x1 - x0) as usize, (t, t, t));
+        }
+        return;
+    }
+    let (x0, x1) = (x.clamp(0, g.w), (x.saturating_add(w)).clamp(0, g.w));
+    let (y0, y1) = (y.clamp(0, g.h), (y.saturating_add(h)).clamp(0, g.h));
+    if x0 >= x1 || y0 >= y1 {
+        return;
+    }
+    let n = g.n;
+    let rows = (g.len / g.stride.max(1)) as i32;
+    // Screen row r of this buffer shows design rows (r + sy0) * n - oy and on.
+    let (a0, a1) = (g.oy + y0, g.oy + y1);
+    let (r0, r1) = ((a0.div_euclid(n) - g.sy0).max(0), ((a1 - 1).div_euclid(n) + 1 - g.sy0).min(rows));
+    let (c0, c1) = (x0 / n, ((x1 - 1) / n + 1).min(g.stride as i32));
+    if c0 >= c1 {
+        return;
+    }
+    let part = |a: i32, lo: i32, hi: i32| (((a + 1) * n).min(hi) - (a * n).max(lo)).max(0) as u32;
+    let whole = (n * n) as u32;
+    let (first_x, last_x) = (part(c0, x0, x1), part(c1 - 1, x0, x1));
+    for r in r0..r1 {
+        // The sum of the amounts of the design rows this screen row shows (rows outside the band: 0).
+        let top = ((r + g.sy0) * n).max(a0);
+        let bottom = ((r + g.sy0 + 1) * n).min(a1);
+        let sum: u32 = (top..bottom).map(|a| amount(a - g.oy - y) as u32).sum();
+        if sum == 0 {
+            continue;
+        }
+        let t = |cols: u32| (sum * cols + whole / 2) / whole;
+        f(r as usize * g.stride + c0 as usize, (c1 - c0) as usize, (t(first_x), t(n as u32), t(last_x)));
+    }
+}
+
 /// The mean of four 0RGB pixels, rounded as `scaled_layout`'s 2:1 filter rounds it (bit for bit the same).
 #[inline]
 pub fn avg4(a: u32, b: u32, c: u32, d: u32) -> u32 {
@@ -351,49 +449,76 @@ impl<'a> Canvas<'a> {
     }
 
     fn shade_band(&mut self, x: i32, y: i32, w: i32, h: i32, toward: u32, amount: &dyn Fn(i32) -> u8) {
-        if self.n == 1 {
-            for row in y.max(0)..(y + h).min(self.h) {
-                let t = amount(row - y) as u32;
-                for col in x.max(0)..(x + w).min(self.w) {
-                    let i = (row * self.w + col) as usize;
-                    self.buf[i] = mix(self.buf[i], toward, t);
+        let g = self.geometry();
+        let buf = &mut *self.buf;
+        shade_segments(g, x, y, w, h, amount, |at, len, (first, inner, last)| {
+            let row = &mut buf[at..at + len];
+            row[0] = mix(row[0], toward, first);
+            if let [_, between @ .., end] = row {
+                mix_run(between, toward, inner);
+                *end = mix(*end, toward, last);
+            }
+        });
+    }
+
+    fn geometry(&self) -> Geometry {
+        Geometry { w: self.w, h: self.h, n: self.n, stride: self.stride, oy: self.oy, sy0: self.sy0, len: self.buf.len() }
+    }
+
+    /// What `shade_rows` of each strip `(x, w, amounts)` from row `y` would mix on this canvas, pixel by pixel, made once:
+    /// `shade_planned` then mixes each screen row in one run. For a picture painted the same way frame after frame over
+    /// much of the screen: the evening TV glow is 24 strips of ~20 screen pixels each, and strip by strip a frame of it
+    /// was 3.6 ms on the RG35XX Plus (0.6.0 at 21:00: the Cabinet's p50 13.0 ms, 9.4 ms without the glow), most of it the
+    /// cost of starting a run 24 times per row. None where two strips overlap: one mix then is not two.
+    pub fn shade_plan(&self, y: i32, strips: &[(i32, i32, &[u8])]) -> Option<ShadePlan> {
+        let g = self.geometry();
+        const UNTOUCHED: u16 = u16::MAX;
+        let mut k = vec![UNTOUCHED; g.len];
+        let mut overlap = false;
+        for &(x, w, amounts) in strips {
+            shade_segments(g, x, y, w, amounts.len() as i32, &|r| amounts[r as usize], |at, len, (first, inner, last)| {
+                let row = &mut k[at..at + len];
+                overlap |= row.iter().any(|v| *v != UNTOUCHED);
+                row.fill(inner as u16);
+                row[len - 1] = last as u16;
+                row[0] = first as u16;
+            });
+        }
+        if overlap {
+            return None;
+        }
+        // Each screen row's touched pixels as runs.
+        let (mut runs, mut amounts) = (Vec::new(), Vec::new());
+        for (r, row) in k.chunks(g.stride.max(1)).enumerate() {
+            let mut c = 0;
+            while c < row.len() {
+                if row[c] == UNTOUCHED {
+                    c += 1;
+                    continue;
                 }
-            }
-            return;
-        }
-        let (x0, x1) = (x.clamp(0, self.w), (x.saturating_add(w)).clamp(0, self.w));
-        let (y0, y1) = (y.clamp(0, self.h), (y.saturating_add(h)).clamp(0, self.h));
-        if x0 >= x1 || y0 >= y1 {
-            return;
-        }
-        let n = self.n;
-        let rows = (self.buf.len() / self.stride.max(1)) as i32;
-        // Screen row r of this buffer shows design rows (r + sy0) * n - oy and on.
-        let (a0, a1) = (self.oy + y0, self.oy + y1);
-        let (r0, r1) = ((a0.div_euclid(n) - self.sy0).max(0), ((a1 - 1).div_euclid(n) + 1 - self.sy0).min(rows));
-        let (c0, c1) = (x0 / n, ((x1 - 1) / n + 1).min(self.stride as i32));
-        if c0 >= c1 {
-            return;
-        }
-        let part = |a: i32, lo: i32, hi: i32| (((a + 1) * n).min(hi) - (a * n).max(lo)).max(0) as u32;
-        let whole = (n * n) as u32;
-        let (first_x, last_x) = (part(c0, x0, x1), part(c1 - 1, x0, x1));
-        for r in r0..r1 {
-            // The sum of the amounts of the design rows this screen row shows (rows outside the band: 0).
-            let top = ((r + self.sy0) * n).max(a0);
-            let bottom = ((r + self.sy0 + 1) * n).min(a1);
-            let sum: u32 = (top..bottom).map(|a| amount(a - self.oy - y) as u32).sum();
-            if sum == 0 {
-                continue;
-            }
-            let t = |cols: u32| (sum * cols + whole / 2) / whole;
-            let (first, last, inner) = (t(first_x), t(last_x), t(n as u32));
-            let row = &mut self.buf[r as usize * self.stride..];
-            for col in c0..c1 {
-                let k = if col == c0 { first } else if col == c1 - 1 { last } else { inner };
-                row[col as usize] = mix(row[col as usize], toward, k);
+                let start = c;
+                while c < row.len() && row[c] != UNTOUCHED {
+                    amounts.push(row[c] as u8);
+                    c += 1;
+                }
+                runs.push((r * g.stride + start, c - start));
             }
         }
+        Some(ShadePlan { geometry: g, runs, amounts })
+    }
+
+    /// Mixes towards `toward` what `plan` says, the same pixels as the `shade_rows` it was made from; false (nothing
+    /// mixed) when it was made for a canvas of another shape.
+    pub fn shade_planned(&mut self, toward: u32, plan: &ShadePlan) -> bool {
+        if plan.geometry != self.geometry() {
+            return false;
+        }
+        let mut from = 0;
+        for &(at, len) in &plan.runs {
+            mix_each(&mut self.buf[at..at + len], toward, &plan.amounts[from..from + len]);
+            from += len;
+        }
+        true
     }
 
     /// A border `t` thick inside the rectangle. At `n` = 2 each side is rounded as `rect` rounds it, and a side that
@@ -1112,6 +1237,51 @@ pub fn design_sites() -> Vec<(&'static str, u32, u64, u64)> {
 pub(crate) mod tests {
     use super::*;
     use crate::image::Image;
+
+    /// `mix_run` and `mix_each` are `mix` for every channel value, every colour mixed towards and every amount (the top byte too: both
+    /// leave it 0).
+    #[test]
+    fn mix_run_and_mix_each_are_mix_bit_for_bit() {
+        let mut px: Vec<u32> = (0..256u32).map(|x| 0xff00_0000 | x << 16 | (255 - x) << 8 | (x * 7 & 0xff)).collect();
+        for t in 0..=255u32 {
+            for y in 0..256u32 {
+                let b = y << 16 | (y * 13 & 0xff) << 8 | (255 - y);
+                let mut got = px.clone();
+                mix_run(&mut got, b, t);
+                for (g, a) in got.iter().zip(&px) {
+                    assert_eq!(*g, mix(*a, b, t), "{a:08x} towards {b:06x} by {t}");
+                }
+                // `mix_each` with every amount at once: as `px` turns by one per `t`, every pixel meets every amount.
+                let ts: Vec<u8> = (0..=255u8).collect();
+                let mut each = px.clone();
+                mix_each(&mut each, b, &ts);
+                for ((g, a), k) in each.iter().zip(&px).zip(&ts) {
+                    assert_eq!(*g, mix(*a, b, *k as u32), "each: {a:08x} towards {b:06x} by {k}");
+                }
+            }
+            px.rotate_left(1);
+        }
+    }
+
+    /// `shade_rows` at `n` = 1 is one `mix` per pixel by its row's amount, cut at the canvas's edges.
+    #[test]
+    fn shade_rows_is_one_mix_per_pixel() {
+        let (w, h) = (37, 23);
+        let start: Vec<u32> = (0..w * h).map(|i| (i as u32).wrapping_mul(2_654_435_761) >> 8).collect();
+        let amounts: Vec<u8> = (0..30).map(|k| (k * 37 % 256) as u8).collect();
+        for (x, y, ww) in [(-5, -4, 20), (3, 2, 31), (30, 10, 40), (0, 0, 37), (5, 5, 0)] {
+            let mut buf = start.clone();
+            Canvas::new(&mut buf, w as u32, h as u32).shade_rows(x, y, ww, 0xffb068, &amounts);
+            for row in 0..h {
+                for col in 0..w {
+                    let i = (row * w + col) as usize;
+                    let inside = col >= x && col < x + ww && row >= y && row < y + amounts.len() as i32;
+                    let want = if inside { mix(start[i], 0xffb068, amounts[(row - y) as usize] as u32) } else { start[i] };
+                    assert_eq!(buf[i], want, "({col}, {row}) of the band at ({x}, {y}) {ww} wide");
+                }
+            }
+        }
+    }
 
     #[test]
     fn a_crossfade_between_two_shapes_leaves_nothing_of_the_old_one_behind() {

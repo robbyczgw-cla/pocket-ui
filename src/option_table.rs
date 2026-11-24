@@ -89,7 +89,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "scaling",
                 name: "Screen scaling",
-                desc: "Integer scales by whole numbers (integer scaling): every pixel the same size, the sharpest.\nInteger, smaller is one whole step down, leaving room for a frame.\nAspect is as large as fits, in the console's shape.\nFullscreen fills the screen and stretches pixels.",
+                desc: "Integer uses whole-number scaling for razor-sharp, even pixels.\nInteger, smaller steps down once to leave room for a frame.\nAspect scales as big as fits in the original ratio.\nFullscreen fills the display by stretching.",
                 choices: &[c("native", "Integer"), c("integer-smaller", "Integer, smaller"), c("aspect", "Aspect"), c("fullscreen", "Fullscreen")],
                 default: 0,
                 shown_when: None,
@@ -99,7 +99,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: LOOK,
                 name: "Look",
-                desc: "How the picture looks. Pick one; Custom opens Sharpness and Effect.",
+                desc: "Pick a display preset, or Custom for Sharpness and Effect.",
                 choices: &[
                     c("clean", "Clean"),
                     c("smooth", "Smooth"),
@@ -117,7 +117,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "sharpness",
                 name: "Sharpness",
-                desc: "How the edges of the blown-up pixels look.",
+                desc: "How scaled pixel edges are rendered.",
                 choices: &[c("sharp", "Sharp"), c("crisp", "Crisp"), c("soft", "Soft")],
                 default: 0,
                 shown_when: Some((LOOK, "custom")),
@@ -125,7 +125,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "effect",
                 name: "Effect",
-                desc: "What is laid over the picture.",
+                desc: "Shader overlay on the image.",
                 choices: &[c("none", "None"), c("grid", "LCD grid"), c("scanlines", "Scanlines"), c("crt", "Old TV"), c("softglow", "Bloom"), c("smooth", "Smooth")],
                 default: 0,
                 shown_when: Some((LOOK, "custom")),
@@ -134,7 +134,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "lcd_colour",
                 name: "LCD colours",
-                desc: "The colours of the Game Boy Advance's own screen:\nsofter and darker, as the games were made for.\nLeft out while the emulator's own colour correction is on.",
+                desc: "Matches the real Game Boy Advance screen:\nsofter, darker colours as games were designed.\nSkipped if core colour correction is already on.",
                 choices: &[c("off", "Off"), c("on", "On")],
                 default: 0,
                 shown_when: Some((LOOK, "lcd")),
@@ -142,7 +142,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "frame",
                 name: "Screen frame",
-                desc: "Fills the space around the picture. Auto suits the console.\nAmbient glows with the game's colours; Glow is a thin light in its colour.\nDMG to PSP: handhelds, each for its console. CRT to Woodgrain: TVs. Arcade: a cabinet.",
+                desc: "Frames the borders around the game. Auto picks per console.\nAmbient glows with the game's colours; Glow adds a subtle edge.\nDMG to PSP: handheld bezels. CRT to Woodgrain: TVs. Arcade: cabinet.",
                 choices: &[
                     c("none", "None"),
                     c("auto", "Auto"),
@@ -167,7 +167,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "frame_colour",
                 name: "GBC colour",
-                desc: "The colour of the Game Boy Color shell around the screen.\nClear purple, atomic purple and glacier blue are see-through.",
+                desc: "Shell colour for the Game Boy Color frame.\nClear purple, atomic purple and glacier blue are translucent.",
                 choices: &[
                     c("grey", "Classic grey"),
                     c("indigo", "Indigo"),
@@ -183,7 +183,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "frame_tv",
                 name: "TV cabinet",
-                desc: "The cabinet of the CRT frame: dark plastic or wood veneer.",
+                desc: "CRT TV cabinet style: dark plastic or wood veneer.",
                 choices: &[c("plastic", "Dark plastic"), c("wood", "Wood")],
                 default: 0,
                 shown_when: Some(("frame", "crt")),
@@ -191,7 +191,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "frame_brick",
                 name: "DMG colour",
-                desc: "The colour of the original Game Boy. Clear is see-through.\nIts power light shows the battery: red at 20%, blinking at 5%.",
+                desc: "Original Game Boy shell colour. Clear is translucent.\nIts power LED tracks battery: red at 20%, blinking at 5%.",
                 choices: &[c("grey", "Grey"), c("clear", "Clear"), c("red", "Red"), c("yellow", "Yellow"), c("green", "Green"), c("black", "Black")],
                 default: 0,
                 shown_when: Some(("frame", "brick")),
@@ -199,7 +199,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "frame_pocket",
                 name: "GB Pocket finish",
-                desc: "The Game Boy Pocket: brushed silver metal or clear plastic.\nIts power light shows the battery: red at 20%, blinking at 5%.",
+                desc: "Game Boy Pocket shell: brushed silver or clear plastic.\nIts power LED tracks battery: red at 20%, blinking at 5%.",
                 choices: &[c("silver", "Brushed silver"), c("clear", "Clear")],
                 default: 0,
                 shown_when: Some(("frame", "pocket")),
@@ -207,7 +207,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "frame_clamshell",
                 name: "GBA SP finish",
-                desc: "The paint of the opened Game Boy Advance SP.\nIts power light, in the hinge, shows the battery.",
+                desc: "Shell finish for the Game Boy Advance SP.\nIts hinge LED shows live battery status.",
                 choices: &[c("platinum", "Platinum"), c("cobalt", "Cobalt"), c("flame", "Flame red"), c("graphite", "Graphite")],
                 default: 0,
                 shown_when: Some(("frame", "clamshell")),
@@ -217,7 +217,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "orientation",
                 name: "Screen orientation",
-                desc: "For games made for an upright screen, such as vertical shooters.\nTurned left: D-pad at the bottom. Turned right: D-pad on top.\nThe D-pad turns too, menus don't. Frames: only Ambient and Glow.",
+                desc: "TATE mode for vertical arcade games and shmups.\nTurned left: D-pad at bottom. Turned right: D-pad on top.\nD-pad turns too; menus stay upright. Frames: only Ambient and Glow.",
                 choices: &[c("normal", "Normal"), c("left", "Turned left"), c("right", "Turned right")],
                 default: 0,
                 shown_when: None,
@@ -228,7 +228,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: crate::render_scale::KEY,
                 name: "Resolution",
-                desc: "The resolution the 3D picture is drawn at. Original is the console's own; 2x and up are sharper and cost the GPU more. Takes effect the next time the game starts.",
+                desc: "Internal 3D resolution. Original matches the real console; 2x and up look sharper but work the GPU harder. Applies on next launch.",
                 choices: &[c("1", "Original"), c("2", "2x"), c("3", "3x"), c("4", "4x")],
                 default: 0,
                 shown_when: None,
@@ -284,7 +284,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "hk_rewind",
                 name: "Rewind",
-                desc: "Hold HOME + L2 to play backwards.\nRewind itself is switched on under Speed, rumble, fan.",
+                desc: "Hold HOME + L2 to rewind.\nEnable Rewind under Speed, rumble, fan.",
                 choices: &[c("on", "HOME + L2"), c("off", "Off")],
                 default: 0,
                 shown_when: None,
@@ -325,7 +325,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "ff_speed",
                 name: "Fast-forward speed",
-                desc: "How fast the game runs while fast-forward is on.\nSound is muted meanwhile.",
+                desc: "Game speed while fast-forwarding.\nAudio is muted meanwhile.",
                 choices: &[c("2", "2x"), c("3", "3x"), c("4", "4x"), c("8", "8x"), c("max", "As fast as possible")],
                 default: 2,
                 shown_when: None,
@@ -333,7 +333,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "rewind",
                 name: "Rewind",
-                desc: "Remembers the last minute so you can play it backwards.\nHold HOME + L2. Uses some extra power.",
+                desc: "Buffers the last minute so you can rewind.\nHold HOME + L2. Uses extra battery.",
                 choices: &[c("off", "Off"), c("on", "On")],
                 default: 0,
                 shown_when: None,
@@ -342,7 +342,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: crate::timeline_policy::KEY,
                 name: "Earlier states",
-                desc: "Keeps a state every 5 minutes of play, half an hour back,\nand where each session began: Earlier in this menu.\nOff by default for N64, PSP, DS, Dreamcast and Saturn (big states).",
+                desc: "Auto-saves every 5 min (up to 30 min back) plus\nsession start, under Earlier in this menu.\nOff by default on N64, PSP, DS, Dreamcast & Saturn (large states).",
                 choices: &[c("off", "Off"), c("on", "On")],
                 default: 1,
                 shown_when: None,
@@ -352,7 +352,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: OVER_GAME_KEY,
                 name: "Over the game",
-                desc: "FPS shows frames per second and CPU load in the top left corner.\nFPS + sensors adds the temperature, the fan and the battery draw.\nPixel Path shows a line beside the picture: emulator, scale,\nframe rate, latency and sound; orange when something slips.",
+                desc: "FPS shows frame rate and CPU load in the top-left corner.\nFPS + sensors adds temperature, fan speed and power draw.\nPixel Path adds a live strip: core, scale, FPS, latency\nand audio, lighting up orange if anything slips.",
                 choices: &[c("off", "Off"), c("fps", "FPS"), c("sensors", "FPS + sensors"), c("pixel", "Pixel Path")],
                 default: 0,
                 shown_when: None,
@@ -360,7 +360,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "rumble",
                 name: "Rumble",
-                desc: "How strongly games shake the console, for games that rumble.\nOff keeps it still.",
+                desc: "Rumble strength for games that support vibration.\nOff disables it.",
                 choices: &[c("off", "Off"), c("low", "Low"), c("medium", "Medium"), c("high", "High")],
                 default: 2,
                 shown_when: None,
@@ -387,7 +387,7 @@ pub const GROUPS: &[Group] = &[
             Setting {
                 key: "run_ahead",
                 name: "Run-ahead",
-                desc: "The game responds to your buttons 1 or 2 frames sooner.\nIt runs ahead and goes back every frame, so it uses more power.\nIt switches itself off where a game can't keep up.\n1 frame suits most games; 2 only the lighter ones.",
+                desc: "Cuts 1–2 frames of input lag by predicting ahead.\nWorks the CPU harder, so it uses a bit more battery.\nAuto-disables if a game can't keep full speed.\n1 frame fits most games; 2 for lighter consoles.",
                 choices: &[c("off", "Off"), c("1", "1 frame"), c("2", "2 frames")],
                 default: 0,
                 shown_when: None,
@@ -431,17 +431,17 @@ pub fn console_default(system: &str, key: &str) -> Option<&'static str> {
 pub fn value_descs(key: &str) -> &'static [(&'static str, &'static str)] {
     match key {
         "sharpness" => &[
-            ("sharp", "Hard pixel squares, exactly as the console drew them."),
-            ("crisp", "All pixels the same size at any scaling; at Integer it looks like Sharp."),
-            ("soft", "Blurs every pixel edge a little."),
+            ("sharp", "Razor-sharp raw pixels, exactly as rendered."),
+            ("crisp", "Even pixels at any scale; matches Sharp at Integer scaling."),
+            ("soft", "Softly smooths every pixel edge."),
         ],
         "effect" => &[
-            ("none", "The plain picture, nothing laid over it."),
-            ("grid", "Thin dark gaps between the pixels, like a handheld's screen."),
-            ("scanlines", "Rows like a TV's beam: dark gaps in dark parts, rows that close up where it's bright."),
-            ("crt", "Scanlines plus a faint glow, like an old tube TV. The TV around it is a Screen frame."),
-            ("softglow", "A soft halo around bright parts; the rest stays clear."),
-            ("smooth", "Rounds the stair-steps on slanted edges. Flat pixels and straight edges stay sharp."),
+            ("none", "Clean image with no shader overlay."),
+            ("grid", "Subtle pixel grid like a classic handheld LCD."),
+            ("scanlines", "Beam-style scanlines: deep gaps in shadows that bloom in highlights."),
+            ("crt", "Scanlines with a soft CRT glow. Pair with a Screen frame for the full TV."),
+            ("softglow", "Soft glow around bright highlights; crisp elsewhere."),
+            ("smooth", "Smooths jagged diagonal edges while keeping flat pixel art sharp."),
         ],
         _ => &[],
     }
@@ -516,9 +516,9 @@ pub fn android_look(sharpness: &str, effect: &str) -> look::Look {
 /// The explanation of a picture row on Android: only the player's values (`pause_options::shown_rows` is the other side).
 pub(crate) fn android_desc(key: &str) -> Option<&'static str> {
     match key {
-        "scaling" => Some("Integer scales by whole numbers (integer scaling): every pixel the same size, the sharpest.\nAspect is as large as fits, in the console's shape.\nFullscreen fills the screen and stretches pixels."),
+        "scaling" => Some("Integer uses whole-number scaling for razor-sharp, even pixels.\nAspect scales as big as fits in the original ratio.\nFullscreen fills the display by stretching."),
         // Linux's lines without Ambient's, which the player doesn't draw (each line is Linux's, translated as it is).
-        "frame" => Some("Fills the space around the picture. Auto suits the console.\nDMG to PSP: handhelds, each for its console. CRT to Woodgrain: TVs. Arcade: a cabinet."),
+        "frame" => Some("Frames the borders around the game. Auto picks per console.\nDMG to PSP: handheld bezels. CRT to Woodgrain: TVs. Arcade: cabinet."),
         // The app's bsnes has HD built in: no other emulator, no widescreen.
         crate::mode7_hd::KEY => Some(crate::mode7_hd::ANDROID_DESC),
         _ => None,

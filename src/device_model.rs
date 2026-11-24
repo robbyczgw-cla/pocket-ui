@@ -164,7 +164,7 @@ pub fn no_wifi_chip() -> bool {
 }
 
 #[cfg(all(target_os = "android", not(feature = "handheld")))]
-pub const NEEDS_NETWORK: &str = "Needs a network, and this handheld has no Wi-Fi.";
+pub const NEEDS_NETWORK: &str = "Needs a network; this handheld has no Wi-Fi.";
 
 #[cfg(all(target_os = "android", not(feature = "handheld")))]
 pub fn wifi_or<'a>(wifi: &'a str, _none: &'a str) -> &'a str {

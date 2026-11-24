@@ -37,20 +37,31 @@ pub(crate) struct OpenCard {
 /// at a time.
 const INFOS_WARM_AFTER: Duration = Duration::from_millis(1500);
 const INFOS_WARM_BUDGET: Duration = Duration::from_millis(3);
+/// The 1 GiB RK3326 shares RAM with the emulator. On the measured library this many games account for
+/// tens of MiB of decoded facts and indexes, even when the shelf is idle.
+const LARGE_LIBRARY_GAMES: usize = 20_000;
 
 impl App {
+    pub(crate) fn large_game_library_on_rk3326(&self) -> bool {
+        pocket_ui::device::current().model.is_some_and(|m| m.is_rk3326())
+            && self.systems.iter().map(|s| s.games.len()).sum::<usize>() >= LARGE_LIBRARY_GAMES
+    }
+
     /// The facts for a game of the library, looked up once per file: the entry the player chose on the
     /// card, else the automatic match by the name its checksum gave (`app_identify`), else by its file name.
     pub(crate) fn game_info(&mut self, system: &str, path: &Path) -> Option<GameInfo> {
         if let Some(hit) = self.game_infos.get(path) {
-            return hit.clone();
+            return hit.as_deref().cloned();
         }
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
         let choice = self.library.get(path).choice;
         let identified = self.identify.names.get(path).cloned();
+        if self.large_game_library_on_rk3326() {
+            self.gamedb.retain_for(system);
+        }
         let hit = self.gamedb.resolve_rom(system, stem, identified.as_deref(), choice.as_ref());
         self.infos_resolved += 1;
-        self.game_infos.insert(path.to_path_buf(), hit.clone());
+        self.game_infos.insert(path.to_path_buf(), hit.clone().map(Box::new));
         hit
     }
 
@@ -63,6 +74,7 @@ impl App {
         let idle = self.window.is_some()
             && self.card.is_none()
             && self.running.is_none()
+            && self.pending_launch.is_none()
             && self.menu.is_none()
             && self.switcher.is_none()
             && self.settings_page.is_none()
@@ -253,8 +265,8 @@ impl App {
     }
 
     /// The card's rows: a save with two versions first (`app_sync_conflicts`), then Echoes, Versions, Stickers
-    /// (`app_curator`), Screenshots (`app_gallery`) and Hide or delete at the end of
-    /// the card (`app_storage`). The one
+    /// (`app_curator`), Screenshots (`app_gallery`), and last Delete from the card and Hide from the shelf
+    /// (`app_storage`). The one
     /// list for a new card and for every refresh of an open one, so a refresh never drops a row.
     pub(crate) fn card_rows(&self, system: &str, path: &Path) -> Vec<CuratorRow> {
         self.conflict_card_row(system, path)
@@ -262,7 +274,8 @@ impl App {
             .chain(self.curator_card_rows(path))
             .chain(self.card_screenshots_row(system, path))
             .chain(self.card_crate_row(path))
-            .chain(std::iter::once(self.card_manage_row()))
+            .chain(self.card_dolphin_row(system, path))
+            .chain(self.card_manage_rows(path))
             .collect()
     }
 
@@ -312,7 +325,7 @@ impl App {
             patch: Some(pocket_ui::softpatch::find(path).iter().map(|p| pocket_ui::softpatch::name(p)).collect::<Vec<_>>().join(", ")).filter(|s| !s.is_empty()),
             // The title is already on the card; reserve the problem's room for the cause and remedy. The start
             // notice still names the game in full (`library_cache::empty_game`).
-            broken: pocket_ui::library_cache::is_empty_file(path).then(|| "The file is empty (0 bytes). Copy the game to the card again.".into()),
+            broken: pocket_ui::library_cache::is_empty_file(path).then(|| "File is empty (0 bytes). Recopy the ROM to your SD card.".into()),
             favorite: self.favorites.contains(path),
             // Its save slots on their medium (`save_media`): a few file checks, pocket-core's games only.
             saves: game_card::CardSaves::of_core(system, path, stripe(system), &self.core_for_path(system, path)),
@@ -380,21 +393,25 @@ impl App {
     /// "More by" and "Other games in" from the player's own library.
     #[allow(clippy::type_complexity)]
     fn related_games(&mut self, info: &GameInfo, path: &Path) -> (Option<(String, Vec<RelatedGame>)>, Option<(String, Vec<RelatedGame>)>) {
-        let games: Vec<(String, String, PathBuf)> = self
+        let missing: Vec<(String, PathBuf)> = self
             .systems
             .iter()
-            .flat_map(|s| s.games.iter().map(move |g| (s.name.clone(), g.name.clone(), g.path.clone())))
+            .flat_map(|s| s.games.iter().map(move |g| (&s.name, &g.path)))
+            .filter(|(_, p)| !self.game_infos.contains_key(*p))
+            .map(|(s, p)| (s.clone(), p.clone()))
             .collect();
-        let infos: Vec<Option<GameInfo>> = games.iter().map(|(sys, _, p)| self.game_info(sys, p)).collect();
-        let library: Vec<Owned> = games
+        for (system, path) in missing {
+            self.game_info(&system, &path);
+        }
+        let infos = &self.game_infos;
+        let library: Vec<Owned> = self.systems
             .iter()
-            .zip(&infos)
-            .map(|((sys, name, p), i)| Owned {
-                system: sys,
-                path: p,
-                name,
-                info: i.as_ref(),
-            })
+            .flat_map(|s| s.games.iter().map(move |g| Owned {
+                system: &s.name,
+                path: &g.path,
+                name: &g.name,
+                info: infos.get(&g.path).and_then(|i| i.as_deref()),
+            }))
             .collect();
         let r = gamedb::related(info, path, &library);
         let to_list = |(key, owned): (String, Vec<Owned>)| {
@@ -461,7 +478,7 @@ impl App {
                 self.game_box = boxed;
                 self.save_settings();
             }
-            // Hide or delete (`app_storage`).
+            // Delete from the card, Hide from the shelf (`app_storage`).
             Out::Hide => self.card_hide(),
             Out::PlanDelete => self.card_plan_delete(),
             Out::Delete { with_saves } => self.card_delete(with_saves),
@@ -550,7 +567,7 @@ impl App {
             return;
         }
         use pocket_ui::auto_covers::Decision;
-        if self.setup.as_ref().is_some_and(|s| !s.past_wifi()) {
+        if pocket_ui::background_io::paused() || self.setup.as_ref().is_some_and(|s| !s.past_wifi()) {
             return;
         }
         let in_game = self.running.is_some();
@@ -573,29 +590,29 @@ impl App {
         std::thread::spawn(move || {
             use pocket_ui::auto_texts::{self, Event};
             pocket_ui::web::lower_priority();
-            let mut db = gamedb::GameDb::embedded();
-            let todo = auto_texts::todo(&data_dir, &mut db, &games);
-            // Games with nothing to load (no entry, no article, text cached) are done with as well.
-            let to_load: std::collections::HashSet<&PathBuf> = todo.iter().map(|t| &t.0).collect();
-            let mut looked_up: Vec<PathBuf> = games.iter().filter(|g| !to_load.contains(&g.1)).map(|g| g.1.clone()).collect();
-            let _ = proxy.send_event(UserEvent::Texts(Event::Progress { done: 0, total: todo.len() }));
-            let progress = |done, total| {
-                let _ = proxy.send_event(UserEvent::Texts(Event::Progress { done, total }));
-            };
-            let stopped = || stop.load(std::sync::atomic::Ordering::Relaxed) || pocket_ui::covers::game_on();
-            let run = auto_texts::fetch_until(
-                &todo,
-                progress,
-                stopped,
-                |title| pocket_ui::wiki_text::fetch(&data_dir, title),
-                auto_texts::DELAY,
-            );
-            looked_up.extend(run.looked_up);
-            let _ = proxy.send_event(UserEvent::Texts(Event::Done {
-                looked_up,
-                fetched: run.fetched,
-                stopped: run.stopped,
-            }));
+            let event = pocket_ui::background_io::job(|| {
+                let mut db = gamedb::GameDb::embedded();
+                let todo = auto_texts::todo(&data_dir, &mut db, &games);
+                drop(db);
+                // Games with nothing to load (no entry, no article, text cached) are done with as well.
+                let to_load: std::collections::HashSet<&PathBuf> = todo.iter().map(|t| &t.0).collect();
+                let mut looked_up: Vec<PathBuf> = games.iter().filter(|g| !to_load.contains(&g.1)).map(|g| g.1.clone()).collect();
+                let _ = proxy.send_event(UserEvent::Texts(Event::Progress { done: 0, total: todo.len() }));
+                let progress = |done, total| {
+                    let _ = proxy.send_event(UserEvent::Texts(Event::Progress { done, total }));
+                };
+                let stopped = || stop.load(std::sync::atomic::Ordering::Relaxed) || pocket_ui::background_io::cancelled();
+                let run = auto_texts::fetch_until(
+                    &todo,
+                    progress,
+                    stopped,
+                    |title| pocket_ui::wiki_text::fetch(&data_dir, title),
+                    auto_texts::DELAY,
+                );
+                looked_up.extend(run.looked_up);
+                Event::Done { looked_up, fetched: run.fetched, stopped: run.stopped }
+            }).unwrap_or(Event::Done { looked_up: Vec::new(), fetched: 0, stopped: true });
+            let _ = proxy.send_event(UserEvent::Texts(event));
         });
     }
 
@@ -610,6 +627,7 @@ impl App {
                     if stopped { ", stopped" } else { "" }
                 );
                 self.text_run.finish(looked_up, stopped);
+                if stopped { self.resume_shelf_after_update(); }
             }
         }
     }
@@ -815,5 +833,20 @@ impl App {
             let stem = open.path.file_stem().and_then(|s| s.to_str()).unwrap_or("Game").to_string();
             open.card.data.patch = Some(format!("{stem}.ips"));
         }
+    }
+}
+
+#[cfg(test)]
+mod pressure_tests {
+    use super::App;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    #[test]
+    fn r36s_pressure_a_missing_fact_uses_at_most_one_pointer() {
+        fn value_size<V>(_: impl Fn(&App) -> &HashMap<PathBuf, V>) -> usize {
+            std::mem::size_of::<V>()
+        }
+        assert!(value_size(|app| &app.game_infos) <= std::mem::size_of::<usize>());
     }
 }

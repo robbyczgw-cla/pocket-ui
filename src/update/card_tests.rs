@@ -248,7 +248,7 @@ fn a_component_the_file_lacks_is_explained_one_it_has_is_found_by_its_hash() {
     let package = Release { version: "optional".into(), url: "https://h/asset-x.tar.gz".into(), mirrors: vec![], preferred_sources: vec![],
         sha256: "ab".repeat(32), size: 123, notes: String::new() };
     let dest = dir.join("asset");
-    assert_eq!(from(&bundle, &app_sha, &package, &dest, &Cancel::new(), &|_| {}).unwrap_err(), NEEDS_MORE);
+    assert_eq!(from(&bundle, &app_sha, &package, &dest, &Cancel::new(), &|_| {}).unwrap_err(), needs_more(crate::device::no_wifi_chip()));
     let rel = Release { sha256: app_sha.clone(), size: app.len() as u64, ..package };
     from(&bundle, &app_sha, &rel, &dest, &Cancel::new(), &|_| {}).unwrap();
     assert_eq!(std::fs::read(&dest).unwrap(), app);
@@ -409,5 +409,18 @@ fn a_real_update_file_passes_every_check_of_the_device() {
     match look_in(&[dir.to_path_buf()], &from, true, &crate::store::PUBLIC_KEY, target) {
         Look::Offer(found) => println!("offered: {} from {}", found.version(), found.file.display()),
         other => panic!("{other:?}"),
+    }
+}
+
+/// 22.11.2026: an update file that lacks a component said "or update over Wi-Fi" on the RG28XX and the R36S too, which
+/// have none (tests/no_wifi_walk.rs leaves Updates to its own tests). There the card is the only way.
+#[test]
+fn a_file_that_lacks_a_part_names_no_wifi_where_there_is_none() {
+    assert_eq!(needs_more(false), NEEDS_MORE);
+    assert!(NEEDS_MORE.contains("over Wi-Fi"), "with a chip, Wi-Fi is a way");
+    assert!(!needs_more(true).contains("Wi-Fi") && needs_more(true).contains("pocketui.xyz/install"), "{}", needs_more(true));
+    for tsv in [include_str!("../../assets/i18n/de.tsv"), include_str!("../../assets/i18n/es.tsv"), include_str!("../../assets/i18n/fr.tsv"),
+                include_str!("../../assets/i18n/it.tsv"), include_str!("../../assets/i18n/pt.tsv")] {
+        assert!(tsv.lines().any(|l| l.split('\t').next() == Some(NEEDS_MORE_NO_WIFI)), "translated");
     }
 }

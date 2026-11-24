@@ -58,7 +58,7 @@ They are names, not descriptions, and the manual (still English) uses them:
 | Settings | Einstellungen | |
 | Settings' categories: Connections, Look, Screen & sound, Controls, Playing, Games, System, Help & tools | Verbindungen, Aussehen, Bildschirm & Ton, Steuerung, Im Spiel, Spiele, System, Hilfe & Werkzeuge | a path: "Einstellungen › System › Akku" |
 | Playing (the category) | Im Spiel | not "Spielen", one letter from "Spiele" beside it (Settings v2) |
-| Web companion | Web-Begleiter | the Pocket's Settings page is German, the pages in the browser stay English |
+| Web companion | Web-Begleiter | the pages in the browser too follow the Pocket's language (`src/web/texts.rs`); its own words are the Pocket's: Regal, Spielverlauf, Sitzung, koppeln |
 | History, Play history, Year in review, Month in review | Verlauf, Spielverlauf, Jahresrückblick, Monatsrückblick | |
 | Session, streak | Sitzung, Serie | |
 | Look (Settings → Look → Layout), look | Ansicht | "Choose a look" → "Wähl eine Ansicht" |

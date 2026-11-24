@@ -55,7 +55,7 @@ impl App {
             .then(|| pocket_ui::library::load_shown(&self.es_systems, &self.data_dir).ok())
             .flatten();
         let sample = look_sample::pick(card.as_deref().unwrap_or(&self.systems), &self.hidden, &recents, |system, rom| {
-            let path = pocket_ui::covers::cover_path(&data_dir, system, rom);
+            let path = pocket_ui::covers::active_cover_path(&data_dir, system, rom);
             path.exists().then_some(path)
         });
         let cover = match &sample.cover {

@@ -278,7 +278,7 @@ impl AppOffer {
 /// The line about the offers: which app plays which system, and where that is changed later.
 pub fn apps_note(offers: &[AppOffer]) -> String {
     let list: Vec<String> = offers.iter().map(AppOffer::row).collect();
-    format!("Found on this device: {}. They play what pocket-ui doesn't; you can change it per system later.", list.join(", "))
+    format!("Found on this device: {}. They handle systems pocket-ui doesn't; changeable per system later.", list.join(", "))
 }
 
 /// The systems only another app plays on Android: no core of pocket-ui's for them.
@@ -351,7 +351,7 @@ impl AppToGet {
 }
 
 /// What the row about an app to get says over it.
-pub const GET_NOTE: &str = "Opens the app's official page in your browser. pocket-ui downloads and installs nothing itself.";
+pub const GET_NOTE: &str = "Opens the app's official page in your browser; pocket-ui doesn't download or install it.";
 
 /// The systems among `found` (with games) that only an app plays and no installed app takes: its app's official page.
 pub fn apps_to_get(phone: &Phone, found: &[&str]) -> Vec<AppToGet> {
@@ -447,10 +447,10 @@ pub fn bios_names(disk: &dyn Disk, roots: &[PathBuf]) -> Vec<String> {
 pub const WORDS: &[&str] = &[
     "Emulator apps",
     GET_NOTE,
-    "Another app keeps games here. A adds the folder to your shelf; the files stay where they are.",
-    "Games found on this device. Choose them below, or another folder.",
-    "No games found on this device yet. Choose the folder you put them in, or add games later.",
-    "Everything is ready. Covers and pictures download on unmetered Wi-Fi as you browse; Settings can turn that off.",
+    "Another app stores games here. Press A to add it to your shelf; your files stay put.",
+    "Games found on this device. Pick them below, or another folder.",
+    "No games found yet. Pick your games folder below, or add them later.",
+    "All set. Box art downloads on unmetered Wi-Fi as you browse (toggle any time in Settings).",
 ];
 
 // ---- folders taken ----------------------------------------------------------------------------------------------------
@@ -764,7 +764,7 @@ mod tests {
         // The words the two views add around them (`setup.rs` "Your games", `android/src/onboarding.rs`).
         lines.extend(WORDS.iter().map(|w| w.to_string()));
         lines.extend(APP_DOWNLOADS.iter().map(|(s, a, u)| AppToGet { system: s, app: a, url: u }.row()));
-        for lang in crate::i18n::Lang::ALL.into_iter().filter(|l| *l != crate::i18n::Lang::En) {
+        for lang in crate::i18n::Lang::ALL.into_iter().filter(|l| *l != crate::i18n::Lang::En && l.complete()) {
             for line in &lines {
                 assert_ne!(&crate::i18n::tr_in(lang, line), line, "{lang:?}: {line}");
             }

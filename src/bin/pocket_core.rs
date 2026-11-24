@@ -448,6 +448,7 @@ impl App {
         let hw = match hw_render::requested() {
             Some(_) => {
                 let g = self.core.av.geometry;
+                if pocket_ui::startup::n64_start_pending() { pocket_ui::startup::mark("hardware context setup"); }
                 Some(HwContext::new(&display, &config, &context, &surface, handle, (g.max_width, g.max_height))?)
             }
             None => None,
@@ -620,6 +621,7 @@ impl App {
         let swapped = PROGRESS.display(|| gfx.surface.swap_buffers(&gfx.context).ok());
         // A successful swap of a real game picture is evidence it started. Empty/failed swaps are not.
         if swapped.is_some() && gfx.video.has_frame() {
+            pocket_ui::startup::n64_game_presented();
             pocket_ui::fast_switch::first_frame();
             pocket_ui::mark!("core-present", "frame={}", self.stats.emulated);
         }
@@ -673,13 +675,19 @@ impl App {
             let axes = if self.dark { [0; 4] } else { controls::turn_sticks(s.analog(!self.mapping.stick_dpad), turn) };
             let ds = if home || self.dark {
                 self.ds_pad[p].suppress(raw);
-                pocket_ui::ds_pad::Frame { raw: raw & !self.held_mask[p], buttons: 0, axes, changed: None }
+                pocket_ui::ds_pad::Frame::plain(raw & !self.held_mask[p], axes)
             } else {
                 self.ds_pad[p].apply(&self.video_src.0, &self.mapping, raw & !self.held_mask[p], axes)
             };
             if let Some(stylus) = ds.changed {
                 self.toggled[p].clear();
                 if p == 0 { self.hud.toast(if stylus { "Stylus mode" } else { "D-pad mode" }); }
+            }
+            // A tap on the layout button: the two DS screens change places (`ds_pad::swap_options`).
+            if ds.swap {
+                for (key, value) in pocket_ui::ds_pad::swap_options(|k| self.core.option_value(k)) {
+                    self.core.set_option(&key, value);
+                }
             }
             let pressed = self.mapping.translate(ds.raw);
             // With the screen off nothing is held for the game either.
@@ -869,7 +877,10 @@ impl App {
                 let (active, fill, low) = self.audio.as_ref().map_or((false, 0, false), Audio::buffer_status);
                 let sounding = enable & pocket_ui::libretro::AV_AUDIO != 0;
                 self.core.audio_buffer_status(active && sounding, fill, low && sounding);
+                let first = self.stats.emulated == 0 && pocket_ui::startup::n64_start_pending();
+                if first { pocket_ui::startup::mark("first retro_run"); }
                 let (f, s, a, g) = self.core.run_with(buttons, enable);
+                if first { pocket_ui::startup::mark("first retro_run returned"); }
                 // Achievements look at the game's memory after every emulated frame.
                 if let Some(cheevos) = self.cheevos.as_mut() {
                     cheevos.frame();
@@ -889,6 +900,12 @@ impl App {
                 }
             }
             core_time = run_t0.elapsed();
+            // A refresh the core held for over a second (a 3D core compiling its shaders on a small GPU, a stall on a slow
+            // card): the log says when and how long, so a freeze at a game's start has numbers (R36S hand test 20.11.2026
+            // #17, N64 still for about a minute).
+            if core_time >= Duration::from_secs(1) {
+                println!("slow refresh: the core ran {} ms at emulated frame {}", core_time.as_millis(), self.stats.emulated);
+            }
             if ff.is_none() && !ran_ahead {
                 plain_frames = ran;
             }
@@ -2747,6 +2764,12 @@ fn main() {
     let rom = PathBuf::from(&args[2]);
     // The ROCKNIX system name (pocket-ui passes it); otherwise the ROM's folder, which is the same for most.
     let system = arg("--system").cloned().or_else(|| rom.parent().and_then(|p| p.file_name()).and_then(|s| s.to_str()).map(str::to_string)).unwrap_or_else(|| "misc".into());
+    if pocket_ui::startup::is_r36s_n64(&system) {
+        pocket_ui::startup::watch_r36s_n64(started);
+        let since = pocket_ui::startup::since_launch_ms().map_or_else(|| "?".into(), |ms| format!("{ms:.0}"));
+        println!("n64 start: process pid={} core={} since_request_ms={since}", std::process::id(),
+            core_options::core_id(Path::new(&args[1])));
+    }
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or("game").to_string();
     let states = pocket_ui::slots::base_for_core(&system, &stem, &core_options::core_id(Path::new(&args[1])));
 
@@ -2801,12 +2824,12 @@ fn main() {
     let bios_dir = hostsys::bios_dir();
     #[cfg(feature = "brick")]
     {
-        let missing_bios = host.and_then(|h| h.missing_bios(&bios_dir));
+        let missing_bios = host.and_then(|h| h.missing_bios_for(&bios_dir, &rom));
         let missing_bios = pocket_ui::brick_profile::missing_bios(&system, &bios_dir).or(missing_bios);
         if let Some(msg) = missing_bios { fail(&msg); }
     }
     #[cfg(not(feature = "brick"))]
-    if let Some(msg) = host.and_then(|h| h.missing_bios(&bios_dir)) {
+    if let Some(msg) = host.and_then(|h| h.missing_bios_for(&bios_dir, &rom)) {
         fail(&msg);
     }
     let save_dir = rom.parent().map_or_else(|| PathBuf::from("/storage/roms/misc"), Path::to_path_buf); #[cfg(feature = "brick")] let save_dir = std::env::var_os("POCKET_CORE_SAVE_DIR").map(|d| PathBuf::from(d).join(&system)).inspect(|d| { let _ = std::fs::create_dir_all(d); }).unwrap_or(save_dir);
@@ -2884,12 +2907,14 @@ fn main() {
     };
     // ScummVM's ROCKNIX list names the game folder rather than being a game (`hostsys::content_path`).
     let content = hostsys::content_path(&system, &rom);
+    // The core's system directory: the BIOS folder, but ScummVM's may be another (dArkOS: bios/ is read only, `hostsys::scummvm_place`).
+    let mut system_dir = bios_dir.clone();
     if core_options::core_id(core_so) == "scummvm" {
         #[cfg(feature = "brick")] let card_prepared = pocket_ui::brick_profile::prepare_scummvm(&bios_dir);
         #[cfg(feature = "brick")]
-        if !card_prepared { hostsys::prepare_scummvm(&bios_dir); }
+        if !card_prepared { system_dir = hostsys::prepare_scummvm(&bios_dir); }
         #[cfg(not(feature = "brick"))]
-        hostsys::prepare_scummvm(&bios_dir);
+        { system_dir = hostsys::prepare_scummvm(&bios_dir); }
     }
     // PPSSPP's atlas, VFPU tables and fonts live in <system dir>/PPSSPP; ROCKNIX and dArkOS ship them only for their standalone PPSSPP.
     if core_options::core_id(core_so) == "ppsspp" {
@@ -2900,7 +2925,8 @@ fn main() {
         // The Brick: what the load read from the card, every 5 s after the first 3 (a slow card or a stall shows here).
         #[cfg(feature = "brick")]
         let load_log = watch_load();
-        let loaded = Core::load(core_so, &content, &bios_dir, &save_dir, &options);
+        if pocket_ui::startup::n64_start_pending() { pocket_ui::startup::mark("loading core and game"); }
+        let loaded = Core::load(core_so, &content, &system_dir, &save_dir, &options);
         #[cfg(feature = "brick")]
         load_log.done();
         loaded
@@ -2911,6 +2937,14 @@ fn main() {
     };
     PROGRESS.checkpoint();
     pocket_ui::startup::mark("core");
+    if pocket_ui::startup::n64_start_pending() {
+        let option = |key| core.option_value(key).unwrap_or_else(|| "?".into());
+        println!("n64 start: options rdp={} rsp={} resolution={} threaded={} shader_storage={} texture_cache={} mesa_shader_cache_disable={}",
+            option("mupen64plus-rdp-plugin"), option("mupen64plus-rsp-plugin"),
+            option("mupen64plus-EnableNativeResFactor"), option("mupen64plus-ThreadedRenderer"),
+            option("mupen64plus-EnableShadersStorage"), option("mupen64plus-EnableTextureCache"),
+            std::env::var("MESA_SHADER_CACHE_DISABLE").unwrap_or_else(|_| "unset".into()));
+    }
     // A note of the game before about saves that didn't reach the card is not this game's (`save_trouble`).
     pocket_ui::save_trouble::publish_to(Path::new(pocket_ui::save_trouble::FILE), None);
     // A DraStic `.dsv` next to the game became the `.sav` (`dsv`): the toast comes once the window is up.

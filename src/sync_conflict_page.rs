@@ -214,12 +214,12 @@ pub fn version_rows(g: &Group, from: &dyn Fn(&std::path::Path) -> Option<String>
 
 /// The line under the versions: what A does and where the other version goes.
 pub fn keep_text(folder: &str) -> String {
-    format!("A keeps the highlighted version in its place. The other one is not deleted: it moves to {folder}.")
+    format!("Press A to keep the selected version. The other isn't deleted; it moves to {folder}.")
 }
 
 /// For a memory card: the whole card is chosen, with every game's saves on it.
 pub fn card_warning(kind: Kind) -> Option<&'static str> {
-    (kind == Kind::Card).then_some("This is the whole memory card. The version you keep holds the saves of every game on it.")
+    (kind == Kind::Card).then_some("This is a full memory card. Whichever version you keep holds every game's save on it.")
 }
 
 /// The one-time notice on the shelf for groups that appeared since the last one. It says where to choose: the game's
@@ -229,12 +229,12 @@ pub fn notice(new: &[&Entry]) -> Option<String> {
     let first = new.first()?;
     let (card, title, more) = (first.group.kind == Kind::Card, &first.title, new.len() - 1);
     Some(match (card, more, matches!(first.owner, Owner::Game(_))) {
-        (true, 0, true) => format!("A memory card has two versions: {title} – open the game's card to choose"),
-        (true, 0, false) => format!("A memory card has two versions: {title} – choose in Settings › Connections › Sync"),
-        (true, _, _) => format!("A memory card has two versions: {title} and {more} more – choose in Settings › Connections › Sync"),
-        (false, 0, true) => format!("A save has two versions: {title} – open the game's card to choose"),
-        (false, 0, false) => format!("A save has two versions: {title} – choose in Settings › Connections › Sync"),
-        (false, _, _) => format!("A save has two versions: {title} and {more} more – choose in Settings › Connections › Sync"),
+        (true, 0, true) => format!("Two memory card versions: {title}. Open the game's card to choose"),
+        (true, 0, false) => format!("Two memory card versions: {title}. Pick in Settings › Connections › Sync"),
+        (true, _, _) => format!("Two memory card versions: {title} (+{more}). Pick in Settings › Connections › Sync"),
+        (false, 0, true) => format!("Two save versions: {title}. Open the game's card to choose"),
+        (false, 0, false) => format!("Two save versions: {title}. Pick in Settings › Connections › Sync"),
+        (false, _, _) => format!("Two save versions: {title} (+{more}). Pick in Settings › Connections › Sync"),
     })
 }
 
@@ -367,11 +367,11 @@ mod tests {
     fn the_notice_names_the_game_counts_the_rest_and_says_where_to_choose() {
         let (mut a, b, c) = (entry("Pokémon Emerald", Kind::Save, 1), entry("Mcd001.ps2", Kind::Card, 1), entry("Zelda", Kind::Save, 1));
         // One game's save has a card to open; a save nobody owns, a memory card and several have only Settings → Sync.
-        assert_eq!(notice(&[&a]).as_deref(), Some("A save has two versions: Pokémon Emerald – choose in Settings › Connections › Sync"));
+        assert_eq!(notice(&[&a]).as_deref(), Some("Two save versions: Pokémon Emerald. Pick in Settings › Connections › Sync"));
         a.owner = Owner::Game(PathBuf::from("/storage/roms/gba/Pokemon Emerald.gba"));
-        assert_eq!(notice(&[&a]).as_deref(), Some("A save has two versions: Pokémon Emerald – open the game's card to choose"));
-        assert_eq!(notice(&[&b]).as_deref(), Some("A memory card has two versions: Mcd001.ps2 – choose in Settings › Connections › Sync"));
-        assert_eq!(notice(&[&a, &c, &b]).as_deref(), Some("A save has two versions: Pokémon Emerald and 2 more – choose in Settings › Connections › Sync"));
+        assert_eq!(notice(&[&a]).as_deref(), Some("Two save versions: Pokémon Emerald. Open the game's card to choose"));
+        assert_eq!(notice(&[&b]).as_deref(), Some("Two memory card versions: Mcd001.ps2. Pick in Settings › Connections › Sync"));
+        assert_eq!(notice(&[&a, &c, &b]).as_deref(), Some("Two save versions: Pokémon Emerald (+2). Pick in Settings › Connections › Sync"));
     }
 
     /// Every sentence of the notice has its German line.
@@ -382,7 +382,7 @@ mod tests {
         a.owner = Owner::Game(PathBuf::from("/storage/roms/gba/Pokemon Emerald.gba"));
         let b = entry("Mcd001.ps2", Kind::Card, 1);
         let one = notice(&[&a]).unwrap();
-        assert_eq!(t.translate(&one).as_deref(), Some("Ein Spielspeicher hat zwei Versionen: Pokémon Emerald – wähle auf der Spielkarte"));
+        assert_eq!(t.translate(&one).as_deref(), Some("Ein Spielspeicher hat zwei Versionen: Pokémon Emerald. Wähle auf der Spielkarte"));
         for text in [notice(&[&b]).unwrap(), notice(&[&a, &b]).unwrap(), notice(&[&b, &a]).unwrap()] {
             let de = t.translate(&text).unwrap_or_else(|| panic!("no German for {text:?}"));
             assert!(de.contains("Einstellungen › Verbindungen › Sync"), "{de}");

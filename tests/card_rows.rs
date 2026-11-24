@@ -1,8 +1,8 @@
 //! The game card's rows survive a refresh (VDEV-ROUND-2026-10-25): a new Curator index (after a rating or a sticker)
 //! and the sync conflicts' scan make an open card's rows again, and once did so from the Curator rows alone, so
-//! Screenshots and "Hide or delete" went off the card until it was opened again. Rendered with
+//! Screenshots and "Hide from the shelf" went off the card until it was opened again. Rendered with
 //! `pocket-ui --snapshot curator:card:…` on scripts/curator-fake-library.py's made-up library: the card scrolled to its
-//! end (Down onto its last row, "Hide or delete") looks the same with and without a refresh (`f`, `c`) before.
+//! end (Down onto its last row, "Hide from the shelf") looks the same with and without a refresh (`f`, `c`) before.
 //!
 //! Needs python3 for the made-up library and, on Linux without a compositor, scripts/wayland-stub.py (as
 //! tests/i18n_snapshots.rs).
@@ -96,6 +96,6 @@ fn a_refresh_keeps_every_row_of_the_card() {
     // `f`: a new Curator index (after a rating, a sticker), `c`: the sync conflicts' scan.
     for refresh in ["f", "c", "fc"] {
         let after = render(&bin, &tmp, &format!("curator:card:snes:chrono:{refresh}{downs}"), stub.as_ref());
-        assert!(after == end, "{refresh}: the card's end after a refresh is the same, Hide or delete included");
+        assert!(after == end, "{refresh}: the card's end after a refresh is the same, Hide from the shelf included");
     }
 }

@@ -47,7 +47,10 @@ fn copy_dir(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).unwrap();
     for e in std::fs::read_dir(from).unwrap().flatten() {
         let target = to.join(e.file_name());
-        if e.path().is_dir() {
+        if e.file_name() == "covers" && e.path().is_dir() {
+            // Read-only fixture covers: symlink instead of copying 120 PNG files on every run.
+            std::os::unix::fs::symlink(e.path(), &target).unwrap();
+        } else if e.path().is_dir() {
             copy_dir(&e.path(), &target);
         } else {
             std::fs::copy(e.path(), target).unwrap();
@@ -74,7 +77,7 @@ fn check(tmp: &Path, wayland: &Option<Stub>, look: &str, on: bool) -> (String, S
     let _ = std::fs::remove_dir_all(&data);
     copy_dir(&tmp.join("data"), &data);
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
-    cmd.args(["--snapshot", &format!("prefetch-check:{look}:gbc"), tmp.join("check.png").to_str().unwrap()])
+    cmd.args(["--snapshot", &format!("prefetch-check:{look}:gbc"), tmp.join(format!("check-{look}-{on}.png")).to_str().unwrap()])
         .env("POCKETUI_MOCK", "1")
         .env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
         .env("POCKETUI_SEALED", "0")
@@ -140,28 +143,28 @@ const LOOKS: [&str; 4] = ["shelf", "cabinet", "big", "split"];
 
 #[test]
 fn the_next_games_covers_are_decoded_before_they_come_into_view() {
+    // Each `prefetch-check` run already reports both `prefetch-ahead` and `prefetch-keep`; check both contracts here
+    // across all four looks in parallel instead of rebuilding the 120-cover fixture and re-running the same four
+    // subprocesses in a second test.
     let (tmp, wayland) = library();
-    for look in LOOKS {
-        let (ahead, _) = check(tmp.path(), &wayland, look, true);
-        println!("{look}: {ahead}");
-        assert!(ahead.contains(" ready=4/4 "), "{look}: the next four covers were not read ahead: {ahead}");
-        assert!(ahead.ends_with("first_frame=true"), "{look}: the next move's first frame had no cover: {ahead}");
-        // Red without reading ahead: the same move's first frame waits for its cover.
-        let (off, _) = check(tmp.path(), &wayland, look, false);
-        println!("{look} without reading ahead: {off}");
-        assert!(off.ends_with("first_frame=false"), "{look}: the check can't tell reading ahead from not: {off}");
-    }
-}
-
-#[test]
-fn reading_ahead_never_pushes_the_cover_in_view_out_of_the_cache() {
-    let (tmp, wayland) = library();
-    for look in LOOKS {
-        let (_, keep) = check(tmp.path(), &wayland, look, true);
-        println!("{look}: {keep}");
-        assert!(keep.contains("selected=true"), "{look}: the cover in view was pushed out: {keep}");
-        let cached: usize = keep.rsplit("cached=").next().unwrap().parse().unwrap();
-        // The caches' own bounds (Cabinet's cuts: 48 + the window being read; Split's pictures: 16).
-        assert!(cached <= 48 + 8, "{look}: the cache grew past its bound: {keep}");
-    }
+    let root = tmp.path();
+    let wref = &wayland;
+    std::thread::scope(|s| {
+        for look in LOOKS {
+            s.spawn(move || {
+                let (ahead, keep) = check(root, wref, look, true);
+                println!("{look}: {ahead}\n{look}: {keep}");
+                assert!(ahead.contains(" ready=4/4 "), "{look}: the next four covers were not read ahead: {ahead}");
+                assert!(ahead.ends_with("first_frame=true"), "{look}: the next move's first frame had no cover: {ahead}");
+                assert!(keep.contains("selected=true"), "{look}: the cover in view was pushed out: {keep}");
+                let cached: usize = keep.rsplit("cached=").next().unwrap().parse().unwrap();
+                // The caches' own bounds (Cabinet's cuts: 48 + the window being read; Split's pictures: 16).
+                assert!(cached <= 48 + 8, "{look}: the cache grew past its bound: {keep}");
+                // Red without reading ahead: the same move's first frame waits for its cover.
+                let (off, _) = check(root, wref, look, false);
+                println!("{look} without reading ahead: {off}");
+                assert!(off.ends_with("first_frame=false"), "{look}: the check can't tell reading ahead from not: {off}");
+            });
+        }
+    });
 }

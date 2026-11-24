@@ -617,6 +617,8 @@ struct Server {
     native_port: Option<(i32, u64, i64)>,
     /// `pocket_tint`: the Soft look (`Look::multipliers`) of the sender's windows, drawn here instead of on its CPU.
     tint: Option<(i32, [u32; 3])>,
+    /// The CPU copy's buffers, kept from picture to picture (`CpuCopy`).
+    cpu: CpuCopy,
 }
 
 const NATIVE_PORT: (u64, u32) = (u64::MAX, 0);
@@ -869,14 +871,14 @@ impl Server {
                 }
             }
             Some(_) => {}
-            None => show_copy(&mut self.fb, &tinted(pixels, gain), b.width, b.height, b.stride),
+            None => self.cpu.show(&mut self.fb, pixels, b.width, b.height, b.stride, gain),
         }
         if let Some(e) = lost {
             // As `lose_gl`, field by field: the picture is still borrowed from its client.
             eprintln!("pocket-fb: GL failed: {e}; back to the CPU copy");
             (self.gl, self.anim, self.picture, self.picture_pid) = (None, None, None, None);
             self.fb.restore_pan();
-            show_copy(&mut self.fb, &tinted(pixels, gain), b.width, b.height, b.stride);
+            self.cpu.show(&mut self.fb, pixels, b.width, b.height, b.stride, gain);
         }
         let took = t.elapsed();
         self.frames += 1;
@@ -1256,29 +1258,53 @@ pub fn parse_command(command: &str) -> (Option<String>, String) {
     (None, command.to_string())
 }
 
-/// The CPU copy. A picture smaller than the screen is a game's own (it handed it over at its size for the shaders, and the GPU is
-/// gone): placed as `soft_screen` places it, so it shows right either way.
-fn show_copy(fb: &mut Fb, pixels: &[u8], width: u32, height: u32, stride: usize) {
-    let (sw, sh) = (fb.width, fb.height);
-    if (width >= sw && height >= sh) || width == 0 || height == 0 || stride < width as usize * 4 || pixels.len() < stride * (height as usize - 1) + width as usize * 4 {
-        fb.show(pixels, width, height, stride);
-        return;
-    }
-    let frame = pocket_ui::libretro::Frame { width, height, pitch: stride, format: pocket_ui::libretro::PIXEL_XRGB8888, data: pixels.to_vec() };
-    let mut px = vec![0u32; sw as usize * sh as usize];
-    pocket_ui::soft_screen::blit(&frame, &mut px, sw as usize, sh as usize);
-    let bytes: Vec<u8> = px.iter().flat_map(|p| p.to_le_bytes()).collect();
-    fb.show(&bytes, sw, sh, sw as usize * 4);
+/// The CPU copy (dArkOS, a Brick without the GPU path), with its buffers kept from picture to picture: the screen-sized
+/// picture and the tinted copy were three fresh heap buffers on every frame (a copy of the game's picture, the screen in
+/// 0RGB and again as bytes: 6–9 MB a frame on the Brick's 1024x768, each one new pages for the kernel to hand out).
+#[derive(Default)]
+struct CpuCopy {
+    /// The screen in 0RGB, as `soft_screen` places the game's picture in it.
+    px: Vec<u32>,
+    /// The picture with the Soft look multiplied in (`tinted`).
+    tint: Vec<u8>,
 }
 
-/// The picture with the Soft look multiplied in (`pocket_tint`), for the CPU copy; as it is without one.
-fn tinted(pixels: &[u8], gain: [u32; 3]) -> std::borrow::Cow<'_, [u8]> {
+impl CpuCopy {
+    /// A picture smaller than the screen is a game's own (it handed it over at its size for the shaders, and the GPU is
+    /// gone): placed as `soft_screen` places it, so it shows right either way.
+    fn show(&mut self, fb: &mut Fb, pixels: &[u8], width: u32, height: u32, stride: usize, gain: [u32; 3]) {
+        let pixels = tinted(pixels, gain, &mut self.tint);
+        let (sw, sh) = (fb.width, fb.height);
+        if (width >= sw && height >= sh) || width == 0 || height == 0 || stride < width as usize * 4 || pixels.len() < stride * (height as usize - 1) + width as usize * 4 {
+            fb.show(pixels, width, height, stride);
+            return;
+        }
+        self.px.resize(sw as usize * sh as usize, 0);
+        pocket_ui::soft_screen::blit_borrowed(width, height, stride, pocket_ui::libretro::PIXEL_XRGB8888, pixels, &mut self.px, sw as usize, sh as usize);
+        fb.show(&xrgb_bytes(&self.px), sw, sh, sw as usize * 4);
+    }
+}
+
+/// 0RGB words as wl_shm's XRGB8888 bytes (little-endian words): the same memory on the handhelds, so no copy there.
+fn xrgb_bytes(px: &[u32]) -> std::borrow::Cow<'_, [u8]> {
+    if cfg!(target_endian = "little") {
+        // SAFETY: u8 has no alignment and every bit pattern; the slice covers exactly the words' bytes, borrowed as long as `px`.
+        std::borrow::Cow::Borrowed(unsafe { std::slice::from_raw_parts(px.as_ptr().cast::<u8>(), std::mem::size_of_val(px)) })
+    } else {
+        std::borrow::Cow::Owned(px.iter().flat_map(|p| p.to_le_bytes()).collect())
+    }
+}
+
+/// The picture with the Soft look multiplied in (`pocket_tint`), for the CPU copy, into `buf`; as it is without one.
+fn tinted<'a>(pixels: &'a [u8], gain: [u32; 3], buf: &'a mut Vec<u8>) -> &'a [u8] {
     if gain == pocket_ui::brick_gl::NO_GAIN {
-        return std::borrow::Cow::Borrowed(pixels);
+        return pixels;
     }
     let ch = |v: u8, m: u32| ((u32::from(v) * m + 0x8000) >> 16) as u8;
     // wl_shm's XRGB8888: blue, green, red, unused.
-    std::borrow::Cow::Owned(pixels.chunks_exact(4).flat_map(|p| [ch(p[0], gain[2]), ch(p[1], gain[1]), ch(p[2], gain[0]), p[3]]).collect())
+    buf.clear();
+    buf.extend(pixels.chunks_exact(4).flat_map(|p| [ch(p[0], gain[2]), ch(p[1], gain[1]), ch(p[2], gain[0]), p[3]]));
+    buf
 }
 
 fn peer_pid(stream: &UnixStream) -> Option<i32> {
@@ -1840,7 +1866,7 @@ fn run() -> Result<(), String> {
         }
     });
     let slow_paint = Duration::from_millis(std::env::var("POCKET_FB_SLOW_PAINT_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(0));
-    let mut server = Server { fb, clients: HashMap::new(), focus: None, next_con: 100, next_client: 0, frames: 0, copy: Duration::ZERO, worst: Duration::ZERO, upload: Duration::ZERO, present: Duration::ZERO, uploads: 0, uploaded_rows: 0, slow_paint, gl, gl_to_file, pace: Pace::default(), anim: None, next_page: None, cross_next: false, picture, picture_pid: None, shown_by_picture: false, ipc_pid: None, hud: None, native_port: None, tint: None };
+    let mut server = Server { fb, clients: HashMap::new(), focus: None, next_con: 100, next_client: 0, frames: 0, copy: Duration::ZERO, worst: Duration::ZERO, upload: Duration::ZERO, present: Duration::ZERO, uploads: 0, uploaded_rows: 0, slow_paint, gl, gl_to_file, pace: Pace::default(), anim: None, next_page: None, cross_next: false, picture, picture_pid: None, shown_by_picture: false, ipc_pid: None, hud: None, native_port: None, tint: None, cpu: CpuCopy::default() };
     let mut ipcs: Vec<(UnixStream, Vec<u8>)> = Vec::new();
     while !STOP.load(Ordering::Relaxed) {
         let mut polls = vec![libc::pollfd { fd: wayland.as_raw_fd(), events: libc::POLLIN, revents: 0 }, libc::pollfd { fd: ipc.as_raw_fd(), events: libc::POLLIN, revents: 0 }];
@@ -1937,6 +1963,82 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Bytes this thread asked the heap for: the CPU copy's frames after the first must ask for none.
+    struct Counting;
+    thread_local! { static ASKED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+    fn asked(n: usize) {
+        let _ = ASKED.try_with(|a| a.set(a.get() + n));
+    }
+    // SAFETY: every call goes on to the system allocator unchanged; the count is a thread-local cell, which allocates nothing.
+    unsafe impl std::alloc::GlobalAlloc for Counting {
+        unsafe fn alloc(&self, l: std::alloc::Layout) -> *mut u8 {
+            asked(l.size());
+            unsafe { std::alloc::System.alloc(l) }
+        }
+        unsafe fn alloc_zeroed(&self, l: std::alloc::Layout) -> *mut u8 {
+            asked(l.size());
+            unsafe { std::alloc::System.alloc_zeroed(l) }
+        }
+        unsafe fn realloc(&self, p: *mut u8, l: std::alloc::Layout, size: usize) -> *mut u8 {
+            asked(size);
+            unsafe { std::alloc::System.realloc(p, l, size) }
+        }
+        unsafe fn dealloc(&self, p: *mut u8, l: std::alloc::Layout) {
+            unsafe { std::alloc::System.dealloc(p, l) }
+        }
+    }
+    #[global_allocator]
+    static HEAP: Counting = Counting;
+
+    /// A game's picture in wl_shm's XRGB8888, `seed` making each one different.
+    fn game_picture(w: u32, h: u32, seed: u8) -> Vec<u8> {
+        (0..w * h).flat_map(|i| [(i as u8).wrapping_add(seed), (i >> 8) as u8, seed, 0]).collect()
+    }
+
+    /// What the screen shows after a picture: the framebuffer file's bytes.
+    fn screen_of(path: &std::path::Path) -> Vec<u8> {
+        std::fs::read(path).unwrap()
+    }
+
+    /// The Brick without its GPU path and dArkOS: a game's picture goes to the screen through the CPU copy on every frame.
+    /// That made three fresh screen-sized buffers each time (6–9 MB a frame on the Brick); kept buffers
+    /// take none after the first frame. And a kept buffer must not show what the last picture left: an SNES picture,
+    /// then a GBA one (smaller, its black border wider), then a tinted one, each shows exactly as a fresh copy would.
+    #[test]
+    fn the_cpu_copy_keeps_its_buffers_from_frame_to_frame_and_shows_each_picture_as_a_fresh_copy() {
+        let (sw, sh) = (1024u32, 768u32);
+        let dir = tempfile::Builder::new().prefix("pocket-fb-cpu-copy-").tempdir().unwrap();
+        let path = dir.path().join("fb");
+        std::fs::write(&path, vec![0u8; (sw * sh * 4) as usize]).unwrap();
+        let mut fb = Fb::open(path.to_str().unwrap(), Some((sw, sh, 32)), false, false).unwrap();
+        let mut cpu = CpuCopy::default();
+        let warm = [0xffff, 0xe000, 0xc000];
+        // The screen a fresh copy of each picture makes (the old way: a Frame, a zeroed screen, `blit`).
+        let fresh = |pixels: &[u8], w: u32, h: u32, gain: [u32; 3]| -> Vec<u8> {
+            let mut buf = Vec::new();
+            let pixels = tinted(pixels, gain, &mut buf);
+            let frame = pocket_ui::libretro::Frame { width: w, height: h, pitch: w as usize * 4, format: pocket_ui::libretro::PIXEL_XRGB8888, data: pixels.to_vec() };
+            let mut px = vec![0u32; (sw * sh) as usize];
+            pocket_ui::soft_screen::blit(&frame, &mut px, sw as usize, sh as usize);
+            px.iter().flat_map(|p| { let [b, g, r, _] = p.to_le_bytes(); [b, g, r, 0xff] }).collect()
+        };
+        let snes = game_picture(256, 224, 1);
+        let gba = game_picture(240, 160, 2);
+        cpu.show(&mut fb, &snes, 256, 224, 256 * 4, pocket_ui::brick_gl::NO_GAIN);
+        assert_eq!(screen_of(&path), fresh(&snes, 256, 224, pocket_ui::brick_gl::NO_GAIN), "the SNES picture");
+        cpu.show(&mut fb, &gba, 240, 160, 240 * 4, pocket_ui::brick_gl::NO_GAIN);
+        assert_eq!(screen_of(&path), fresh(&gba, 240, 160, pocket_ui::brick_gl::NO_GAIN), "the GBA picture after it: nothing of the SNES one left");
+        cpu.show(&mut fb, &gba, 240, 160, 240 * 4, warm);
+        assert_eq!(screen_of(&path), fresh(&gba, 240, 160, warm), "tinted");
+        for seed in 0..10 {
+            let next = game_picture(240, 160, seed);
+            let before_this = ASKED.with(|a| a.get());
+            cpu.show(&mut fb, &next, 240, 160, 240 * 4, if seed % 2 == 0 { warm } else { pocket_ui::brick_gl::NO_GAIN });
+            assert_eq!(ASKED.with(|a| a.get()), before_this, "frame {seed} asked the heap for memory");
+        }
+        drop(fb);
+    }
 
     #[test]
     fn a_message_fits_a_640_pixel_screen_and_keeps_its_big_letters_where_it_fits() {

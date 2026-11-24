@@ -40,7 +40,7 @@ const GBA_GAME: &str = "Golden Sun (USA, Europe).gba";
 impl Card {
     fn new() -> Card {
         // A short path: the stub's socket has to fit.
-        let dir = tempfile::Builder::new().prefix("pui-phone-").tempdir_in("/tmp").unwrap();
+        let dir = tempfile::Builder::new().prefix("pui-phone-").tempdir().unwrap();
         let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
         assert!(status.success());
         let stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {
@@ -243,4 +243,95 @@ fn a_consoles_first_start_in_our_player_or_an_app_shows_no_controls_card() {
     assert!(!words.contains("Controls ·"), "no controls card before our player's game: {words}");
     let words = card.words(&format!("emu:ps2:{PS2_GAME}:play"), "en", ODIN);
     assert!(!words.contains("Controls ·"), "no card before another app's game: {words}");
+}
+
+const GC_GAME: &str = "F-Zero GX (USA).rvz";
+
+/// GameCube and Wii play in the Dolphin app, which takes no start options for its pad, its touch buttons or its picture
+/// (19.11.2026, a hand test on the Mini V2: a small picture, touch buttons over it, the pad not mapped, no way back).
+/// A on the first such game shows a card with Dolphin's own setting names, "Start the game" selected; the second time
+/// the game starts at once. The game's card keeps the card as a row.
+#[test]
+fn the_first_gamecube_game_in_dolphin_says_how_to_set_it_up_and_the_card_keeps_it() {
+    let card = Card::new();
+    let (words, hints, _, _) = card.look(&format!("emu:gamecube:{GC_GAME}:play"), "en", ODIN);
+    assert!(words.contains("Setting up Dolphin"), "{words}");
+    for step in ["GameCube Input", "Standard Controller", "Toggle Controls", "Aspect Ratio", "Exit Emulation", "Start the game", "Cancel"] {
+        assert!(words.contains(step), "{step}: {words}");
+    }
+    assert!(hints.iter().any(|(k, _)| k == "A"), "A does something on the card: {hints:?}");
+    // Once ever: the next A starts the game.
+    let words = card.words(&format!("emu:gamecube:{GC_GAME}:play"), "en", ODIN);
+    assert!(!words.contains("Setting up Dolphin"), "only the first time: {words}");
+    // A game in our own player or in another app has none.
+    let fresh = Card::new();
+    for state in [format!("emu:gba:{GBA_GAME}:play"), format!("emu:ps2:{PS2_GAME}:play")] {
+        let words = fresh.words(&state, "en", ODIN);
+        assert!(!words.contains("Setting up Dolphin"), "{state}: {words}");
+    }
+    // The game's card has the row (for a game that plays in Dolphin only).
+    // Down to the card's end (Hide from the shelf; the row before it is Dolphin's); stop once reached.
+    let walk = |game: &str| {
+        let mut out = String::new();
+        for d in (0..=60).step_by(4) {
+            let page = card.words(&format!("curator:card:{game}:{d}"), "en", ODIN);
+            let done = page.contains("Hide from the shelf");
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str(&page);
+            if done {
+                break;
+            }
+        }
+        out
+    };
+    let gc = walk("gamecube:f-zero");
+    assert!(gc.contains("Hide from the shelf") && gc.contains("Setting up Dolphin") && gc.contains("Controller, touch buttons, picture, the way back"), "{gc}");
+    let ps2 = walk("ps2:revenge");
+    assert!(ps2.contains("Hide from the shelf") && !ps2.contains("Setting up Dolphin"), "{ps2}");
+    // From the game's card at any time, with OK.
+    let words = card.words("dolphin", "en", ODIN);
+    assert!(words.contains("Setting up Dolphin") && words.contains("OK") && !words.contains("Start the game"), "{words}");
+}
+
+/// The card in every language: the words are there (no English left over in the steps) and nothing runs out of the screen
+/// or into something else, on the Mini V2 and a 20:9 phone, Normal and Large text (`POCKETUI_TEXT_BOXES`).
+#[test]
+fn dolphin_s_card_fits_in_every_language() {
+    let card = Card::new();
+    let tmp = card.dir.path();
+    for (lang, title) in [("en", "Setting up Dolphin"), ("de", "Dolphin einrichten"), ("es", "Configurar Dolphin"), ("pt", "Configurar o Dolphin"), ("fr", "Configurer Dolphin"), ("it", "Configurare Dolphin")] {
+        for size in ["1240x1080", "2400x1080"] {
+            for text in ["normal", "large"] {
+                for state in ["dolphin-start:1", "dolphin"] {
+                    let (png, words, boxes, phone) = (tmp.join("fit.png"), tmp.join("fit.tsv"), tmp.join("fit.boxes"), tmp.join("phone.json"));
+                    std::fs::write(&phone, ODIN).unwrap();
+                    let _ = std::fs::remove_file(&boxes);
+                    let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+                    if tmp.join("wl").exists() {
+                        cmd.env("WAYLAND_DISPLAY", tmp.join("wl"));
+                    }
+                    let out = cmd.args(["--snapshot", state, png.to_str().unwrap()])
+                        .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).env("POCKETUI_ANDROID_PROFILE", "1")
+                        .env("POCKETUI_LANG", lang).env("POCKETUI_TEXT_SIZE", text).env("POCKETUI_SNAPSHOT_SIZE", size)
+                        .env("POCKETUI_VISIBLE_TEXT", &words).env("POCKETUI_TEXT_BOXES", &boxes).env("POCKETUI_PHONE", &phone)
+                        .env("POCKETUI_DATA", tmp.join("data")).env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
+                        .output().unwrap();
+                    let name = format!("{state} {lang} {size} {text}");
+                    assert!(out.status.success(), "{name}: {}", String::from_utf8_lossy(&out.stderr));
+                    let seen = std::fs::read_to_string(&words).unwrap_or_default().split_whitespace().collect::<Vec<_>>().join(" ");
+                    assert!(seen.contains(title), "{name}: {seen}");
+                    if lang != "en" {
+                        for english in ["Set it up once", "Touch buttons off", "Back to the shelf"] {
+                            assert!(!seen.contains(english), "{name}: English left: {english}: {seen}");
+                        }
+                    }
+                    let bad: Vec<String> = std::fs::read_to_string(&boxes).unwrap_or_default().lines()
+                        .filter(|l| l.starts_with(['E', 'O', 'V', 'W', 'T'])).map(str::to_string).collect();
+                    assert!(bad.is_empty(), "{name}: {}", bad.join("\n"));
+                }
+            }
+        }
+    }
 }

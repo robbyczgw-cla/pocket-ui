@@ -179,47 +179,68 @@ impl App {
         self.hits.clear();
         c.shade_rect(0, 0, c.w, c.h, pal().void, 215);
         pocket_ui::text::boxes::covered();
-        let (w, row, font, small) = (980, pocket_ui::type_scale::row(66, 36), 36u32, NU_SMALL);
+        let compact = (740..900).contains(&c.h) && c.w * 3 == c.h * 4;
+        let screen_h = c.h;
+        let scale = |px| if compact { px * screen_h / 960 } else { px };
+        let w = if compact { c.w * 13 / 16 } else { 980 };
+        let (row, font) = (pocket_ui::type_scale::row(scale(66), 36), 36u32);
         let x = (c.w - w) / 2;
-        let inner = w - 2 * 48;
+        let inset = scale(48);
+        let inner = w - 2 * inset;
         let (title, paragraphs): (&str, Vec<(String, u32)>) = match sheet {
             Sheet::Writing => (report::WRITING, vec![]),
-            Sheet::Saved(s) => (report::SAVED_TITLE, vec![(s.name.clone(), pal().chalk), (report::WHERE.into(), pal().text), (report::ATTACH.into(), pal().text), (report::LEFT_OUT.into(), pal().quiet)]),
+            Sheet::Saved(s) => (report::SAVED_TITLE, vec![(s.name.clone(), pal().chalk), (s.where_text().into(), pal().text), (report::ATTACH.into(), pal().text), (report::LEFT_OUT.into(), pal().quiet)]),
             Sheet::Failed(f) => (report::FAILED_TITLE, vec![(f.message(), pal().text)]),
         };
-        let line_h = pocket_ui::type_scale::line(small, 12);
-        // The sheet fits between the top and the hints; with larger text the last paragraph gives way first.
-        let max_h = c.h - NU_PILL - 2 * NU_PAD - 24;
-        let fixed = 48 + 58 + 26 + 16 + row + 36;
+        let gap = scale(14);
+        let fixed = inset + scale(58) + scale(26) + scale(16) + row + scale(36);
+        let max_h = if compact {
+            pocket_ui::kit::hint_bar_top(c.h) - 2 * scale(NU_PAD)
+        } else {
+            c.h - NU_PILL - 2 * NU_PAD - 24
+        };
+        // Fit all the saved-report paragraphs together, including the description of what is left out.
+        let small = if compact {
+            [NU_SMALL, 28, 26, 24, 22].into_iter().find(|&px| {
+                let step = pocket_ui::type_scale::line(px, scale(12));
+                paragraphs.iter().map(|(p, _)| {
+                    self.text.wrap_prose(Face::Body, px, p, inner).len() as i32 * step + gap
+                }).sum::<i32>() <= max_h - fixed
+            }).unwrap_or(22)
+        } else {
+            NU_SMALL
+        };
+        let line_h = pocket_ui::type_scale::line(small, scale(12));
         let mut left_h = max_h - fixed;
         let mut wrapped: Vec<(Vec<String>, u32)> = Vec::new();
         for (p, colour) in &paragraphs {
-            let fit = ((left_h - 14) / line_h).max(0) as usize;
+            let fit = ((left_h - gap) / line_h).max(0) as usize;
             if fit == 0 {
                 break;
             }
             let lines = self.text.wrap_prose_at_most(Face::Body, small, p, inner, fit);
-            left_h -= lines.len() as i32 * line_h + 14;
+            left_h -= lines.len() as i32 * line_h + gap;
             wrapped.push((lines, *colour));
         }
-        let body_h: i32 = wrapped.iter().map(|(l, _)| l.len() as i32 * line_h + 14).sum();
+        let body_h: i32 = wrapped.iter().map(|(l, _)| l.len() as i32 * line_h + gap).sum();
         let h = fixed + body_h;
-        let y = ((c.h - NU_PILL - NU_PAD - h) / 2).max(NU_PAD);
+        let bottom = if compact { pocket_ui::kit::hint_bar_top(c.h) } else { c.h - NU_PILL - NU_PAD };
+        let y = ((bottom - h) / 2).max(scale(NU_PAD));
         c.rect(x, y, w, h, pal().void);
         c.frame(x, y, w, h, 1, if pal().t > 0 { pal().pick(VOID, 0xd6d0c4) } else { pal().pill });
-        let left = x + 48;
-        let mut ty = y + 48 + 46;
+        let left = x + inset;
+        let mut ty = y + inset + scale(46);
         let title = self.text.fit(Face::Title, 50, title, inner);
         self.text.draw(c, Face::Title, 50, left, ty, pal().chalk, &title);
-        ty += 26;
+        ty += scale(26);
         for (lines, colour) in &wrapped {
             for line in lines {
                 ty += line_h;
                 self.text.draw(c, Face::Body, small, left, ty, *colour, line);
             }
-            ty += 14;
+            ty += gap;
         }
-        ty += 16;
+        ty += scale(16);
         let hints: &[(&str, &str)] = if *sheet == Sheet::Writing {
             &[("B", "Hide")]
         } else {
@@ -233,7 +254,7 @@ impl App {
         self.nu_hints(c, hints);
     }
 
-    /// `--snapshot report[:writing|:saved|:full|:readonly|:es]`: Settings → System → About with "Report a problem"
+    /// `--snapshot report[:writing|:saved|:saved-card|:saved-flash|:full|:readonly|:es]`: Settings → System → About with "Report a problem"
     /// selected (`es`: Open EmulationStation… selected), and the sheet while writing, after it was saved, or with the
     /// card full or read-only. Nothing is written.
     pub(crate) fn report_snapshot(&mut self, state: &str) -> bool {
@@ -246,7 +267,8 @@ impl App {
         let name = report::file_name(&report::Stamp { year: 2026, month: 10, day: 26, hour: 16, min: 5, sec: 7 });
         self.about.sheet = match rest.trim_start_matches(':') {
             "writing" => Some(Sheet::Writing),
-            "saved" => Some(Sheet::Saved(Saved { path: std::path::Path::new(report::DEFAULT_DIR).join(&name), name, bytes: 180_000 })),
+            "saved" | "saved-card" | "saved-flash" => Some(Sheet::Saved(Saved { path: std::path::Path::new(report::DEFAULT_DIR).join(&name), name, bytes: 180_000,
+                on_card: rest == ":saved-card", on_flash: rest == ":saved-flash" })),
             "full" => Some(Sheet::Failed(Failure::Full)),
             "readonly" => Some(Sheet::Failed(Failure::ReadOnly)),
             "es" => {

@@ -256,6 +256,13 @@ good one. `Core::save_trouble` reads that outcome without waiting (one mutex, at
   an 8 KB battery save), the same note and line follow from that write's error (`App::save_auto`), so a Quit ends with
   the shelf's notice instead of an older moment at the next start without a word.
 
+pocket-ui's own files in its data folder (settings, Favourites, Recently played, play time, the other lists) go
+through `fsutil::write_atomic` and `write_json` too. A write the card refuses (ENOSPC/EDQUOT: full; EROFS, EIO,
+EACCES, EPERM: can't be written to; other errors say nothing about the card) is noted in `fsutil` with its path, and
+the shelf takes the notes under the data folder (`fsutil::take_write_trouble`) and says it once a run for each kind
+(`save_trouble::CardRefusals`, `save_trouble::CHANGES_FULL` / `CHANGES_UNWRITABLE`), not while a game runs or over
+another notice.
+
 A battery save that is on the card but can't be read at the start (an input/output error: a failing card reads a worn
 sector wrong and still writes new ones) is never written over: `Core::read_sram` marks it, the flushes and the exit skip
 it, and `save_trouble` says `Unreadable` ("Couldn't read this game's save. It stays as it was."). The game runs without
@@ -999,9 +1006,11 @@ Sources: D = `github.com/ROCKNIX/distribution/blob/20261001/projects/ROCKNIX/pac
   `secondinstance`; off for NO_RUNAHEAD), `set_autosave` (`autosave` 1–3 → `savestate_auto_save/load`). ROCKNIX ships
   per-system values in `/usr/config/system/configs/system.cfg` (`gba.ratio=3/2`, `snes.ratio=4/3`, `global.autosave=1`
   …), which set_setting copies when the file is missing.
-- **Hotkeys in RetroArch**: with `system.autohotkeys=1` (default) `configure_hotkeys` keeps the pad's hotkey button
-  (the DualSense profile InputPlumber presents: PS = HOME) and maps R2 to toggle fast-forward and L2 to rewind (R1/L1
-  save/load, Start exits).
+- **Hotkeys in RetroArch**: with `system.autohotkeys=1` (ROCKNIX's start value) `configure_hotkeys` rewrites the
+  hotkey lines of `retroarch.cfg` at every start from the built-in pad's autoconfig in `/tmp/joypads` (the pad: the
+  InputPlumber DualSense if there, else `js0`'s name): the pad's `input_enable_hotkey_btn` (or Select), R1/L1
+  save/load, R2 toggle fast-forward, L2 rewind (buttons when the pad has both as buttons, else axes), Start exits, Y
+  the FPS, X the menu. pocket-ui does this step itself since 0.6.1 (`src/ra_hotkeys.rs`, below).
 - **Locking**: `set_setting` takes `/tmp/.system.cfg.lock` with `wait_lock` (noclobber + PID). Its `del_setting`
   matches the key as a sed regex, so a per-game key (`gba["Game (USA).gba"].core`, a bracket expression to sed) is
   never deleted and a second line is appended; ROCKNIX's own scripts never write per-game keys, ES writes the file
@@ -1020,6 +1029,22 @@ Sources: D = `github.com/ROCKNIX/distribution/blob/20261001/projects/ROCKNIX/pac
 - **ES compatibility**: ES ignores `pocket-core` (not in its list) and shows AUTO; every RetroArch or standalone
   choice is the same in both. Choices made in ES are honoured from the first start of this version (logged:
   `emulator choices from system.cfg: …`).
+- **HOME shortcuts in RetroArch** (`src/ra_hotkeys.rs`, 0.6.1): right before a RetroArch start (`launch_prepared`)
+  pocket-ui writes the hotkey lines `configure_hotkeys` would, from the same autoconfig, with the game's Options →
+  Shortcuts applied (Kids Mode: none; Easy: no HOME + Y), then sets `system.autohotkeys=0` so setsettings.sh leaves
+  them. A switched-off shortcut gets button `100` and axis `+100`, which no udev pad has (64 buttons, 32 axes):
+  RetroArch's `nul` means "unset" and falls back to the autoconfig's binding (input_driver.c), which has save, load
+  and the triggers. RetroArch's screenshot and pause keys are always off (HOME + A is pocket-ui's screenshot), the
+  autoconfig's hold-fast-forward too (it would end a toggled one). No slot keys: pocket-ui's Save and Load are
+  RetroArch's current slot (normally slot 0). Without the pad's autoconfig, ROCKNIX keeps its own hotkeys.
+  The pause menu lists them from Runs on (`shortcut_list`, `app_shortcut_list`).
+  HOME + START quits only on the second press: ROCKNIX's `retroarch.cfg` has `quit_press_twice = "true"`, which pocket-ui
+  leaves as it is. Checked on the RG35XX Plus (ROCKNIX RetroArch, 21.11.2026) with these lines and `autohotkeys=0`: HOME + R1
+  wrote the `.state`, with Save off (`100`) it didn't, HOME + A no longer paused, a HOME tap opened the pause menu.
+- **RetroArch pause menu commands on ROCKNIX**: pocket-ui enables the command listener on UDP 55355 before launching
+  RetroArch. RetroArch listens on all IPv4 interfaces, so devices on the local network can also send commands.
+  `ra_state` checks that Save writes a new or updated state file. For Load it checks that a state exists and asks
+  for a status reply in the same UDP packet to confirm delivery. RetroArch reports the outcome of loading in-game.
 - **Speed**: `emu_choice::preload` reads system.cfg's emulator/core lines on a thread at start (logged with its time);
   `App::route` then resolves with a map lookup (`resolving_costs_microseconds`: well under 200 µs per resolve with
   900 keys, in practice a few µs). If a game starts before the thread is done, the file is read then (tiny). The page
@@ -1600,6 +1625,7 @@ Save, Load, Quit, start again; and the same bench against standalone with that B
   `hostsys::prepare_scummvm` sets `extrapath` and `themepath` to `/usr/share/scummvm` (ROCKNIX's copy for standalone:
   engine data, themes, virtual keyboard) and `savepath` to `/storage/.local/share/scummvm/saves` (standalone ScummVM's
   default; ROCKNIX's ini sets none) where they are missing or name no folder; other keys and game sections stay.
+  On dArkOS the core's system directory is pocket-ui's own folder instead (`hostsys::scummvm_place`, docs/DARKOS.md).
   Curated options: `scummvm_pointer_device=pointer` (a tap clicks where the finger is), A left click, B right click,
   L1 `.` (skip a line); the core's own layout for the rest (D-pad and sticks move the cursor, X F5, Y Escape, Select
   virtual keyboard, Start ScummVM's menu, R1 right click, R2 slow cursor). Hardware acceleration stays on (OpenGL 3.0
@@ -2152,7 +2178,7 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
   resolution), + Y (Dolphin's FPS, pocket-core's Pixel Path), + R1/L1/R2/L2/Left/Right (pocket-core's save, load, fast-forward,
   rewind, slot), + Vol+/- (brightness), + SELECT (the game switcher) and + START (ROCKNIX's quit)
   ([BIG-EMULATORS.md](BIG-EMULATORS.md), [user/controls.md](user/controls.md)). A is the one nothing in the repo uses; what
-  RetroArch's and the ports' own HOME + A does has not been checked (RetroArch games are left alone, below). The thumb is
+  the ports' own HOME + A does has not been checked. The thumb is
   on A anyway while HOME is held. pocket-ui's pause menu opens on a HOME *tap* only (`hotkeys::home_tap_step`: any other
   button going down while HOME is held ends the tap), so HOME + A opens nothing. Options → Shortcuts → Screenshot
   (`hk_shot`) switches it off on pocket-core.
@@ -2168,12 +2194,15 @@ the Pocket's motor at the same time, and the Players page (A on each controller)
   menu, and takes about as long as a frame).
   A vertical arcade game's frame is saved as the core delivers it, not turned upright, and so is a picture turned by
   Screen orientation.
-- **Standalone emulators and ports** (`src/app_screenshot.rs`): pocket-ui sees the same pad events. HOME + A with no
-  menu open, in a game whose emulator is neither pocket-core nor RetroArch nor an app, sends a request to the same
+- **RetroArch, standalone emulators and ports** (`src/app_screenshot.rs`): pocket-ui sees the same pad events. HOME + A with no
+  menu open, in a game whose emulator is neither pocket-core nor an app, sends a request to the same
   thread, which runs `grim -t png -` (5 s limit) and writes the PNG. That is the whole screen, so the game's picture
   with whatever the emulator draws. Nothing can be shown over these games (pocket-ui is not in front), so the answer is
   the Shutter sound through `ui_sound::play_over_game` (the mixer thread; only when Sounds is on) or the Error sound,
-  and a line in the log. Not switchable. RetroArch is left alone: its own hotkeys (and screenshot key) stay its own.
+  and a line in the log. Not switchable, except in RetroArch games: Options → Shortcuts → Screenshot of the game or its
+  console, and none in Kids Mode (`app_screenshot::switched_on`). RetroArch's own screenshot and pause keys are off
+  there (`ra_hotkeys`): its files would miss the gallery's folder and names, and the H700 and DualSense autoconfigs put
+  pause on A.
 - **Files**: `/storage/roms/screenshots/<system>/<game> <YYYY-MM-DD HH-MM-SS>.png` (`POCKETUI_SCREENSHOTS` moves
   the folder). Under `roms` the file share shows it (nothing there is hidden), and the companion lists it. (Where RetroArch's own screenshots go on ROCKNIX has not been checked on the
   device.) The name is time-sorted, has no colon (vfat/exFAT), and the game part goes through

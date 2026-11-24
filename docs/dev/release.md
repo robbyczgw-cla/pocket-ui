@@ -22,6 +22,8 @@ What a release brings goes only into `CHANGELOG.md` (`[Unreleased]`, which the v
 the release notes; the README links both and has no "New in …" section. A doc check holds this in the merge gate
 ([Documentation checks](tests.md#documentation-checks), "README"), and the release scripts check it again before the build
 and before publishing.
+After the tag is public, `python3 scripts/check-changelog.py --record vX.Y.Z` records its sections in
+`scripts/changelog-published.txt` (a commit on `main`): from then on the merge gate keeps `[X.Y.Z]` byte-equal to the tag.
 
 ### Order: full tests before the cut and export
 

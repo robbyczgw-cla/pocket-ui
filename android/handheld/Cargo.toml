@@ -42,6 +42,8 @@ base64 = "0.22"
 libloading = "0.8"
 miniz_oxide = "0.8"
 crc32fast = "1"
+# 7z games (`seven_zip`), as the root Cargo.toml.
+sevenz-rust2 = { version = "0.25", default-features = false, features = ["ppmd"] }
 glow = "0.14"
 raw-window-handle = "0.6"
 qrcode = { version = "0.14.1", default-features = false }

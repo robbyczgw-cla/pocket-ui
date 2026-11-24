@@ -1744,6 +1744,7 @@ mod tests {
                 crate::i18n::Lang::Pt => "Portuguese",
                 crate::i18n::Lang::Fr => "French",
                 crate::i18n::Lang::It => "Italian",
+                crate::i18n::Lang::Ko => "Korean",
             };
             assert!(line.contains(english), "{lang:?} is missing: {line}");
         }
@@ -2070,7 +2071,8 @@ mod tests {
                     Block::Rule | Block::Picture(_) => {}
                 }
                 for ch in all.iter().flat_map(|t| t.chars()) {
-                    if !ch.is_whitespace() && !(text.has_glyph(Face::Body, ch) && text.has_glyph(Face::Title, ch)) {
+                    // Hangul comes from the Korean fonts pocket-ui ships (`text_fallback::korean`), in both faces.
+                    if !ch.is_whitespace() && !(text.has_glyph(Face::Body, ch) && text.has_glyph(Face::Title, ch)) && !crate::text_fallback::korean_has(ch) {
                         missing.insert((name, ch));
                     }
                 }

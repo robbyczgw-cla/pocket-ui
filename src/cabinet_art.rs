@@ -10,6 +10,7 @@ use crate::gfx::{avg4, mix, Canvas};
 use crate::image::Image;
 use crate::system_art::Sprite;
 use crate::text::{Face, Text};
+use std::rc::Rc;
 
 /// A picture with straight alpha, 0xAARRGGBB.
 ///
@@ -1881,6 +1882,78 @@ pub fn plate_ink(bg: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    /// A handheld-like picture: a rounded body with see-through corners and a hole (its screen's bezel is solid).
+    fn handheld(w: i32, h: i32) -> super::Pic {
+        let px = (0..w * h)
+            .map(|i| {
+                let (x, y) = (i % w, i / w);
+                let corner = (x < 9 || x >= w - 9) && (y < 9 || y >= h - 9) && (x.min(w - 1 - x) + y.min(h - 1 - y) < 9);
+                let hole = x > w / 3 && x < w / 2 && y > h / 2 && y < h / 2 + 7;
+                if corner || hole { 0 } else { 0xff00_0000 | (i as u32).wrapping_mul(2_654_435_761) >> 8 & 0xff_ffff }
+            })
+            .collect();
+        super::Pic::of(w, h, px)
+    }
+
+    /// `ShapeShadow::paint` (one mask) is `blend_with` put by put, pixel for pixel: at 1 and 2 design pixels a screen
+    /// pixel, at even and odd places, cut by the clip, at full, part and no strength, and painted again from its kept mask.
+    #[test]
+    fn a_shape_shadow_paints_as_put_by_put() {
+        use crate::gfx::Canvas;
+        let shadow = super::ShapeShadow::of(&handheld(57, 83), 4, 6, 10);
+        let (pw, ph) = (90u32, 70u32);
+        let start: Vec<u32> = (0..pw * ph).map(|i| i.wrapping_mul(2_654_435_761) >> 8).collect();
+        for n in [1u32, 2] {
+            let (w, h) = ((pw * n) as i32, (ph * n) as i32);
+            for (x, y, strength, clip) in [(20, 15, 1.0, (0, h)), (21, 16, 0.37, (0, h)), (-7, -5, 0.8, (0, h)), (w - 40, h - 50, 1.0, (0, h)), (31, 22, 1.0, (40, 81)), (30, 20, 0.0, (0, h)), (30, 20, 1.0, (0, h))] {
+                let (mut want, mut got) = (start.clone(), start.clone());
+                fn canvas(buf: &mut [u32], (pw, ph): (u32, u32), n: u32) -> Canvas<'_> {
+                    if n == 1 { Canvas::new(buf, pw, ph) } else { Canvas::screen(buf, (pw, ph), 2) }
+                }
+                shadow.paint_put_by_put(&mut canvas(&mut want, (pw, ph), n), x, y, strength, clip);
+                shadow.paint(&mut canvas(&mut got, (pw, ph), n), x, y, strength, clip);
+                assert!(got == want, "n = {n} at ({x}, {y}), strength {strength}, clip {clip:?}");
+            }
+        }
+    }
+
+    /// A handheld's shadow in the Cabinet TV's place is painted in every frame: it must cost about what painting the
+    /// handheld itself costs (its area is larger: the fall-off round it). Put by put it cost 14x the picture on the Air,
+    /// and the frames with a handheld were the Cabinet's slowest on the RG35XX Plus (p95 33.0 -> 37.9 ms from 0.5.1 to
+    /// 0.6.0, the handheld larger); from its kept mask 1.9x. The size the Plus's handheld has (2 design pixels a screen
+    /// pixel). Only in an optimised build (`--profile gate`): unoptimised timings say nothing.
+    #[test]
+    fn a_shape_shadow_costs_about_its_picture() {
+        if cfg!(debug_assertions) {
+            return;
+        }
+        use crate::gfx::Canvas;
+        let pic = handheld(240, 330);
+        let shadow = super::ShapeShadow::of(&pic, 6, 8, 14);
+        let (pw, ph) = (640u32, 480u32);
+        let mut buf = vec![0x30_2418u32; (pw * ph) as usize];
+        // Measure UI-thread CPU time across small batches (not wall-clock `Instant::now()` of a single 20 us call):
+        // a host preemption under parallel gate load stretched wall-clock ratio to 4.05x without any slowdown.
+        let mut best = |paint: &mut dyn FnMut(&mut Canvas)| {
+            (0..15)
+                .map(|_| {
+                    let t0 = crate::run_ahead::thread_cpu_ms();
+                    for _ in 0..8 {
+                        let mut c = Canvas::screen(&mut buf, (pw, ph), 2);
+                        paint(&mut c);
+                    }
+                    (crate::run_ahead::thread_cpu_ms() - t0) * 1000.0 / 8.0
+                })
+                .fold(f64::MAX, f64::min)
+        };
+        let pic_us = best(&mut |c| super::blit(c, &pic, 901, 301, 256, (0, 960)));
+        let put_us = best(&mut |c| shadow.paint_put_by_put(c, 901, 301, 0.45, (0, 960)));
+        let shadow_us = best(&mut |c| shadow.paint(c, 901, 301, 0.45, (0, 960)));
+        println!("shadow {shadow_us:.0} us ({:.2}x its picture), put by put {put_us:.0} us ({:.2}x), picture {pic_us:.0} us", shadow_us / pic_us, put_us / pic_us);
+        assert!(shadow_us <= pic_us * SHADOW_PER_PICTURE, "the shadow {shadow_us:.0} us, its picture {pic_us:.0} us: {:.2}x", shadow_us / pic_us);
+    }
+    const SHADOW_PER_PICTURE: f64 = 3.0;
+
     /// A console with its pad beside it is no box (17.11.2026, Alex on the first previews: "weirde Schatten"): the
     /// TV's box shadow round it was a grey block with corners where the picture has none. Its shadow keeps to its shape.
     #[test]
@@ -2482,7 +2555,7 @@ pub fn blit_affine_rows(c: &mut Canvas, p: &Pic, o: (f32, f32), u: (f32, f32), v
 /// The soft shadow of a picture that is not a box (a console with its controller beside it, a handheld), in its own
 /// shape: `soft_shadow`'s look for the TV (moved `dx` right and `dy` down, cut at the picture's own bottom, the line it
 /// stands on, and fading out over `blur` pixels) without a box's grey corners where the picture has none. Made once per
-/// picture; painting it is one blend per pixel of its area.
+/// picture; painting it is one mask of its area (`Canvas::mask`), the mask at a strength kept for the next frame.
 pub struct ShapeShadow {
     /// From the picture's top left to the shadow's (the fall-off reaches beyond the picture).
     pad: i32,
@@ -2490,10 +2563,19 @@ pub struct ShapeShadow {
     h: i32,
     /// Darkness 0-255 at full strength.
     a: Vec<u8>,
+    /// `a` at the strength last painted (0-256).
+    at: std::cell::RefCell<Option<(u32, Rc<[u8]>)>>,
+    /// That mask in screen pixels at 2 design pixels a screen pixel (`gfx::half_mask`), for the strength and the place
+    /// in a screen pixel it was made for.
+    half: std::cell::RefCell<Option<((u32, u8, u8), Rc<(usize, usize, Vec<u8>)>)>>,
 }
+
+/// How many [`ShapeShadow`]s were made (`bench-shelf`'s `shadows_made`: none once every picture of a browse was seen).
+pub static SHADOWS_MADE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 impl ShapeShadow {
     pub fn of(p: &Pic, dx: i32, dy: i32, blur: i32) -> ShapeShadow {
+        SHADOWS_MADE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let blur = blur.max(2);
         let pad = blur + 1;
         let (w, h) = (p.w + dx.max(0) + 2 * pad, p.h + 2 * pad);
@@ -2544,11 +2626,47 @@ impl ShapeShadow {
         for _ in 0..2 {
             m = pass(&pass(&m, r, true, false), r, false, false);
         }
-        ShapeShadow { pad, w, h, a: m.iter().map(|v| (v * 255.0).round().clamp(0.0, 255.0) as u8).collect() }
+        ShapeShadow { pad, w, h, a: m.iter().map(|v| (v * 255.0).round().clamp(0.0, 255.0) as u8).collect(), at: Default::default(), half: Default::default() }
     }
 
     /// Its shadow for the picture standing at (x, y), `strength` (0-1) as `soft_shadow`'s, only rows `clip.0..clip.1`.
+    /// The same pixels as one `Canvas::blend_with` put per pixel of it (`paint_put_by_put`), without a call per design
+    /// pixel: a handheld in the Cabinet TV's place had its shadow put pixel by pixel in every frame, ~2.5x the rest of
+    /// a frame (0.6.0: the Cabinet's p95 on the RG35XX Plus 33.0 -> 37.9 ms against 0.5.1, its handheld larger).
     pub fn paint(&self, c: &mut Canvas, x: i32, y: i32, strength: f32, clip: (i32, i32)) {
+        let (x0, y0) = (x - self.pad, y - self.pad);
+        let k = (strength.clamp(0.0, 1.0) * 256.0) as u32;
+        let (top, bottom) = (y0.max(clip.0), (y0 + self.h).min(clip.1));
+        if top >= bottom {
+            return;
+        }
+        let made = self.at.borrow().as_ref().filter(|(at, _)| *at == k).map(|(_, a)| a.clone());
+        let alpha = made.unwrap_or_else(|| {
+            let a: Rc<[u8]> = self.a.iter().map(|&a| (a as u32 * k >> 8) as u8).collect();
+            *self.at.borrow_mut() = Some((k, a.clone()));
+            a
+        });
+        let w = self.w as usize;
+        if c.n() == 2 && (top, bottom) == (y0, y0 + self.h) {
+            // Whole, as most frames paint it: `Canvas::mask`'s steps with its screen pixels kept.
+            let (sx, sy, fx, fy) = c.cell(x0, y0);
+            let key = (k, fx & 1, fy & 1);
+            let kept = self.half.borrow().as_ref().filter(|(at, _)| *at == key).map(|(_, h)| h.clone());
+            let half = kept.unwrap_or_else(|| {
+                let h = Rc::new(crate::gfx::half_mask(&alpha, w, self.h as usize, fx, fy));
+                *self.half.borrow_mut() = Some((key, h.clone()));
+                h
+            });
+            c.mask_screen(sx, sy, half.0, half.1, &half.2, 0);
+            return;
+        }
+        let rows = &alpha[(top - y0) as usize * w..(bottom - y0) as usize * w];
+        c.mask(x0, top, w, (bottom - top) as usize, rows, 0);
+    }
+
+    /// `paint` as it was: one `blend_with` put per pixel of the shadow (the reference of its test).
+    #[cfg(test)]
+    fn paint_put_by_put(&self, c: &mut Canvas, x: i32, y: i32, strength: f32, clip: (i32, i32)) {
         let (x0, y0) = (x - self.pad, y - self.pad);
         let k = (strength.clamp(0.0, 1.0) * 256.0) as u32;
         c.blend_with((x0, y0.max(clip.0), self.w, (y0 + self.h).min(clip.1) - y0.max(clip.0)), 0, |put| {

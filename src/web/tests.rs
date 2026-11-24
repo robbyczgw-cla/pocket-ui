@@ -592,10 +592,10 @@ impl Tailnet for FakeTailnet {
     }
 }
 
-struct Rig {
-    root: crate::testutil::TestDir,
-    shared: Arc<Shared>,
-    addr: SocketAddr,
+pub(super) struct Rig {
+    pub(super) root: crate::testutil::TestDir,
+    pub(super) shared: Arc<Shared>,
+    pub(super) addr: SocketAddr,
     edits: Arc<Mutex<Vec<Edit>>>,
     /// tailscaled's answers, changeable while the server runs.
     peers: Arc<Mutex<HashMap<IpAddr, Whois>>>,
@@ -605,7 +605,7 @@ struct Rig {
 }
 
 /// A server on 127.0.0.1 with one GBA game, a port waiting for files, and an App that answers every edit with Ok.
-fn rig(name: &str, owner: bool) -> Rig {
+pub(super) fn rig(name: &str, owner: bool) -> Rig {
     rig_with(name, owner, None)
 }
 
@@ -672,23 +672,23 @@ fn rig_full(name: &str, owner: bool, lan: bool, tune: impl FnOnce(&mut Ctx)) -> 
     Rig { root, shared, addr, edits, peers: tailnet_peers, shots, server: Some(server) }
 }
 
-struct Answer {
-    status: u16,
-    head: String,
-    body: Vec<u8>,
+pub(super) struct Answer {
+    pub(super) status: u16,
+    pub(super) head: String,
+    pub(super) body: Vec<u8>,
 }
 
 impl Answer {
-    fn json(&self) -> serde_json::Value {
+    pub(super) fn json(&self) -> serde_json::Value {
         serde_json::from_slice(&self.body).unwrap_or(serde_json::Value::Null)
     }
-    fn header(&self, name: &str) -> Option<String> {
+    pub(super) fn header(&self, name: &str) -> Option<String> {
         self.head.lines().find_map(|l| l.split_once(':').filter(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, v)| v.trim().to_string()))
     }
 }
 
 impl Rig {
-    fn raw(&self, req: &[u8]) -> Answer {
+    pub(super) fn raw(&self, req: &[u8]) -> Answer {
         let mut s = TcpStream::connect(self.addr).unwrap();
         s.set_read_timeout(Some(crate::testutil::timeout(Duration::from_secs(10)))).unwrap();
         s.write_all(req).unwrap();
@@ -701,7 +701,7 @@ impl Rig {
     }
 
     /// A request with the Host the browser would send, extra headers and a body.
-    fn req(&self, method: &str, path: &str, headers: &[(&str, &str)], body: &[u8]) -> Answer {
+    pub(super) fn req(&self, method: &str, path: &str, headers: &[(&str, &str)], body: &[u8]) -> Answer {
         let mut r = format!("{method} {path} HTTP/1.1\r\nHost: {}\r\n", self.addr);
         for (n, v) in headers {
             r.push_str(&format!("{n}: {v}\r\n"));
@@ -716,7 +716,7 @@ impl Rig {
     }
 
     /// Pairs with a code made as the Settings page makes it; returns the cookie and the CSRF token.
-    fn pair(&self) -> (String, String) {
+    pub(super) fn pair(&self) -> (String, String) {
         *self.shared.pairing.lock().unwrap() = Some(Pairing { code: "246810".into(), until: Instant::now() + Duration::from_secs(60), tries_left: 5 });
         let a = self.req("POST", "/api/pair", &[("Content-Type", "application/json"), ("Sec-Fetch-Site", "same-origin")], br#"{"code":"246810"}"#);
         assert_eq!(a.status, 200, "{}", String::from_utf8_lossy(&a.body));
@@ -740,8 +740,10 @@ fn the_page_is_served_with_its_policy_and_nothing_else_without_pairing() {
     assert!(!html.contains("http://") && !html.contains("https://"), "nothing from another site");
     assert!(!html.contains("<script>"), "no inline script");
     assert_eq!(r.req("GET", "/app.js", &[], b"").status, 200);
+    assert_eq!(r.req("GET", "/media-update.js", &[], b"").status, 200);
+    assert_eq!(r.req("GET", "/media-update.css", &[], b"").status, 200);
     assert_eq!(r.req("GET", "/fonts/body.ttf", &[], b"").header("cache-control").as_deref(), Some("public, max-age=31536000, immutable"));
-    for path in ["/api/library", "/api/games?system=gba", "/api/stats", "/api/uploads", "/api/screenshot", "/api/battery", "/api/status"] {
+    for path in ["/api/library", "/api/games?system=gba", "/api/stats", "/api/uploads", "/api/screenshot", "/api/battery", "/api/status", "/api/album", "/api/album/photo", "/api/media/zip", "/api/update"] {
         assert_eq!(r.req("GET", path, &[], b"").status, 401, "{path}");
     }
     assert_eq!(r.req("GET", "/api/session", &[], b"").json()["signedIn"], false);
@@ -1650,4 +1652,290 @@ fn an_upload_row_keeps_the_file_name_readable_on_a_phone() {
     assert_eq!(cols, Some("minmax(0, 1fr)"), "one column that may shrink below its longest word: {rule}");
     // Everything in the row is in that one column: nothing sits beside the name again.
     assert!(!rule.contains("auto"), "{rule}");
+}
+
+mod cover_diagnostics_tests;
+
+// --- Web 0.7: photo album, screenshots, ZIP and signed updates ---------------------------------------------------
+
+/// Decodes a `Transfer-Encoding: chunked` body from `Rig::raw`.
+fn decode_chunked(mut raw: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    loop {
+        let Some(crlf) = raw.windows(2).position(|w| w == b"\r\n") else { break };
+        let size = usize::from_str_radix(std::str::from_utf8(&raw[..crlf]).unwrap().trim(), 16).unwrap();
+        raw = &raw[crlf + 2..];
+        if size == 0 {
+            break;
+        }
+        out.extend_from_slice(&raw[..size]);
+        raw = &raw[size + 2..];
+    }
+    out
+}
+
+#[test]
+fn photo_album_and_screenshots_list_view_download_delete_and_zip() {
+    let r = rig("api-media", false);
+    let (cookie, csrf) = r.pair();
+    let get = |p: &str| r.req("GET", p, &[("Cookie", &cookie)], b"");
+    let post = |p: &str, body: &[u8]| r.req("POST", p, &[("Cookie", &cookie), ("X-CSRF-Token", &csrf), ("Content-Type", "application/json")], body);
+
+    // Empty state: clear counts, albumOn false, and ZIP returns 404 (never an empty broken file).
+    let empty = get("/api/album");
+    assert_eq!(empty.status, 200);
+    let ej = empty.json();
+    assert_eq!(ej["albumTotal"], 0);
+    assert_eq!(ej["shotsTotal"], 0);
+    assert_eq!(ej["shelfTotal"], 0);
+    assert_eq!(ej["albumOn"], false);
+    assert_eq!(get("/api/media/zip").status, 404);
+
+    // Add one album photo (JPEG + album.tsv), one game screenshot (PNG), and one shelf picture (PNG).
+    let rom = r.root.join("roms/gba/Advance Wars (USA).gba");
+    let gid = api::game_id(&rom);
+    let data = r.root.join("data");
+    std::fs::write(data.join("settings.json"), r#"{"moment_photos":true}"#).unwrap();
+    let (jpeg, _) = crate::album::encode(8, 8, &vec![90u8; 8 * 8 * 3]).unwrap();
+    let photo = crate::album::add(&crate::album::dir(&data, "gba", &rom), 1_761_234_567, &["Badge 3".into(), "4 h 12 min".into()], (8, 8), &jpeg).unwrap();
+    let photo_file = photo.file.file_name().unwrap().to_string_lossy().into_owned();
+    let png = crate::screenshot::encode_rgb(4, 4, &vec![40u8; 4 * 4 * 3]).unwrap();
+    let stamp = crate::screenshot::Stamp { year: 2026, month: 11, day: 18, hour: 21, min: 14, sec: 5 };
+    let shots_dir = r.root.join("roms/screenshots");
+    crate::screenshot::save_png(&shots_dir, "gba", "Advance Wars (USA)", &stamp, &png).unwrap();
+    crate::screenshot::save_png(&shots_dir, crate::share_shelf::FOLDER, crate::share_shelf::NAME, &stamp, &png).unwrap();
+
+    // Listing has all three and leaks zero filesystem paths.
+    let listed = get("/api/album");
+    assert_eq!(listed.status, 200);
+    let raw_text = String::from_utf8_lossy(&listed.body);
+    assert!(!raw_text.contains(&r.root.to_string_lossy().into_owned()), "no host path in /api/album: {raw_text}");
+    let lj = listed.json();
+    assert_eq!(lj["albumOn"], true);
+    assert_eq!(lj["albumTotal"], 1);
+    assert_eq!(lj["shotsTotal"], 1);
+    assert_eq!(lj["shelfTotal"], 1);
+    assert_eq!(lj["album"][0]["id"], gid);
+    assert_eq!(lj["album"][0]["file"], photo_file);
+    assert_eq!(lj["album"][0]["note"], "Badge 3 · 4 h 12 min");
+    assert_eq!(lj["shots"][0]["id"], gid);
+    assert_eq!(lj["shots"][0]["at"], "2026-11-18 21-14-05");
+
+    // Game page carries its album photos and shots.
+    let gm = get(&format!("/api/game?id={gid}")).json();
+    assert_eq!(gm["albumOn"], true);
+    assert_eq!(gm["album"].as_array().unwrap().len(), 1);
+    assert_eq!(gm["shots"].as_array().unwrap().len(), 1);
+
+    // Individual view and attachment download for album photo and screenshot.
+    let viewed = get(&format!("/api/album/photo?id={gid}&file={photo_file}"));
+    assert_eq!(viewed.status, 200);
+    assert_eq!(viewed.header("content-type").as_deref(), Some("image/jpeg"));
+    assert_eq!(viewed.body, jpeg);
+    assert!(viewed.header("content-disposition").is_none());
+    let dl_photo = get(&format!("/api/album/photo?id={gid}&file={photo_file}&download=1"));
+    assert_eq!(dl_photo.status, 200);
+    assert!(dl_photo.header("content-disposition").is_some_and(|h| h.starts_with("attachment; filename=\"")));
+    let dl_shot = get(&format!("/api/shot?id={gid}&at=2026-11-18%2021-14-05&download=1"));
+    assert_eq!(dl_shot.status, 200);
+    assert!(dl_shot.header("content-disposition").is_some_and(|h| h.starts_with("attachment; filename=\"")));
+
+    // Streaming ZIP download packs album photo, album.tsv, screenshot, and shelf picture, with no secrets.
+    let zipped = get("/api/media/zip");
+    assert_eq!(zipped.status, 200);
+    assert_eq!(zipped.header("content-type").as_deref(), Some("application/zip"));
+    assert_eq!(zipped.header("transfer-encoding").as_deref(), Some("chunked"));
+    assert_eq!(zipped.header("content-disposition").as_deref(), Some("attachment; filename=\"pocket-ui-photos.zip\""));
+    let zip_bytes = decode_chunked(&zipped.body);
+    let zip_file = r.root.join("downloaded.zip");
+    std::fs::write(&zip_file, &zip_bytes).unwrap();
+    let entries: Vec<String> = crate::archive::stored_entries(&zip_file).unwrap().unwrap().into_iter().map(|(n, _, _)| n).collect();
+    assert!(entries.iter().any(|n| n.starts_with("album/gba/") && n.ends_with(&photo_file)), "{entries:?}");
+    assert!(entries.iter().any(|n| n.starts_with("album/gba/") && n.ends_with("/album.tsv")), "{entries:?}");
+    assert!(entries.iter().any(|n| n.starts_with("screenshots/gba/") && n.ends_with(".png")), "{entries:?}");
+    assert!(entries.iter().any(|n| n.starts_with("shelf/") && n.ends_with(".png")), "{entries:?}");
+    assert!(!entries.iter().any(|n| n.contains("browsers.json") || n.contains("web.json") || n.contains("settings.json")), "no secrets: {entries:?}");
+
+    // Single-game album-only ZIP.
+    let one_zip = get(&format!("/api/media/zip?id={gid}&scope=album"));
+    assert_eq!(one_zip.status, 200);
+    let one_file = r.root.join("one.zip");
+    std::fs::write(&one_file, decode_chunked(&one_zip.body)).unwrap();
+    let one_entries: Vec<String> = crate::archive::stored_entries(&one_file).unwrap().unwrap().into_iter().map(|(n, _, _)| n).collect();
+    assert!(one_entries.iter().all(|n| n.starts_with("album/gba/")), "{one_entries:?}");
+
+    // Individual deletion requires CSRF and dispatches through Edit to the App.
+    assert_eq!(r.req("POST", "/api/album/delete", &[("Cookie", &cookie)], format!(r#"{{"id":"{gid}","file":"{photo_file}"}}"#).as_bytes()).status, 403);
+    assert_eq!(post("/api/album/delete", format!(r#"{{"id":"{gid}","file":"{photo_file}"}}"#).as_bytes()).status, 200);
+    assert_eq!(post("/api/shot/delete", format!(r#"{{"id":"{gid}","at":"2026-11-18 21-14-05"}}"#).as_bytes()).status, 200);
+    assert_eq!(post("/api/shot/delete", br#"{"shelf":true,"at":"2026-11-18 21-14-05"}"#).status, 200);
+
+    let edits = r.edits.lock().unwrap().clone();
+    assert!(edits.contains(&Edit::DeleteAlbumPhoto { system: "gba".into(), rom: rom.clone(), file: photo_file.clone() }), "{edits:?}");
+    assert!(edits.contains(&Edit::DeleteScreenshot { system: "gba".into(), game: "Advance Wars (USA)".into(), at: "2026-11-18 21-14-05".into() }));
+    assert!(edits.contains(&Edit::DeleteScreenshot { system: crate::share_shelf::FOLDER.into(), game: crate::share_shelf::NAME.into(), at: "2026-11-18 21-14-05".into() }));
+
+    // Applying the App-side deletion helpers removes files cleanly and leaves empty views again.
+    super::media::apply_delete_photo(&data, "gba", &rom, &photo_file).unwrap();
+    super::media::apply_delete_shot(&shots_dir, "gba", "Advance Wars (USA)", "2026-11-18 21-14-05").unwrap();
+    super::media::apply_delete_shot(&shots_dir, crate::share_shelf::FOLDER, crate::share_shelf::NAME, "2026-11-18 21-14-05").unwrap();
+    let after = get("/api/album").json();
+    assert_eq!(after["albumTotal"], 0);
+    assert_eq!(after["shotsTotal"], 0);
+    assert_eq!(after["shelfTotal"], 0);
+}
+
+#[test]
+fn album_and_screenshot_security_blocks_traversal_symlinks_non_images_and_playing() {
+    let r = rig("api-media-sec", false);
+    let (cookie, csrf) = r.pair();
+    let get = |p: &str| r.req("GET", p, &[("Cookie", &cookie)], b"");
+    let post = |p: &str, body: &[u8]| r.req("POST", p, &[("Cookie", &cookie), ("X-CSRF-Token", &csrf), ("Content-Type", "application/json")], body);
+
+    let rom = r.root.join("roms/gba/Advance Wars (USA).gba");
+    let gid = api::game_id(&rom);
+    let dir = crate::album::dir(&r.root.join("data"), "gba", &rom);
+    std::fs::create_dir_all(&dir).unwrap();
+    // Bogus non-JPEG and a symlink in the album folder.
+    std::fs::write(dir.join("111.jpg"), b"<html>not jpeg</html>").unwrap();
+    let secret = r.root.join("secret.jpg");
+    std::fs::write(&secret, b"\xff\xd8\xff\xe0secret").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&secret, dir.join("222.jpg")).unwrap();
+    std::fs::write(dir.join("album.tsv"), "111.jpg\t100\t8x8\tBadge 1\n222.jpg\t200\t8x8\tBadge 2\n").unwrap();
+
+    assert_eq!(get(&format!("/api/album/photo?id={gid}&file=111.jpg")).status, 404, "non-JPEG refused");
+    assert_eq!(get(&format!("/api/album/photo?id={gid}&file=222.jpg")).status, 404, "symlink refused");
+    assert_eq!(get(&format!("/api/album/photo?id={gid}&file=..%2F..%2Fsecret.jpg")).status, 404, "traversal refused");
+    assert_eq!(get(&format!("/api/album/photo?id={gid}&file=album.tsv")).status, 404, "non-.jpg refused");
+    assert_eq!(get("/api/media/zip?id=deadbeef00000000").status, 404);
+    assert_eq!(get("/api/media/zip?scope=evil").status, 400);
+    assert_eq!(post("/api/album/delete", format!(r#"{{"id":"{gid}","file":"../secret.jpg"}}"#).as_bytes()).status, 400);
+    assert_eq!(post("/api/shot/delete", format!(r#"{{"id":"{gid}","at":"../../secret"}}"#).as_bytes()).status, 400);
+    assert!(r.edits.lock().unwrap().is_empty());
+
+    // Nothing runs while a game is playing.
+    r.shared.game_running.store(true, std::sync::atomic::Ordering::Relaxed);
+    for p in ["/api/album", "/api/media/zip", &format!("/api/album/photo?id={gid}&file=111.jpg")] {
+        let a = get(p);
+        assert_eq!(a.status, 503, "{p}");
+        assert_eq!(a.json()["playing"], true);
+    }
+    assert_eq!(post("/api/album/delete", format!(r#"{{"id":"{gid}","file":"111.jpg"}}"#).as_bytes()).status, 503);
+    assert_eq!(post("/api/shot/delete", format!(r#"{{"id":"{gid}","at":"2026-11-18 21-14-05"}}"#).as_bytes()).status, 503);
+}
+
+#[test]
+fn update_status_check_and_install_respect_signed_channel_and_running_game() {
+    let r = rig("api-update", false);
+    let (cookie, csrf) = r.pair();
+    let get = |p: &str| r.req("GET", p, &[("Cookie", &cookie)], b"");
+    let post = |p: &str, body: &[u8]| r.req("POST", p, &[("Cookie", &cookie), ("X-CSRF-Token", &csrf), ("Content-Type", "application/json")], body);
+
+    // Development build: cannot install OTA.
+    {
+        let mut u = r.shared.update.lock().unwrap();
+        u.current = "0.2.0".into();
+        u.release_build = false;
+        u.checked = false;
+    }
+    let dev = get("/api/update");
+    assert_eq!(dev.status, 200);
+    assert_eq!(dev.json()["releaseBuild"], false);
+    assert_eq!(dev.json()["checked"], false);
+    assert_eq!(post("/api/update/install", br#"{"version":"0.6.1"}"#).status, 409);
+
+    // Signed release offered: "0.6.0, new: 0.6.1".
+    {
+        let mut u = r.shared.update.lock().unwrap();
+        u.current = "0.6.0".into();
+        u.available = Some("0.6.1".into());
+        u.notes = Some("Photo album and updates.".into());
+        u.size = Some(18 << 20);
+        u.release_build = true;
+        u.checked = true;
+    }
+    let offered = get("/api/update").json();
+    assert_eq!(offered["current"], "0.6.0");
+    assert_eq!(offered["available"], "0.6.1");
+    assert_eq!(offered["summary"], "0.6.0, new: 0.6.1");
+    assert_eq!(offered["releaseBuild"], true);
+
+    // CSRF required; bad or stale versions refused; matching version dispatches Edit::InstallUpdate.
+    assert_eq!(r.req("POST", "/api/update/check", &[("Cookie", &cookie)], b"{}").status, 403);
+    assert_eq!(r.req("POST", "/api/update/install", &[("Cookie", &cookie)], br#"{"version":"0.6.1"}"#).status, 403);
+    assert_eq!(post("/api/update/install", br#"{"version":"https://evil.example/a"}"#).status, 400);
+    assert_eq!(post("/api/update/install", br#"{"version":"0.5.0"}"#).status, 409);
+    assert_eq!(post("/api/update/check", b"{}").status, 200);
+    assert_eq!(post("/api/update/install", br#"{"version":"0.6.1"}"#).status, 200);
+    let edits = r.edits.lock().unwrap().clone();
+    assert!(edits.contains(&Edit::CheckUpdate));
+    assert!(edits.contains(&Edit::InstallUpdate { version: "0.6.1".into() }));
+
+    // While downloading: progress reported and duplicate install/check refused.
+    {
+        let mut u = r.shared.update.lock().unwrap();
+        u.state = super::updates::UpdateState::Downloading;
+        u.step = Some(1);
+        u.percent = Some(42);
+    }
+    let busy = get("/api/update").json();
+    assert_eq!(busy["busy"], true);
+    assert_eq!(busy["step"], 1);
+    assert_eq!(busy["percent"], 42);
+    assert!(busy["stepLine"].as_str().unwrap().contains("42%"), "{busy}");
+    assert_eq!(post("/api/update/check", b"{}").status, 409);
+    assert_eq!(post("/api/update/install", br#"{"version":"0.6.1"}"#).status, 409);
+
+    // Never during a running game.
+    {
+        let mut u = r.shared.update.lock().unwrap();
+        u.state = super::updates::UpdateState::Idle;
+    }
+    r.shared.game_running.store(true, std::sync::atomic::Ordering::Relaxed);
+    r.edits.lock().unwrap().clear();
+    assert_eq!(get("/api/update").status, 503);
+    assert_eq!(post("/api/update/check", b"{}").status, 503);
+    assert_eq!(post("/api/update/install", br#"{"version":"0.6.1"}"#).status, 503);
+    assert!(r.edits.lock().unwrap().is_empty(), "no update edit while a game runs");
+}
+
+#[test]
+fn texts_endpoint_answers_without_auth_even_while_a_game_runs() {
+    let r = rig("api-texts", false);
+    r.shared.game_running.store(true, std::sync::atomic::Ordering::Relaxed);
+    let a = r.req("GET", "/api/texts", &[], b"");
+    assert_eq!(a.status, 200);
+    assert!(a.json()["lang"].is_string());
+    assert!(a.json()["texts"].is_object());
+}
+
+/// 21.11.: the web companion had no way to delete a game. Its page now says what Delete frees (the game, its saves
+/// apart), and `POST /api/game/delete` hands the App the game (by id, never a path) with or without its saves; only with
+/// the token, as every write.
+#[test]
+fn a_game_s_page_offers_delete_with_its_size_and_the_post_reaches_the_app() {
+    let r = rig("api-delete-game", false);
+    let (cookie, csrf) = r.pair();
+    let rom = r.root.join("roms/gba/Advance Wars (USA).gba");
+    std::fs::write(r.root.join("roms/gba/Advance Wars (USA).srm"), vec![0u8; 3000]).unwrap();
+    let id = api::game_id(&rom);
+    let page = r.req("GET", &format!("/api/game?id={id}"), &[("Cookie", &cookie)], b"").json();
+    let d = &page["delete"];
+    assert_eq!(d["files"], 1, "{page}");
+    assert_eq!(d["bytes"].as_u64(), Some(std::fs::metadata(&rom).unwrap().len()));
+    assert_eq!((d["saves"].as_u64(), d["saveFiles"].as_u64()), (Some(3000), Some(1)), "its save, apart: {d}");
+    let body = format!(r#"{{"id":"{id}","saves":false}}"#);
+    assert_eq!(r.req("POST", "/api/game/delete", &[("Cookie", &cookie)], body.as_bytes()).status, 403, "no token");
+    assert!(r.edits.lock().unwrap().is_empty());
+    let post = |json: String| r.req("POST", "/api/game/delete", &[("Cookie", &cookie), ("X-CSRF-Token", &csrf)], json.as_bytes()).status;
+    assert_eq!(post(body.clone()), 200);
+    assert_eq!(post(format!(r#"{{"id":"{id}","saves":true}}"#)), 200);
+    assert_eq!(post(r#"{"id":"0000000000000000"}"#.into()), 404, "ids, never paths");
+    let edits = r.edits.lock().unwrap().clone();
+    assert_eq!(edits, [
+        Edit::DeleteGame { system: "gba".into(), path: rom.clone(), with_saves: false },
+        Edit::DeleteGame { system: "gba".into(), path: rom.clone(), with_saves: true },
+    ]);
+    assert!(rom.exists(), "the server deletes nothing itself: the App does, as the card does");
 }

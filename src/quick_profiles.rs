@@ -69,7 +69,8 @@ impl Default for Profiles {
         Profiles {
             prefs: Prefs::default(),
             cpufreq: true,
-            fan: true,
+            // Until the look at the start is done: the device's rule, as Settings have it (`device::no_fan`).
+            fan: !crate::device::no_fan(),
             game: None,
         }
     }
@@ -200,7 +201,7 @@ impl Profiles {
     /// The line under the list while the row is selected (at most four short lines).
     pub fn desc(&self, w: Which) -> String {
         if w == Which::Performance && !self.cpufreq {
-            return "This device doesn't let pocket-ui set the processor's speed.".into();
+            return "CPU speed control isn't supported on this handheld.".into();
         }
         // Each line short enough for one line of the footer (four at most).
         let what = match (w, self.in_game()) {
@@ -210,16 +211,16 @@ impl Profiles {
         };
         let choice = match w {
             Which::Performance => match self.prefs.games_performance {
-                Performance::Battery if crate::device::current().model.is_some_and(|m| m.h700_class()) => "Battery: saves in menus and idle. Games keep their normal processor speed on this device.",
-                Performance::Battery => "Battery: about half speed, enough for Game Boy and NES; the battery lasts longer.",
-                Performance::Auto => "Auto: the system decides; for PS2, GameCube and 3DS that is full speed.",
-                Performance::Performance => "Max: full speed all the time. Warmer, and uses more battery.",
+                Performance::Battery if crate::device::current().model.is_some_and(|m| m.h700_class()) => "Battery: throttles menus and idle; games keep full speed on this handheld.",
+                Performance::Battery => "Battery: ~half speed for longer battery life (plenty for GB and NES).",
+                Performance::Auto => "Auto: scales on demand (runs full speed for PS2, GameCube and 3DS).",
+                Performance::Performance => "Max: locked to full speed. Runs warmer, uses more battery.",
             },
             Which::Fan => match self.fan_choice() {
-                Fan::VeryQuiet => "Very quiet: fan only when it gets warm; the Pocket feels a bit warmer.",
-                Fan::Quiet => "Quiet: the fan starts later and stays slow.",
+                Fan::VeryQuiet => "Very quiet: fan only spins up when warm. Pocket runs a bit warmer.",
+                Fan::Quiet => "Quiet: fan kicks in later and stays gentle.",
                 Fan::Auto => "Auto: the system's own cooling profile.",
-                Fan::Cool => "Cool: the fan starts early and turns faster.",
+                Fan::Cool => "Cool: fan kicks in earlier and spins faster.",
             },
         };
         let mut lines = vec![what.to_string(), choice.to_string()];
@@ -360,8 +361,13 @@ pub struct Caps {
 
 static CAPS: OnceLock<Caps> = OnceLock::new();
 
-/// Looks below `root` (`/`, or the virtual device's mock sysfs): a cpufreq policy, the PWM fan's thermal zone.
+/// Looks below `root` (`/`, or the virtual device's mock sysfs): a cpufreq policy, the PWM fan's thermal zone. A device
+/// without a fan of ours (`device::no_fan`: the R36S, the H700 handhelds, the Brick, Android) gets no Fan row, as in Settings.
 pub fn probe(root: &Path) -> Caps {
+    probe_for(root, !crate::device::no_fan())
+}
+
+fn probe_for(root: &Path, has_fan: bool) -> Caps {
     let cpufreq = std::fs::read_dir(root.join("sys/devices/system/cpu/cpufreq"))
         .into_iter()
         .flatten()
@@ -369,7 +375,7 @@ pub fn probe(root: &Path) -> Caps {
         .any(|e| e.file_name().to_string_lossy().starts_with("policy"));
     Caps {
         cpufreq,
-        fan: crate::power::fan_zone(root).is_some(),
+        fan: has_fan && crate::power::fan_zone(root).is_some(),
     }
 }
 
@@ -538,17 +544,19 @@ mod tests {
         assert_eq!(q.value(Which::Performance), "Not available here");
         assert_eq!(q.note(Which::Performance), None);
         assert_eq!(q.step(Which::Performance, 1, false), None);
-        assert!(q.desc(Which::Performance).contains("doesn't let"));
+        assert!(q.desc(Which::Performance).contains("isn't supported"));
     }
 
     #[test]
     fn the_probe_finds_cpufreq_and_the_fan_or_neither() {
         let d = TestDir::new("qcaps");
-        assert_eq!(probe(&d), Caps { cpufreq: false, fan: false });
+        assert_eq!(probe_for(&d, true), Caps { cpufreq: false, fan: false });
         std::fs::create_dir_all(d.join("sys/devices/system/cpu/cpufreq/policy0")).unwrap();
         let zone = d.join("sys/class/thermal/thermal_zone3/cdev0");
         std::fs::create_dir_all(&zone).unwrap();
         std::fs::write(zone.join("type"), "pwm-fan\n").unwrap();
-        assert_eq!(probe(&d), Caps { cpufreq: true, fan: true });
+        assert_eq!(probe_for(&d, true), Caps { cpufreq: true, fan: true });
+        // A device without a fan of ours (the R36S render 21.11.: "Fan … in menus"): no Fan row even with a pwm-fan zone.
+        assert_eq!(probe_for(&d, false), Caps { cpufreq: true, fan: false });
     }
 }

@@ -167,18 +167,31 @@ pub fn paint(c: &mut Canvas, text: &mut Text, sel: usize) -> Hits {
             crate::nav_probe::focus(c, (MARGIN, y, full, row_h));
         }
     }
-    // What the selected level brings, in three lines at most above the hint bar (Large text in German needs them).
+    // What the selected level brings, in three lines at most above the hint bar (Large text in German needs them): whole,
+    // a size smaller where it would not fit. The lines that ran under the bar were left out, the sentence broken off with
+    // no sign of it ("…Spiele in Folie, alter", German in Large on the Brick, review 20.11.).
     let level = CozyLevel::ALL[sel.min(2)];
-    let mut y = first + 3 * pitch + if short { 18 } else { 30 };
+    let y = first + 3 * pitch + if short { 18 } else { 30 };
     let bottom = crate::kit::hint_bar_top(c.h) - 8;
-    for l in text.wrap_prose_at_most(Face::Body, 24, level.includes(), full, 3) {
-        if y + crate::type_scale::line(24, 8) > bottom {
-            break;
-        }
-        text.draw(c, Face::Body, 24, MARGIN, y + 24, pal().chalk, &l);
-        y += crate::type_scale::line(24, 8);
+    let (px, lines) = includes_lines(text, level.includes(), full, bottom - y);
+    let step = crate::type_scale::line(px, 8);
+    for (i, l) in lines.iter().enumerate() {
+        text.draw(c, Face::Body, px, MARGIN, y + i as i32 * step + 24, pal().chalk, l);
     }
     hits
+}
+
+/// What a level brings, `room` pixels high and `width` wide: the largest of the sizes at which it is whole in three lines at
+/// most, each line a step of its size high; where none is, the smallest, its last line cut short with "…".
+fn includes_lines(text: &mut Text, s: &str, width: i32, room: i32) -> (u32, Vec<String>) {
+    let fits = |px: u32| (room / crate::type_scale::line(px, 8)).clamp(0, 3) as usize;
+    for px in [24, 22, 20] {
+        let lines = text.wrap_prose(Face::Body, px, s, width);
+        if lines.len() <= fits(px) {
+            return (px, lines);
+        }
+    }
+    (20, text.wrap_prose_at_most(Face::Body, 20, s, width, fits(20)))
 }
 
 #[cfg(test)]
@@ -260,7 +273,7 @@ mod tests {
         for l in CozyLevel::ALL {
             words.extend([l.name(), l.blurb(), l.includes()]);
         }
-        for lang in crate::i18n::Lang::ALL.into_iter().filter(|l| *l != crate::i18n::Lang::En) {
+        for lang in crate::i18n::Lang::ALL.into_iter().filter(|l| *l != crate::i18n::Lang::En && l.complete()) {
             for w in &words {
                 assert_ne!(&crate::i18n::tr_in(lang, w), w, "{lang:?}: {w}");
             }

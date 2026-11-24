@@ -340,7 +340,10 @@ file. Opening the row from Settings shows About with **Report a problem** select
 Sensor readings and logs may contain Unicode (for example °C and µs); these are kept in the report.
 
 **Where it is.** In the `reports` folder of the games share, the same place as `screenshots`: `roms/reports` on the SD
-card. Copy it to your computer over [file sharing](getting-started.md#over-wi-fi-file-sharing), or with the SD card in a computer.
+card. Copy it to your computer over [file sharing](getting-started.md#over-wi-fi-file-sharing).
+On a ROCKNIX system card with the games on STORAGE and no second card, look in the `reports` folder of the ROCKNIX drive.
+Turn the Pocket off before putting the card in your computer. If the Pocket put a copy on the games card in the second
+slot, the confirmation names that card.
 
 **What to do with it.** Open a bug report on pocket-ui's GitHub page (Issues → New issue → Bug report) or write to
 robby@robbyczesany.com. Say what happened, and attach the zip. Nothing is sent by the Pocket itself.

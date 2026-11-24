@@ -221,9 +221,16 @@ pub fn read_body(r: &mut impl Read, req: &Request, max: u64) -> Result<Vec<u8>, 
     Ok(body)
 }
 
+/// A body written while it is sent (a ZIP of the saves, a large save state): never whole in memory. Written with
+/// `Transfer-Encoding: chunked`; an error ends the connection without the last chunk, so the browser knows the download
+/// failed.
+pub type StreamFn = Box<dyn FnOnce(&mut dyn Write) -> io::Result<()> + Send>;
+
 pub enum Body {
     Bytes(Vec<u8>),
     Static(&'static [u8]),
+    /// Taken out once, when the response is written (`write_response` gets the response by reference).
+    Stream(std::cell::Cell<Option<StreamFn>>),
 }
 
 pub struct Response {
@@ -247,6 +254,11 @@ impl Response {
         Response::json(status, &serde_json::json!({ "error": message }))
     }
 
+    /// A body made while it is sent ([`StreamFn`]).
+    pub fn stream(status: u16, content_type: &'static str, f: impl FnOnce(&mut dyn Write) -> io::Result<()> + Send + 'static) -> Response {
+        Response { status, content_type, headers: Vec::new(), body: Body::Stream(std::cell::Cell::new(Some(Box::new(f)))) }
+    }
+
     pub fn with(mut self, name: &str, value: &str) -> Response {
         self.headers.push((name.to_string(), value.to_string()));
         self
@@ -256,6 +268,7 @@ impl Response {
         match &self.body {
             Body::Bytes(b) => b,
             Body::Static(b) => b,
+            Body::Stream(_) => &[],
         }
     }
 }
@@ -289,7 +302,11 @@ pub fn reason(status: u16) -> &'static str {
 /// no-store` (the data is private; only the fonts and the page's own files may be kept).
 pub fn write_response(w: &mut impl Write, resp: &Response, head_only: bool) -> io::Result<()> {
     let body = resp.body();
-    let mut head = format!("HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n", resp.status, reason(resp.status), resp.content_type, body.len());
+    let length = match resp.body {
+        Body::Stream(_) => "Transfer-Encoding: chunked".to_string(),
+        _ => format!("Content-Length: {}", body.len()),
+    };
+    let mut head = format!("HTTP/1.1 {} {}\r\nContent-Type: {}\r\n{length}\r\nConnection: close\r\n", resp.status, reason(resp.status), resp.content_type);
     for (n, v) in SECURITY_HEADERS {
         head.push_str(&format!("{n}: {v}\r\n"));
     }
@@ -304,8 +321,56 @@ pub fn write_response(w: &mut impl Write, resp: &Response, head_only: bool) -> i
     }
     head.push_str("\r\n");
     w.write_all(head.as_bytes())?;
+    if let Body::Stream(f) = &resp.body {
+        if !head_only {
+            if let Some(f) = f.take() {
+                let mut chunked = Chunked { w: &mut *w, buf: Vec::with_capacity(CHUNK) };
+                f(&mut chunked)?;
+                chunked.flush_chunk()?;
+                w.write_all(b"0\r\n\r\n")?;
+            }
+        }
+        return w.flush();
+    }
     if !head_only {
         w.write_all(body)?;
     }
     w.flush()
+}
+
+/// A streamed body's chunks: this many bytes each (the last one less).
+const CHUNK: usize = 64 * 1024;
+
+/// Writes what it is given as HTTP chunks of [`CHUNK`] bytes.
+struct Chunked<'a> {
+    w: &'a mut dyn Write,
+    buf: Vec<u8>,
+}
+
+impl Chunked<'_> {
+    fn flush_chunk(&mut self) -> io::Result<()> {
+        if self.buf.is_empty() {
+            return Ok(());
+        }
+        self.w.write_all(format!("{:x}\r\n", self.buf.len()).as_bytes())?;
+        self.w.write_all(&self.buf)?;
+        self.w.write_all(b"\r\n")?;
+        self.buf.clear();
+        Ok(())
+    }
+}
+
+impl Write for Chunked<'_> {
+    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+        let n = data.len().min(CHUNK - self.buf.len());
+        self.buf.extend_from_slice(&data[..n]);
+        if self.buf.len() >= CHUNK {
+            self.flush_chunk()?;
+        }
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }

@@ -145,11 +145,11 @@ impl Profile {
 
     pub fn blurb(self) -> &'static str {
         match self {
-            Profile::Simple => "Your games on a shelf, as it comes.",
-            Profile::JustPlay => "One big game at a time, simple menus.",
-            Profile::Enthusiast => "Suggestions, play statistics, picture details and frames, all on.",
-            Profile::Choose => "One card per feature, with a preview: on, off, or later.",
-            Profile::Child => "A big, simple shelf with the games you pick, behind your PIN.",
+            Profile::Simple => "Clean shelf, ready out of the box.",
+            Profile::JustPlay => "One big case at a time, zero clutter.",
+            Profile::Enthusiast => "Curator picks, play stats, Pixel Path and frames, all on.",
+            Profile::Choose => "Pick each feature with a preview: on, off, or later.",
+            Profile::Child => "One big, safe shelf with only the games you pick, PIN-locked.",
         }
     }
 }
@@ -229,7 +229,7 @@ pub static FEATURES: &[Feature] = &[
         id: "quit_without_saving",
         title: "Continue where I quit",
         plain: "continue where you quit",
-        line: "On: Quit keeps the moment and the next start continues there. Off: only the game's own saves stay.",
+        line: "On: Quit auto-saves so you pick right back up. Off: only in-game saves are kept.",
         place: "Settings › Playing › Continue where I quit",
         guide: "settings-playing.md#continue-where-i-quit",
         since: "0.1.0",
@@ -244,7 +244,7 @@ pub static FEATURES: &[Feature] = &[
         id: "last_game",
         title: "Continue your last game",
         plain: "continue your last game at start",
-        line: "When the Pocket starts, the game you played last continues where you left off.",
+        line: "Boots straight back into your last game, right where you left off.",
         place: "Settings › Playing › On start",
         guide: "settings-playing.md#on-start",
         since: "0.1.0",
@@ -262,7 +262,7 @@ pub static FEATURES: &[Feature] = &[
         id: "motion",
         title: "Motion",
         plain: "gentle animations",
-        line: "Selections glide and pages slide in. Off shows every press at once, without animation.",
+        line: "Smooth glides and sliding pages. Off makes every screen snap instantly.",
         place: "Settings › Look › Motion",
         guide: "settings.md#motion",
         since: "0.1.0",
@@ -281,7 +281,7 @@ pub static FEATURES: &[Feature] = &[
         id: "easy_to_read",
         title: "Big text",
         plain: "larger text and calmer menus",
-        line: "Larger text, menus that only fade, and Zoom in the pause menu. Switches Text size and Motion together.",
+        line: "Bigger text, gentle fades, and pause-menu Zoom. Sets Text size and Motion together.",
         place: "Settings › Look › Text size, Settings › Look › Motion",
         guide: "big-text.md#big-text",
         since: "0.2.0",
@@ -311,7 +311,7 @@ pub static FEATURES: &[Feature] = &[
         id: "retro_look",
         title: "Retro",
         plain: "an old handheld's look for every menu",
-        line: "Pixel letters, chunky frames, little icons and blips in every menu. Your shelf and box art stay.",
+        line: "Crisp pixel type, chunky frames, icons and menu blips. Your shelf and box art stay.",
         place: "Settings › Look › Style › Retro",
         guide: "theme.md#style",
         since: "0.3.0",
@@ -332,7 +332,7 @@ pub static FEATURES: &[Feature] = &[
         id: "sounds",
         title: "Menu sounds",
         plain: "soft clicks in the menus",
-        line: "Soft clicks as you move through the menus. Never in games.",
+        line: "Subtle clicks as you browse menus. Silent in games.",
         place: "Settings › Screen & sound › Menu sounds",
         guide: "playing.md#menu-sounds",
         since: "0.1.0",
@@ -350,7 +350,7 @@ pub static FEATURES: &[Feature] = &[
         id: "haptics",
         title: "Haptics",
         plain: "a light tick as you move",
-        line: "A very short tick in your hands as the selection moves.",
+        line: "A light tactile tick as you move through menus.",
         place: "Settings › Controls › Haptics",
         guide: "settings.md#open-settings",
         since: "0.1.0",
@@ -368,7 +368,7 @@ pub static FEATURES: &[Feature] = &[
         id: "leds",
         title: "Stick lights",
         plain: "lights around the sticks",
-        line: "The lights around the sticks glow in one calm colour. Colour and brightness in Settings.",
+        line: "Stick rings glow in a soft colour. Tune colour and brightness in Settings.",
         place: "Settings › Controls › LEDs",
         guide: "settings-sound.md#leds",
         since: "0.1.0",
@@ -394,7 +394,7 @@ pub static FEATURES: &[Feature] = &[
         id: "frames",
         title: "Screen frames on every console",
         plain: "frames around the picture on every console",
-        line: "Auto frames the picture on the home consoles too, not only on the handhelds.",
+        line: "Adds matching screen frames to home consoles too, not just handhelds.",
         place: "Settings › Playing › Screen frames",
         guide: "settings-playing.md#screen-frames",
         since: "0.1.0",
@@ -412,7 +412,7 @@ pub static FEATURES: &[Feature] = &[
         id: "echoes",
         title: "Echoes",
         plain: "suggestions for similar games",
-        line: "More like this, on every game card: games you own that play alike, each with a reason.",
+        line: "On every game card: similar games you already own, with a short reason why.",
         place: "Settings › Games › Curator",
         guide: "curator.md#echoes",
         since: "0.1.0",
@@ -430,7 +430,7 @@ pub static FEATURES: &[Feature] = &[
         id: "versions",
         title: "Versions",
         plain: "other versions of a game",
-        line: "A game you own on several systems shows once in mixed lists and starts the version you prefer.",
+        line: "Multi-system games show once in mixed lists and launch your favourite version.",
         place: "Settings › Games › Curator",
         guide: "curator.md#versions",
         since: "0.1.0",
@@ -450,7 +450,7 @@ pub static FEATURES: &[Feature] = &[
         id: "play_history",
         title: "Play history",
         plain: "your play time by week and year",
-        line: "Curator › History: what you played this week, month and year, and a calm Year in review.",
+        line: "Curator › History: your weekly, monthly and yearly play log, plus Year in review.",
         place: "Settings › Games › Curator",
         guide: "curator.md#play-history",
         since: "0.1.0",
@@ -505,7 +505,7 @@ pub static FEATURES: &[Feature] = &[
         id: "pixel_path_live",
         title: "Pixel Path over every game",
         plain: "a line of picture details over every game",
-        line: "One quiet line beside the picture: the emulator, the scale, the frame rate, the latency, the sound.",
+        line: "A clean live strip over the game: core, scale, FPS, latency and audio.",
         place: "Settings › Playing › Over the game",
         guide: "pause-menu.md#pixel-path-over-the-game",
         since: "0.1.0",
@@ -535,7 +535,7 @@ pub static FEATURES: &[Feature] = &[
         id: "lens",
         title: "Lens & smart shelves",
         plain: "pick games by mood and length",
-        line: "A Curator row on Home: combine filters, and keep one as a shelf that updates itself.",
+        line: "Combine mood, genre and length filters, then pin any mix as an auto-updating shelf.",
         place: "Settings › Games › Curator",
         guide: "curator.md#lens",
         since: "0.1.0",
@@ -554,7 +554,7 @@ pub static FEATURES: &[Feature] = &[
         id: "search",
         title: "Search and the letter jump",
         plain: "Search and the letter jump",
-        line: "Search is the row above Continue. L2 and R2 jump through any list by first letter.",
+        line: "Search sits above Continue. Tap L2 or R2 to jump through any list by letter.",
         place: "Home: one press up. L2 / R2 in any list",
         guide: "playing.md#finding-a-game",
         since: "0.1.0",
@@ -569,7 +569,7 @@ pub static FEATURES: &[Feature] = &[
         id: "console_credits",
         title: "Console credits",
         plain: "Console credits",
-        line: "Who made a console, its chips and its family, with links to your own games for it.",
+        line: "Console history, hardware specs and family tree, linked straight to your games.",
         place: "X on a console page (X on a system on Home)",
         guide: "console-pages.md#credits--links",
         since: "0.1.0",
@@ -584,7 +584,7 @@ pub static FEATURES: &[Feature] = &[
         id: "players",
         title: "Players",
         plain: "Players",
-        line: "Up to four players on pocket-ui's own host: each controller you connect is the next player.",
+        line: "Up to 4 players in pocket-ui's player; each new controller joins as the next player.",
         place: "Pause menu (HOME) › Players",
         guide: "pause-menu.md#players",
         since: "0.1.0",
@@ -599,7 +599,7 @@ pub static FEATURES: &[Feature] = &[
         id: "run_ahead",
         title: "Run-ahead",
         plain: "less input delay in older games",
-        line: "The game responds to your buttons a frame or two sooner, on the lighter consoles.",
+        line: "Shaves 1–2 frames off input lag on lighter consoles.",
         place: "Pause menu › Options › Speed, rumble, fan",
         guide: "options.md#run-ahead",
         since: "0.1.0",
@@ -614,7 +614,7 @@ pub static FEATURES: &[Feature] = &[
         id: "runs_on",
         title: "Runs on",
         plain: "Runs on",
-        line: "Which emulator plays a console, or a single game, and RetroArch's own picture settings.",
+        line: "Pick the emulator per console or per game, plus RetroArch picture settings.",
         place: "START on a game card or a console page",
         guide: "options.md#runs-on",
         since: "0.1.0",
@@ -629,7 +629,7 @@ pub static FEATURES: &[Feature] = &[
         id: "achievements",
         title: "RetroAchievements",
         plain: "RetroAchievements",
-        line: "Sign in once and earn achievements in the games on pocket-ui's own host.",
+        line: "Sign in once to unlock RetroAchievements in pocket-ui's player.",
         place: "Settings › Playing › RetroAchievements",
         guide: "achievements.md#sign-in",
         since: "0.1.0",
@@ -644,7 +644,7 @@ pub static FEATURES: &[Feature] = &[
         id: "sync",
         title: "Sync",
         plain: "Sync",
-        line: "Keeps saves and save states in step with your other devices, with Syncthing.",
+        line: "Keeps saves and save states synced across your devices via Syncthing.",
         place: "Settings › Connections › Sync",
         guide: "sync.md#turn-it-on",
         since: "0.1.0",
@@ -659,7 +659,7 @@ pub static FEATURES: &[Feature] = &[
         id: "tailscale",
         title: "Tailscale",
         plain: "Tailscale",
-        line: "Reach the Pocket from your phone or computer, even away from home.",
+        line: "Access this Pocket from your phone or PC, even away from home.",
         place: "Settings › Connections › Tailscale",
         guide: "remote.md#turn-it-on-and-sign-in",
         since: "0.1.0",
@@ -674,7 +674,7 @@ pub static FEATURES: &[Feature] = &[
         id: "tools",
         title: "Tools",
         plain: "Tools",
-        line: "The emulators' own menus, gamepad test and calibration, a file manager, a terminal.",
+        line: "Emulator menus, controller test & calibration, file manager and terminal.",
         place: "Settings › Help & tools › Tools",
         guide: "extras.md#tools",
         since: "0.1.0",
@@ -689,7 +689,7 @@ pub static FEATURES: &[Feature] = &[
         id: "cozy_extras",
         title: "Cozy extras",
         plain: "Cozy extras",
-        line: "The little touches, each on its own: real cases, stickers, printed discs and more.",
+        line: "Toggle each tactile detail: real cases, stickers, printed discs and more.",
         place: crate::cozy_extras::PAGE,
         guide: "settings.md#cozy-extras",
         since: "0.1.0",
@@ -704,7 +704,7 @@ pub static FEATURES: &[Feature] = &[
         id: "perf_fan",
         title: "Performance & fan",
         plain: "Performance & fan",
-        line: "How fast games run, and a fan that speeds up and slows down gently instead of switching on and off.",
+        line: "Tune performance and a smooth fan curve that ramps gently instead of pulsing.",
         place: "Settings › Playing › Performance & fan",
         guide: "performance.md#performance-and-fan",
         since: "0.1.0",
@@ -720,7 +720,7 @@ pub static FEATURES: &[Feature] = &[
         id: "settings_at_once",
         title: "Settings at once",
         plain: "Settings at once",
-        line: "START shows the settings straight away; L1 and R1 go through the categories. Tailscale, SSH and Sync are in Connections.",
+        line: "Press START for Settings; L1/R1 switch tabs. Tailscale, SSH and Sync live in Connections.",
         place: "START, then L1 / R1",
         guide: "settings.md#open-settings",
         since: "0.4.1",
@@ -777,42 +777,42 @@ pub static BASICS: &[Basic] = &[
     Basic {
         id: "play",
         title: "Play, and HOME is the menu",
-        text: "Pick a game and press A. While you play, tap HOME to pause and open the menu: Continue, Save, Load, Quit.",
+        text: "Pick a game and press A. Tap HOME any time to pause: Continue, Save, Load, or Quit.",
         place: "Tap HOME in a game",
         guide: "pause-menu-saves.md#save-slots-where-i-quit-and-before-load",
     },
     Basic {
         id: "continue",
         title: "Continue where you stopped",
-        text: "Home opens on the game you played last. A continues it, and quitting keeps the moment, so the next start picks it up.",
+        text: "Home opens on your last game. Press A to jump right back in; quitting saves your exact spot.",
         place: "Home › Continue",
         guide: "playing.md#home",
     },
     Basic {
         id: "saving",
         title: "Saving",
-        text: "Save and Load are in the pause menu. Earlier brings back a moment from before, if a game went wrong.",
+        text: "Save and Load live in the pause menu. Earlier rewinds to an automatic backup if things go south.",
         place: "Pause menu › Save, Load, Earlier",
         guide: "pause-menu-saves.md#earlier",
     },
     Basic {
         id: "quick",
         title: "Quick settings",
-        text: "Brightness, volume, Wi-Fi, Bluetooth, fan and power in one panel, over the shelf and over a game.",
+        text: "Brightness, volume, Wi-Fi, Bluetooth, fan and power in one overlay, on Home or in-game.",
         place: "HOME on the shelf, START in the pause menu",
         guide: "quick-settings.md#quick-settings",
     },
     Basic {
         id: "add_games",
         title: "Add games",
-        text: "Games go in each system's folder on the SD card. Add games shows the folders and BIOS files, and can share them over Wi-Fi.",
+        text: "Drop games in each system's folder on the SD card. Add games lists folders, BIOS files, and Wi-Fi sharing.",
         place: "START › Settings › Games › Add games",
         guide: "getting-started.md#5-add-games",
     },
     Basic {
         id: "settings",
         title: "Settings",
-        text: "Everything on these cards, and everything you meet along the way, can be switched under START › Settings.",
+        text: "Every feature here, and everything else in pocket-ui, can be tweaked in START › Settings.",
         place: "START on the shelf",
         guide: "settings.md#settings",
     },
@@ -822,15 +822,15 @@ pub static BASICS: &[Basic] = &[
 /// on the shelf (`quick::android_rows`; the player's pause menu has none), its games are in `ROMs` folders read through Android,
 /// with no file sharing (`android_handheld`). The Tour on the Odin 2 Mini promised Wi-Fi, Bluetooth, fan and power (13.11.).
 pub const ANDROID_BASICS: &[(&str, &str, &str)] = &[
-    ("quick", "Brightness and volume in one panel, over the shelf.", "HOME on the shelf"),
-    ("add_games", "Games go in a ROMs folder, one folder per system, in the device's storage or on a memory card. Add games shows the folders and BIOS files.", "START › Settings › Games › Add games"),
+    ("quick", "Brightness and volume in one quick overlay.", "HOME on the shelf"),
+    ("add_games", "Drop games in a ROMs folder, one per system, on device storage or memory card. Add games lists folders and BIOS.", "START › Settings › Games › Add games"),
 ];
 
 /// The basics that promise Wi-Fi, as they read on a handheld without it (`device::no_wifi_chip`): no Wi-Fi tile in the
 /// quick settings, no file sharing in Add games.
 pub const NO_WIFI_BASICS: &[(&str, &str)] = &[
-    ("quick", "Brightness, volume, Bluetooth, fan and power in one panel, over the shelf and over a game."),
-    ("add_games", "Games go in each system's folder on the SD card. Add games shows the folders and BIOS files."),
+    ("quick", "Brightness, volume, performance and power in one overlay, on Home or in-game."),
+    ("add_games", "Drop games in each system's folder on the SD card. Add games lists the folders and BIOS files."),
 ];
 
 /// A basic card as it reads on this device: Android's handheld view has its own words for some (`ANDROID_BASICS`), and
@@ -838,7 +838,7 @@ pub const NO_WIFI_BASICS: &[(&str, &str)] = &[
 pub fn basic_in(b: &Basic, android: bool) -> Basic {
     match ANDROID_BASICS.iter().find(|(id, _, _)| *id == b.id).filter(|_| android) {
         Some((_, text, place)) => Basic { text: *text, place: *place, ..*b },
-        None => match NO_WIFI_BASICS.iter().find(|(id, _)| *id == b.id).filter(|_| !android && crate::device::no_wifi_chip()) {
+        None => match NO_WIFI_BASICS.iter().find(|(id, _)| *id == b.id).filter(|_| !android && crate::device::no_own_wifi()) {
             Some((_, text)) => Basic { text: *text, ..*b },
             None => *b,
         },
@@ -848,8 +848,8 @@ pub fn basic_in(b: &Basic, android: bool) -> Basic {
 /// What a feature card's line says instead on Android's handheld view, by id: Zoom is pocket-core's pause menu, which the Android
 /// player does not have (`device::ANDROID_HIDES` "zoom_pause").
 pub const ANDROID_LINES: &[(&str, &str)] = &[
-    ("easy_to_read", "Larger text and menus that only fade. Switches Text size and Motion together."),
-    ("last_game", "When pocket-ui starts, the game you played last continues where you left off."),
+    ("easy_to_read", "Bigger text and gentle fades. Sets Text size and Motion together."),
+    ("last_game", "Launches straight back into your last game, right where you left off."),
 ];
 
 /// A feature card's line as it reads on this device (`ANDROID_LINES`).
@@ -1193,7 +1193,7 @@ impl Cards {
         let put_off = self.later.iter().any(|l| l == f.id);
         let lead = match (f.switch.is_some(), self.choice == LATER) {
             (false, _) => "Nothing to switch. Find it here:",
-            (true, true) => "Left as it is for now. Changed any time in",
+            (true, true) => "Unchanged for now. Tweak any time in",
             (true, false) => "Changed any time in",
         };
         // The way to the setting can be long (German, two settings, Large text) and must stay readable whole, above the hint
@@ -1333,11 +1333,18 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
     } else {
         (140, 192, 230, 124, 112)
     };
+    // Larger text grows the name and the line under it: on a short screen's rows the row grows with them, as the cozy
+    // page's rows do (`cozy_level::paint`), so the name stays in its row (Large stood out of the Brick's 86-px rows, Brick
+    // review 20.11.). The 112-px rows of 960 lines and more hold it as they are (five grown rows reached the hint bar there).
+    // Half of each one's growth is enough for the name (its line has its own room under the name); the whole of it took
+    // 44 lines from what the selected way turns on and off under the rows.
+    let extra = if short { crate::type_scale::grow(46) / 2 + crate::type_scale::grow(24) / 2 } else { 0 };
+    let (pitch, row_h) = (pitch + extra, row_h + extra);
     let full = c.w - 2 * MARGIN;
     // A little smaller where they would not fit: Retro's wider letters ran both off a 1024-wide screen (the Brick).
     let (px, title) = text.fit_sizes(Face::Title, &[67, 60, 54], "How do you like to play?", full);
     text.draw(c, Face::Title, px, MARGIN, head, pal().chalk, &title);
-    let (px, line) = text.fit_sizes(Face::Body, &[28, 25, 22], "A starting point for the extras. Every switch stays in Settings.", full);
+    let (px, line) = text.fit_sizes(Face::Body, &[28, 25, 22], "Pick a starting vibe. You can toggle every option in Settings.", full);
     text.draw(c, Face::Body, px, MARGIN, sub, pal().dust, &line);
     // A small live preview beside the rows (the look step's pictures: Easy's case for its row, the shelf for
     // The shelf and Enthusiast): only where there's room. On a small screen (drawn on 960 lines at 640x480) the rows fill it, so the preview is left out.
@@ -1367,9 +1374,11 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
         c.rect(MARGIN, y, width, row_h, if selected { pal().label } else { pal().spine });
         if selected {
             crate::game_card::lift_shadow(c, MARGIN, y + row_h, width, pal().t);
+            crate::nav_probe::focus(c, (MARGIN, y, width, row_h));
         }
         let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
-        text.draw(c, Face::Title, 46, MARGIN + 28, y + row_h * 50 / 112, fg, p.name());
+        // Nearly all of what the row grew goes over the name: half was a line short on the Smart Pro's 80-line rows.
+        text.draw(c, Face::Title, 46, MARGIN + 28, y + (row_h - extra) * 50 / 112 + extra * 7 / 8, fg, p.name());
         let blurb = text.fit(Face::Body, 24, p.blurb(), width - 56);
         // Lower by what Large text adds to it: on a short screen's rows (92 px) the grown line touched the name above
         // (Retro, Spanish, 1024x768, 2026-11-07).
@@ -1380,15 +1389,15 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
     let p = profiles[sel.min(profiles.len() - 1)];
     let lines: Vec<(String, u32)> = match p {
         Profile::Child => vec![
-            ("Next: a PIN, the games, Blue or Pink, and a time and volume limit if you like.".to_string(), pal().chalk),
-            ("Your settings and saves stay as they are for when the mode goes off.".to_string(), pal().dust),
+            ("Next: set a PIN, pick games, choose Blue or Pink, plus optional limits.".to_string(), pal().chalk),
+            ("Your own settings and saves stay untouched until you exit Kids Mode.".to_string(), pal().dust),
         ],
         Profile::Choose => vec![
             (
                 format!("{} cards, each with a small picture of what it does.", choose_list().len()),
                 pal().chalk,
             ),
-            ("START skips the rest; what you haven't chosen stays as it is.".to_string(), pal().dust),
+            ("Press START to skip the rest; what you haven't picked stays as it is.".to_string(), pal().dust),
         ],
         _ => {
             let (on, off) = profile_summary(p);
@@ -1405,7 +1414,7 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
                 v.push((format!("Off: {}.", shown.join(", ")), pal().dust));
             }
             if back {
-                v.push(("Picked now, it puts every extra back as pocket-ui ships it, also On start and Screen frames.".to_string(), pal().chalk));
+                v.push(("Resets every extra (including On start and Screen frames) back to pocket-ui's defaults.".to_string(), pal().chalk));
             }
             v
         }
@@ -1423,7 +1432,9 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
             text.draw(c, Face::Body, 24, MARGIN, y, colour, &l);
             y += step;
         }
-        y += 10;
+        // A short screen's rows grow with Large text: the Off line keeps its second line there without the gap (it was cut
+        // with "…" under the grown rows); the two read apart by their colours.
+        y += if short { 0 } else { 10 };
     }
     hits.buttons = crate::setup::hints(c, text, &[("Up/Down", "Choose"), ("A", "Take this"), ("B", "Back"), ("START", "Skip")]);
     hits

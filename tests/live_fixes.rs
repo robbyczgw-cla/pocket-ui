@@ -27,7 +27,7 @@ struct Card {
 impl Card {
     fn new() -> Card {
         // A short path: the stub's socket has to fit.
-        let dir = tempfile::Builder::new().prefix("pui-live-").tempdir_in("/tmp").unwrap();
+        let dir = tempfile::Builder::new().prefix("pui-live-").tempdir().unwrap();
         let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
         assert!(status.success());
         let stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {

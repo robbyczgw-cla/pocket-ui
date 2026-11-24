@@ -33,6 +33,9 @@ pub struct Eject {
     /// is on screen (`attach`): the picture switching off needs none of it, and the way back is not slower to come.
     scene: Option<Launch>,
     medium: media::Medium,
+    game: media::Game,
+    form: FormFactor,
+    mechanism: Option<pocket_ui::insert_rig::Kind>,
     /// How a handheld's display switches off (Handheld switch-on, `lcd_on`); `Plain` simply goes dark.
     panel: pocket_ui::lcd_on::Panel,
     /// The canvas and the window it was made for: turned meanwhile, it ends.
@@ -58,13 +61,11 @@ pub fn why_not(cozy: bool, motion: Motion, on_shelf: bool, on_the_game: bool) ->
 
 /// The way back of `game`: its last picture switches off first when there is one (a TV's only with the old-TV
 /// switch-on, as on the handhelds), and its console opens a lid or tray first when it has one.
-pub fn way(game: &Game, has_picture: bool) -> Way {
-    let system = insert::rig_system(game);
-    let screen = Screen::of(FormFactor::of(system));
+fn way(form: FormFactor, has_picture: bool, lid: bool) -> Way {
+    let screen = Screen::of(form);
     // The Mobile view has the one old-TV row (switch-on); the handheld view's switch-off row is read as well.
     let crt = pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::CrtOn) && pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::CrtOff);
-    let kind = media::Game::of(system, &game.relative);
-    Way::new(screen, has_picture && (screen == Screen::Lcd || crt), pocket_ui::playful::on() && pocket_ui::insert_rig::takes_disc(system, kind))
+    Way::new(screen, has_picture && (screen == Screen::Lcd || crt), lid)
 }
 
 /// The page the way back plays over, as the launcher painted it (`Ui::back_from`, then a paint with `Ui::launching` and
@@ -109,10 +110,15 @@ impl Eject {
     /// The way back of `game` from its last picture `frame` (None: from black), which stood at `area` on a canvas `size`
     /// big in a window `window` big (None: all of the canvas); its scene comes later (`attach`).
     pub fn new(game: &Game, frame: Option<Image>, area: Option<(i32, i32, i32, i32)>, size: (u32, u32), window: (u32, u32), at: Instant) -> Eject {
-        let way = way(game, frame.is_some());
         let area = area.unwrap_or((0, 0, size.0 as i32, size.1 as i32));
-        let panel = if pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::HandheldOn) { pocket_ui::lcd_on::Panel::of(insert::rig_system(game)) } else { pocket_ui::lcd_on::Panel::Plain };
-        Eject { at, way, frame, area, scene: None, medium: media::Medium::of(insert::rig_system(game)), panel, size, window, key: game.key.clone() }
+        let system = insert::rig_system(game);
+        let panel = if pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::HandheldOn) { pocket_ui::lcd_on::Panel::of(system) } else { pocket_ui::lcd_on::Panel::Plain };
+        let medium = media::Medium::of(system);
+        let kind = media::Game::of(system, &game.relative);
+        let form = FormFactor::of(system);
+        let mechanism = pocket_ui::playful::on().then(|| pocket_ui::insert_rig::moving_kind(system, kind)).flatten();
+        let way = way(form, frame.is_some(), mechanism.is_some());
+        Eject { at, way, frame, area, scene: None, medium, game: kind, form, mechanism, panel, size, window, key: game.key.clone() }
     }
 
     /// Its scene, made from the page (`scene`).
@@ -144,7 +150,7 @@ impl Eject {
     /// coming out, the case), queued now, each a frame's way to the glass later (as the start's).
     pub fn play_cues(&self) {
         let ctx = ui_sound::Ctx { config: Default::default(), in_game: false, pause_menu: false, asleep: false };
-        for (sound, at) in self.way.sounds(self.medium) {
+        for (sound, at) in self.way.sounds(self.medium, self.game, self.form, self.mechanism) {
             ui_sound::play_after(sound, &ctx, at.saturating_sub(ui_sound::hit_at(sound)) + insert::PICTURE_LATE, 0.0);
         }
     }

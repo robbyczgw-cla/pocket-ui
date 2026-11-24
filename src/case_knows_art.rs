@@ -266,7 +266,7 @@ fn gb_picture(tiles: &[u8], pal: &[u32; 4]) -> Option<Pic> {
 /// Gold's, Silver's or Crystal's pictures for `team`: each Pokémon's party menu icon in the menu's colours, and the
 /// trainer card's eight Johto badges (won ones bright).
 pub fn gb_art(rom: &Path, places: &GbPlaces, team: &TeamArt) -> Art {
-    let Ok(mut f) = std::fs::File::open(rom) else { return Art::default() };
+    let Ok(mut f) = crate::background_io::open(rom) else { return Art::default() };
     let mut out = Art::default();
     let four = |raw: Vec<u8>| -> [u32; 4] { let c = colours_n(&raw, 4); [0, c[1], c[2], c[3]] };
     let Some(party) = bytes_at(&mut f, places.party_palette as u64, 8).filter(|p| crc32fast::hash(p) == GB_PARTY_PALETTE.crc).map(four) else { return out };
@@ -414,7 +414,7 @@ fn tile_2bpp(sheet: &[u8], t: usize, pal: &[u32; 4], into: &mut Pic, (x0, y0): (
 /// crystals, read from the ROM at `rom` where `find_zelda` found them (`header`: the copier header's size).
 pub fn zelda_art(rom: &Path, (sheet, palette): (u32, u32), header: u64, quest: &crate::case_knows::Progress) -> Option<Art> {
     let crate::case_knows::Progress::Quest { pendants, crystals, dark_world, .. } = quest else { return None };
-    let mut f = std::fs::File::open(rom).ok()?;
+    let mut f = crate::background_io::open(rom).ok()?;
     let len = f.metadata().ok()?.len();
     let packed = bytes_at(&mut f, header + sheet as u64, 0x1000.min(len.saturating_sub(header + sheet as u64)) as usize)?;
     let tiles = zelda_unpack(&packed, 0, 0x1000).filter(|d| d.len() >= ZELDA_SHEET.len && crc32fast::hash(&d[..ZELDA_SHEET.len]) == ZELDA_SHEET.crc)?;
@@ -444,7 +444,7 @@ pub fn zelda_art(rom: &Path, (sheet, palette): (u32, u32), header: u64, quest: &
 }
 
 /// `len` bytes of the file at `at`.
-fn bytes_at(f: &mut std::fs::File, at: u64, len: usize) -> Option<Vec<u8>> {
+fn bytes_at(f: &mut (impl std::io::Read + std::io::Seek), at: u64, len: usize) -> Option<Vec<u8>> {
     let mut b = vec![0; len];
     f.seek(SeekFrom::Start(at)).ok()?;
     f.read_exact(&mut b).ok()?;
@@ -492,7 +492,7 @@ fn picture(tiles: &[u8], (tw, th): (u32, u32), index: impl Fn(u32, u32) -> usize
 
 /// The pictures for `team` from the ROM at `rom`, by its `places`: whatever can be read; a row that can't is empty.
 pub fn art(rom: &Path, places: &Places, team: &TeamArt) -> Art {
-    let Ok(mut f) = std::fs::File::open(rom) else { return Art::default() };
+    let Ok(mut f) = crate::background_io::open(rom) else { return Art::default() };
     let len = f.metadata().map_or(0, |m| m.len()) as usize;
     let mut out = Art::default();
     // Each icon: its pointer, its palette's number, its first frame (4 x 4 tiles).
@@ -612,7 +612,7 @@ pub fn blz(b: &[u8]) -> Option<Vec<u8>> {
 
 /// A DS ROM's file system (NitroFS): the file id of `path` by the name table, then its (offset, size) by the
 /// allocation table.
-fn nitro_file(f: &mut std::fs::File, header: &[u8], path: &str) -> Option<(u32, u32)> {
+fn nitro_file(f: &mut (impl std::io::Read + std::io::Seek), header: &[u8], path: &str) -> Option<(u32, u32)> {
     let (fnt_at, fnt_len, fat_at, fat_len) = (u32le(header, 0x40), u32le(header, 0x44) as usize, u32le(header, 0x48), u32le(header, 0x4C) as usize);
     if fnt_len > DS_MAX_PART || fat_len > DS_MAX_PART {
         return None;
@@ -698,7 +698,7 @@ fn find_in(code: &[u8], mark: &Mark) -> Option<usize> {
 
 /// The icon palette numbers in a DS ROM's code: the main program (unpacked when its module parameters say it is
 /// packed), else each overlay (unpacked when the overlay table says so).
-fn ds_palette_numbers(f: &mut std::fs::File, header: &[u8], mark: &Mark) -> Option<Vec<u8>> {
+fn ds_palette_numbers(f: &mut (impl std::io::Read + std::io::Seek), header: &[u8], mark: &Mark) -> Option<Vec<u8>> {
     let (arm9_at, ram, arm9_len) = (u32le(header, 0x20), u32le(header, 0x28), u32le(header, 0x2C) as usize);
     let look = |code: &[u8]| find_in(code, mark).map(|o| code[o..o + mark.len].to_vec());
     if arm9_len <= DS_MAX_PART {
@@ -755,7 +755,7 @@ fn ds_icon_archive(kind: Kind) -> Option<&'static str> {
 
 fn find_nds_by(rom: &Path, kind: Kind, mark: &Mark) -> Option<NdsPlaces> {
     let path = ds_icon_archive(kind)?;
-    let mut f = std::fs::File::open(rom).ok()?;
+    let mut f = crate::background_io::open(rom).ok()?;
     let header = bytes_at(&mut f, 0, 0x200)?;
     let narc = nitro_file(&mut f, &header, path)?;
     let head = bytes_at(&mut f, narc.0 as u64, (narc.1 as usize).min(64 << 10))?;
@@ -771,14 +771,14 @@ fn find_nds_by(rom: &Path, kind: Kind, mark: &Mark) -> Option<NdsPlaces> {
 /// developer, for a ROM whose code doesn't hold the games' table. Never used when reading a player's game.
 pub fn snapshot_nds_places(rom: &Path, kind: Kind, numbers: Vec<u8>) -> Option<NdsPlaces> {
     let path = ds_icon_archive(kind)?;
-    let mut f = std::fs::File::open(rom).ok()?;
+    let mut f = crate::background_io::open(rom).ok()?;
     let header = bytes_at(&mut f, 0, 0x200)?;
     let narc = nitro_file(&mut f, &header, path)?;
     (numbers.len() >= DS_ICON_PALETTES.len).then_some(NdsPlaces { narc, numbers })
 }
 
 /// One file of the icon archive.
-fn narc_file(f: &mut std::fs::File, narc: (u32, u32), files: &[(usize, usize)], i: usize) -> Option<Vec<u8>> {
+fn narc_file(f: &mut (impl std::io::Read + std::io::Seek), narc: (u32, u32), files: &[(usize, usize)], i: usize) -> Option<Vec<u8>> {
     let (s, l) = *files.get(i)?;
     (s + l <= narc.1 as usize && l <= 64 << 10).then_some(())?;
     bytes_at(f, narc.0 as u64 + s as u64, l)
@@ -805,7 +805,7 @@ fn ds_icon(ncgr: &[u8], nclr: &[u8], n: usize) -> Option<Pic> {
 /// The DS team's icons from the ROM at `rom`, by its `places`: whatever can be read; none when one can't (a whole row
 /// or none). The DS games' badges are not drawn: the line counts them.
 pub fn nds_art(rom: &Path, places: &NdsPlaces, team: &TeamArt) -> Art {
-    let Ok(mut f) = std::fs::File::open(rom) else { return Art::default() };
+    let Ok(mut f) = crate::background_io::open(rom) else { return Art::default() };
     let Some(head) = bytes_at(&mut f, places.narc.0 as u64, (places.narc.1 as usize).min(64 << 10)) else { return Art::default() };
     let Some(files) = narc_files(&head) else { return Art::default() };
     let Some(nclr) = narc_file(&mut f, places.narc, &files, 0) else { return Art::default() };

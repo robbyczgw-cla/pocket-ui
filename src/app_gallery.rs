@@ -52,6 +52,7 @@ const FULL_ASKED: usize = 3;
 pub(crate) enum Event {
     /// The folder was read.
     Scanned(Index),
+    ScanDeferred,
     /// A screenshot was copied to the shelf's picture of its game (or was not).
     Shelf(Result<(), String>),
     /// The picture of the player's shelf was written (or was not): `app_share_shelf`.
@@ -62,6 +63,7 @@ pub(crate) struct GalleryUi {
     /// What the folder held at the last reading.
     pub index: Index,
     scanning: Arc<AtomicBool>,
+    deferred: bool,
     page: Option<Gallery>,
     /// Opened from a game's card: B goes back to it.
     over_card: bool,
@@ -80,6 +82,7 @@ impl Default for GalleryUi {
         GalleryUi {
             index: Index::default(),
             scanning: Arc::default(),
+            deferred: false,
             page: None,
             over_card: false,
             rom: None,
@@ -116,24 +119,42 @@ impl App {
 
     /// Reads the screenshots folder on a thread; the list comes back as `UserEvent::Gallery`. One at a time.
     pub(crate) fn gallery_refresh(&mut self, why: &'static str) {
+        if pocket_ui::background_io::paused() {
+            self.gallery.deferred = true;
+            return;
+        }
         if self.gallery.made_up.is_some() || self.gallery.scanning.swap(true, Ordering::SeqCst) {
             return;
         }
+        self.gallery.deferred = false;
         let (busy, proxy, dir) = (self.gallery.scanning.clone(), self.proxy.clone(), self.gallery_dir());
         let spawned = std::thread::Builder::new().name("gallery".into()).spawn(move || {
             let t0 = Instant::now();
-            let index = Index::load(&dir);
-            println!("gallery: {} screenshots ({why}) in {:?}", index.len(), t0.elapsed());
+            let result = pocket_ui::background_io::job(|| Index::load(&dir));
             busy.store(false, Ordering::SeqCst);
-            let _ = proxy.send_event(UserEvent::Gallery(Event::Scanned(index)));
+            let event = match result {
+                Some(index) => {
+                    println!("gallery: {} screenshots ({why}) in {:?}", index.len(), t0.elapsed());
+                    Event::Scanned(index)
+                }
+                None => Event::ScanDeferred,
+            };
+            let _ = proxy.send_event(UserEvent::Gallery(event));
         });
         if spawned.is_err() {
             self.gallery.scanning.store(false, Ordering::SeqCst);
         }
     }
 
+    pub(crate) fn gallery_resume(&mut self) {
+        if self.gallery.deferred && !pocket_ui::background_io::paused() {
+            self.gallery_refresh("after a game");
+        }
+    }
+
     pub(crate) fn gallery_event(&mut self, e: Event) {
         match e {
+            Event::ScanDeferred => self.gallery.deferred = true,
             Event::Scanned(index) => {
                 self.gallery.index = index;
                 self.gallery_page_refresh();
@@ -210,9 +231,9 @@ impl App {
                 rows.remove(i);
                 open.card.focus = None;
             }
-            // Before "Hide or delete", the last row.
+            // Before "Delete from the card" and "Hide from the shelf", the last rows.
             (None, Some(row)) => {
-                let at = rows.iter().position(|r| r.kind == RowKind::Manage).unwrap_or(rows.len());
+                let at = rows.iter().position(|r| matches!(r.kind, RowKind::Delete | RowKind::Hide)).unwrap_or(rows.len());
                 rows.insert(at, row);
                 open.card.focus = None;
             }
@@ -429,7 +450,7 @@ impl App {
             Some((m, true)) => (m.clone(), pal().alert),
             Some((m, false)) => (m.clone(), pal().chalk),
             // The full view says "3 of 12" at the top already.
-            None if page.shots().is_empty() || page.view == View::Full => (String::new(), pal().dust),
+            None if page.shots().is_empty() || page.view == View::Full || gallery_has_header_count(c.h) => (String::new(), pal().dust),
             None => (count_text(page.shots().len()), pal().dust),
         };
         let left = NU_PAD + NU_BTN_PAD;
@@ -459,15 +480,24 @@ impl App {
             Scope::All => SETTINGS_NAME.to_string(),
             Scope::Game(t) => t.clone(),
         };
-        let title = self.text.fit(Face::Title, 50, &title, pill_left - 24 - left);
-        self.text.draw(c, Face::Title, 50, left, pocket_ui::kit::header_title(c.h), pal().chalk, &title);
+        let baseline = pocket_ui::kit::header_title(c.h);
+        let mut title_right = pill_left - 24;
+        if gallery_has_header_count(c.h) && !page.shots().is_empty() {
+            let count = count_text(page.shots().len());
+            self.text.draw_right(c, Face::Body, NU_SMALL, title_right, baseline, pal().dust, &count);
+            title_right -= self.text.width(Face::Body, NU_SMALL, &count) + 24;
+        }
+        let title = self.text.fit(Face::Title, 50, &title, title_right - left);
+        self.text.draw(c, Face::Title, 50, left, baseline, pal().chalk, &title);
         let (mut top, mut bottom) = (pocket_ui::kit::header_bottom(c.h) + 12, pocket_ui::kit::hint_bar_top(c.h) - 16);
         // What a delete or Y came to may need its own line above the hints (`paint_gallery`): the list ends above it,
         // so the message never covers a row's name (the square CubeXX page ended a row right under it).
         if page.message.is_some() {
             bottom -= type_scale::line(NU_SMALL, 8) + 8;
         }
-        let (shot_h, gap) = (type_scale::row(92, 37) + type_scale::grow(28), 8);
+        let scale = |px| pocket_ui::kit::chrome(px, c.h);
+        let (shot_h, gap) = (scale(type_scale::row(92, 37) + type_scale::grow(28)), scale(8));
+        let day_h = scale(type_scale::row(56, 37));
         // The page's first row (every game's screenshots only): the picture of the player's shelf, to post. Fixed
         // above the list, it is what Up reaches from the first screenshot.
         let has_make = page.has_make_row();
@@ -480,8 +510,8 @@ impl App {
         if page.shots().is_empty() {
             let (head, line) = match (page.loaded, &page.scope) {
                 (false, _) => ("Looking for screenshots…", ""),
-                (true, Scope::All) => ("No screenshots yet", "Hold HOME and press A while you play to take one. It shows up here."),
-                (true, Scope::Game(_)) => ("No screenshots of this game", "Hold HOME and press A while you play to take one. It shows up here."),
+                (true, Scope::All) => ("No screenshots yet", "Press HOME + A while playing to snap a screenshot. It lands here."),
+                (true, Scope::Game(_)) => ("No screenshots of this game", "Press HOME + A while playing to snap a screenshot. It lands here."),
             };
             // A camera with a blank photo above the words once the folder is read (`kit::empty_state`).
             let base = top + 60 + type_scale::grow(37);
@@ -491,7 +521,6 @@ impl App {
         }
 
         let all = matches!(page.scope, Scope::All);
-        let day_h = type_scale::row(56, 37);
         let first = page.follow(bottom - top, (day_h, shot_h + gap));
         let rows = page.rows();
         let today = page.today;
@@ -535,11 +564,12 @@ impl App {
         pocket_ui::kit::shelf_row(c, x, y, w, h, selected);
         c.rect(x, y, STRIPE, h, if selected { pal().amber } else { pocket_ui::gfx::mix(pal().amber, pal().spine, 150) });
         let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
-        let (tx, ty) = (x + STRIPE + 16, y + (h - THUMB.1) / 2);
-        c.rect(tx, ty, THUMB.0, THUMB.1, pal().void);
+        let (tw, th) = (pocket_ui::kit::chrome(THUMB.0, c.h), pocket_ui::kit::chrome(THUMB.1, c.h));
+        let (tx, ty) = (x + STRIPE + 16, y + (h - th) / 2);
+        c.rect(tx, ty, tw, th, pal().void);
         let (mw, mh) = pocket_ui::ui_art::size(pocket_ui::ui_art::Art::Logo, 1);
-        pocket_ui::ui_art::paint(c, pocket_ui::ui_art::Art::Logo, tx + (THUMB.0 - mw) / 2, ty + (THUMB.1 - mh) / 2, 1);
-        let text_x = tx + THUMB.0 + 20;
+        pocket_ui::ui_art::paint(c, pocket_ui::ui_art::Art::Logo, tx + (tw - mw) / 2, ty + (th - mh) / 2, 1);
+        let text_x = tx + tw + 20;
         let block = type_scale::px(37) as i32 + 6 + type_scale::px(28) as i32;
         let top = y + (h - block) / 2;
         let base1 = top + type_scale::px(37) as i32 * 4 / 5;
@@ -559,18 +589,22 @@ impl App {
         c.rect(x, y, STRIPE, h, if selected { stripe(&shot.system) } else { pocket_ui::gfx::mix(stripe(&shot.system), pal().spine, 150) });
         let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
         // The small picture in a tile that is there before the picture is: nothing moves when it arrives.
-        let (tx, ty) = (x + STRIPE + 16, y + (h - THUMB.1) / 2);
-        c.rect(tx, ty, THUMB.0, THUMB.1, pal().void);
+        let (tw, th) = (pocket_ui::kit::chrome(THUMB.0, c.h), pocket_ui::kit::chrome(THUMB.1, c.h));
+        let (tx, ty) = (x + STRIPE + 16, y + (h - th) / 2);
+        c.rect(tx, ty, tw, th, pal().void);
         match self.gallery_thumb(&shot.path) {
-            Some(Some(img)) => c.blit_scaled(&img, tx + (THUMB.0 - img.w as i32) / 2, ty + (THUMB.1 - img.h as i32) / 2, img.w as i32, img.h as i32),
+            Some(Some(img)) => {
+                let (iw, ih) = (pocket_ui::kit::chrome(img.w as i32, c.h), pocket_ui::kit::chrome(img.h as i32, c.h));
+                c.blit_scaled(&img, tx + (tw - iw) / 2, ty + (th - ih) / 2, iw, ih);
+            }
             // A file that can't be read: a mark in the tile, so it is clear that it is the file, not the wait.
             Some(None) => {
                 let mw = self.text.width(Face::Title, 37, "?");
-                self.text.draw(c, Face::Title, 37, tx + (THUMB.0 - mw) / 2, ty + THUMB.1 / 2 + type_scale::base(13, 37), pal().dust, "?");
+                self.text.draw(c, Face::Title, 37, tx + (tw - mw) / 2, ty + th / 2 + type_scale::base(13, 37), pal().dust, "?");
             }
             None => {}
         }
-        let text_x = tx + THUMB.0 + 20;
+        let text_x = tx + tw + 20;
         let clock = if all { shot.when.clock() } else { format!("{}:{:02}", shot.when.clock(), shot.when.sec) };
         let clock_w = self.text.width(Face::Body, 28, &clock);
         if all {
@@ -674,7 +708,7 @@ impl App {
         let b1 = y + 60 + type_scale::px(50) as i32 + type_scale::px(28) as i32;
         self.text.draw(c, Face::Body, 28, x, b1, pal().dust, &what);
         let mut by = b1 + type_scale::line(28, 14);
-        for l in self.text.wrap_prose(Face::Body, 28, "It is taken off the SD card for good.", w).into_iter().take(2) {
+        for l in self.text.wrap_prose(Face::Body, 28, "Deleted permanently from the SD card.", w).into_iter().take(2) {
             self.text.draw(c, Face::Body, 28, x, by, pal().chalk, &l);
             by += type_scale::line(28, 8);
         }
@@ -791,6 +825,11 @@ impl App {
     }
 }
 
+/// The four hints leave too little room for the count on the Brick. Put it beside the title.
+fn gallery_has_header_count(h: i32) -> bool {
+    (740..960).contains(&h)
+}
+
 /// "3 of 12".
 fn g_place(page: &Gallery) -> String {
     page.place()
@@ -798,7 +837,7 @@ fn g_place(page: &Gallery) -> String {
 
 /// The page's first row.
 const MAKE_TITLE: &str = "My shelf as a picture";
-const MAKE_LINE: &str = "A picture of your cases to post. It is saved here.";
+const MAKE_LINE: &str = "A shelf snapshot ready to share. Saved here.";
 const MAKE_BUSY: &str = "Making the picture…";
 
 /// What Y came to, beside the hint bar (or above it, where four hints leave no room).

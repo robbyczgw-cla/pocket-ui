@@ -163,7 +163,7 @@ fn every_source_is_corrupt_so_nothing_reaches_the_installer() {
     let dest = dir.join("app");
     assert!(download_checked(&tools(), &rel, "http://unused/u.json", &dest, &Cancel::new(), &|_| {})
         .unwrap_err()
-        .contains("damaged"));
+        .contains("failed verification"));
     assert!(!dest.exists(), "no corrupt file can be installed or resumed");
 }
 

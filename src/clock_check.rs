@@ -68,7 +68,7 @@ pub fn page_line_in(clock: Clock, wifi: Option<bool>, no_chip: bool) -> Option<&
     match (clock, wifi) {
         (Clock::Fine, _) => None,
         (Clock::Wrong, _) if no_chip => Some("The clock looks wrong. Play history, the night light and the dates on saves follow it. Set it under Date and time."),
-        (Clock::Unsynced, _) if no_chip => Some("No Wi-Fi here, so the clock doesn't set itself."),
+        (Clock::Unsynced, _) if no_chip => Some("No Wi-Fi here, so set the clock manually."),
         (Clock::Wrong, Some(true)) => Some("The clock looks wrong. Play history, the night light and the dates on saves follow it. Set it under Date and time, or wait for network time to set it over Wi-Fi."),
         (Clock::Wrong, _) => Some("The clock looks wrong. Play history, the night light and the dates on saves follow it. Set it under Date and time, or turn Wi-Fi on."),
         (Clock::Unsynced, _) => Some("Wi-Fi is off, and no time server has set the clock since it started, so it may be a little off. Set it under Date and time, or turn Wi-Fi on."),
@@ -80,14 +80,44 @@ pub const SHELF_NOTICE: &str = "The clock looks wrong. Play history and the date
 /// [`SHELF_NOTICE`] on a handheld without Wi-Fi (`device::no_wifi_chip`).
 pub const SHELF_NOTICE_NO_WIFI: &str = "The clock looks wrong. Play history and the dates on saves will be off until it is set. Set it in Settings › System › Time.";
 
+/// [`SHELF_NOTICE`] in the dArkOS port: the clock is dArkOS's (no Time row there, `darkos::LEAVES_OUT`).
+pub const SHELF_NOTICE_DARKOS: &str = "The clock looks wrong. Play history and the dates on saves will be off until it is set. Set it in dArkOS.";
+
 /// The shelf's notice on this handheld.
-pub fn shelf_notice() -> &'static str {
-    crate::device::wifi_or(SHELF_NOTICE, SHELF_NOTICE_NO_WIFI)
+pub fn shelf_notice() -> Option<&'static str> {
+    let no_wifi = crate::device::no_wifi_chip();
+    let keeps_time = !no_wifi || persistent_clock(crate::device::current().model, std::path::Path::new("/sys/class/rtc/rtc0").exists());
+    shelf_notice_in(crate::device::darkos_port(), no_wifi, keeps_time)
+}
+
+fn persistent_clock(model: Option<crate::device::Model>, rtc: bool) -> bool {
+    // The R36S can expose the RK817's RTC for wake alarms without a separate battery to keep time.
+    rtc && !matches!(model, Some(crate::device::Model::Rk3326(board)) if board.key == "r36s")
+}
+
+fn shelf_notice_in(darkos: bool, no_wifi: bool, keeps_time: bool) -> Option<&'static str> {
+    if no_wifi && !keeps_time {
+        return None;
+    }
+    Some(if darkos { SHELF_NOTICE_DARKOS } else if no_wifi { SHELF_NOTICE_NO_WIFI } else { SHELF_NOTICE })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn r36s_test7_a_clock_that_cannot_stay_set_does_not_interrupt_the_shelf() {
+        let r36s = crate::device::RK3326_BOARDS.iter().find(|board| board.key == "r36s").unwrap();
+        assert!(!persistent_clock(Some(crate::device::Model::Rk3326(r36s)), true));
+        assert!(persistent_clock(None, true));
+        assert!(!persistent_clock(None, false));
+        assert_eq!(shelf_notice_in(false, true, false), None);
+        assert_eq!(shelf_notice_in(false, true, true), Some(SHELF_NOTICE_NO_WIFI));
+        assert_eq!(shelf_notice_in(false, false, false), Some(SHELF_NOTICE));
+        assert_eq!(shelf_notice_in(true, true, true), Some(SHELF_NOTICE_DARKOS));
+        assert!(page_line_in(Clock::Wrong, None, true).unwrap().contains("Date and time"));
+    }
 
     // 2026-10-25 12:00 UTC
     const BUILT: i64 = 1_792_929_600;

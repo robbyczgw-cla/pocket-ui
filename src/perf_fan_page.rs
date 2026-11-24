@@ -192,22 +192,22 @@ impl PerfFanPage {
             return ["ROCKNIX controls the fan on this device.".into(), "".into()];
         }
         let what = match row {
-            Row::GamesPerformance => "How fast the processor may run while you play.",
-            Row::GamesFan => "How early the fan starts while you play.",
-            Row::OutsideFan => "The fan on the shelf, in the lists and in Settings. While the Pocket sleeps it keeps the system's own cooling.",
-            Row::SmoothFan => "How the fan changes its speed.",
+            Row::GamesPerformance => "CPU speed limit during gameplay.",
+            Row::GamesFan => "How soon the fan ramps up in games.",
+            Row::OutsideFan => "Fan curve in menus and Settings. Sleep uses the system's default cooling.",
+            Row::SmoothFan => "How smoothly the fan ramps.",
         };
         let choice = match row {
             Row::GamesPerformance => match self.prefs.games_performance {
-                Performance::Battery if crate::device::current().model.is_some_and(|m| m.h700_class()) => "Battery: saves in menus and idle. Games keep their normal processor speed on this device.".to_string(),
-                Performance::Battery => "Battery: about half speed, which is enough for Game Boy and NES. The battery lasts longer.".to_string(),
-                Performance::Auto => "Auto: the system decides; it speeds up and slows down as the game needs it.".to_string(),
-                Performance::Performance => "Max: full speed all the time, for demanding games. Uses more battery and gets warmer.".to_string(),
+                Performance::Battery if crate::device::current().model.is_some_and(|m| m.h700_class()) => "Battery: throttles menus and idle; games keep full speed on this handheld.".to_string(),
+                Performance::Battery => "Battery: ~half speed for longer play (plenty for GB and NES).".to_string(),
+                Performance::Auto => "Auto: scales CPU speed up and down to match each game.".to_string(),
+                Performance::Performance => "Max: locked to full speed for heavy games. Runs warmer, uses more battery.".to_string(),
             },
             Row::GamesFan => fan_blurb(self.prefs.games_fan, self.prefs.smooth_fan),
             Row::OutsideFan => fan_blurb(self.prefs.outside_fan, self.prefs.smooth_fan),
             Row::SmoothFan if self.prefs.smooth_fan => format!(
-                "On: gently up and down with the temperature instead of on and off, in every game. Full speed above {} °C.",
+                "On: ramps gently with heat instead of pulsing, in every game. Full speed above {} °C.",
                 crate::fan_curve::GUARD_ON as i32
             ),
             Row::SmoothFan => "Off: the system's steps. Games: fan then only applies to games with a pause menu.".to_string(),
@@ -234,7 +234,7 @@ pub fn fan_blurb(f: Fan, smooth: bool) -> String {
             Fan::VeryQuiet => format!("Very quiet: fan only when it gets warm ({} °C); the Pocket feels a bit warmer.", Shape::VeryQuiet.start() as i32),
             Fan::Quiet => format!("Quiet: the fan starts slowly at {} °C and stays slow. The Pocket gets a little warmer.", Shape::Quiet.start() as i32),
             Fan::Cool => format!("Cool: the fan starts at {} °C and turns faster. Cooler to hold, and you hear it more.", Shape::Cool.start() as i32),
-            Fan::Auto => "Auto: follows the system's cooling profile, as a smooth curve.".to_string(),
+            Fan::Auto => "Auto: smooth curve matching the system's cooling profile.".to_string(),
         };
     }
     match (f, f.starts_at()) {
@@ -249,7 +249,7 @@ pub fn fan_blurb(f: Fan, smooth: bool) -> String {
 /// `PRECEDENCE_NOTE` for this device: no fan rows without a fan.
 pub fn precedence_note() -> &'static str {
     if crate::device::no_fan() {
-        return "A choice saved in the pause menu (Options › Speed, rumble, fan) wins over this one.";
+        return "Choices saved in the pause menu (Options › Speed, rumble, fan) override this.";
     }
     PRECEDENCE_NOTE
 }
@@ -379,7 +379,7 @@ mod tests {
         assert!(p.describe(Row::GamesPerformance)[1].contains("half speed"));
         assert!(p.describe(Row::GamesFan)[1].contains("52 °C"));
         assert!(p.describe(Row::OutsideFan)[1].contains("40 °C"));
-        assert!(p.describe(Row::OutsideFan)[0].contains("sleeps"));
+        assert!(p.describe(Row::OutsideFan)[0].contains("Sleep"));
         assert!(p.describe(Row::SmoothFan)[1].starts_with("Off: the system's steps"));
         p.prefs.outside_fan = Fan::Auto;
         assert_eq!(p.describe(Row::OutsideFan)[1], "Auto: the system's own cooling.");

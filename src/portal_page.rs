@@ -254,7 +254,7 @@ impl PortalPage {
         let lead = if self.online {
             format!("{} lets this Pocket in now. Games, the store and updates can go online.", self.ssid)
         } else {
-            "Hotel, train and café networks often ask you to accept their terms or type a room number before anything goes online.".to_string()
+            "Hotel, train and café Wi-Fi often need a browser login or terms check before going online.".to_string()
         };
         let again = format!("pocket-ui checks again every {RECHECK_SECS} seconds and says when you're online.");
         // Keep a fitting page exactly as it was. Otherwise close the spare gaps first, then make the prose a little
@@ -384,10 +384,10 @@ const FRONT_DESK: &str = "Ask the front desk";
 /// The other ways online, in the order most travellers have them at hand: heading and what to do.
 pub fn other_ways() -> [(&'static str, &'static str); 4] {
     [
-        ("Your phone's hotspot", "Turn on the hotspot on your phone and choose it on the Wi-Fi page. It uses your mobile data, and works on every network."),
-        ("Wi-Fi sharing from a phone", "Some phones (many Samsung Galaxy) can pass the hotel's Wi-Fi on: sign in on the phone, then turn on the hotspot with Wi-Fi sharing."),
-        (FRONT_DESK, "Many hotels and halls of residence can let a device in by its Wi-Fi address. Give them this one:"),
-        ("A travel router", "Sign in once on the router's page from your phone. The Pocket joins the router's own Wi-Fi and stays connected."),
+        ("Your phone's hotspot", "Enable your phone's hotspot and join it on the Wi-Fi page. Uses mobile data, works anywhere."),
+        ("Wi-Fi sharing from a phone", "Some phones (like Samsung Galaxy) can share hotel Wi-Fi: sign in on your phone, then turn on Wi-Fi sharing hotspot."),
+        (FRONT_DESK, "Many hotels and dorms can whitelist a device by its MAC address. Give them this one:"),
+        ("A travel router", "Sign in once via your travel router from your phone. The Pocket joins the router and stays online."),
     ]
 }
 

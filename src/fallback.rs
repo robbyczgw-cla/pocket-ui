@@ -119,6 +119,24 @@ pub fn core_missing_notice(name: &str) -> String {
     format!("{name} didn't start. The system's core may not be installed: add it in RetroArch (Flatpak) > Online Updater > Core Downloader.")
 }
 
+/// A pocket-core start that failed with no reason of pocket-core's own: a missing core says so ("cannot open shared object
+/// file", `missing_core_in`), a missing BIOS or a refused file too, so what is left is the emulator crashing while it loaded
+/// the game (a SIGSEGV writes no error file). 20.11.2026: the OS images said "the system's core may not be installed" here.
+pub fn core_crashed_notice(name: &str) -> String {
+    format!("{name} didn't start. Its emulator crashed while loading the game. Try again; if it crashes again, copy the game to the card again.")
+}
+
+/// What pocket-ui says when a failed pocket-core start has no other emulator to retry with (`retry_with` is false for
+/// `next`) and nothing explained it: on a system with none at all (`next` empty, the Brick) a damaged file or a BIOS,
+/// else (pocket-core again, the OS images) the emulator crashed.
+pub fn no_retry_notice(system: &str, name: &str, next: &str) -> String {
+    if next.is_empty() {
+        not_started_notice_on(system, name, None)
+    } else {
+        core_crashed_notice(name)
+    }
+}
+
 /// shared object file") name it. Returns the core's name from such a line.
 pub fn missing_core_in(reason: &str) -> Option<String> {
     let rest = reason.strip_prefix("load ")?;
@@ -153,6 +171,17 @@ mod tests {
 
     /// 20.11.2026, Brick: PPSSPP crashed, the retry went to "" ("emulator , core "), which exited at once with a
     /// "damaged file" notice. Only a real other emulator is a retry.
+    /// 20.11.2026, OS images: a core that crashed at the start (no error file) was told as "the system's core may not be
+    /// installed: add it in RetroArch"; a missing core says so itself (`missing_core_in`), so this is a crash.
+    #[test]
+    fn a_crash_at_the_start_is_told_as_a_crash_not_a_missing_core() {
+        let said = no_retry_notice("gba", "Metroid", "pocket-core");
+        assert!(said.starts_with("Metroid didn't start.") && said.contains("crashed"), "{said}");
+        assert!(!said.contains("may not be installed") && !said.contains("RetroArch"), "{said}");
+        assert_eq!(said, core_crashed_notice("Metroid"));
+        assert_eq!(no_retry_notice("gb", "Tetris", ""), not_started_notice_on("gb", "Tetris", None), "the Brick: no other emulator at all");
+    }
+
     #[test]
     fn no_retry_without_another_emulator() {
         assert!(!retry_with(""), "an empty next choice starts nothing");

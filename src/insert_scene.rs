@@ -101,25 +101,33 @@ pub struct Cue {
     pub db: f32,
 }
 
-/// The sounds of a start, all queued at A with their waits: the sound thread plays them on time. Quick: a quiet click as
-/// it goes in (`cabinet::IN_AT`). Cozy: the case opens, and the game goes into the console with its own sound, seated as
-/// it is in (`IN_AT_COZY`). A rig's disc (`disc_rig`): down on its spindle, a pause, and the lid or tray shuts with the
-/// rest of the sound; a front-loader's cartridge clicks with its own sound and the door shuts with that clunk. The case's
-/// opening sounds when the case visibly opens, not at A (`playful`: the rig's scene, else the plain animation).
-pub fn cues(cozy: bool, medium: Medium, disc_rig: bool, playful: bool) -> Vec<Cue> {
+/// The sounds of a start, queued at A. Quick uses a short click. Cozy opens the case, seats the game and shuts the
+/// mechanism when there is one. A front-loading NES slides the cartridge in before it presses it down.
+pub fn cues(cozy: bool, medium: Medium, game: Game, form: FormFactor, mechanism: Option<ir::Kind>, playful: bool) -> Vec<Cue> {
     let in_at = cabinet::in_at(cozy).saturating_sub(SOUND_LEAD);
     let at = |sound: Sound, moment: Duration, db: f32| Cue { sound, after: moment.saturating_sub(ui_sound::hit_at(sound)), db };
     if !cozy {
         return vec![at(Sound::Insert, in_at, ui_sound::QUICK_DB)];
     }
     let opens = if playful { ir::case_opens_at() } else { cabinet::plain_case_opens_at(true) };
-    let opening = Cue { sound: ui_sound::opening(medium), after: opens.saturating_sub(SOUND_LEAD + ui_sound::hit_at(ui_sound::opening(medium))), db: 0.0 };
-    if disc_rig {
-        // A front-loader's cartridge clicks as itself; its door drops shut with the lid's clunk.
-        let down = if medium.game().is_round() { Sound::DiscDrop } else { ui_sound::going_in(medium) };
-        vec![opening, at(down, in_at, 0.0), at(Sound::DiscShut, in_at + ir::SHUT_AFTER, 0.0)]
-    } else {
-        vec![opening, at(ui_sound::going_in(medium), in_at, 0.0)]
+    let opening = at(ui_sound::opening(medium), opens.saturating_sub(SOUND_LEAD), 0.0);
+    let insert = ui_sound::going_in(game, form);
+    let shut_at = in_at + ir::SHUT_AFTER;
+    match mechanism {
+        Some(ir::Kind::Door) if game == Game::Nes => {
+            let slide_at = in_at - Duration::from_millis(ir::PRESS_MS as u64);
+            vec![opening, at(Sound::NesSlide, slide_at, 0.0), at(Sound::NesPress, in_at, 0.0), at(Sound::NesDoorShut, shut_at, 0.0)]
+        }
+        Some(kind) => {
+            let down = if game.is_round() { Sound::DiscDrop } else { insert };
+            let shut = match (game, kind) {
+                (Game::Umd, _) => Sound::UmdShut,
+                (_, ir::Kind::Tray) => Sound::TrayShut,
+                _ => Sound::DiscShut,
+            };
+            vec![opening, at(down, in_at, 0.0), at(shut, shut_at, 0.0)]
+        }
+        None => vec![opening, at(insert, in_at, 0.0)],
     }
 }
 
@@ -217,7 +225,7 @@ pub fn scene_system(system: &str) -> &str {
     match system {
         // Their games are the bigger console's (a GBA Video is a GBA cartridge, PSP Minis go into the PSP, DSiWare into the DS).
         "gbav" => "gba",
-        "pspockets" => "psp",
+        "pspminis" => "psp",
         "ndsiware" => "nds",
         // Handhelds without a picture of their own: the closest we have. Landscape ones and the tiny Arduboy: the Game Gear; the
         // upright ones of the Game Boy's build: the Game Boy; the GP32 (a GBA-shaped handheld): the GBA; the Palm: the phone.
@@ -252,6 +260,7 @@ pub fn lights_up_only(system: &str) -> bool {
 }
 
 /// A rig's pictures, ready to paint: the console's at screen size, what moves at its own (drawn through a map).
+#[derive(Clone)]
 pub struct Rigged {
     pub rig: ir::Rig,
     /// The console's front, at the art's own size, for a console that turns round to its back first (the PSP).
@@ -269,11 +278,47 @@ pub struct Rigged {
     pub lid_lit: Option<Pic>,
     /// The front's display lit (`ir::Rig::front_display`), at the art's size as `front`; `front` has its glass dark then.
     pub front_lit: Option<Pic>,
-    /// A cartridge's edge, one column of its own plastic (`edge_of`), made the first time it turns and kept.
-    pub edge: std::cell::OnceCell<Pic>,
+    /// A cartridge's edge, one column of its own plastic (`edge_of`), keyed by cartridge picture pointer so a cached rig can be shared across games.
+    pub edge: std::cell::RefCell<Option<(usize, Rc<Pic>)>>,
     /// The see-through rows under the console's lowest visible one (`base` and `over` together): it stands on the floor
     /// by what is seen of it (18.11.: up to 30 of them under some consoles, which floated over the shelf's board).
     pub foot: i32,
+    /// What is seen of the console (`seen_box`), made once when the rig is prepared and kept.
+    pub seen: std::cell::OnceCell<(i32, i32, i32, i32)>,
+}
+
+/// Bounded thread-local cache of decoded and scaled rigs (`Rigged::cached_scaled`), so repeated launches and focus
+/// warm-up (`warm_rig_scaled`) never decode PNGs or run `scaled_smooth` on Frame 0 (Brick 1024x768, blocks = 1.36).
+const RIG_CACHE_KEEP: usize = 6;
+
+type RigCacheKey = (String, Option<&'static str>, u32);
+
+thread_local! {
+    static RIG_CACHE: std::cell::RefCell<Vec<(RigCacheKey, Option<Rc<Rigged>>)>> = const { std::cell::RefCell::new(Vec::new()) };
+    static RIG_LOADS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// How many rigs this thread decoded and scaled (cache misses), for tests and diagnostics.
+pub fn rig_loads() -> u32 {
+    RIG_LOADS.with(std::cell::Cell::get)
+}
+
+/// Decodes and scales `system`'s rig at `blocks` ahead of time into the cache (`Rigged::cached_scaled`); true if the system has one.
+pub fn warm_rig_scaled(system: &str, game: Game, blocks: f32) -> bool {
+    Rigged::cached_scaled(system, game, blocks).is_some()
+}
+
+fn rig_cache_key(system: &str, game: Game, blocks: f32) -> RigCacheKey {
+    let pic_id = crate::system_art::picture_id(system);
+    let id = if game == Game::SnesUs {
+        "snes-us"
+    } else if system == "famicom" {
+        "famicom"
+    } else {
+        pic_id
+    };
+    let colour = crate::system_art::colour(system).filter(|_| id == pic_id).map(|c| c.id);
+    (id.to_string(), colour, blocks.to_bits())
 }
 
 /// The see-through rows at the bottom of a picture `w` wide (nothing seen at all: none).
@@ -291,6 +336,36 @@ impl Rigged {
     /// `load` at any number of screen pixels per pixel of the art (not whole on a short screen).
     pub fn load_scaled(system: &str, game: Game, blocks: f32) -> Option<Rigged> {
         Self::of_files(ir::files(system, game)?, blocks)
+    }
+
+    /// Cached `load_scaled` (bypassed when `POCKETUI_RIG_ASSETS` overrides rig files from disk).
+    pub fn cached_scaled(system: &str, game: Game, blocks: f32) -> Option<Rc<Rigged>> {
+        if std::env::var_os("POCKETUI_RIG_ASSETS").is_some() {
+            RIG_LOADS.with(|n| n.set(n.get() + 1));
+            return Self::load_scaled(system, game, blocks).map(Rc::new);
+        }
+        let key = rig_cache_key(system, game, blocks);
+        let hit = RIG_CACHE.with(|c| {
+            let mut cache = c.borrow_mut();
+            let pos = cache.iter().position(|(k, _)| *k == key)?;
+            let entry = cache.remove(pos);
+            let val = entry.1.clone();
+            cache.push(entry);
+            Some(val)
+        });
+        if let Some(val) = hit {
+            return val;
+        }
+        RIG_LOADS.with(|n| n.set(n.get() + 1));
+        let built = Self::load_scaled(system, game, blocks).map(Rc::new);
+        RIG_CACHE.with(|c| {
+            let mut cache = c.borrow_mut();
+            if cache.len() >= RIG_CACHE_KEEP {
+                cache.remove(0);
+            }
+            cache.push((key, built.clone()));
+        });
+        built
     }
 
     /// The rig of `f` at `blocks` screen pixels per pixel of its art.
@@ -336,7 +411,9 @@ impl Rigged {
             }
         }
         let foot = std::iter::once(&base).chain(over.as_ref()).map(|p| clear_rows_below(&p.px, p.w as usize)).min().unwrap_or(0);
-        Some(Rigged { rig: f.rig, front, front_lit, base, over, top: f.top.and_then(|d| pic(&d)), under: f.under.and_then(|d| pic(&d)), scale: blocks, lit, lid_lit, edge: Default::default(), foot })
+        let seen = std::cell::OnceCell::new();
+        let _ = seen.set(seen_box(&base, over.as_ref()));
+        Some(Rigged { rig: f.rig, front, front_lit, base, over, top: f.top.and_then(|d| pic(&d)), under: f.under.and_then(|d| pic(&d)), scale: blocks, lit, lid_lit, edge: Default::default(), foot, seen })
     }
 }
 
@@ -505,6 +582,31 @@ fn fill_alpha(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, rgb: u32, alpha: u
 /// How much of the case still shows, 1-0: it fades while the medium leaves it.
 fn case_shown(st: cabinet::Insert) -> f32 {
     1.0 - ((st.carry - 0.3) / 0.4).clamp(0.0, 1.0)
+}
+
+/// The box (x, y, w, h, within the picture) of what is seen of a console's pictures: pixels more than a quarter opaque.
+/// Single row-major pass (a column-outer scan misses cache lines on the Brick's Cortex-A53).
+fn seen_box(base: &Pic, over: Option<&Pic>) -> (i32, i32, i32, i32) {
+    let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+    for pic in std::iter::once(base).chain(over) {
+        let (w, h) = (pic.w, pic.h);
+        for y in 0..h {
+            let row = &pic.px[(y * w) as usize..((y + 1) * w) as usize];
+            if let Some(left) = row.iter().position(|&p| p >> 24 > 0x40) {
+                let right = row.iter().rposition(|&p| p >> 24 > 0x40).unwrap();
+                x0 = x0.min(left as i32);
+                x1 = x1.max(right as i32 + 1);
+                y0 = y0.min(y);
+                y1 = y1.max(y + 1);
+            }
+        }
+    }
+    if x1 > x0 && y1 > y0 { (x0, y0, x1 - x0, y1 - y0) } else { (0, 0, base.w, base.h) }
+}
+
+/// Whether two boxes (x, y, w, h) overlap.
+fn overlap(a: (i32, i32, i32, i32), b: (i32, i32, i32, i32)) -> bool {
+    a.0 < b.0 + b.2 && b.0 < a.0 + a.2 && a.1 < b.1 + b.3 && b.1 < a.1 + a.3
 }
 
 /// How far on its way home (`case_back`) a case is in its row on the shelf, behind the stage the console stands on: from
@@ -743,6 +845,50 @@ impl Scene {
         ((cx - w / 2.0) as i32, (cy - h / 2.0) as i32, w as i32, h as i32)
     }
 
+    /// The case's box at `back` of its way home (`case_back`'s second part), as `with_case` moves it.
+    fn case_rect_at(&self, back: f32) -> (i32, i32, i32, i32) {
+        let r = (self.from.0, self.from.1, self.front.w, self.front.h);
+        let Some(home) = self.home.as_ref() else { return r };
+        let lerp = |a: f32, b: f32| a + (b - a) * back;
+        let (w, h) = (lerp(r.2 as f32, home.spine.w as f32), lerp(r.3 as f32, home.spine.h as f32));
+        let (cx, cy) = (lerp(r.0 as f32 + r.2 as f32 / 2.0, home.at.0), lerp(r.1 as f32 + r.3 as f32 / 2.0, home.at.1));
+        ((cx - w / 2.0) as i32, (cy - h / 2.0) as i32, w as i32, h as i32)
+    }
+
+    /// Whether the case, `elapsed` after A, is painted under the console standing at `console` (its box, risen): from where
+    /// its way home crosses behind the stage. It changes sides only where it is clear of the console (changing over it showed
+    /// as a jump, ritual 19.11.): the last point of its way up to half way home where it does not overlap it, else half way.
+    fn case_under(&self, elapsed: Duration, opens: bool, console: (i32, i32, i32, i32)) -> bool {
+        if !self.returning() {
+            return false;
+        }
+        let back = case_back(elapsed, opens).1;
+        if back <= 0.0 {
+            return false;
+        }
+        // Where it first comes over the console's box on its way home (by half way at the latest): it goes behind as it
+        // comes over it out of the clear and stays behind, never changing sides while it is over it.
+        const STEPS: i32 = 128;
+        let half = (CASE_IN_ROW * STEPS as f32) as i32;
+        let over_at = |b: f32| overlap(self.case_rect_at(b), console);
+        let over = |i: i32| over_at(i as f32 / STEPS as f32);
+        // The exact point it comes over, not the step after it: a 60 Hz frame between the two showed it over the console in
+        // front, and behind it the frame after (NDS at 633 ms).
+        let switch = (1..=half).find(|&i| over(i) && !over(i - 1)).map_or(CASE_IN_ROW, |i| {
+            let (mut clear, mut on) = ((i - 1) as f32 / STEPS as f32, i as f32 / STEPS as f32);
+            for _ in 0..24 {
+                let mid = (clear + on) / 2.0;
+                if over_at(mid) {
+                    on = mid;
+                } else {
+                    clear = mid;
+                }
+            }
+            on
+        });
+        back >= switch
+    }
+
     /// The case on its way back to its place in the row, for the rests check (`scene_check::case_over_console`): from half
     /// way it is in the row, behind the stage the console stands on; `under` says whether it was painted under the console.
     fn record_case(&self, elapsed: Duration, opens: bool, under: bool) {
@@ -757,7 +903,8 @@ impl Scene {
         let what = match (back >= CASE_IN_ROW, under) {
             (true, true) => "the case back in its row, under the console",
             (true, false) => "the case back in its row",
-            (false, _) => "the case on its way back to its row",
+            (false, true) => "the case on its way back to its row, under the console",
+            (false, false) => "the case on its way back to its row",
         };
         crate::scene_check::put(what, x, y, w, h, crate::scene_check::Rests::Held("going back into its row"), true);
     }
@@ -878,7 +1025,7 @@ impl Scene {
             }
             // The SP also needs its bottom-slot geometry in Quick and without playful motion.
             let sp = crate::system_art::picture_id(&self.system) == "gba-sp";
-            self.rig = ((self.cozy && crate::playful::on()) || sp).then(|| Rigged::load_scaled(&self.system, self.kind, blocks)).flatten().map(Rc::new);
+            self.rig = ((self.cozy && crate::playful::on()) || sp).then(|| Rigged::cached_scaled(&self.system, self.kind, blocks)).flatten();
             self.rig_asked = true;
         }
     }
@@ -886,10 +1033,19 @@ impl Scene {
     /// One moment of it, `elapsed` after A, over what is on `c`. `sprite` is the console's picture (`fitted` to the stage)
     /// for the plain animation.
     pub fn paint(&mut self, c: &mut Canvas, elapsed: Duration, sprite: Option<&Sprite>, stage: Stage) {
+        self.paint_with_dim(c, elapsed, sprite, stage, true);
+    }
+
+    /// As [`Scene::paint`], when the caller already dimmed the kept background page to `cabinet::insert_at(elapsed, cozy).dim`.
+    pub fn paint_dimmed(&mut self, c: &mut Canvas, elapsed: Duration, sprite: Option<&Sprite>, stage: Stage) {
+        self.paint_with_dim(c, elapsed, sprite, stage, false);
+    }
+
+    fn paint_with_dim(&mut self, c: &mut Canvas, elapsed: Duration, sprite: Option<&Sprite>, stage: Stage, apply_dim: bool) {
         if self.rig.is_some() {
-            self.paint_rig(c, elapsed, stage);
+            self.paint_rig(c, elapsed, stage, apply_dim);
         } else {
-            self.paint_plain(c, elapsed, sprite, stage);
+            self.paint_plain(c, elapsed, sprite, stage, apply_dim);
             self.paint_plain_display(c, elapsed, sprite, stage);
         }
         self.paint_tucked(c, elapsed);
@@ -963,7 +1119,7 @@ impl Scene {
     }
 
     /// Every system without a rig, and every system in Quick: the console comes up from below and the medium goes in.
-    fn paint_plain(&mut self, c: &mut Canvas, elapsed: Duration, sprite: Option<&Sprite>, Stage { floor, k }: Stage) {
+    fn paint_plain(&mut self, c: &mut Canvas, elapsed: Duration, sprite: Option<&Sprite>, Stage { floor, k }: Stage, apply_dim: bool) {
         let px = |n: i32| (n as f32 * k) as i32;
         let (system, ff, medium, from) = (self.system.clone(), self.ff, self.medium, self.from);
         let tint = self.look.color;
@@ -980,7 +1136,9 @@ impl Scene {
         } else {
             crate::playful::Keys::default()
         };
-        art::dim(c, 0, c.h, 256 - (st.dim * 256.0) as u32);
+        if apply_dim {
+            art::dim(c, 0, c.h, 256 - (st.dim * 256.0) as u32);
+        }
         crate::scene_check::new_layer();
         // The console, up from below the screen.
         let (sw, sh) = sprite.as_ref().map_or((px(360), px(120)), |s| (s.w as i32, s.h as i32));
@@ -1009,7 +1167,7 @@ impl Scene {
         }
         // From half way home the case is in its row, behind the stage the console stands on: painted before the console,
         // so the console stands in front of it (it went back into the row through the console, ritual 19.11.).
-        let case_under = self.returning() && case_back(elapsed, self.opens()).1 >= CASE_IN_ROW;
+        let case_under = self.case_under(elapsed, self.opens(), (sx, sy_final, sw, sh));
         if case_under {
             self.draw_case(c, elapsed, None, 256, st.dim, (0, c.h), true);
         }
@@ -1171,7 +1329,7 @@ impl Scene {
 
     /// A game going into its console's real mechanism (`insert_rig`, docs/DESIGN.md): the console comes up, the lid or
     /// tray opens, the game leaves its case and goes in behind the right parts, the lid shuts with the sound's clunk.
-    fn paint_rig(&mut self, c: &mut Canvas, elapsed: Duration, Stage { floor, k }: Stage) {
+    fn paint_rig(&mut self, c: &mut Canvas, elapsed: Duration, Stage { floor, k }: Stage, apply_dim: bool) {
         use ir::Mech;
         let Some(pics) = self.rig.clone() else { return };
         let (front, from, kind, medium) = (self.front.clone(), self.from, self.kind, self.medium);
@@ -1183,7 +1341,9 @@ impl Scene {
         // A power-on of a console that turned round to its back: it turns back to its front and lights there (`ir::pose_of`).
         let back = self.power_on.is_some() && pics.front_lit.is_some();
         let pose = ir::pose_of(rig.kind(), mechanism_time, back);
-        art::dim(c, 0, c.h, 256 - (st.dim * 256.0) as u32);
+        if apply_dim {
+            art::dim(c, 0, c.h, 256 - (st.dim * 256.0) as u32);
+        }
         crate::scene_check::new_layer();
         let (bw, bh) = (pics.base.w, pics.base.h);
         let px = |n: i32| (n as f32 * k) as i32;
@@ -1230,6 +1390,12 @@ impl Scene {
         let opens = kind.is_round() && rig.kind() != ir::Kind::Cart;
         let start = if opens { (fx + fw / 2.0, fy + fh / 2.0) } else { (fx + fw / 2.0 + pose.out * (fw / 2.0 + near_w * 0.45), fy + fh / 2.0) };
         let m = rig.medium_at(start, screen, (near_w, near_h), &pose, scale);
+        // What is seen of the console (its base and the layer over its slot), where it stands once up: the box the rests
+        // check knows it by (`scene_check::put_pics`); the case changes sides of it only where it comes over it.
+        let console_box = {
+            let (x0, y0, w, h) = *pics.seen.get_or_init(|| seen_box(&pics.base, pics.over.as_ref()));
+            (ox.round() as i32 + x0, top + y0, w, h)
+        };
         // Its rows from `rows.0` to `rows.1` (parts of its height, top first), at `shade`.
         // Turning round on its way to a rear slot, it is a thin box, not a card: its face is off its middle by half its
         // thickness and its edge shows beside it (`MediumAt::turn`), so it never thins to a line.
@@ -1241,9 +1407,18 @@ impl Scene {
             let face = if m.back { d / 2.0 * sin } else { -d / 2.0 * sin };
             (dir, face, half * cos - d / 2.0 * sin, d * sin)
         });
-        if edge.is_some() {
-            pics.edge.get_or_init(|| edge_of(&pic));
-        }
+        let edge_strip = edge.map(|_| {
+            let key = Rc::as_ptr(&pic) as usize;
+            let mut slot = pics.edge.borrow_mut();
+            if let Some((k, p)) = slot.as_ref() {
+                if *k == key {
+                    return p.clone();
+                }
+            }
+            let p = Rc::new(edge_of(&pic));
+            *slot = Some((key, p.clone()));
+            p
+        });
         let draw_part = |c: &mut Canvas, shade: u32, rows: (f32, f32)| {
             let face_pic = if m.back { self.game_back.as_deref().unwrap_or(&pic) } else { &pic };
             let (sx, sy) = (face_pic.w as f32 / 2.0, face_pic.h as f32 / 2.0);
@@ -1251,7 +1426,7 @@ impl Scene {
             let o = (at.0 - m.u.0 - m.v.0, at.1 - m.u.1 - m.v.1);
             let h = face_pic.h as f32;
             art::blit_affine_rows(c, face_pic, o, (m.u.0 / sx, m.u.1 / sx), (m.v.0 / sy, m.v.1 / sy), shade, all, (rows.0 * h, rows.1 * h));
-            if let (Some((dir, _, x0, w)), Some(strip)) = (edge, pics.edge.get()) {
+            if let (Some((dir, _, x0, w)), Some(strip)) = (edge, edge_strip.as_deref()) {
                 if w >= 0.5 {
                     let o = (m.at.0 + dir.0 * x0 - m.v.0, m.at.1 + dir.1 * x0 - m.v.1);
                     let sy = strip.h as f32 / 2.0;
@@ -1314,7 +1489,8 @@ impl Scene {
         }
         // From half way home the case is in its row, behind the stage the console stands on: under the console (as in
         // `paint_plain`).
-        let case_under = self.returning() && case_back(elapsed, opens).1 >= CASE_IN_ROW;
+        // Decided by where the console stands once up: while it rises into the case's way the case does not change sides.
+        let case_under = self.case_under(elapsed, opens, console_box);
         if case_under {
             self.draw_case(c, elapsed, opens.then_some(pose.out), case_fade, st.dim, all, true);
         }
@@ -1440,13 +1616,30 @@ impl Scene {
         if way_in_front && sink <= 0.0 {
             draw_medium(c);
         } else if way_in_front && sink < 1.0 {
-            let under = c.pixels().to_vec();
-            draw_medium(c);
             let keep = (sink * 255.0) as u32;
-            for (p, &u) in c.pixels_mut().iter_mut().zip(&under) {
-                if *p != u {
-                    *p = mix(*p, u, keep);
+            if let Some((sx0, sy0, sx1, sy1)) = rear_sink_bounds(&m, edge, c) {
+                let stride = c.stride();
+                let rw = sx1 - sx0;
+                let mut under = Vec::with_capacity((sy1 - sy0) * rw);
+                {
+                    let px = c.pixels();
+                    for row in sy0..sy1 {
+                        under.extend_from_slice(&px[row * stride + sx0..row * stride + sx1]);
+                    }
                 }
+                draw_medium(c);
+                let px = c.pixels_mut();
+                for (ry, row) in (sy0..sy1).enumerate() {
+                    let dst = &mut px[row * stride + sx0..row * stride + sx1];
+                    let src = &under[ry * rw..(ry + 1) * rw];
+                    for (p, &u) in dst.iter_mut().zip(src) {
+                        if *p != u {
+                            *p = mix(*p, u, keep);
+                        }
+                    }
+                }
+            } else {
+                draw_medium(c);
             }
         }
         // The console takes it: its power light comes on, a moment later its display (a handheld's start, `power_on`).
@@ -1525,6 +1718,48 @@ impl Scene {
 
 fn draw_lid(c: &mut Canvas, l: ir::Lid, pics: &Rigged, o: (f32, f32), open: f32, shade: u32) {
     draw_lid_as(c, l, pics, o, open, shade, true);
+}
+
+/// Tight screen-pixel bounding box `(sx0, sy0, sx1, sy1)` covering `draw_medium` (both face and edge strip) so
+/// `REAR_SINK_FROM` only saves and blends the medium's pixels instead of cloning the full framebuffer.
+fn rear_sink_bounds(m: &ir::MediumAt, edge: Option<((f32, f32), f32, f32, f32)>, c: &Canvas) -> Option<(usize, usize, usize, usize)> {
+    let stride = c.stride();
+    let rows = c.pixels().len() / stride.max(1);
+    if stride == 0 || rows == 0 {
+        return None;
+    }
+    let at = edge.map_or(m.at, |(dir, off, _, _)| (m.at.0 + dir.0 * off, m.at.1 + dir.1 * off));
+    let dx = m.u.0.abs() + m.v.0.abs();
+    let dy = m.u.1.abs() + m.v.1.abs();
+    let mut min_x = at.0 - dx;
+    let mut max_x = at.0 + dx;
+    let mut min_y = at.1 - dy;
+    let mut max_y = at.1 + dy;
+    if let Some((dir, _, x0, w)) = edge {
+        if w >= 0.5 {
+            let o = (m.at.0 + dir.0 * x0 - m.v.0, m.at.1 + dir.1 * x0 - m.v.1);
+            let ex = dir.0 * w;
+            let ey = dir.1 * w;
+            let vx = 2.0 * m.v.0;
+            let vy = 2.0 * m.v.1;
+            for (px, py) in [(o.0, o.1), (o.0 + ex, o.1 + ey), (o.0 + vx, o.1 + vy), (o.0 + ex + vx, o.1 + ey + vy)] {
+                min_x = min_x.min(px);
+                max_x = max_x.max(px);
+                min_y = min_y.min(py);
+                max_y = max_y.max(py);
+            }
+        }
+    }
+    let pad = 4.0;
+    let dx0 = (min_x - pad).floor() as i32;
+    let dx1 = (max_x + pad).ceil() as i32;
+    let dy0 = (min_y - pad).floor() as i32;
+    let dy1 = (max_y + pad).ceil() as i32;
+    let sx0 = (c.screen_x(dx0) - 1).clamp(0, stride as i32) as usize;
+    let sx1 = (c.screen_x(dx1) + 2).clamp(0, stride as i32) as usize;
+    let sy0 = (c.screen_y(dy0) - 1).clamp(0, rows as i32) as usize;
+    let sy1 = (c.screen_y(dy1) + 2).clamp(0, rows as i32) as usize;
+    (sx0 < sx1 && sy0 < sy1).then_some((sx0, sy0, sx1, sy1))
 }
 
 /// A clamshell's lit display (`Rigged::lid_lit`) over its lid drawn open `open` (`draw_lid`), `amount` (0-1) of the way to its
@@ -1724,6 +1959,7 @@ mod tests {
                 front_lit: rig.front_lit.clone(),
                 edge: Default::default(),
                 foot: rig.foot,
+                seen: Default::default(),
             });
             let paint = |s: &mut Scene, ms: u64| {
                 let mut buf = vec![0u32; w * h];
@@ -1770,6 +2006,23 @@ mod tests {
         let front = Rc::new(Pic::new(120, 180, 0xff40_6080));
         let game = Rc::new(Pic::new(90, 90, 0xffc0_c0c0));
         Scene { system: system.into(), ff: FormFactor::of(hardware), medium, look, title: "T".into(), kind, has_cover: false, front, from: (40, 40, 120, 180), game: Some(game), game_back: None, cozy, at_drive: None, rig: None, rig_asked: false, home: None, power_on: None, plain_lit: None, plain_foot: None, tucked: Vec::new(), tuck_p: None }
+    }
+
+    /// 0.6 Brick (1024x768, blocks = 2.0 * 1.7 / 2.5 = 1.36): repeated launches of the same system must reuse the
+    /// decoded and scaled rig instead of decoding PNGs and running scaled_smooth again on Frame 0.
+    #[test]
+    fn brick_rig_is_cached_across_launches() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        let blocks = ir::SCALE * (crate::media::SHORT_SHELF_SCALE / crate::media::SHELF_SCALE);
+        for system in ["snes", "psx", "gba"] {
+            let (mut a, mut b) = (scene(system, true), scene(system, true));
+            a.load_rig_scaled(blocks);
+            b.load_rig_scaled(blocks);
+            let ra = a.rig.as_ref().unwrap_or_else(|| panic!("{system}: rig missing"));
+            let rb = b.rig.as_ref().unwrap_or_else(|| panic!("{system}: rig missing"));
+            assert!(Rc::ptr_eq(ra, rb), "{system}: rig at blocks={blocks} was decoded and scaled anew on launch 2");
+        }
     }
 
     fn frame(s: &mut Scene, ms: u64, stage: Stage) -> Vec<u32> {
@@ -1893,7 +2146,7 @@ mod tests {
         crate::motion::set_cozy(true);
         let mut s = scene("gba-sp", true);
         s.load_rig(2);
-        let r = Rc::get_mut(s.rig.as_mut().expect("SP hardware")).unwrap();
+        let r = Rc::make_mut(s.rig.as_mut().expect("SP hardware"));
         let over = r.over.as_mut().expect("SP controls and slot rim");
         // Mark the D-pad on the actual foreground picture. It must be hidden by the
         // closed outer lid, then visible once the photographed screen swings up.
@@ -1947,7 +2200,7 @@ mod tests {
             let mut s = scene("psx", cozy);
             s.load_rig(2);
             assert!(s.rig.is_none());
-            assert_eq!(cues(cozy, Medium::of("psx"), false, true).iter().map(|c| c.sound).collect::<Vec<_>>(), [Sound::Insert]);
+            assert_eq!(cues(cozy, Medium::of("psx"), Game::of("psx", "game.rom"), FormFactor::of("psx"), None, true).iter().map(|c| c.sound).collect::<Vec<_>>(), [Sound::Insert]);
         }
         assert!(cabinet::starts_cozy(true, Full));
     }
@@ -1980,17 +2233,17 @@ mod tests {
     #[test]
     fn each_sound_hits_on_its_moment_of_the_picture() {
         let hit = |c: &Cue| c.after + ui_sound::hit_at(c.sound) + SOUND_LEAD;
-        let disc = cues(true, Medium::of("psx"), true, true);
-        assert_eq!(disc.iter().map(|c| c.sound).collect::<Vec<_>>(), [Sound::CaseOpen, Sound::DiscDrop, Sound::DiscShut]);
+        let disc = cues(true, Medium::of("psx"), Game::of("psx", "game.rom"), FormFactor::of("psx"), Some(ir::Kind::Lid), true);
+        assert_eq!(disc.iter().map(|c| c.sound).collect::<Vec<_>>(), [Sound::JewelOpen, Sound::DiscDrop, Sound::DiscShut]);
         assert_eq!(hit(&disc[1]), cabinet::IN_AT_COZY);
         assert_eq!(hit(&disc[2]), cabinet::IN_AT_COZY + ir::SHUT_AFTER);
-        let cart = cues(true, Medium::of("snes"), false, true);
+        let cart = cues(true, Medium::of("snes"), Game::of("snes", "game.rom"), FormFactor::of("snes"), None, true);
         assert_eq!(cart[0].sound, ui_sound::opening(Medium::of("snes")));
         assert_eq!((cart[1].sound, hit(&cart[1])), (Sound::CartIn, cabinet::IN_AT_COZY));
         // The plain animation's disc keeps the whole sound, on the same moment.
-        let plain = cues(true, Medium::of("psp"), false, true);
+        let plain = cues(true, Medium::of("psp"), Game::of("psp", "game.rom"), FormFactor::of("psp"), None, true);
         assert_eq!(hit(&plain[1]), cabinet::IN_AT_COZY);
-        let quick = cues(false, Medium::of("psx"), false, true);
+        let quick = cues(false, Medium::of("psx"), Game::of("psx", "game.rom"), FormFactor::of("psx"), None, true);
         assert_eq!((hit(&quick[0]), quick[0].db), (cabinet::IN_AT, ui_sound::QUICK_DB));
     }
 
@@ -2183,6 +2436,81 @@ mod tests {
                 assert!(((a.3 - a.1) as f32) / (h as f32) <= (lh as f32 / HANDHELD_SCREEN.1 as f32) * 1.1 || h > w, "{system} {n} on {w}x{h}: no larger against the screen than on the handhelds");
             }
         }
+    }
+
+    /// Ritual 19.11.: a case going home and a game going into a slot at the back changed sides of the console (in front,
+    /// behind) while they overlapped it, which shows as a jump through it. Every console with its own mechanism, every 60 Hz
+    /// frame of the start: the case's and the game's side may change only where they are clear of the console.
+    #[test]
+    fn the_case_and_the_game_change_sides_of_the_console_only_clear_of_it() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        let rigs: Vec<&str> = ir::rig_ids().collect();
+        let next = std::sync::atomic::AtomicUsize::new(0);
+        let wrong = std::sync::Mutex::new(Vec::new());
+        let workers = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).clamp(1, 4).min(rigs.len().max(1));
+        std::thread::scope(|scope| {
+            for _ in 0..workers {
+                let (rigs, next, wrong) = (&rigs, &next, &wrong);
+                scope.spawn(move || {
+                    crate::motion::set_cozy(true);
+                    let mut local = Vec::new();
+                    loop {
+                        let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some(&system) = rigs.get(i) else { break };
+                        let mut s = scene(system, true);
+                        // Its place in the row on the shelf, low behind where the console stands (as on a handheld's screen).
+                        s.home = Some(Home { spine: Rc::new(Pic::new(20, 180, 0xffe0_2010)), at: (360.0, 930.0), scale: 1.0 });
+                        s.load_rig(2);
+                        if s.rig.is_none() {
+                            continue;
+                        }
+                        crate::scene_check::record(true);
+                        let mut last: Option<(Option<(bool, bool)>, Option<(bool, bool)>)> = None;
+                        let mut hidden = false;
+                        let mut ms = 0.0f32;
+                        while ms < cabinet::INSERT_COZY.as_secs_f32() * 1000.0 {
+                            crate::scene_check::take();
+                            let _ = frame(&mut s, ms as u64, STAGE);
+                            let (objs, _) = crate::scene_check::take();
+                            let console = objs.iter().find(|o| o.what.starts_with("the console ("));
+                            let side = |prefix: &str| objs.iter().find(|o| o.what.starts_with(prefix)).map(|o| (o.what.contains("under the console"), o));
+                            let (case, game) = (side("the case "), None::<(bool, &crate::scene_check::Obj)>);
+                            // A change of sides shows as a jump when it is over the console before and after it (coming over it out of
+                            // the clear and going behind there is not one).
+                            if let (Some(con), Some((before_case, before_game))) = (console, last) {
+                                for (now, was, what) in [(case, before_case, "the case"), (game, before_game, "the game")] {
+                                    if let (Some((under, o)), Some((was_under, was_over))) = (now, was) {
+                                        let over = o.x < con.x + con.w && con.x < o.x + o.w && o.y < con.y + con.h && con.y < o.y + o.h;
+                                        if under != was_under && over && was_over {
+                                            local.push(format!("{system} {ms:.0} ms: {what} changes sides over the console ({} at {},{} {}x{}, the console at {},{} {}x{})", o.what, o.x, o.y, o.w, o.h, con.x, con.y, con.w, con.h));
+                                        }
+                                    }
+                                }
+                            }
+                            // Behind the console and over it, then clear of it again before it is in: it flew through it.
+                            if let (Some(con), Some((under, o))) = (console, game) {
+                                let over = o.x < con.x + con.w && con.x < o.x + o.w && o.y < con.y + con.h && con.y < o.y + o.h;
+                                if under && over {
+                                    hidden = true;
+                                } else if hidden && !over {
+                                    local.push(format!("{system} {ms:.0} ms: the game went behind the console and comes out clear of it on its way"));
+                                    hidden = false;
+                                }
+                            }
+                            let over_con = |o: &crate::scene_check::Obj| {
+                                console.is_some_and(|con| o.x < con.x + con.w && con.x < o.x + o.w && o.y < con.y + con.h && con.y < o.y + o.h)
+                            };
+                            last = Some((case.map(|c| (c.0, over_con(c.1))), game.map(|g| (g.0, over_con(g.1)))));
+                            ms += 1000.0 / 60.0;
+                        }
+                        crate::scene_check::record(false);
+                    }
+                    wrong.lock().unwrap().extend(local);
+                });
+            }
+        });
+        let wrong = wrong.into_inner().unwrap();
+        assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     }
 
     #[test]
@@ -2428,7 +2756,7 @@ mod tests {
     /// without any picture of their own.
     const HANDHELDS: &[&str] = &[
         "gb", "gbh", "gbc", "gbch", "gba", "gbah", "gamegear", "ggh", "ngp", "ngpc", "wonderswan", "wonderswancolor", "atarilynx", "lynx", "virtualboy", "pokemini",
-        "supervision", "gamate", "gameandwatch", "arduboy", "pico-8", "tic-80", "psp", "pspockets", "nds", "3ds", "n3ds", "psvita",
+        "supervision", "gamate", "gameandwatch", "arduboy", "pico-8", "tic-80", "psp", "pspminis", "nds", "3ds", "n3ds", "psvita",
     ];
     /// Handhelds with a rig and a display in it (`rig.json`): the power light, then the display on the console's picture.
     const RIG_DISPLAYS: &[&str] = &["gb", "gbc", "gba", "gamegear", "nds", "3ds", "ngpc", "ngp", "atarilynx", "wonderswan"];
@@ -2712,7 +3040,7 @@ mod tests {
     /// Every handheld of ROCKNIX's list (and the phone), by the ids a library has them under.
     const EVERY_HANDHELD: &[&str] = &[
         "arduboy", "atarilynx", "gameandwatch", "gamate", "gb", "gbh", "gbc", "gbch", "gba", "gbah", "gbav", "gamegear", "ggh", "gp32", "j2me", "megaduck", "nds", "ndsiware", "3ds", "n3ds",
-        "ngp", "ngpc", "palm", "pico-8", "pokemini", "psp", "pspockets", "psvita", "supervision", "tic-80", "virtualboy", "wonderswan", "wonderswancolor",
+        "ngp", "ngpc", "palm", "pico-8", "pokemini", "psp", "pspminis", "psvita", "supervision", "tic-80", "virtualboy", "wonderswan", "wonderswancolor",
     ];
 
     /// 15.11. (tester, RG353: "NGP/NGPC should look like GBA"; Ritual review 14.11. found, too, that GP32, Mega Duck, Palm, DSiWare and
@@ -2885,10 +3213,13 @@ mod tests {
             (front, game)
         };
         let first = measure(&frame(&mut s, 0, STAGE));
-        (0..1400u64).step_by(2).find(|ms| {
-            let now = measure(&frame(&mut s, *ms, STAGE));
+        let opened = |s: &mut Scene, ms: u64| {
+            let now = measure(&frame(s, ms, STAGE));
             (now.0 as f32) < first.0 as f32 * 0.995 || now.1 > first.1 + 4
-        })
+        };
+        // Coarse 20 ms scan then 2 ms refinement: finds the exact same 2 ms opening timestamp with ~10x fewer renders.
+        let hi = (0..1400u64).step_by(20).find(|&ms| opened(&mut s, ms))?;
+        (hi.saturating_sub(18)..=hi).step_by(2).find(|&ms| opened(&mut s, ms))
     }
 
     /// The case's opening sounds when the case opens on the screen: its cover has begun to swing, or its cartridge or card to
@@ -2896,8 +3227,8 @@ mod tests {
     /// first). Measured on the painted frames, every 2 ms, against the moment the cue hits.
     #[test]
     fn the_case_sound_comes_when_the_case_visibly_opens_on_every_console() {
-        let hit = |system: &str, disc_rig: bool, playful: bool| {
-            let c = &cues(true, Medium::of(system), disc_rig, playful)[0];
+        let hit = |system: &str, mechanism: Option<ir::Kind>, playful: bool| {
+            let c = &cues(true, Medium::of(system), Game::of(system, "game.rom"), FormFactor::of(system), mechanism, playful)[0];
             (c.after + ui_sound::hit_at(c.sound) + SOUND_LEAD).as_millis() as i64
         };
         let mut failures = Vec::new();
@@ -2905,19 +3236,129 @@ mod tests {
             "psx", "ps2", "saturn", "dreamcast", "gamecube", "psp", "nes", "snes", "n64", "gba", "gb", "gbc", "nds", "3ds", "megadrive", "gamegear",
             "mastersystem", "pcengine", "xbox", "wii",
         ] {
-            let disc_rig = crate::insert_rig::takes_disc(system, Game::of(system, "x.rom"));
+            let mechanism = crate::insert_rig::moving_kind(system, Game::of(system, "x.rom"));
             let seen = visible_open_ms(system, true).expect(system) as i64;
-            if (hit(system, disc_rig, true) - seen).abs() > 60 {
-                failures.push(format!("{system}: sound at {} ms, the case opens at {seen} ms", hit(system, disc_rig, true)));
+            if (hit(system, mechanism, true) - seen).abs() > 60 {
+                failures.push(format!("{system}: sound at {} ms, the case opens at {seen} ms", hit(system, mechanism, true)));
             }
         }
         // Without Playful the plain animation's case (consoles with a cartridge or card, drawn the same way).
         for system in ["nes", "snes", "n64", "gba", "gb", "gbc", "nds", "3ds", "megadrive", "gamegear", "mastersystem", "pcengine"] {
             let seen = visible_open_ms(system, false).expect(system) as i64;
-            if (hit(system, false, false) - seen).abs() > 60 {
-                failures.push(format!("{system} (plain): sound at {} ms, the case opens at {seen} ms", hit(system, false, false)));
+            if (hit(system, None, false) - seen).abs() > 60 {
+                failures.push(format!("{system} (plain): sound at {} ms, the case opens at {seen} ms", hit(system, None, false)));
             }
         }
         assert!(failures.is_empty(), "the case sound is not on the case opening:\n{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn seen_box_row_major_matches_column_scan() {
+        let mut base = Pic::new(40, 30, 0);
+        let mut over = Pic::new(40, 30, 0);
+        base.px[7 * 40 + 5] = 0xff11_2233;
+        base.px[21 * 40 + 29] = 0xff44_5566;
+        over.px[3 * 40 + 34] = 0xff77_8899;
+        over.px[25 * 40 + 12] = 0xffaa_bbcc;
+        assert_eq!(seen_box(&base, None), (5, 7, 25, 15));
+        assert_eq!(seen_box(&base, Some(&over)), (5, 3, 30, 23));
+        assert_eq!(seen_box(&Pic::new(10, 10, 0), None), (0, 0, 10, 10));
+    }
+
+    #[test]
+    fn paint_dimmed_matches_paint_after_pre_dimming_canvas() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        let bg = 0xff3a_4f68u32;
+        for system in ["snes", "psx", "gba"] {
+            let mut a = scene(system, true);
+            let mut b = scene(system, true);
+            let blocks = ir::SCALE * (1.7 / 2.5);
+            a.load_rig_scaled(blocks);
+            b.load_rig_scaled(blocks);
+            a.game = Some(Rc::new(Pic::new(80, 90, 0xffaa_6633)));
+            b.game = a.game.clone();
+            let stage = Stage { floor: 660, k: 1.7 / 2.5 };
+            for ms in [0u64, 150, 420, 700, 1050] {
+                let elapsed = Duration::from_millis(ms);
+                let mut buf_a = vec![bg; 1024 * 768];
+                let mut buf_b = vec![bg; 1024 * 768];
+                a.paint(&mut Canvas::new(&mut buf_a, 1024, 768), elapsed, None, stage);
+                let keep = 256 - (cabinet::insert_at(elapsed, true).dim * 256.0) as u32;
+                if keep < 256 {
+                    for p in &mut buf_b {
+                        *p = ((*p & 0xff00ff) * keep >> 8 & 0xff00ff) | ((*p & 0x00ff00) * keep >> 8 & 0x00ff00);
+                    }
+                }
+                b.paint_dimmed(&mut Canvas::new(&mut buf_b, 1024, 768), elapsed, None, stage);
+                assert_eq!(buf_a, buf_b, "{system} at {ms} ms: paint_dimmed differed from paint");
+            }
+        }
+    }
+
+    #[test]
+    fn rear_sink_bounds_covers_every_pixel_drawn_by_handheld_sink() {
+        crate::cozy_extras::set(crate::cozy_extras::Extras::default());
+        crate::motion::set_cozy(true);
+        let mut s = scene("gba", true);
+        let blocks = ir::SCALE * (1.7 / 2.5);
+        s.load_rig_scaled(blocks);
+        s.game = Some(Rc::new(Pic::new(80, 90, 0xffcc_3344)));
+        let stage = Stage { floor: 660, k: 1.7 / 2.5 };
+        // Paint every frame across the rear-sink window at both n=1 (1024x768) and n=2 (640x480) and verify the tight
+        // bounding box strictly covers all pixels drawn by the medium and stays inside canvas bounds.
+        let pics = s.rig.as_ref().expect("gba rig").clone();
+        let (bw, bh) = (pics.base.w, pics.base.h);
+        let ox = ((1024 - bw) / 2) as f32;
+        let top = stage.floor - bh + pics.foot;
+        let beside = s.kind.size_beside(s.medium, s.from.3);
+        let (near_w, near_h) = (beside.0 as f32, beside.1 as f32);
+        let (fx, fy, fw, fh) = (s.from.0 as f32, s.from.1 as f32, s.from.2 as f32, s.from.3 as f32);
+        let mut checked_sink = 0u32;
+        for ms in (300..=1100u64).step_by(20) {
+            let elapsed = Duration::from_millis(ms);
+            let mut buf = vec![0xff20_2530u32; 1024 * 768];
+            s.paint(&mut Canvas::new(&mut buf, 1024, 768), elapsed, None, stage);
+            let mut small = vec![0xff20_2530u32; 640 * 480];
+            s.paint(&mut Canvas::screen(&mut small, (640, 480), 2), elapsed, None, stage);
+            // When in the rear-sink window, verify rear_sink_bounds encloses every pixel modified by blitting the medium.
+            let st = cabinet::insert_at(elapsed, true);
+            let pose = ir::pose_of(pics.rig.kind(), elapsed, false);
+            if pose.fly > REAR_SINK_FROM && pose.fly < 1.0 {
+                checked_sink += 1;
+                let oy = top as f32 + (1.0 - st.rise) * (bh + (160.0 * stage.k) as i32).max(768 - top) as f32 + pose.dip * pics.scale;
+                let screen = |p: (f32, f32)| (ox + p.0 * pics.scale, oy + p.1 * pics.scale);
+                let start = (fx + fw / 2.0 + pose.out * (fw / 2.0 + near_w * 0.45), fy + fh / 2.0);
+                let m = pics.rig.medium_at(start, screen, (near_w, near_h), &pose, pics.scale);
+                let edge = m.turn.map(|(angle, full)| {
+                    let half = full.0.hypot(full.1).max(0.5);
+                    let dir = (full.0 / half, full.1 / half);
+                    let d = 2.0 * half * ir::thickness(s.kind);
+                    let (sin, cos) = angle.sin_cos();
+                    let face = if m.back { d / 2.0 * sin } else { -d / 2.0 * sin };
+                    (dir, face, half * cos - d / 2.0 * sin, d * sin)
+                });
+                let mut probe = vec![0xff10_1010u32; 1024 * 768];
+                let mut c = Canvas::new(&mut probe, 1024, 768);
+                let (sx0, sy0, sx1, sy1) = rear_sink_bounds(&m, edge, &c).expect("bounds");
+                let pic = s.game.as_ref().unwrap();
+                let at = edge.map_or(m.at, |(dir, off, _, _)| (m.at.0 + dir.0 * off, m.at.1 + dir.1 * off));
+                let o = (at.0 - m.u.0 - m.v.0, at.1 - m.u.1 - m.v.1);
+                art::blit_affine_rows(&mut c, pic, o, (m.u.0 / (pic.w as f32 / 2.0), m.u.1 / (pic.w as f32 / 2.0)), (m.v.0 / (pic.h as f32 / 2.0), m.v.1 / (pic.h as f32 / 2.0)), 256, (0, 768), (0.0, pic.h as f32));
+                if let Some((dir, _, x0, w)) = edge.filter(|(_, _, _, w)| *w >= 0.5) {
+                    let strip = edge_of(pic);
+                    let eo = (m.at.0 + dir.0 * x0 - m.v.0, m.at.1 + dir.1 * x0 - m.v.1);
+                    art::blit_affine_rows(&mut c, &strip, eo, (dir.0 * w, dir.1 * w), (m.v.0 / (strip.h as f32 / 2.0), m.v.1 / (strip.h as f32 / 2.0)), 256, (0, 768), (0.0, strip.h as f32));
+                }
+                for y in 0..768usize {
+                    for x in 0..1024usize {
+                        if probe[y * 1024 + x] != 0xff10_1010 {
+                            assert!(x >= sx0 && x < sx1 && y >= sy0 && y < sy1, "ms={ms}: pixel ({x},{y}) outside rear_sink_bounds ({sx0}..{sx1}, {sy0}..{sy1})");
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked_sink >= 4, "expected rear-sink frames in 300..=1100 ms, saw {checked_sink}");
     }
 }

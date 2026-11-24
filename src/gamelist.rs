@@ -1,6 +1,7 @@
 //! What people bring from EmulationStation: the per-system `gamelist.xml` (ES, ROCKNIX ES, KNULLI/Batocera, ES-DE) with
 //! scraped names, descriptions, ratings, release dates, developer, genre, players, favourites and the paths of the
-//! pictures. pocket-ui reads them and never writes them (docs/ARCHITECTURE.md "EmulationStation gamelists").
+//! pictures. pocket-ui reads them and writes them only to take out the entry of a game deleted from the card
+//! ([`without_games`], `game_files::delete`; docs/ARCHITECTURE.md "EmulationStation gamelists").
 //!
 //! * **Where:** `<ROM folder>/gamelist.xml`, then `gamelists/<system>/gamelist.xml` in ES's config folders
 //!   (`/storage/.config/emulationstation`, `/storage/.emulationstation`) and in `/storage/ES-DE`. A game found in
@@ -22,7 +23,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
@@ -149,7 +150,7 @@ impl Locations {
         if self.es_de.as_os_str().is_empty() {
             return None;
         }
-        es_de_names(system).into_iter().map(|n| self.es_de.join("downloaded_media").join(n)).find(|d| d.is_dir())
+        es_de_names(system).into_iter().map(|n| self.es_de.join("downloaded_media").join(n)).find(|d| crate::background_io::is_dir(d))
     }
 }
 
@@ -364,6 +365,53 @@ pub fn parse(text: &str, rom_dir: &Path) -> Vec<Entry> {
     out
 }
 
+/// Tags of an entry that name a picture, video or manual of the game ([`without_games`] deletes them with it).
+const MEDIA_TAGS: [&str; 10] = ["image", "thumbnail", "marquee", "video", "cover", "boxart", "fanart", "titleshot", "map", "manual"];
+
+/// The gamelist `text` of the ROM folder `rom_dir` without the `<game>` entries of `games` (deleted from the card), and
+/// the media those entries name inside `rom_dir` that no other entry names. None when no entry is one of them. The
+/// rest of the file is kept byte for byte: each entry goes from the start of its line to the end of its `</game>` line.
+pub fn without_games(text: &str, rom_dir: &Path, games: &[PathBuf]) -> Option<(String, Vec<PathBuf>)> {
+    let wanted: Vec<PathBuf> = games.iter().map(|g| lexical(g)).collect();
+    let (mut out, mut media, mut kept_media) = (String::with_capacity(text.len()), Vec::new(), Vec::new());
+    let (mut at, mut removed) = (0, false);
+    while let Some(i) = text[at..].find("<game") {
+        let start = at + i;
+        let after = &text[start + "<game".len()..];
+        let ok = after.chars().next().is_some_and(|c| c.is_whitespace() || c == '>');
+        let (Some(open_end), Some(close)) = (after.find('>'), after.find("</game>")) else { break };
+        if !ok || after[..open_end].ends_with('/') || close < open_end {
+            out.push_str(&text[at..start + "<game".len()]);
+            at = start + "<game".len();
+            continue;
+        }
+        let block = &after[open_end + 1..close];
+        let end = start + "<game".len() + close + "</game>".len();
+        let names: Vec<PathBuf> = MEDIA_TAGS.iter().filter_map(|t| field(block, t)).filter_map(|v| resolve(&v, rom_dir)).filter(|p| p.starts_with(rom_dir)).collect();
+        if field(block, "path").and_then(|v| resolve(&v, rom_dir)).is_some_and(|p| wanted.contains(&p)) {
+            // From the start of its line (only blanks before it) to the end of its line.
+            let line_start = text[..start].rfind('\n').map_or(0, |n| n + 1);
+            let from = if text[line_start..start].trim().is_empty() { line_start } else { start };
+            let to = if text[end..].starts_with("\r\n") { end + 2 } else if text[end..].starts_with('\n') { end + 1 } else { end };
+            out.push_str(&text[at..from.max(at)]);
+            at = to;
+            removed = true;
+            media.extend(names);
+        } else {
+            out.push_str(&text[at..end]);
+            at = end;
+            kept_media.extend(names);
+        }
+    }
+    if !removed {
+        return None;
+    }
+    out.push_str(&text[at..]);
+    media.retain(|m| !kept_media.contains(m));
+    media.dedup();
+    Some((out, media))
+}
+
 fn entry(block: &str, rom_dir: &Path) -> Option<Entry> {
     let path = resolve(&field(block, "path")?, rom_dir)?;
     let get = |tag: &str, max: usize| field(block, tag).map(|v| tidy(&v, max)).unwrap_or_default();
@@ -409,9 +457,14 @@ fn cryptic(name: &str) -> bool {
 /// already reads as a name keeps pocket-ui's cleaned name: its regions and versions are the same for every list, and
 /// `tell_apart` relies on them for games that share a name.
 pub fn better_name(cleaned: &str, gamelist: &str) -> Option<String> {
+    if !cryptic(cleaned) { return None; }
+    usable_name(gamelist, Some(cleaned))
+}
+
+pub(crate) fn usable_name(gamelist: &str, current: Option<&str>) -> Option<String> {
     let name = tidy(gamelist, FACT_MAX);
     let key = crate::covers::normalize(&name);
-    (!key.is_empty() && cryptic(cleaned) && key != crate::covers::normalize(cleaned)).then_some(name)
+    (!key.is_empty() && current.is_none_or(|s| key != crate::covers::normalize(s))).then_some(name)
 }
 
 // ---- reading files, the memo and the cache ---------------------------------------------------------------------
@@ -428,7 +481,7 @@ struct Sig {
 impl Sig {
     fn of(file: &Path, rom_dir: &Path) -> Option<Sig> {
         use std::os::unix::fs::MetadataExt;
-        let m = std::fs::metadata(file).ok().filter(|m| m.is_file())?;
+        let m = crate::background_io::metadata(file).ok().filter(|m| m.is_file())?;
         Some(Sig { mtime: m.mtime(), mtime_ns: m.mtime_nsec(), len: m.len(), rom_dir: rom_dir.to_path_buf() })
     }
 }
@@ -453,7 +506,7 @@ struct Disk {
 }
 
 static MEMO: Mutex<BTreeMap<PathBuf, Parsed>> = Mutex::new(BTreeMap::new());
-static LOADED: OnceLock<()> = OnceLock::new();
+static LOADED: Mutex<bool> = Mutex::new(false);
 static DIRTY: AtomicBool = AtomicBool::new(false);
 static WRITE: Mutex<()> = Mutex::new(());
 
@@ -463,29 +516,33 @@ fn memo() -> std::sync::MutexGuard<'static, BTreeMap<PathBuf, Parsed>> {
 
 /// The disk cache into the memo, once per run. A damaged, foreign or older file is ignored.
 fn load_disk(data_dir: &Path) {
-    LOADED.get_or_init(|| {
-        let Ok(bytes) = std::fs::read(data_dir.join(FILE)) else { return };
-        match serde_json::from_slice::<Disk>(&bytes) {
-            Ok(d) if d.version == VERSION => {
-                let mut m = memo();
-                for f in d.files {
-                    let entries: Arc<[Arc<Entry>]> = f.entries.into_iter().map(Arc::new).collect();
-                    m.entry(f.file).or_insert(Parsed { sig: f.sig, entries });
-                }
+    let mut loaded = LOADED.lock().unwrap_or_else(|e| e.into_inner());
+    if *loaded { return; }
+    let bytes = crate::background_io::read(data_dir.join(FILE));
+    if crate::background_io::check().is_err() { return; }
+    *loaded = true;
+    let Ok(bytes) = bytes else { return; };
+    match serde_json::from_slice::<Disk>(&bytes) {
+        Ok(d) if d.version == VERSION => {
+            let mut m = memo();
+            for f in d.files {
+                let entries: Arc<[Arc<Entry>]> = f.entries.into_iter().map(Arc::new).collect();
+                m.entry(f.file).or_insert(Parsed { sig: f.sig, entries });
             }
-            Ok(_) => println!("gamelist: cache of another format, read again"),
-            Err(e) => println!("gamelist: cache not used: damaged ({e})"),
         }
-    });
+        Ok(_) => println!("gamelist: cache of another format, read again"),
+        Err(e) => println!("gamelist: cache not used: damaged ({e})"),
+    }
 }
 
 /// The memo as the cache file: only files that are still there are kept.
 fn disk_bytes() -> std::io::Result<Vec<u8>> {
     let files: Vec<DiskFile> = memo()
         .iter()
-        .filter(|(f, _)| f.is_file())
+        .filter(|(f, _)| crate::background_io::is_file(f))
         .map(|(f, p)| DiskFile { file: f.clone(), sig: p.sig.clone(), entries: p.entries.iter().map(|e| (**e).clone()).collect() })
         .collect();
+    crate::background_io::check()?;
     serde_json::to_vec(&Disk { version: VERSION, files }).map_err(std::io::Error::other)
 }
 
@@ -505,8 +562,10 @@ pub fn flush(data_dir: &Path) {
     #[cfg(test)]
     WRITERS.fetch_add(1, Ordering::SeqCst);
     let spawned = std::thread::Builder::new().name("gamelist-cache".into()).spawn(move || {
-        if let Err(e) = write_disk(&dir) {
-            eprintln!("gamelist: cache not written: {e}");
+        match crate::background_io::job(|| write_disk(&dir)) {
+            Some(Ok(())) => {}
+            Some(Err(e)) => eprintln!("gamelist: cache not written: {e}"),
+            None => DIRTY.store(true, Ordering::SeqCst),
         }
         #[cfg(test)]
         WRITERS.fetch_sub(1, Ordering::SeqCst);
@@ -543,9 +602,10 @@ fn read_file(file: &Path, rom_dir: &Path) -> Option<Parsed> {
         println!("gamelist: {} is {} MB, not read", file.display(), sig.len >> 20);
         return None;
     }
-    let bytes = match std::fs::read(file) {
+    let bytes = match crate::background_io::read(file) {
         Ok(b) => b,
         Err(e) => {
+            crate::background_io::check().ok()?;
             println!("gamelist: {}: {e}", file.display());
             return None;
         }
@@ -600,7 +660,8 @@ impl SystemData {
     /// name, then the picture folders next to the games. None is checked to be there except those a listing found.
     fn ranked(&self, rom: &Path) -> Vec<(Kind, PathBuf)> {
         let mut v: Vec<(Kind, PathBuf)> = Vec::new();
-        if let Some(e) = self.get(rom) {
+        let entry = self.get(rom);
+        if let Some(e) = entry {
             v.extend(e.images.iter().map(|p| (Kind::Box, p.clone())));
             for p in &e.shots {
                 let folder = p.parent().and_then(|d| d.file_name()).map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
@@ -617,14 +678,24 @@ impl SystemData {
             }
         }
         // A game in a folder of its own ("Game/Game.cue") is named by the folder as often as by the file.
-        let names: Vec<&str> = stem.into_iter().chain(rom.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str())).collect();
+        let parent = rom.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str());
+        let names = [stem, parent, entry.map(|e| e.name.as_str()).filter(|n| !n.is_empty())];
+        let mut titles = None;
         for (dir, folders) in &self.art {
             // A catalogue (muOS) lies outside the ROM folders and fits every game of the system.
             if dir.as_ref().is_some_and(|d| !rom.starts_with(d)) {
                 continue;
             }
             for folder in folders {
-                if let Some((path, kind)) = names.iter().find_map(|name| folder.find(name)) {
+                let found = names.iter().flatten().filter_map(|name| folder.find(name)).min_by_key(|(_, kind)| *kind);
+                // A card without a gamelist may name the picture without the ROM's region or revision tags.
+                let found = if found.as_ref().is_some_and(|(_, kind)| *kind <= Kind::Likely) {
+                    found
+                } else {
+                    let by_title = titles.get_or_insert_with(|| [stem.map(crate::library::display_name), parent.map(crate::library::display_name)]);
+                    found.into_iter().chain(by_title.iter().flatten().filter_map(|name| folder.find(name))).min_by_key(|(_, kind)| *kind)
+                };
+                if let Some((path, kind)) = found {
                     v.push((kind, path));
                 }
             }
@@ -681,6 +752,7 @@ impl Index {
     pub fn load(data_dir: &Path, loc: &Locations, sources: &[(String, PathBuf)]) -> Index {
         let mut systems: BTreeMap<String, SystemData> = BTreeMap::new();
         for (id, dir) in sources {
+            if crate::background_io::check().is_err() { break; }
             let d = system(data_dir, loc, id, dir);
             if d.is_empty() {
                 continue;
@@ -693,7 +765,7 @@ impl Index {
                 }
             }
         }
-        flush(data_dir);
+        if crate::background_io::check().is_ok() { flush(data_dir); }
         Index { systems }
     }
 
@@ -750,9 +822,10 @@ impl Index {
 /// A picture over this size is not used as a cover: decoding it while the shelf scrolls would stall it.
 pub const COVER_MAX_BYTES: u64 = 1 << 20;
 
-/// The first of `candidates` that is a file of at most [`COVER_MAX_BYTES`] (a few `stat`s; the caller keeps the answer).
+/// The first of `candidates` that is a file of at most [`COVER_MAX_BYTES`] (a `stat` for a name its folder has,
+/// `dir_index`; the caller keeps the answer).
 pub fn usable_cover(candidates: Vec<PathBuf>) -> Option<PathBuf> {
-    candidates.into_iter().find(|p| std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.len() <= COVER_MAX_BYTES))
+    candidates.into_iter().find(|p| crate::dir_index::file_metadata(p).is_some_and(|m| m.len() <= COVER_MAX_BYTES))
 }
 
 // ---- the game card -------------------------------------------------------------------------------------------
@@ -968,6 +1041,16 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn r36s_secondary_gamelist_does_not_parse_a_file_after_a_launch() {
+        let t = Tmp::new("pause-read");
+        t.xml("<game><path>./a.gba</path><name>One</name></game>");
+        let sources = [("gba".to_string(), t.rom_dir())];
+        let load = || Index::load(&t.data(), &Locations::none(), &sources);
+        assert_eq!(crate::background_io::after_launch_request(load).files(), 0);
+        assert_eq!(load().files(), 1);
+    }
 
     #[test]
     fn a_file_is_parsed_once_per_change_and_comes_back_from_the_cache() {

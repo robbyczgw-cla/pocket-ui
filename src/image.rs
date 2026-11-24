@@ -196,7 +196,7 @@ pub fn png_size(path: &Path) -> Option<(u32, u32)> {
 }
 
 pub fn load_png(path: &Path) -> Option<Image> {
-    read_png(std::io::BufReader::new(std::fs::File::open(path).ok()?))
+    read_png(std::io::BufReader::new(crate::background_io::open(path).ok()?))
 }
 
 fn read_png<R: std::io::Read>(source: R) -> Option<Image> {
@@ -265,7 +265,7 @@ impl Image {
 
 /// Baseline/progressive JPEG (PortMaster screenshots).
 pub fn load_jpeg(path: &Path) -> Option<Image> {
-    let mut decoder = jpeg_decoder::Decoder::new(std::io::BufReader::new(std::fs::File::open(path).ok()?));
+    let mut decoder = jpeg_decoder::Decoder::new(std::io::BufReader::new(crate::background_io::open(path).ok()?));
     // The header first: nothing is allocated for a picture larger than `size_ok` allows (N2).
     decoder.read_info().ok()?;
     let head = decoder.info()?;

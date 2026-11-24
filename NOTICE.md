@@ -145,8 +145,9 @@ the core says the same, with the checksums. The licence texts of the core and it
 **How the licences fit together.** pocket-ui is GPL-2.0-or-later, so it can be combined with GPL-2.0 code and,
 by the "or later", with GPL-3.0 code. The cores are not part of this repository or of the pocket-ui programs:
 `pocket-core` loads the ones ROCKNIX installs, at run time, the same arrangement as RetroArch and other libretro
-frontends. Three of them contain GPL-2.0-only code (gambatte, parts of mupen64plus_next and ppsspp). Four Rust crates
-that pocket-ui and pocket-core link (`winit`, `glutin`, `glutin_egl_sys`, `dpi`) are Apache-2.0, which the FSF
+frontends. Three of them contain GPL-2.0-only code (gambatte, parts of mupen64plus_next and ppsspp). Six Rust crates
+that pocket-ui and pocket-core link (`winit`, `glutin`, `glutin_egl_sys`, `dpi`, and the 7z reader's `sevenz-rust2` and
+`lzma-rust2`) are Apache-2.0, which the FSF
 counts as compatible with GPLv3 but not with GPLv2-only code. We state this so you can judge it yourself. If you hold
 rights in one of these components and see a problem, please open an issue; we would rather change a default than
 argue.
@@ -304,6 +305,8 @@ described file by file in [assets/ui-art/SOURCES.md](assets/ui-art/SOURCES.md). 
 | Departure Mono Regular (version 1.500) | `assets/fonts/DepartureMono-Regular.otf`; compiled into the binaries (`src/font_style.rs`), the Retro style's letters (Settings → Look → Style → Retro) | SIL Open Font License 1.1 | Copyright 2022–2024 Helena Zhang ([source](https://github.com/rektdeckard/departure-mono), release `DepartureMono-1.500.zip`). The release's OTF file unchanged; no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
 | Caveat Brush Regular | `assets/fonts/CaveatBrush-Regular.ttf`; compiled into the binaries (`src/tape_label.rs`), the handwriting on the label of a game without box art | SIL Open Font License 1.1 | Copyright 2015 Google Inc. ([source](https://github.com/googlefonts/caveat), designer Impallari Type; the file of google/fonts `ofl/caveatbrush`). Cut down to Latin with fonttools (U+0020-007E, U+00A0-017F, punctuation), hinting dropped, no glyph changed; no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
 | Titillium Web Regular, Bold | `store/test-catalog/src/fonts/`; packed into the test store's `type-titillium` package only, not compiled in | SIL Open Font License 1.1 | Copyright (c) 2009-2011 Accademia di Belle Arti di Urbino and students of MA course of Visual design. Licence text: `store/test-catalog/src/fonts/OFL.txt` (also inside the package as `Titillium-OFL.txt`) |
+| Galmuri11 Regular (version 2.40.4) | `assets/fonts/Galmuri11-KSX1001.ttf`; compiled into the binaries (`src/text_fallback.rs`), the Korean letters of the Retro style | SIL Open Font License 1.1 | Copyright (c) 2019-2025 Lee Minseo ([source](https://github.com/quiple/galmuri), release `Galmuri-v2.40.4.zip`). Cut down with fonttools to the 2,350 hangul syllables of KS X 1001, the compatibility jamo and a few marks (`scripts/korean-fonts.py`), hinting dropped, no glyph changed; no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
+| Noto Sans KR Regular (version 2.004) | `assets/fonts/NotoSansKR-Regular-KSX1001.otf`; compiled into the binaries (`src/text_fallback.rs`), the Korean letters of the Barlow style | SIL Open Font License 1.1 | Copyright 2014-2021 Adobe ([source](https://github.com/notofonts/noto-cjk), `Sans/SubsetOTF/KR`). Cut down the same way; no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
 | Noto Sans CJK SC Regular | Not shipped: pocket-ui uses the system's copy if present (ROCKNIX installs it at `/usr/share/fonts/truetype/noto-cjk/`), for Japanese, Chinese and Korean letters (`src/text_fallback.rs`) | SIL Open Font License 1.1 (ROCKNIX's package) | Nothing of it is in this repository or our binaries |
 | 8x8 bitmap glyphs (crate `font8x8` 0.3.1) | linked as a Rust crate | MIT | The crate says the glyph data comes from public-domain IBM VGA fonts |
 
@@ -332,6 +335,11 @@ that means shipping `assets/fonts/OFL.txt` with it.
   `tv-off.wav` from "CRT TV turn on and off" by Sanderboah ([Freesound 838726](https://freesound.org/s/838726/));
   `switch-on.wav` from "Toggle switch On Off" by cookies+policy ([Freesound 556636](https://freesound.org/s/556636/));
   `switch-off.wav` from "Toggle switch On Off" by cookies+policy ([Freesound 556636](https://freesound.org/s/556636/)). Each file with its cut in `assets/ui-sounds/SOURCES.md`.
+- **NES, motorized tray and plastic disc case recordings** (`assets/ui-sounds/`). `nes-door-shut.wav` is adapted
+  from "NES door slam.mp3" by florn ([Freesound 454468](https://freesound.org/s/454468/), [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)).
+  It was trimmed, mixed to mono, filtered, faded and levelled. The other clips are CC0 1.0. XenosNS recorded the NES
+  cartridge, lartti the CD player's tray, ottoojala the jewel case, and ryanharding95 and ewellis the DVD cases.
+  See [SOURCES.md](assets/ui-sounds/SOURCES.md) for each file and its source.
 - **The film tearing off a sealed case** (`assets/ui-sounds/wrap-tear.wav`): cut from "sound saran plastic wrap unroll
   tear wrap put down - homemade.wav" by buzzatsea ([Freesound 431217](https://freesound.org/people/buzzatsea/sounds/431217/)),
   CC0 1.0 (public domain dedication), a real recording, not generated; cut, filtered and levelled by us.
@@ -395,7 +403,7 @@ that means shipping `assets/fonts/OFL.txt` with it.
 
 ## Rust crates
 
-128 crates end up in the aarch64 build (116 linked into the programs, 12 only run at build time), 253 in the full
+131 crates end up in the aarch64 build (119 linked into the programs, 12 only run at build time), 253 in the full
 dependency graph (all platforms, including a macOS development build). For every crate with a choice, the
 GPLv2-compatible option is the one used: MIT, BSD, ISC, Zlib, Unlicense, 0BSD and Unicode-3.0 qualify; for
 `MIT OR Apache-2.0` the MIT side is used. There is no copyleft or non-commercial crate among them.
@@ -404,7 +412,8 @@ The photo album's small JPEGs are written with `jpeg-encoder` (MIT OR Apache-2.0
 this software is based in part on the work of the Independent JPEG Group.
 
 **Not compatible with GPLv2 (Apache-2.0 only), linked into `pocket-ui` and `pocket-core`:** `winit` 0.30.13,
-`glutin` 0.32.3, `glutin_egl_sys` 0.7.1 and `dpi` 0.1.2 (Apache-2.0 AND MIT). Apache-2.0 is fine with
+`glutin` 0.32.3, `glutin_egl_sys` 0.7.1, `dpi` 0.1.2 (Apache-2.0 AND MIT), and `sevenz-rust2` 0.25.0 and `lzma-rust2`
+0.25.0, which read 7z games. Apache-2.0 is fine with
 GPL-3.0-or-later but not with GPL-2.0-only (see "How the licences fit together" above). `gl_generator` and
 `khronos_api` (also Apache-2.0) only run in a build script of `glutin_egl_sys`; they are not linked, and the EGL
 bindings they generate are compiled in.

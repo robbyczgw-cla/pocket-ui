@@ -22,7 +22,7 @@ pub fn cache_path(data_dir: &Path, title: &str) -> PathBuf {
 
 /// The description loaded before, if any.
 pub fn cached(data_dir: &Path, title: &str) -> Option<String> {
-    std::fs::read_to_string(cache_path(data_dir, title)).ok().filter(|t| !t.trim().is_empty())
+    crate::background_io::read_to_string(cache_path(data_dir, title)).ok().filter(|t| !t.trim().is_empty())
 }
 
 fn percent_encode(s: &str) -> String {

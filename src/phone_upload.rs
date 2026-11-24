@@ -105,7 +105,7 @@ pub const ALLOWED: &[(&[&str], &[&str], u64)] = &[
     (&["nds"], &["nds", "zip"], DS),
     (&["arcade", "mame", "fbn", "fbneo", "neogeo", "cps1", "cps2", "cps3"], &["zip", "7z"], ARCADE),
     (&["psx"], &["cue", "bin", "img", "wav", "chd", "iso", "pbp", "m3u"], DISC),
-    (&["psp", "pspockets"], &["iso", "cso", "chd"], DISC),
+    (&["psp", "pspminis"], &["iso", "cso", "chd"], DISC),
     (&["ps2"], &["iso", "chd"], DISC),
     (&["gamecube", "gc"], &["iso", "rvz", "gcz", "ciso"], DISC),
     (&["wii"], &["iso", "rvz", "wbfs"], DISC),

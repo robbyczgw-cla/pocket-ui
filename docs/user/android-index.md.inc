@@ -6,7 +6,7 @@
 pocket-ui shows your games on a shelf, in their real boxes, and plays them with the built-in pad. It picks up where you
 quit. Everything works with the pad: the hints at the bottom of each page show the buttons it uses.
 
-This guide is in English; the menus themselves can be German, Spanish, Portuguese, French or Italian (Settings → System → **Language**).
+This guide is in English; the menus themselves can be German, Spanish, Portuguese, French, Italian or Korean (Settings → System → **Language**).
 
 ## Your games
 

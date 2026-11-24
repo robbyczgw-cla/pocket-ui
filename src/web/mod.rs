@@ -16,7 +16,8 @@
 //!   rebinding).
 //! - **What it touches** ([`files`]): uploads only into a system's ROM folder, `roms/bios` and the PortMaster drop
 //!   folders, with sanitised names, a size limit, a check of free space, a temporary file and a rename that never
-//!   replaces an existing file unless the player said so. No shell, no programs except `grim` for the screenshot.
+//!   replaces an existing file unless the player said so. The App installs and backs up custom covers by game ID.
+//!   The diagnostics ZIP carries only recognised event names from the log. No shell; `grim` takes the screenshot.
 //! - **What it costs**: no work while no browser is connected (the supervisor wakes every 30 s to see whether the
 //!   Tailscale address changed, one `getifaddrs`); while a game runs, everything except the status, the session and
 //!   the screenshot (rate-limited) answers "playing", and an upload under way waits until the game ends.
@@ -24,10 +25,18 @@
 pub mod api;
 pub mod assets;
 pub mod auth;
+mod cover_edit;
+mod diagnostics;
 pub mod files;
 pub mod http;
+pub mod media;
 pub mod net;
+pub mod pockets;
+pub mod saves;
 pub mod server;
+pub mod texts;
+pub mod updates;
+pub mod zip;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -92,6 +101,8 @@ pub enum Edit {
     Note { path: PathBuf, note: String },
     /// The player's rating, 1 to 5; 0 takes it away.
     Rating { path: PathBuf, rating: u8 },
+    /// Replace a game's box art, or reset it to automatic when png is None.
+    Cover { system: String, rom: PathBuf, png: Option<Vec<u8>> },
     /// Smart shelves are addressed by their place and their name, so a shelf that moved meanwhile is not the one changed.
     RenameShelf { index: usize, was: String, name: String },
     DeleteShelf { index: usize, was: String },
@@ -100,6 +111,18 @@ pub enum Edit {
     /// Games were uploaded: the library as the server just read it (on its own thread), for the App to take over at
     /// a quiet moment.
     LibraryChanged(Systems),
+    // --- Photo album, screenshots, and updates (web07-album-update) ---
+    /// Delete one album photo (verified against the game's album.tsv on the App thread).
+    DeleteAlbumPhoto { system: String, rom: PathBuf, file: String },
+    /// Delete one game or shelf screenshot (verified with `screenshot::find` on the App thread).
+    DeleteScreenshot { system: String, game: String, at: String },
+    /// "Delete from the card" from the game's page: the game's files, its pictures and gamelist entry, and with
+    /// `with_saves` its saves and states (`game_files`, as the card does it; never while a game runs, never in Kids mode).
+    DeleteGame { system: String, path: PathBuf, with_saves: bool },
+    /// Check the signed update channel (never while a game runs).
+    CheckUpdate,
+    /// Install the offered signed release `version` (never while a game runs).
+    InstallUpdate { version: String },
 }
 
 /// The game list as `library::load` reads it, passed along whole.
@@ -157,6 +180,8 @@ pub struct Shared {
     pub trust_epoch: AtomicU64,
     /// Counts games hidden, shown again or deleted on the Pocket: the server reads its game list again at the next request.
     pub library_epoch: AtomicU64,
+    /// Software update state published by the App (`updates::UpdateSnapshot`).
+    pub update: Mutex<updates::UpdateSnapshot>,
 }
 
 impl Shared {
@@ -182,6 +207,7 @@ impl Shared {
             screen_private: AtomicBool::new(false),
             trust_epoch: AtomicU64::new(0),
             library_epoch: AtomicU64::new(0),
+            update: Mutex::new(updates::UpdateSnapshot::initial()),
         })
     }
 
@@ -268,3 +294,5 @@ pub(crate) fn hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod saves_tests;

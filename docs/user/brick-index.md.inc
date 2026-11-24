@@ -7,7 +7,7 @@ pocket-ui is a game frontend for your TrimUI Brick: a shelf of your games, their
 picks up where you quit. You control it with the buttons.
 
 This guide is on the Brick as well: Settings → Help & tools → **Manual**. It is in English; the menus themselves can be German,
-Spanish, Brazilian Portuguese, French or Italian ([Settings → System → Language](language.md)).
+Spanish, Brazilian Portuguese, French, Italian or Korean ([Settings → System → Language](language.md)).
 
 ## On the Brick
 
@@ -34,7 +34,7 @@ Spanish, Brazilian Portuguese, French or Italian ([Settings → System → Langu
 5. [Options](options.md): picture, screen frames, controls, shortcuts, extras and run-ahead in a game, [Screen frame and Screen orientation](options-screen.md), and [Cheats](options-cheats.md); [their shorter list](options-big.md) for the big consoles of other handhelds.
 6. [Controls](controls.md): every button, screen by screen; [in Settings, setup and on the touch screen](controls-settings.md), with the power and volume keys.
 7. [Settings](settings.md): the Settings categories and the entries of Look; [Playing and Games](settings-playing.md): the entries of those two categories; [Screen & sound, Controls](settings-sound.md): brightness, volume, the screen and sounds; the buttons and controllers; [Connections, System and Help & tools](settings-system.md): Wi-Fi, Bluetooth, Tailscale, SSH, Sync, PC streaming, the clock, sleep, backups, the Tour and this guide; [quick settings, sleep and power](quick-settings.md); [storage](storage.md): what takes up space on the SD card, clean-ups, hidden games; [Bluetooth](bluetooth.md): pairing controllers, headphones and speakers.
-8. [Language](language.md): English, German, Spanish, Brazilian Portuguese, French or Italian menus, and what stays English.
+8. [Language](language.md): English, German, Spanish, Brazilian Portuguese, French, Italian or Korean menus, and what stays English.
 9. [Night light](night-light.md): warmer, less blue colours in the evening, on a schedule or all the time.
 10. [Colours and style](theme.md): the colour sets, fonts and the Retro style for every screen, switched in place.
 11. [Performance](performance.md): how fast the processor may run in games and menus.

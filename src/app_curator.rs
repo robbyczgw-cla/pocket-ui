@@ -32,6 +32,7 @@ use pocket_ui::palette::*;
 use pocket_ui::text::Face;
 use pocket_ui::touch::Area;
 
+use super::app_library::{find_picked, picked, Picked};
 use super::{stripe, system_label, system_short, App, Item, Screen, SettingsPage, UserEvent, CANCEL, CONFIRM, NU_BTN_PAD, NU_PAD, NU_SMALL};
 
 /// The name in the Settings list, to come back to.
@@ -45,6 +46,7 @@ const INLINE: usize = 3;
 const ELSEWHERE: usize = 6;
 /// News from the index thread.
 pub(crate) enum Event {
+    Deferred,
     /// A new index; `gen` is the library generation its catalog was made from. `today`: what
     /// Home's Curator row offers (the day's pick, the games waiting), also from the thread.
     /// `connections`: Connections' index, made with a new catalog (`app_connections`); `rediscover`: Rediscover's games.
@@ -68,6 +70,7 @@ pub(crate) enum Event {
 impl std::fmt::Debug for Event {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Event::Deferred => write!(f, "Deferred"),
             Event::Built { gen, index, .. } => write!(f, "Built {{ gen: {gen}, games: {} }}", index.len()),
             Event::Elsewhere { seed, names } => write!(f, "Elsewhere {{ seed: {seed}, names: {} }}", names.len()),
             Event::History(_) => write!(f, "History"),
@@ -132,6 +135,8 @@ pub(crate) struct CuratorUi {
     library_gen: u64,
     /// The library generation of the catalog in `index`.
     built_gen: Option<u64>,
+    /// The open results list can keep using its existing items while the index is rebuilt after a game.
+    released_list: Option<(Screen, Vec<Item>)>,
     building: bool,
     /// The player changed something the index shows: a new index when the thread is free.
     dirty: bool,
@@ -144,7 +149,7 @@ pub(crate) struct CuratorUi {
     rng: Option<Rng>,
     surprise_seen: Vec<usize>,
     /// Where B goes from a list opened in the Curator list.
-    back: Vec<(Screen, Item)>,
+    back: Vec<(Screen, Picked)>,
     /// Games on each smart shelf and sticker, for the rows' counts.
     shelf_counts: Vec<usize>,
     sticker_counts: HashMap<u32, usize>,
@@ -174,7 +179,20 @@ impl CuratorUi {
 
     /// The library was read again: a new catalog.
     pub fn library_changed(&mut self) {
+        self.released_list = None;
         self.library_gen += 1;
+    }
+
+    pub fn release_for_game(&mut self, screen: Screen, items: &[Item]) -> (Option<Arc<Index>>, Arc<pocket_ui::connections::Index>) {
+        self.library_gen += 1;
+        if matches!(screen, Screen::Shelf(_) | Screen::Sticker(_) | Screen::LensResults) {
+            self.released_list = Some((screen, items.to_vec()));
+        }
+        (self.index.take(), std::mem::take(&mut self.connections.index))
+    }
+
+    pub fn released_items(&self, screen: Screen) -> Option<&[Item]> {
+        self.released_list.as_ref().filter(|(saved, _)| *saved == screen).map(|(_, items)| items.as_slice())
     }
 }
 
@@ -216,7 +234,7 @@ impl App {
         // Play history's writer and migration (`app_history`), which also run while a game does.
         self.history_tick();
         let c = &self.curator;
-        if c.building || self.running.is_some() || !self.drew_first || self.setup.is_some() {
+        if c.building || self.running.is_some() || self.pending_launch.is_some() || !self.drew_first || self.setup.is_some() {
             return;
         }
         let need_catalog = c.built_gen != Some(c.library_gen);
@@ -268,6 +286,8 @@ impl App {
                     // The names the games' checksums gave (`rom_id`), from the card: nothing is read through here.
                     let pairs: Vec<(String, PathBuf)> = games.iter().map(|g| (g.system.clone(), g.path.clone())).collect();
                     let mut names = pocket_ui::rom_id::known(&data_dir, &pairs);
+                    drop(pairs);
+                    if pocket_ui::background_io::cancelled() { return None; }
                     for g in &mut games {
                         g.choice = player.meta.get(&g.path.to_string_lossy().into_owned()).and_then(|m| m.choice.clone());
                         g.identified = names.remove(&g.path);
@@ -276,9 +296,11 @@ impl App {
                     Arc::new(curator::build_catalog(&games, systems, &mut db, feel_source().as_ref()))
                 }
             };
+            if pocket_ui::background_io::cancelled() { return None; }
             // Connections' index with a new catalog or new gamelists: the same games, their developers, publishers, series, genres.
             let connections = make_connections.then(|| Arc::new(pocket_ui::connections::Index::build(super::app_connections::entries(&catalog, &gamelist))));
             let catalog_ms = t.elapsed().as_millis();
+            if pocket_ui::background_io::cancelled() { return None; }
             let t = Instant::now();
             let rediscover = super::app_connections::rediscover_input(&catalog, &player, &gamelist, log.as_deref(), player.now, tz);
             let user = curator::user_state(&catalog, &player);
@@ -286,11 +308,10 @@ impl App {
             let index_ms = t.elapsed().as_millis();
             // Home's Curator row: one draw and one pass over the works, well under a millisecond (`curator::today`).
             let today = index.today();
-            Event::Built { gen, index, catalog_ms, index_ms, today, connections, rediscover }
+            Some(Event::Built { gen, index, catalog_ms, index_ms, today, connections, rediscover })
         };
         if now {
-            let e = job();
-            self.curator_event(e);
+            self.curator_event(job().unwrap_or(Event::Deferred));
             return;
         }
         let proxy = self.proxy.clone();
@@ -302,12 +323,17 @@ impl App {
                 let tid = libc::syscall(libc::SYS_gettid) as libc::id_t;
                 libc::setpriority(libc::PRIO_PROCESS, tid, 10);
             }
-            let _ = proxy.send_event(UserEvent::Curator(job()));
+            let event = pocket_ui::background_io::job(job).flatten().unwrap_or(Event::Deferred);
+            let _ = proxy.send_event(UserEvent::Curator(event));
         });
     }
 
     pub(crate) fn curator_event(&mut self, e: Event) {
         match e {
+            Event::Deferred => {
+                self.curator.building = false;
+                self.curator.dirty = true;
+            }
             Event::Built { gen, index, catalog_ms, index_ms, today, connections, rediscover } => {
                 self.curator.building = false;
                 println!("curator: {} games, catalog {catalog_ms} ms, index {index_ms} ms (library {gen})", index.len());
@@ -325,6 +351,7 @@ impl App {
                     self.curator.surprise_seen.clear();
                 }
                 self.curator.built_gen = Some(gen);
+                self.curator.released_list = None;
                 self.curator.index = Some(index);
                 if let Some(c) = connections {
                     self.curator.connections.index = c;
@@ -377,6 +404,16 @@ impl App {
         let top = |lens: &Lens, order: Order| ix.sorted(&ix.matches(lens), merge, order).into_iter().take(pocket_ui::home_panel::MAX_COVERS).collect::<Vec<_>>();
         self.curator.shelf_tops = self.curator.prefs.shelves.iter().enumerate().map(|(i, s)| (i, top(&s.lens, s.order))).collect();
         self.curator.sticker_tops = self.library.stickers().iter().map(|st| (st.id, top(&sticker_lens(st.id), Order::Name))).collect();
+    }
+
+    pub(crate) fn curator_follow_library(&mut self, fresh: &[pocket_ui::library::System]) {
+        for (screen, _) in &mut self.curator.back {
+            if let Screen::Games(s) = *screen {
+                *screen = self.systems.get(s)
+                    .and_then(|old| fresh.iter().position(|new| new.name == old.name))
+                    .map_or(Screen::Home, Screen::Games);
+            }
+        }
     }
 
     /// The App's item for a game of the catalog, while the library still has that file there.
@@ -656,7 +693,7 @@ impl App {
             self.home_item = Some(item);
             self.curator.back.clear();
         } else {
-            self.curator.back.push((self.screen, item));
+            self.curator.back.push((self.screen, picked(item, &self.systems)));
         }
         self.screen = screen;
         self.sel = 0;
@@ -682,7 +719,7 @@ impl App {
         let Some((screen, item)) = self.curator.back.pop() else { return false };
         self.screen = screen;
         self.rebuild();
-        self.sel = self.items.iter().position(|i| *i == item).unwrap_or(0);
+        self.sel = find_picked(&item, &self.items, &self.systems).unwrap_or(0);
         self.prev_sel = self.sel;
         true
     }
@@ -853,7 +890,7 @@ impl App {
                             return self.curator.page = Some(Page::Lens(p));
                         }
                         self.cabinet.dirty = true;
-                        self.curator.back.push((self.screen, self.items.get(self.sel).copied().unwrap_or(Item::Lens)));
+                        self.curator.back.push((self.screen, picked(self.items.get(self.sel).copied().unwrap_or(Item::Lens), &self.systems)));
                         self.screen = Screen::LensResults;
                         self.sel = 0;
                         self.rebuild();
@@ -1221,7 +1258,7 @@ impl App {
     }
 
     /// The card's rows again (after stickers changed, or a new index after a rating). All of them (`card_rows`): the
-    /// Curator rows alone took Screenshots and Hide or delete off the card.
+    /// Curator rows alone took Screenshots and the delete row off the card.
     fn curator_card_refresh(&mut self) {
         let Some((system, path)) = self.card.as_ref().map(|o| (o.system.clone(), o.path.clone())) else { return };
         let rows = self.card_rows(&system, &path);
@@ -1301,10 +1338,12 @@ impl App {
             RowKind::Stickers => self.open_sticker_sheet(&path),
             // The save's versions (`app_sync_conflicts`).
             RowKind::SaveVersions => self.open_conflicts_for_card(),
-            // Not Curator's: Hide or delete (`app_storage`).
-            RowKind::Manage => self.open_card_manage(),
+            // Not Curator's: the card answers these itself (Out::PlanDelete, Out::Hide, `app_storage`).
+            RowKind::Delete | RowKind::Hide => {}
             // Shelf space: off the shelf into the crate (`app_crate`).
             RowKind::Crate => self.card_into_crate(),
+            // How to set up the Dolphin app (`app_runs_on_android`).
+            RowKind::Dolphin => self.open_dolphin_card(None),
             // The game's screenshots (`app_gallery`).
             RowKind::Screenshots => self.open_gallery_for_card(),
         }

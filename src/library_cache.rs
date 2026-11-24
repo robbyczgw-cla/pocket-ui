@@ -3,11 +3,10 @@
 //! Mini V2's 319 ms to the first frame, 332 games in 23 systems; docs/ARCHITECTURE.md, Start).
 //!
 //! * [`start`]: the list for the first frame: the cache when it belongs to this es_systems.cfg (path, mtime, size),
-//!   this cache format ([`VERSION`]) and this version of pocket-ui; otherwise the folders are read as before
-//!   (`library::load`), which is also what a first boot does.
+//!   and this cache format ([`VERSION`]), also from another version of pocket-ui (the rescan then rewrites it);
+//!   otherwise the folders are read as before (`library::load`), which is also what a first boot does.
 //! * [`rescan`]: after the first frame the folders are read again on a thread; only a list that differs from the
-//!   one on screen comes back (the app swaps it in, `app_library.rs`), and only then is the cache written. Equal
-//!   lists change nothing: no frame, no write.
+//!   one on screen is swapped in by the app. If only the cache key changes, the app adopts it without a redraw.
 //! * [`write`] / [`store_soon`]: the file is replaced atomically (`fsutil::write_atomic`), never on the UI thread, in
 //!   the order the lists were handed in.
 //!
@@ -50,7 +49,7 @@ impl Key {
     /// The key of `es_systems` as it is now; None when it can't be read (then there is nothing to cache either).
     pub fn now(es_systems: &Path) -> Option<Key> {
         use std::os::unix::fs::MetadataExt;
-        let m = std::fs::metadata(es_systems).ok()?;
+        let m = crate::background_io::metadata(es_systems).ok()?;
         Some(Key {
             version: VERSION,
             app: crate::update::app_version().to_string(),
@@ -73,17 +72,22 @@ pub fn path(data_dir: &Path) -> PathBuf {
 
 /// The cached list if it belongs to `key`; Err says why not (no file, another key, damaged), for the log.
 pub fn read(data_dir: &Path, key: &Key) -> Result<Vec<System>, String> {
-    let file = std::fs::File::open(path(data_dir)).map_err(|e| if e.kind() == io::ErrorKind::NotFound { "none yet".to_string() } else { e.to_string() })?;
+    read_if(data_dir, key, |found| found == key).map(|(systems, _)| systems)
+}
+
+/// The cached list and the key it was written for, when `fits` takes that key.
+fn read_if(data_dir: &Path, key: &Key, fits: impl Fn(&Key) -> bool) -> Result<(Vec<System>, Key), String> {
+    let file = crate::background_io::open(path(data_dir)).map_err(|e| if e.kind() == io::ErrorKind::NotFound { "none yet".to_string() } else { e.to_string() })?;
     let mut r = io::BufReader::new(file);
     let mut first = String::new();
     r.read_line(&mut first).map_err(|e| e.to_string())?;
     let found: Key = serde_json::from_str(first.trim_end()).map_err(|e| format!("damaged ({e})"))?;
-    if found != *key {
+    if !fits(&found) {
         return Err(stale_reason(&found, key));
     }
     let systems: Vec<System> = serde_json::from_reader(r).map_err(|e| format!("damaged ({e})"))?;
     library::learn_names(&systems);
-    Ok(systems)
+    Ok((systems, found))
 }
 
 fn stale_reason(found: &Key, now: &Key) -> String {
@@ -165,8 +169,16 @@ pub fn start(data_dir: &Path, es_systems: &Path) -> Result<Start, String> {
     }
     let key = Key::now(es_systems);
     if let Some(k) = &key {
-        match read(data_dir, k) {
-            Ok(systems) => return Ok(Start::Cached { systems, key: k.clone() }),
+        // Another pocket-ui's list is good for the first frame: reading a big card takes longer than an update's
+        // watchdog waits. Its key goes along, so the rescan after that frame writes the list for this version.
+        let fits = |found: &Key| Key { app: k.app.clone(), ..found.clone() } == *k;
+        match read_if(data_dir, k, fits) {
+            Ok((systems, key)) => {
+                if key.app != k.app {
+                    println!("library: showing the list of version {} until the folders are read again", key.app);
+                }
+                return Ok(Start::Cached { systems, key });
+            }
             Err(why) => println!("library: cache not used: {why}"),
         }
     }
@@ -176,8 +188,10 @@ pub fn start(data_dir: &Path, es_systems: &Path) -> Result<Start, String> {
 /// What reading the folders again found.
 #[derive(Debug, PartialEq)]
 pub enum Rescan {
-    /// The same list as on screen: nothing to do (the cache is rewritten only if es_systems.cfg's key moved on).
+    /// The same list and no new cache key.
     Same,
+    /// The same list was written with a new key.
+    KeyChanged(Key),
     /// A different list (games added, removed or renamed): the cache holds it already, for `key`.
     Changed { systems: Vec<System>, key: Option<Key> },
     Failed(String),
@@ -196,19 +210,25 @@ pub fn rescan(data_dir: &Path, es_systems: &Path, shown: &[System], cached_key: 
         Ok(s) => s,
         Err(e) => return Rescan::Failed(e),
     };
+    if crate::background_io::check().is_err() { return Rescan::Same; }
     let same = fresh == shown;
     if same && key.as_ref() == cached_key {
         return Rescan::Same;
     }
-    if let (Some(k), true) = (&key, enabled()) {
-        if let Err(e) = write(data_dir, k, &fresh) {
-            eprintln!("library: cache not written: {e}");
+    let written = key.filter(|k| {
+        if !enabled() { return false; }
+        match write(data_dir, k, &fresh) {
+            Ok(()) => true,
+            Err(e) => {
+                eprintln!("library: cache not written: {e}");
+                false
+            }
         }
-    }
+    });
     if same {
-        Rescan::Same
+        written.map_or(Rescan::Same, Rescan::KeyChanged)
     } else {
-        Rescan::Changed { systems: fresh, key }
+        Rescan::Changed { systems: fresh, key: written }
     }
 }
 
@@ -253,6 +273,16 @@ mod tests {
     use super::*;
     use crate::library::Game;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn r36s_secondary_library_scan_keeps_the_previous_shelf_after_a_launch() {
+        let f = Fixture::new("pause-read");
+        let shown = crate::library::load_shown(&f.es(), &f.data()).unwrap();
+        std::fs::write(f.dir.join("roms/gba/Third.gba"), b"x").unwrap();
+        let rescan = || rescan(&f.data(), &f.es(), &shown, None);
+        assert!(!matches!(crate::background_io::after_launch_request(rescan), Rescan::Changed { .. }));
+        assert!(matches!(rescan(), Rescan::Changed { .. }));
+    }
 
     #[test]
     fn an_empty_game_file_is_named_as_such_and_a_healthy_or_missing_one_is_not() {
@@ -332,13 +362,12 @@ mod tests {
     }
 
     #[test]
-    fn a_changed_es_systems_a_new_format_or_version_is_not_used() {
+    fn a_changed_es_systems_or_cache_format_is_not_used() {
         let f = Fixture::new("invalid");
         let key = Key::now(&f.es()).unwrap();
         let systems = library::load(&f.es()).unwrap();
         for (what, other) in [
             ("format", Key { version: VERSION + 1, ..key.clone() }),
-            ("app version", Key { app: "0.0.0-old".into(), ..key.clone() }),
             ("size", Key { len: key.len + 1, ..key.clone() }),
             ("mtime", Key { mtime: key.mtime - 10, ..key.clone() }),
             ("another es_systems.cfg", Key { es_systems: "/elsewhere/es_systems.cfg".into(), ..key.clone() }),
@@ -353,6 +382,31 @@ mod tests {
         let cfg = std::fs::read_to_string(f.es()).unwrap();
         std::fs::write(f.es(), format!("{cfg}\n")).unwrap();
         assert_eq!(read(&f.data(), &Key::now(&f.es()).unwrap()), Err("es_systems.cfg changed".into()));
+    }
+
+    #[test]
+    fn r36s_fix_a_the_update_boot_uses_the_old_list_then_adopts_the_new_key_once() {
+        let f = Fixture::new("update-key");
+        let key = Key::now(&f.es()).unwrap();
+        let old = Key { app: "0.0.0-old".into(), ..key.clone() };
+        let systems = library::load_shown(&f.es(), &f.data()).unwrap();
+        write(&f.data(), &old, &systems).unwrap();
+        let Start::Cached { systems: shown, key: used } = start(&f.data(), &f.es()).unwrap() else {
+            panic!("an update must show its first frame from the old cache");
+        };
+        assert_eq!(used, old);
+        assert_eq!(shown, systems);
+        let adopted = match rescan(&f.data(), &f.es(), &shown, Some(&used)) {
+            Rescan::Same => panic!("an equal rescan must send the app its new cache key"),
+            Rescan::Failed(error) => panic!("{error}"),
+            Rescan::KeyChanged(key) => Some(key),
+            Rescan::Changed { .. } => panic!("the visible library is unchanged"),
+        };
+        assert_eq!(adopted.as_ref(), Some(&key));
+        assert_eq!(read(&f.data(), &key).unwrap(), systems);
+        std::fs::File::open(path(&f.data())).unwrap().set_modified(std::time::SystemTime::UNIX_EPOCH).unwrap();
+        assert_eq!(rescan(&f.data(), &f.es(), &shown, adopted.as_ref()), Rescan::Same);
+        assert_eq!(std::fs::metadata(path(&f.data())).unwrap().modified().unwrap(), std::time::SystemTime::UNIX_EPOCH);
     }
 
     #[test]

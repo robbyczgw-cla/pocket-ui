@@ -142,7 +142,7 @@ impl App {
         let (system, path) = (run.system.clone(), run.path.clone());
         let kind = Kind::of(&system);
         let inner = ROW_BLOCK - 2 * (ROW_BLOCK / 12).max(2);
-        let cover = self.picture(&pocket_ui::covers::cover_path(&self.data_dir, &system, &path), inner, inner);
+        let cover = self.picture(&pocket_ui::covers::active_cover_path(&self.data_dir, &system, &path), inner, inner);
         let console = self
             .art
             .entry((system.clone(), inner, inner))
@@ -176,7 +176,7 @@ impl App {
             Kind::Cartridge(..) => l.h,
             _ => l.block,
         };
-        let cover = self.picture(&pocket_ui::covers::cover_path(&self.data_dir, &system, &path), side, side);
+        let cover = self.picture(&pocket_ui::covers::active_cover_path(&self.data_dir, &system, &path), side, side);
         let console = self
             .art
             .entry((system.clone(), l.block, l.block))

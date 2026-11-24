@@ -308,6 +308,10 @@ pub fn parse_battery(capacity: Option<&str>, status: Option<&str>) -> Option<Bat
 
 /// Reads Wi-Fi (`<net>/operstate`) and the battery (`<battery>/capacity`, `status`): three small sysfs files.
 pub fn read(net: &Path, battery: &Path) -> Status {
+    read_with_net(Some(net), battery)
+}
+
+fn read_with_net(net: Option<&Path>, battery: &Path) -> Status {
     // Android's handheld view: the battery is what Android says (`PocketBase.statusCorner`, as in the Mobile view): sysfs
     // isn't open to an app there. Wi-Fi is Android's business (its own status bar), not shown here.
     #[cfg(all(target_os = "android", feature = "handheld"))]
@@ -326,10 +330,10 @@ fn android_reading() -> crate::phone_corner::Reading {
 }
 
 #[cfg(not(all(target_os = "android", feature = "handheld")))]
-fn read_files(net: &Path, battery: &Path) -> Status {
+fn read_files(net: Option<&Path>, battery: &Path) -> Status {
     let file = |p: PathBuf| std::fs::read_to_string(p).ok();
     Status {
-        wifi: file(net.join("operstate")).is_some_and(|s| parse_operstate(&s)),
+        wifi: net.and_then(|net| file(net.join("operstate"))).is_some_and(|s| parse_operstate(&s)),
         battery: parse_battery(file(battery.join("capacity")).as_deref(), file(battery.join("status")).as_deref()),
     }
 }
@@ -420,16 +424,14 @@ static FORCED_WIFI: AtomicU8 = AtomicU8::new(0);
 /// (parked, no wake-ups) while it is not. `notify` is called from it when what it read changed.
 #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn start(notify: impl Fn() + Send + 'static) {
-    // The virtual device has no Wi-Fi chip: POCKETUI_WIFI_IFACE=eth0 there stands in for it (docs/VIRTUAL-DEVICE.md).
-    let iface = std::env::var("POCKETUI_WIFI_IFACE").unwrap_or_else(|_| "wlan0".into());
-    let net = Path::new("/sys/class/net").join(iface);
+    let net = crate::wifi::net_device();
     let battery = crate::battery::dir();
     let spawned = std::thread::Builder::new().name("status-corner".into()).spawn(move || {
         // The symbol's pixels for the corner and the pill, before the first frame wants them.
         prepare_wifi(&[PX, 30]);
         let mut last = None;
         loop {
-            let now = read(&net, &battery);
+            let now = read_with_net(net.as_deref(), &battery);
             if last != Some(now) {
                 last = Some(now);
                 *STATUS.lock().unwrap_or_else(|e| e.into_inner()) = Some(now);
@@ -472,8 +474,7 @@ pub fn status() -> Status {
         if THREAD.get().is_some() {
             return Status::default();
         }
-        let iface = std::env::var("POCKETUI_WIFI_IFACE").unwrap_or_else(|_| "wlan0".into());
-        read(&Path::new("/sys/class/net").join(iface), &crate::battery::dir())
+        read_with_net(crate::wifi::net_device().as_deref(), &crate::battery::dir())
     });
     match FORCED_WIFI.load(Ordering::Relaxed) {
         1 => s.wifi = false,
@@ -490,10 +491,9 @@ pub fn wifi_now() -> bool {
     match FORCED_WIFI.load(Ordering::Relaxed) {
         1 => false,
         2 => true,
-        _ => {
-            let iface = std::env::var("POCKETUI_WIFI_IFACE").unwrap_or_else(|_| "wlan0".into());
-            std::fs::read_to_string(Path::new("/sys/class/net").join(iface).join("operstate")).is_ok_and(|s| parse_operstate(&s))
-        }
+        _ => crate::wifi::net_device().is_some_and(|net| {
+            std::fs::read_to_string(net.join("operstate")).is_ok_and(|s| parse_operstate(&s))
+        }),
     }
 }
 

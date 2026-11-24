@@ -213,7 +213,7 @@ impl Ui {
             Level::Offer(n) => {
                 let room = self.check_buttons(c, text, room, &[("Not now", Action::Press(Button::South), false), ("Check", Action::Press(Button::East), true)]);
                 let head = if n == 1 { tr("1 new game") } else { tr(&format!("{n} new games")) };
-                self.empty_page(c, text, room, Art::Search, &head, &tr("Want to see if they will start? This takes a moment and changes nothing."), None);
+                self.empty_page(c, text, room, Art::Search, &head, &tr("Check if your games can launch? Takes a moment, changes nothing."), None);
             }
             Level::Running => {
                 let room = self.check_buttons(c, text, room, &[("Stop", Action::Press(Button::South), false)]);

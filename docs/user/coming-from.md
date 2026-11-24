@@ -163,8 +163,8 @@ the card handling with a made-up card; the first R36S test follows.
 
 ## Coming from Android
 
-Nothing on Android is touched ([What it does not touch](index.md#what-it-does-not-touch)), and Linux cannot see its
-storage. So you copy files over, from a backup on your computer.
+Use a backup on your computer to copy your games and saves over. Access to internal storage depends on the
+[boot path](../INSTALL-DUAL-BOOT.md#internal-storage-on-the-sd-cards).
 
 ### Getting the files onto the Pocket
 

@@ -146,10 +146,10 @@ impl RommPage {
     pub fn describe(&self, row: Row) -> &'static str {
         match row {
             Row::Server => "Your RomM server's address, as you open it in a browser, e.g. 192.0.2.10:8080.",
-            Row::PairQr => "A code appears. Scan it with your phone, sign in to RomM and approve this Pocket. Needs RomM 5.0 or newer.",
+            Row::PairQr => "Shows a QR code to scan on your phone, sign in to RomM and approve this Pocket (RomM 5.0+).",
             Row::PairCode => "In RomM: your profile › Client API Tokens › Pair. Type the 8-digit code it shows.",
             Row::Refresh => "Read the list of games on the server again.",
-            Row::Unpair => "This Pocket forgets the server. Games you downloaded stay on the card.",
+            Row::Unpair => "Unlinks this server. Games already downloaded stay on your SD card.",
         }
     }
 

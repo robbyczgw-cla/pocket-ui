@@ -280,7 +280,7 @@ launch() {
     POCKETUI_RESTART_DELAY="${DELAY:-0}" POCKETUI_RESTARTS="${RESTARTS:-3}" POCKETUI_GAME_GRACE=5 \
     POCKETUI_AS_ESSWAY="${ESSWAY:-}" POCKETUI_SWAY_WAIT="${SWAY_WAIT:-30}" POCKETUI_START_ES="$T/bin/start_es.sh" POCKETUI_ES_ONLY_FILE="$T/es-only" \
     POCKETUI_FRAME_FILE="$T/frame" POCKETUI_UI_PID_FILE="$T/ui.pid" POCKETUI_FIRST_FRAME_SECS="${FIRST_FRAME:-30}" \
-    POCKETUI_STABLE_SECS="${STABLE:-120}" POCKETUI_SAFE_RESTARTS="${SAFE_RESTARTS:-2}" POCKETUI_HELPER_SECS="${HELPER:-10}" \
+    POCKETUI_STABLE_SECS="${STABLE:-120}" POCKETUI_CRASH_RESET_SECS="${CRASH_RESET:-600}" POCKETUI_SAFE_RESTARTS="${SAFE_RESTARTS:-2}" POCKETUI_HELPER_SECS="${HELPER:-10}" \
     POCKETUI_ROCKNIX_PROFILE="$T/rocknix/profile" POCKETUI_ROCKNIX_FUNCTIONS="$T/rocknix/001-functions" \
     POCKETUI_ES_SETTINGS="$T/rocknix/es_settings" POCKETUI_SYSTEM_CFG="$T/system.cfg" POCKETUI_TZ_CACHE="$T/cache" \
     POCKETUI_LOCALE_DIR="$T/locale" POCKETUI_FAN_ROOT="$T/fansys" POCKETUI_FAN_NOTE="$T/fan.restore" \
@@ -639,6 +639,18 @@ setup "139 139 139 139 0:3 77"
 releases v1
 STABLE=2 RESTARTS=3 launch
 check "a long run in safe mode is not either" '[ ! -e "$ROOT/known-good" ] && run_line 5 | grep -q -- --safe'
+
+echo "# a pocket-ui that dies a while after its picture, again and again, still reaches safe mode"
+# A pocket-ui that dies a few minutes after its first picture (a big card): the count started afresh after every run that
+# lasted STABLE seconds, so it restarted for ever. Only a run of CRASH_RESET seconds starts it afresh.
+setup "139:2 139:2 139:2 139:2 77"
+STABLE=1 RESTARTS=3 launch
+check "four runs that died after their picture, then safe mode" 'run_line 5 | grep -q -- --safe && ! run_line 4 | grep -q -- --safe'
+check "counted 1, 2, 3" 'grep -q "restart 3 of 3" "$T/log"'
+# CRASH_RESET 3 s against a 5 s run: an instant crash on a loaded gate host can take more than 1 s.
+setup "139 139 139:5 139 139 77"
+CRASH_RESET=3 RESTARTS=3 launch
+check "a run of CRASH_RESET seconds starts the count afresh" '! grep -q -- --safe "$T/calls" && grep -c "restart 1 of 3" "$T/log" | grep -q "^2$"'
 
 echo "# a crash loop goes back to the last known good version, then safe mode"
 setup "139 139 139 139 139 139 139 139 77"

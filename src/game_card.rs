@@ -115,10 +115,6 @@ pub enum Mode {
         sel: usize,
         rows: Vec<ChoiceRow>,
     },
-    /// "Hide or delete": Hide from the shelf (0) or Delete from the card… (1).
-    Manage {
-        sel: usize,
-    },
     /// "Delete from the card?": what it frees, whether saves and states go too, the second A.
     Delete(DeleteSheet),
 }
@@ -186,9 +182,9 @@ pub enum Out {
     Emulator,
     /// Right on a card opened by Just Play (X on its row): pick another game.
     Another,
-    /// "Hide from the shelf" (`app_storage`).
+    /// A on "Hide from the shelf" (`app_storage`).
     Hide,
-    /// "Delete from the card…": the app works out what it takes ([`Card::delete_info`]).
+    /// A on "Delete from the card": the sheet is open, the app works out what it takes ([`Card::delete_info`]).
     PlanDelete,
     /// The second A on Delete.
     Delete { with_saves: bool },
@@ -299,8 +295,7 @@ impl Card {
         }
     }
 
-    /// Whether row `j` follows row `i` with nothing to read between them (Curator's rows do; "Hide or delete" sits
-    /// under the description, far below them).
+    /// Whether row `j` follows row `i` with nothing to read between them (the card's rows do).
     fn next_to(&self, i: usize, j: usize) -> bool {
         let at = self.row_at.borrow();
         match (at.get(i), at.get(j)) {
@@ -363,7 +358,6 @@ impl Card {
             Mode::Status { sel, stars } => (1, *sel, *stars as usize, 0),
             Mode::Note(kb) => (2, kb.row * 16 + kb.col, kb.text.len(), kb.shift as usize * 2 + kb.symbols as usize),
             Mode::Choose { sel, rows } => (3, *sel, rows.len(), 0),
-            Mode::Manage { sel } => (4, *sel, 0, 0),
             Mode::Delete(d) => (5, d.sel, d.with_saves as usize * 2 + d.armed as usize, d.info.is_some() as usize),
         }
     }
@@ -482,8 +476,14 @@ impl Card {
         }
         match &mut self.mode {
             Mode::View => match b {
-                Button::East => match self.focus.and_then(|i| self.data.rows.get(i)) {
-                    Some(row) => Out::Row(row.kind),
+                Button::East => match self.focus.and_then(|i| self.data.rows.get(i)).map(|r| r.kind) {
+                    // "Delete from the card": the sheet at once, Delete selected; the app works out what it takes.
+                    Some(RowKind::Delete) => {
+                        self.mode = Mode::Delete(DeleteSheet { info: None, with_saves: false, sel: 1, armed: false, synced: false, busy: false });
+                        Out::PlanDelete
+                    }
+                    Some(RowKind::Hide) => Out::Hide,
+                    Some(kind) => Out::Row(kind),
                     None => Out::Play,
                 },
                 Button::South => Out::Back,
@@ -588,29 +588,6 @@ impl Card {
                     let pick = rows.get(*sel).map(|r| r.choice.clone());
                     self.mode = Mode::View;
                     pick.map_or(Out::None, Out::SetChoice)
-                }
-                Button::South => {
-                    self.mode = Mode::View;
-                    Out::None
-                }
-                _ => Out::None,
-            },
-            Mode::Manage { sel } => match b {
-                Button::Up | Button::Left => {
-                    *sel = 0;
-                    Out::None
-                }
-                Button::Down | Button::Right => {
-                    *sel = 1;
-                    Out::None
-                }
-                Button::East if *sel == 0 => {
-                    self.mode = Mode::View;
-                    Out::Hide
-                }
-                Button::East => {
-                    self.mode = Mode::Delete(DeleteSheet { info: None, with_saves: false, sel: 1, armed: false, synced: false, busy: false });
-                    Out::PlanDelete
                 }
                 Button::South => {
                     self.mode = Mode::View;
@@ -774,7 +751,6 @@ impl Card {
             Mode::Status { .. } => vec![("A", "Set"), ("B", "Cancel")],
             Mode::Note(_) => vec![("A", "Type"), ("B", "Delete"), ("X", "Shift"), ("Y", "Symbols"), ("START", "Save")],
             Mode::Choose { .. } => vec![("A", "This one"), ("B", "Cancel")],
-            Mode::Manage { .. } => vec![("A", "Choose"), ("B", "Cancel")],
             Mode::Delete(DeleteSheet { busy: true, .. }) => Vec::new(),
             Mode::Delete(DeleteSheet { armed: true, .. }) => vec![("A", "Delete now"), ("B", "Keep it")],
             Mode::Delete(DeleteSheet { sel: 0, .. }) => vec![("A", "Change"), ("B", "Cancel")],
@@ -841,7 +817,6 @@ impl Card {
         match &self.mode {
             Mode::Status { sel, stars } => self.paint_picker(c, text, *sel, *stars),
             Mode::Choose { sel, rows } => self.paint_chooser(c, text, *sel, rows),
-            Mode::Manage { sel } => self.paint_manage(c, text, *sel),
             Mode::Delete(d) => self.paint_delete(c, text, d),
             _ => {}
         }
@@ -866,7 +841,6 @@ impl Card {
         match &self.mode {
             Mode::Status { sel, stars } => self.paint_picker(c, text, *sel, *stars),
             Mode::Choose { sel, rows } => self.paint_chooser(c, text, *sel, rows),
-            Mode::Manage { sel } => self.paint_manage(c, text, *sel),
             Mode::Delete(d) => self.paint_delete(c, text, d),
             _ => {}
         }
@@ -904,7 +878,6 @@ impl Card {
         match &self.mode {
             Mode::Status { sel, stars } => self.paint_picker(c, text, *sel, *stars),
             Mode::Choose { sel, rows } => self.paint_chooser(c, text, *sel, rows),
-            Mode::Manage { sel } => self.paint_manage(c, text, *sel),
             Mode::Delete(d) => self.paint_delete(c, text, d),
             _ => {}
         }
@@ -1221,11 +1194,12 @@ impl Card {
             y += 18 + tallest + 30;
         }
 
-        // Curator's rows: Echoes, Versions, Stickers, each a spine with its one line; the focused one is the label.
-        // "Hide or delete" is a row like them, but the last thing on the card (below).
+        // The card's rows: Echoes, Versions, Stickers, Screenshots …, and last "Delete from the card" and "Hide from the
+        // shelf", each a spine with its one line; the focused one is the label. All above the description, so Down
+        // finds Delete in a few presses (21.11.: under the description nobody found it).
         let mut at = vec![(0, 0); d.rows.len()];
         let mut curator_rows = false;
-        for (i, row) in d.rows.iter().enumerate().filter(|(_, r)| r.kind != RowKind::Manage) {
+        for (i, row) in d.rows.iter().enumerate() {
             at[i] = (y - y0, spine_h());
             self.paint_row(c, text, y, row, self.focus == Some(i));
             y += spine_h() + 10;
@@ -1302,18 +1276,11 @@ impl Card {
             text.draw(c, Face::Body, 21, MARGIN, y, pal().dust, &credit);
             y += line_step();
         }
-        // "Hide or delete", under everything: found by scrolling to the end, never in the way of reading.
-        for (i, row) in d.rows.iter().enumerate().filter(|(_, r)| r.kind == RowKind::Manage) {
-            y += 20;
-            at[i] = (y - y0, spine_h());
-            self.paint_row(c, text, y, row, self.focus == Some(i));
-            y += spine_h() + 10;
-        }
         *self.row_at.borrow_mut() = at;
         y - y0
     }
 
-    /// A row of the card (Curator's, "Hide or delete"): a spine with its title and one line; the focused one is the label.
+    /// A row of the card (Curator's, "Delete from the card"): a spine with its title and one line; the focused one is the label.
     fn paint_row(&self, c: &mut Canvas, text: &mut Text, y: i32, row: &CuratorRow, focused: bool) {
         let d = &self.data;
         let (full_w, h) = (c.w - 2 * MARGIN, spine_h());
@@ -1327,37 +1294,6 @@ impl Card {
         let lx = MARGIN + STRIPE + 28 + title_w.max(170) + 28;
         let line = text.fit(Face::Body, 28, &row.line, MARGIN + full_w - 28 - lx);
         text.draw(c, Face::Body, 28, lx, y + h / 2 + type_scale::base(10, 28), dim, &line);
-    }
-
-    /// "Hide or delete": two choices on a sheet over the dimmed card, as the status picker.
-    fn paint_manage(&self, c: &mut Canvas, text: &mut Text, sel: usize) {
-        c.shade_rect(0, 0, c.w, c.h, pal().void, 225);
-        // Two lines in a row: a title and its line under it, each grown with the text size (`type_scale`).
-        let (w, gap) = (type_scale::wide(820, 37).min(c.w - 2 * MARGIN - 96), 10);
-        let row = 96 + type_scale::grow(37) + type_scale::grow(26);
-        let x = (c.w - w) / 2;
-        let total = 2 * (row + gap) - gap;
-        let top = (crate::kit::content_bottom(c.h) - total) / 2 + 50;
-        sheet(c, x - 48, top - 110, w + 96, total + 158);
-        let title = text.fit_name(Face::Title, 50, &self.data.title, w);
-        text.draw_name(c, Face::Title, 50, x, top - 32, pal().chalk, &title);
-        let choices = [
-            ("Hide from the shelf", "It stays on the SD card. Settings › System › Storage brings it back."),
-            ("Delete from the SD card…", "Shows what it frees and asks again."),
-        ];
-        for (i, (name, meta)) in choices.iter().enumerate() {
-            let y = top + i as i32 * (row + gap);
-            let selected = i == sel;
-            crate::kit::shelf_row(c, x, y, w, row, selected);
-            c.rect(x, y, STRIPE, row, if selected { self.data.stripe } else { mix(self.data.stripe, pal().spine, 150) });
-            let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
-            let name = text.fit(Face::Title, 37, name, w - STRIPE - 56);
-            text.draw(c, Face::Title, 37, x + STRIPE + 28, y + 42 + type_scale::grow(37), fg, &name);
-            let meta = text.fit(Face::Body, 26, meta, w - STRIPE - 56);
-            text.draw(c, Face::Body, 26, x + STRIPE + 28, y + 78 + type_scale::grow(37) + type_scale::grow(26), dim, &meta);
-        }
-        c.rect(0, crate::kit::content_bottom(c.h), c.w, c.h - crate::kit::content_bottom(c.h), pal().void);
-        self.paint_hints(c, text);
     }
 
     /// "Delete from the card?": what goes and what it frees, saves and states kept or not, then Delete (twice).
@@ -1782,36 +1718,40 @@ mod tests {
         assert_eq!(card.focus, None);
     }
 
-    fn manage_row() -> CuratorRow {
-        CuratorRow { kind: RowKind::Manage, title: "Hide or delete".into(), line: "Take it off the shelf, or off the SD card".into() }
+    fn delete_row() -> CuratorRow {
+        CuratorRow { kind: RowKind::Delete, title: "Delete from the card".into(), line: "Frees its space. Asks twice".into() }
     }
 
-    /// "Hide or delete" is under the description: Down reads the card to its end first, then lands on it; Up from it
-    /// goes back into the text, not straight to Echoes.
+    fn hide_row() -> CuratorRow {
+        CuratorRow { kind: RowKind::Hide, title: "Hide from the shelf".into(), line: "Stays on the card".into() }
+    }
+
+    /// 21.11. (a player found no way to delete one game): Delete sat under the description, behind a second
+    /// sheet, and nobody found it. Now "Delete from the card" follows the other rows above the description: Down goes
+    /// straight from Echoes onto it, however long the text, and A opens the delete sheet at once (no Hide-or-delete step).
     #[test]
-    fn the_hide_or_delete_row_is_reached_by_reading_to_the_end() {
+    fn delete_from_the_card_is_a_row_right_after_the_others_and_a_opens_the_sheet() {
         let (w, h) = (1240, 1080);
         let mut px = vec![0u32; (w * h) as usize];
         let mut text = Text::new();
         let mut d = data();
         d.summary = Summary::Wikipedia { text: "A long description. ".repeat(80), title: "Tetris".into() };
-        d.rows = vec![CuratorRow { kind: RowKind::Echoes, title: "Echoes".into(), line: "Dr. Mario".into() }, manage_row()];
+        d.rows = vec![CuratorRow { kind: RowKind::Echoes, title: "Echoes".into(), line: "Dr. Mario".into() }, delete_row(), hide_row()];
         let mut card = Card::new(d);
         card.paint(&mut Canvas::new(&mut px, w as u32, h as u32), &mut text, None, None);
         assert!(card.max_scroll > 400, "a long card");
         card.press(Button::Down);
         assert_eq!(card.focus, Some(0), "Echoes first");
-        let mut presses = 0;
-        while card.focus != Some(1) && presses < 200 {
-            card.press(Button::Down);
-            card.paint(&mut Canvas::new(&mut px, w as u32, h as u32), &mut text, None, None);
-            presses += 1;
-        }
-        assert_eq!(card.focus, Some(1), "Hide or delete at the end");
-        assert!(presses > 3, "the description was scrolled through, not jumped over ({presses} presses)");
-        assert_eq!(card.press(Button::East), Out::Row(RowKind::Manage));
-        card.press(Button::Up);
-        assert_eq!(card.focus, None, "up from it scrolls back into the text");
+        card.press(Button::Down);
+        assert_eq!(card.focus, Some(1), "Delete from the card next, not after the description");
+        let (echoes, delete) = (card.row_at.borrow()[0], card.row_at.borrow()[1]);
+        assert!(delete.0 > echoes.0 && delete.0 - (echoes.0 + echoes.1) <= 40, "right under Echoes: {echoes:?} {delete:?}");
+        assert_eq!(card.press(Button::East), Out::PlanDelete);
+        assert!(matches!(&card.mode, Mode::Delete(d) if d.sel == 1 && !d.armed && !d.with_saves), "the sheet, saves kept");
+        card.press(Button::South);
+        card.press(Button::Down);
+        assert_eq!(card.focus, Some(2));
+        assert_eq!(card.press(Button::East), Out::Hide, "Hide from the shelf is its own row");
     }
 
     /// A card whose Developer and Series lead to other games, and whose Genre doesn't.
@@ -1916,7 +1856,7 @@ mod tests {
         let mut text = Text::new();
         let mut d = data();
         d.summary = Summary::Wikipedia { text: "A long description. ".repeat(80), title: "Tetris".into() };
-        d.rows = vec![manage_row()];
+        d.rows = vec![delete_row()];
         let mut card = Card::new(d);
         card.show_info();
         card.paint(&mut Canvas::new(&mut px, w as u32, h as u32), &mut text, None, None);
@@ -1935,13 +1875,14 @@ mod tests {
 
     #[test]
     fn hide_is_one_choice_and_delete_asks_twice_keeping_saves_unless_changed() {
-        let mut card = Card::new(data());
-        card.mode = Mode::Manage { sel: 0 };
+        let mut d = data();
+        d.rows = vec![delete_row(), hide_row()];
+        let mut card = Card::new(d);
+        card.focus = Some(1);
         assert_eq!(card.press(Button::East), Out::Hide);
         assert!(matches!(card.mode, Mode::View));
 
-        card.mode = Mode::Manage { sel: 0 };
-        card.press(Button::Down);
+        card.focus = Some(0);
         assert_eq!(card.press(Button::East), Out::PlanDelete);
         assert_eq!(card.press(Button::East), Out::None, "nothing to delete before it is known");
         card.delete_info(Ok(DeleteInfo { game_bytes: 4_000_000_000, files: 3, names: vec!["Racer.cue".into(), "Racer.bin".into()], kept_files: 2, kept_bytes: 9_000 }), true);

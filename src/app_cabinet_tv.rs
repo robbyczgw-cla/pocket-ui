@@ -74,8 +74,8 @@ pub(crate) struct TvState {
     pub(crate) console_place: Option<(i32, i32, i32, i32)>,
     /// Where the console stands this frame (None: a handheld's game, or one without a console picture).
     pub(crate) console_at: Option<(i32, i32, i32, i32)>,
-    /// The shadow of the handheld standing in the TV's place, in its shape (key: the body's).
-    hand_shadow: Option<((i32, usize), Rc<art::ShapeShadow>)>,
+    /// The shadows of the handhelds that stood in the TV's place, in their shapes (key: the body's), the last one last.
+    hand_shadow: Vec<((i32, usize), Rc<art::ShapeShadow>)>,
     /// The power light of the handheld in the TV's place: the battery it shows (`frame_led`, read every 10 s).
     hand_light: Option<pocket_ui::frame_led::Clock>,
 }
@@ -303,8 +303,13 @@ pub(crate) fn tv_scale(w: i32, h: i32, room: i32) -> Option<f32> {
 const CONSOLE_H: f32 = 0.42;
 const CONSOLE_GAP: i32 = 14;
 const CONSOLE_WIDE: f32 = 2.35;
-/// Consoles kept made (`TvState::console`).
-const CONSOLES_KEPT: usize = 8;
+/// Consoles kept made (`TvState::console`): one per system a library has, so browsing it never makes one twice (8 made
+/// them again on every move along a shelf of more systems; a few MB at most).
+const CONSOLES_KEPT: usize = 32;
+/// Handhelds' shadows kept made (`TvState::hand_shadow`): browsing between handheld systems made one in every frame that
+/// changed the handheld (a blur over its whole area, the Cabinet's slowest frames on the RG35XX Plus, 0.6.0's p95 37.9 ms
+/// against 0.5.1's 33.0 with a larger handheld).
+const HAND_SHADOWS_KEPT: usize = 16;
 /// The TV's shadow (also the console's and a handheld's, in their shapes): how far right and down, how soft, how dark.
 const SHADOW: (i32, i32, i32, f32) = (10, 12, 18, 0.45);
 
@@ -366,7 +371,9 @@ impl App {
             if !unplayed { tv.showcase_stop(); }
             showcase_step_with(tv, &want, &data_dir, now, pocket_ui::showcase::enabled() && unplayed);
         }
+        let mut lap = super::app_cabinet::thread_cpu();
         let pic = tv.compose(&body, now);
+        self.cabinet.timing.part("tv compose", &mut lap);
         let px = c.w - super::app_cabinet::CAB_X - art::WALL - GAP - pw;
         let (x, y) = (px + (pw - pic.w) / 2, board_y - pic.h);
         tv.left = Some(px);
@@ -378,10 +385,11 @@ impl App {
             if tv.glow.as_ref().is_none_or(|g| !g.is_for(centre, pw, (c.w, c.h), 0, glow)) {
                 tv.glow = Some(pocket_ui::tv_glow::Glow::new(centre, pw, (c.w, c.h), 0, glow));
             }
-            if let Some(g) = tv.glow.as_ref() {
+            if let Some(g) = tv.glow.as_mut() {
                 g.paint(c);
             }
         }
+        self.cabinet.timing.part("tv glow", &mut lap);
         // The console's place beside the TV: the same on every shelf, so the cases out of the shelf keep clear of it
         // there too (a handheld's shelf leaves it empty); left out where the widest case would no longer have its room.
         let (bh, bw) = ((ph as f32 * CONSOLE_H).round() as i32, (ph as f32 * CONSOLE_H * CONSOLE_WIDE).round() as i32);
@@ -424,21 +432,36 @@ impl App {
             }
             tv.console_at = Some((x, y, cp.w, cp.h));
         }
+        self.cabinet.timing.part("tv console", &mut lap);
         if lcd && shows <= 0.0 {
             // The handheld is in the scene, in front: its place by the board stays empty meanwhile.
             return;
         }
         if lcd {
             // A handheld is no box: its shadow in its shape.
-            if tv.hand_shadow.as_ref().is_none_or(|(k, _)| *k != key) {
-                tv.hand_shadow = Some((key, Rc::new(art::ShapeShadow::of(&body.pic, sdx, sdy, blur))));
-            }
-            let shadow = tv.hand_shadow.as_ref().map(|(_, s)| s.clone()).unwrap();
+            let shadow = match tv.hand_shadow.iter().position(|(k, _)| *k == key) {
+                Some(i) => {
+                    let kept = tv.hand_shadow.remove(i);
+                    tv.hand_shadow.push(kept);
+                    tv.hand_shadow.last().map(|(_, s)| s.clone()).unwrap()
+                }
+                None => {
+                    if tv.hand_shadow.len() >= HAND_SHADOWS_KEPT {
+                        tv.hand_shadow.remove(0);
+                    }
+                    let made = Rc::new(art::ShapeShadow::of(&body.pic, sdx, sdy, blur));
+                    tv.hand_shadow.push((key, made.clone()));
+                    made
+                }
+            };
+            self.cabinet.timing.part("tv hand shadow made", &mut lap);
             shadow.paint(c, x, y, dark * shows, (0, c.h));
         } else {
             art::soft_shadow(c, x + sdx, y + sdy, pic.w - 4, pic.h - sdy, blur, dark, (0, c.h));
         }
+        self.cabinet.timing.part(if lcd { "tv hand shadow" } else { "tv soft shadow" }, &mut lap);
         art::blit(c, &pic, x, y, if lcd { (256.0 * shows) as u32 } else { 256 }, (0, c.h));
+        self.cabinet.timing.part("tv blit", &mut lap);
         // Its power light once it stands there whole (`frame_led`).
         if lcd && shows >= 1.0 {
             paint_hand_light(c, tv, system, &pic, x, y, now);

@@ -76,6 +76,14 @@ fn wait_for(what: &str, mut ok: impl FnMut() -> bool) -> bool {
 
 #[test]
 fn a_gles_core_reaches_the_screen_upright_through_the_read_back() {
+    if let Some(err) = run() {
+        assert!(err.contains("read back (rgba, ") || err.contains("read back (bgra, "), "the order read, in the log: {err}");
+    }
+}
+
+/// Runs the stub core; the core's log, None when the host has no GLES. The log has the order read and the read-back's time split into
+/// the read and the turn into the picture.
+fn run() -> Option<String> {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
     std::fs::write(d.join("core.c"), CORE).unwrap();
@@ -113,11 +121,23 @@ fn a_gles_core_reaches_the_screen_upright_through_the_read_back() {
         let i = ((y * w + x) * 4) as usize;
         [fb[i + 2], fb[i + 1], fb[i]]
     };
+    // The top half mostly red over blue, the bottom half mostly blue over red. Not exact colours: on this 64x48 screen the software
+    // HUD's note (a dark pill over most of the top half) dims the red under it; an upside-down or red-blue swapped picture still fails.
+    let upright = |fb: &[u8]| {
+        let share = |rows: std::ops::Range<u32>, red: bool| {
+            let n = rows.clone().flat_map(|y| (0..w).map(move |x| (x, y))).filter(|&(x, y)| {
+                let [r, _, b] = px(fb, x, y);
+                if red { r > b.saturating_add(30) } else { b > r.saturating_add(30) }
+            });
+            n.count() * 2 > rows.len() * w as usize
+        };
+        fb.len() >= (w * h * 4) as usize && share(0..h / 2, true) && share(h / 2..h, false)
+    };
     let mut seen = false;
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(20) {
         let fb = std::fs::read(d.join("fb")).unwrap();
-        if px(&fb, w / 2, 2) == [255, 0, 0] && px(&fb, w / 2, h - 3) == [0, 0, 255] {
+        if upright(&fb) {
             seen = true;
             break;
         }
@@ -129,9 +149,11 @@ fn a_gles_core_reaches_the_screen_upright_through_the_read_back() {
     let err = std::fs::read_to_string(d.join("core.err")).unwrap_or_default();
     if err.contains("GL context") && !seen {
         eprintln!("no GLES on this host, nothing to check: {err}");
-        return;
+        return None;
     }
     assert!(seen, "the core's picture never reached the screen upright\n{err}");
     assert!(err.contains("read back to the CPU") && err.contains("frames read back"), "{err}");
+    assert!(["read ", "convert "].iter().all(|k| err.contains(k)), "the read-back's time split: {err}");
+    Some(err)
 }
 

@@ -12,7 +12,9 @@ import sys
 import tempfile
 
 RELEASE = 'image-release.receipt.json'
-MANIFESTS = ('SHA256SUMS-images', 'SHA256SUMS-images-more', 'SHA256SUMS-images-sm8550')
+# The release's checksum lists. The R36S beta card has its own (its own folder too), so it is uploaded or left out
+# without touching the other images' SHA256SUMS-images asset.
+MANIFESTS = ('SHA256SUMS-images', 'SHA256SUMS-images-more', 'SHA256SUMS-images-sm8550', 'SHA256SUMS-images-r36s')
 HEX = re.compile(r'[0-9a-f]{64}')
 ASSET = re.compile(r'pocket-ui-[A-Za-z0-9.+_-]+\.(?:img\.xz|txt)')
 HEADER = re.compile(r'^== (\S+\.img(?:\.xz)?) \(version ([^,)]+)(?:, model [^)]*)?\)$')

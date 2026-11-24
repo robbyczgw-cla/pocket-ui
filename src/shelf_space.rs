@@ -7,6 +7,7 @@
 //! folder). A game the list doesn't know is in the crate: games copied onto the card later go into the crate, and the
 //! shelf keeps what the player put on it. A game gone from the card leaves a free place.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 const FILE: &str = "shelf_space.json";
@@ -27,12 +28,21 @@ pub enum Fill {
     Pick,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default)]
 pub struct ShelfSpace {
     /// How many places the shelf has; None: shelf space is off and every game stands on the shelf.
     pub limit: Option<u32>,
-    /// The games on the shelf, in the shelf's order.
+    /// The games on the shelf, in the shelf's order. Changed only through the methods here, which keep `index`.
     pub shelf: Vec<PathBuf>,
+    /// `shelf` as a set: `on_shelf` runs for every game of the card on every rebuild and in the crate's count
+    /// (179,000 games × 500 places on the R36S card was 90 million path comparisons).
+    index: HashSet<PathBuf>,
+}
+
+impl PartialEq for ShelfSpace {
+    fn eq(&self, o: &Self) -> bool {
+        self.limit == o.limit && self.shelf == o.shelf
+    }
 }
 
 impl ShelfSpace {
@@ -40,8 +50,17 @@ impl ShelfSpace {
         let Ok(text) = std::fs::read_to_string(data_dir.join(FILE)) else { return ShelfSpace::default() };
         let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { return ShelfSpace::default() };
         let limit = v["limit"].as_u64().map(|n| n.clamp(1, MOST as u64) as u32);
-        let shelf = v["shelf"].as_array().map(|a| a.iter().filter_map(|p| p.as_str()).map(PathBuf::from).collect()).unwrap_or_default();
-        ShelfSpace { limit, shelf }
+        let shelf: Vec<PathBuf> = v["shelf"].as_array().map(|a| a.iter().filter_map(|p| p.as_str()).map(PathBuf::from).collect()).unwrap_or_default();
+        let mut s = ShelfSpace { limit, shelf, index: HashSet::new() };
+        // A hand-edited file may name a game twice: keep the first, as `switch_on` would.
+        let mut seen = HashSet::new();
+        s.shelf.retain(|p| seen.insert(p.clone()));
+        s.index = seen;
+        s
+    }
+
+    fn reindex(&mut self) {
+        self.index = self.shelf.iter().cloned().collect();
     }
 
     pub fn save(&self, data_dir: &Path) {
@@ -58,7 +77,15 @@ impl ShelfSpace {
 
     /// Whether `rom` stands on the shelf (every game does while shelf space is off).
     pub fn on_shelf(&self, rom: &Path) -> bool {
-        self.limit.is_none() || self.shelf.iter().any(|p| p == rom)
+        if self.limit.is_none() {
+            return true;
+        }
+        // The set matches the list unless someone changed `shelf` past the methods: then the list decides.
+        if self.index.len() == self.shelf.len() {
+            self.index.contains(rom)
+        } else {
+            self.shelf.iter().any(|p| p == rom)
+        }
     }
 
     /// How many places are free.
@@ -72,11 +99,12 @@ impl ShelfSpace {
         let limit = limit.clamp(1, MOST);
         self.limit = Some(limit);
         self.shelf.truncate(limit as usize);
+        self.reindex();
         for p in candidates {
             if self.shelf.len() >= limit as usize {
                 break;
             }
-            if !self.shelf.contains(&p) {
+            if self.index.insert(p.clone()) {
                 self.shelf.push(p);
             }
         }
@@ -95,6 +123,7 @@ impl ShelfSpace {
         match self.shelf.iter().position(|p| p == out) {
             Some(i) => {
                 self.shelf[i] = inn.to_path_buf();
+                self.reindex();
                 true
             }
             None => false,
@@ -107,6 +136,7 @@ impl ShelfSpace {
             return false;
         }
         self.shelf.push(inn.to_path_buf());
+        self.index.insert(inn.to_path_buf());
         true
     }
 
@@ -114,6 +144,7 @@ impl ShelfSpace {
     pub fn put_away(&mut self, out: &Path) -> bool {
         let n = self.shelf.len();
         self.shelf.retain(|p| p != out);
+        self.index.remove(out);
         self.shelf.len() != n
     }
 
@@ -121,6 +152,7 @@ impl ShelfSpace {
     pub fn forget_missing(&mut self, exists: impl Fn(&Path) -> bool) -> bool {
         let n = self.shelf.len();
         self.shelf.retain(|p| exists(p));
+        self.reindex();
         self.shelf.len() != n
     }
 }
@@ -133,9 +165,12 @@ pub fn order(fill: Fill, recent: &[PathBuf], favourites: &[PathBuf], all: &[Path
         Fill::Favourites => [favourites, recent],
         Fill::Pick => return Vec::new(),
     };
+    // Each game once, by a set: `out.contains` against the whole list was quadratic, 178 s on a desktop for the R36S
+    // card's 63,000 games (15–30 minutes of a still picture on the handheld).
+    let mut seen: std::collections::HashSet<&PathBuf> = std::collections::HashSet::new();
     let mut out: Vec<PathBuf> = Vec::new();
     for p in firsts.into_iter().flatten().chain(all) {
-        if !out.contains(p) {
+        if seen.insert(p) {
             out.push(p.clone());
         }
     }
@@ -194,6 +229,68 @@ mod tests {
         assert_eq!(order(Fill::Recent, &[p("c")], &[p("d"), p("c")], &all), [p("c"), p("d"), p("a"), p("b")]);
         assert_eq!(order(Fill::Favourites, &[p("c")], &[p("d")], &all), [p("d"), p("c"), p("a"), p("b")]);
         assert!(order(Fill::Pick, &[p("c")], &[], &all).is_empty());
+    }
+
+    fn thread_cpu() -> std::time::Duration {
+        let mut ts: libc::timespec = unsafe { std::mem::zeroed() };
+        assert_eq!(unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut ts) }, 0);
+        std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
+    }
+
+    /// A big card (the R36S's 179,000 files, 63,000 games): Settings → Games → Shelf space → "My favourites" orders
+    /// every game on the main thread. With `out.contains` that took 178 s on a desktop; it has to stay
+    /// far below a frame's worth per thousand games. Thread CPU, so a loaded host doesn't fail it.
+    #[test]
+    fn ordering_a_big_card_is_linear_not_quadratic() {
+        let all: Vec<PathBuf> = (0..60_000).map(|i| PathBuf::from(format!("/storage/roms/snes/Game {i:05} (USA).zip"))).collect();
+        let favourites: Vec<PathBuf> = all.iter().rev().take(300).cloned().collect();
+        let t = thread_cpu();
+        let out = order(Fill::Favourites, &all[..200], &favourites, &all);
+        let took = thread_cpu() - t;
+        assert_eq!(out.len(), all.len(), "each game once");
+        assert_eq!(out[0], all[all.len() - 1], "the favourites first");
+        assert!(took < std::time::Duration::from_millis(1500), "ordering 60,000 games took {took:?} of CPU");
+    }
+
+    /// Home, a system's row and the crate ask `on_shelf` for every game on every rebuild (and the crate's card counts
+    /// them while it is drawn): 180,000 games against a full shelf of 500 places was 90 million path comparisons.
+    #[test]
+    fn asking_a_full_shelf_about_every_game_of_a_big_card_is_cheap() {
+        let all: Vec<PathBuf> = (0..180_000).map(|i| PathBuf::from(format!("/storage/roms/zxspectrum/Game {i:06}.tzx"))).collect();
+        let mut s = ShelfSpace::default();
+        s.switch_on(MOST, all.iter().step_by(360).cloned());
+        assert_eq!(s.shelf.len(), MOST as usize);
+        let t = thread_cpu();
+        let on = all.iter().filter(|g| s.on_shelf(g)).count();
+        let took = thread_cpu() - t;
+        assert_eq!(on, MOST as usize);
+        assert!(took < std::time::Duration::from_millis(800), "180,000 on_shelf questions took {took:?} of CPU");
+    }
+
+    /// The set behind `on_shelf` follows every change of the shelf, and a file naming a game twice keeps it once.
+    #[test]
+    fn on_shelf_follows_every_change() {
+        let mut s = ShelfSpace::default();
+        s.switch_on(3, [p("a"), p("b"), p("a"), p("c"), p("d")]);
+        assert_eq!(s.shelf, [p("a"), p("b"), p("c")]);
+        assert!(s.on_shelf(&p("c")) && !s.on_shelf(&p("d")));
+        assert!(s.swap(&p("c"), &p("d")));
+        assert!(s.on_shelf(&p("d")) && !s.on_shelf(&p("c")));
+        assert!(s.put_away(&p("a")));
+        assert!(!s.on_shelf(&p("a")));
+        assert!(s.put(&p("x")));
+        assert!(s.on_shelf(&p("x")));
+        assert!(s.forget_missing(|r| r != p("b")));
+        assert!(!s.on_shelf(&p("b")) && s.on_shelf(&p("d")) && s.on_shelf(&p("x")));
+        s.switch_on(1, []);
+        assert_eq!(s.shelf, [p("d")]);
+        assert!(!s.on_shelf(&p("x")), "cut to one place: x went into the crate");
+
+        let dir = crate::testutil::TestDir::new("shelf-space-twice");
+        std::fs::write(dir.join(FILE), r#"{"limit":5,"shelf":["/roms/a","/roms/b","/roms/a"]}"#).unwrap();
+        let read = ShelfSpace::load(&dir);
+        assert_eq!(read.shelf, [p("a"), p("b")]);
+        assert!(read.on_shelf(&p("b")) && !read.on_shelf(&p("c")));
     }
 
     /// The read of shelf_space.json against every damaged form of a valid file (`file_faults`: missing, empty, cut short,

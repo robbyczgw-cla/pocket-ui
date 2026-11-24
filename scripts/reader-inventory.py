@@ -62,7 +62,7 @@ COVERAGE = {
     'settings.rs': ['settings'], 'favorites.rs': ['favorites'], 'recents.rs': ['recents'],
     'system_list.rs': ['systems'], 'library.rs': ['systems', 'playlist'], 'gamelist.rs': ['gamelist'],
     'library_cache.rs': ['library-cache'], 'store.rs': ['installed'], 'cheats.rs': ['cheats', 'own-cheats'],
-    'disc.rs': ['disc'], 'softpatch.rs': ['ips', 'bps', 'ups'], 'archive.rs': ['archive', 'runtime-archive'],
+    'disc.rs': ['disc'], 'softpatch.rs': ['ips', 'bps', 'ups'], 'archive.rs': ['archive', 'runtime-archive'], 'seven_zip.rs': ['7z'],
     'image.rs': ['cover', 'jpeg', 'ppm'], 'covers.rs': ['cover', 'cover-missing'], 'frame_cache.rs': ['frame-cache'],
     'update.rs': ['update'], 'update/channel.rs': ['update'], 'update_hint.rs': ['update-hint'],
     'slots.rs': ['moments'], 'state_file.rs': ['moments','core-resume-raw','core-resume-compressed'], 'game_settings.rs': ['game-settings', 'console-settings'],
@@ -74,6 +74,24 @@ COVERAGE = {
 # Private parsers can use the identical policy from tests/common/data_faults.rs
 # in their own module. Keep their test identity explicit so removal fails too.
 UNIT_COVERAGE = {
+    'background_io.rs': [
+        ('src/background_io.rs', 'file_source_rule_background_reads_have_the_same_bytes_and_errors'),
+        ('src/background_io.rs', 'r36s_readers_a_cancelled_job_cannot_read_seek_walk_or_stat'),
+    ],
+    'startup.rs': [('src/startup.rs', 'n64_wait_samples_survive_missing_and_damaged_proc_fields')],
+    # Cover folders listed once (`dir_index`): a missing, unreadable or changed folder, FAT's coarse times.
+    'dir_index.rs': [('src/dir_index.rs', 'a_folder_is_read_once_and_names_it_lacks_cost_nothing')],
+    # The dArkOS motor probe (`rumble::look_for_motor`): no force-feedback device means no Haptics row.
+    'rumble.rs': [('src/darkos.rs', 'haptics_goes_where_dark_os_has_nothing_to_vibrate')],
+    'covers/custom.rs': [('src/web/tests/cover_diagnostics_tests.rs', 'covers_are_per_game_and_refuse_links_out_of_the_cover_folder')],
+    'storage.rs': [('src/storage.rs', 'clearing_downloaded_pictures_keeps_custom_covers_and_backups')],
+    'ra_hotkeys.rs': [('src/ra_hotkeys.rs', 'broken_inputs_never_break_the_players_config')],
+    'ra_state.rs': [('src/ra_state.rs', 'save_requires_a_finished_new_state_for_this_game')],
+    'web/cover_edit.rs': [('src/web/tests/cover_diagnostics_tests.rs', 'cover_empty_state_and_edit_round_trip_with_backups')],
+    'web/diagnostics.rs': [
+        ('src/web/tests/cover_diagnostics_tests.rs', 'the_diagnosis_zip_only_contains_version_model_and_safe_events'),
+        ('src/web/tests/cover_diagnostics_tests.rs', 'diagnostic_empty_states_include_explanations_instead_of_blank_files'),
+    ],
     'android_handheld/files.rs': [('src/android_handheld/files.rs','file_source_rule_handheld_activity_files'),('src/android_handheld/files.rs','file_source_rule_handheld_return_picture')],
     'android/src/play_cards.rs': [('src/android_02_tests.rs', 'file_source_rule_mobile_preferences_and_buttons')],
     'dpad_stick_rocknix.rs': [('src/dpad_stick_rocknix.rs', 'file_source_rule_standalone_dpad_settings')],
@@ -108,6 +126,8 @@ UNIT_COVERAGE = {
     'android_first_start.rs': [('src/android_first_start.rs', 'file_source_rule_first_start_games_folders')],
     'romm.rs': [('src/romm_tests.rs', 'file_source_rule_romm_account_token_catalog_device_id_and_parts')],
     'romm_net.rs': [('src/romm_net.rs', 'file_source_rule_http_answers')],
+    # PortMaster games from the card: zips, port.json inside them, runtime files.
+    'ports_card.rs': [('src/ports_card_tests.rs', 'file_source_rule_card_ports')],
 }
 
 BIN_UNIT_COVERAGE = {

@@ -48,6 +48,12 @@ impl CaseKnows {
         self.known.get(path).is_some_and(Option::is_some) || self.made_up.as_ref().is_some_and(|p| snapshot_game(p, path))
     }
 
+    /// Saves came from another Pocket (Pocket Sync): every case asks again at its next look, as after a game's end. The
+    /// thread reads a save again only when its size or time changed, so the others cost a look at their files.
+    pub(crate) fn saves_came(&self) {
+        self.asked.borrow_mut().clear();
+    }
+
     /// The answer for `path` so far; the first look at it asks the thread (`start` makes it at the very first question).
     fn look(&self, system: &str, path: &Path, start: impl FnOnce() -> Reader) -> Option<&Progress> {
         if self.asked.borrow_mut().insert(path.to_path_buf()) {
@@ -143,6 +149,17 @@ impl App {
         if changed {
             self.request_redraw();
         }
+    }
+
+    /// Pocket Sync wrote saves from another Pocket here. Only a game's end used to make the cases look again, so on
+    /// Android (the saves in the player's `saves/<key>/`, nothing beside the game) the open case of a game not played here
+    /// showed the save that came only after the game had run once. Now the cases read their saves again and the shelf
+    /// looks again at which games have a save ("Not here yet" instead of "Not played yet").
+    pub(crate) fn case_saves_came(&mut self) {
+        self.case_knows.saves_came();
+        self.played_refresh();
+        self.cases_look_changed();
+        self.request_redraw();
     }
 
     /// A game ended: its save may have changed. The old line stays on the screen until the new answer replaces it.
@@ -288,5 +305,31 @@ mod tests {
         assert_eq!(starts.get(), 1);
         assert!(k.reader.get().is_some());
         assert_eq!(k.asked.borrow().len(), 1);
+    }
+
+    /// Found in the 0.6 video (20.11.2026): on Android the open case of a game never played there showed nothing of the
+    /// save Pocket Sync had just brought from the RG35XX Plus; the line came only after the game had run once, because
+    /// only a game's end made the case ask again. A save that comes from another Pocket is read at the next look.
+    #[test]
+    fn a_save_from_another_pocket_is_read_at_the_next_look_without_playing() {
+        let k = CaseKnows::default();
+        let dir = tempfile::Builder::new().prefix("pocketui-case-knows-sync-").tempdir().unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let start = || {
+            let tx = std::sync::Mutex::new(tx);
+            Reader::start(dir.path().to_path_buf(), move |(_, rom), _, _| {
+                let _ = tx.lock().unwrap().send(rom);
+            })
+        };
+        let rom = Path::new("/roms/snes/Zelda - A Link to the Past.sfc");
+        assert!(k.look("snes", rom, start).is_none());
+        assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(5)).as_deref(), Ok(rom), "the first look reads the save");
+        // The case is looked at again and again while nothing changed: one read.
+        k.look("snes", rom, || unreachable!("started once"));
+        assert!(rx.recv_timeout(std::time::Duration::from_millis(300)).is_err(), "nothing changed, nothing read again");
+        // Pocket Sync wrote the other Pocket's save: the next look reads it, no game started.
+        k.saves_came();
+        k.look("snes", rom, || unreachable!("started once"));
+        assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(5)).as_deref(), Ok(rom), "the save that came is read at the next look");
     }
 }

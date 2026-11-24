@@ -9,6 +9,33 @@ use crate::gfx::Canvas;
 /// box reduction, and a pixel font lands on whole screen pixels (`step` 2). The CubeXX's 1280×1280 with a 16:9 area
 /// filter cost about three times the frame of a 640×480 panel (docs/H700-SCALED-LAYOUT.md "CubeXX").
 pub fn logical_size(panel: (u32, u32)) -> (u32, u32) {
+    // The Mobile view's and the player's library (`android_modules.rs`) has no handheld view: its sizes stay.
+    #[cfg(all(target_os = "android", not(feature = "handheld")))]
+    let android = false;
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+    let android = crate::device::android_profile();
+    logical_size_for(panel, android)
+}
+
+/// The lines a tall Android screen is laid out on (`logical_size_for`).
+pub const ANDROID_LINES: u32 = 1080;
+/// Android screens whose short side has more lines than this are laid out on `ANDROID_LINES` and scaled up.
+pub const ANDROID_TALL: u32 = 1200;
+
+/// `logical_size`, with `android`: Android's handheld view. There a screen with more than `ANDROID_TALL` lines on its short
+/// side (QHD+ phones at 3120x1440, tablets at 2560x1600) is laid out on 1080 lines and scaled up with whole source pixels
+/// (`ScaledFrame`, nearest): at its own size the letters stood about a quarter smaller than on a 1080-line phone and
+/// the frame was 3.4 times the Mini V2's (19.11.2026). Measured first: an area filter left a pixel font's edges soft every
+/// third column; whole pixels keep it sharp, a stroke at most one screen pixel wider (at ~500 ppi).
+pub fn logical_size_for(panel: (u32, u32), android: bool) -> (u32, u32) {
+    let (w, h) = panel;
+    if android && w.min(h) > ANDROID_TALL {
+        return if w >= h {
+            ((u64::from(w) * u64::from(ANDROID_LINES) / u64::from(h)) as u32, ANDROID_LINES)
+        } else {
+            (ANDROID_LINES, (u64::from(h) * u64::from(ANDROID_LINES) / u64::from(w)) as u32)
+        };
+    }
     // A panel of 1024x720 and more is painted natively, as the Brick's 1024x768: the TrimUI Smart Pro's 1280x720 is the
     // full 1280 width with 48 lines less (`kit::short_screen`). Laid out at 1707x960 and reduced by 3:4 it took 108-132 ms
     // a frame on an A53, and a pixel font fell between screen pixels.
@@ -61,6 +88,8 @@ pub struct ScaledFrame {
     packed_area: bool,
     horizontal: Vec<u64>,
     row_sums: Vec<u64>,
+    /// Scaling up (`logical_size_for`'s tall Android screens): each panel column's and row's source pixel.
+    up: Option<(Vec<usize>, Vec<usize>)>,
     /// Keep the whole logical frame after painting, also where it is the panel's own size (the showcase's partial
     /// frames, `render_partial`).
     pub retain: bool,
@@ -219,6 +248,12 @@ impl ScaledFrame {
         }
         self.sizes = Some((logical, panel));
         self.pixels.resize(logical.0 as usize * logical.1 as usize, 0);
+        if logical.0 < panel.0 && logical.1 < panel.1 {
+            let map = |src: u32, dst: u32| (0..dst).map(|d| ((u64::from(d) * u64::from(src)) / u64::from(dst)) as usize).collect::<Vec<_>>();
+            self.up = Some((map(logical.0, panel.0), map(logical.1, panel.1)));
+            return;
+        }
+        self.up = None;
         self.xs = coverage(logical.0, panel.0);
         self.ys = coverage(logical.1, panel.1);
         self.packed_area = logical != (panel.0 * 2, panel.1 * 2) && self.xs.iter().chain(&self.ys).flatten().all(|(_, weight)| weight % 256 == 0);
@@ -241,7 +276,15 @@ impl ScaledFrame {
     fn reduce(&mut self, output: &mut [u32]) {
         let ((sw, sh), (dw, dh)) = self.sizes.expect("prepared frame");
         assert_eq!(output.len(), dw as usize * dh as usize);
-        if sw == dw * 2 && sh == dh * 2 {
+        if let Some((xs, ys)) = &self.up {
+            // Up, by whole source pixels: a pixel font stays sharp (`logical_size_for`).
+            for (row, &sy) in output.chunks_exact_mut(dw as usize).zip(ys) {
+                let src = &self.pixels[sy * sw as usize..(sy + 1) * sw as usize];
+                for (pixel, &sx) in row.iter_mut().zip(xs) {
+                    *pixel = src[sx];
+                }
+            }
+        } else if sw == dw * 2 && sh == dh * 2 {
             // Four taps, packed R/B sums: no floating point, divisions, weights or intermediate image.
             for (rows, output_row) in self.pixels.chunks_exact(sw as usize * 2).zip(output.chunks_exact_mut(dw as usize)) {
                 let (top, bottom) = rows.split_at(sw as usize);
@@ -436,6 +479,18 @@ mod tests {
     }
 }
 
+/// The handhelds' pause menu in Android's player (`android/src/player.rs`): the whole window as on Linux (not the safe insets
+/// Android reports round a handheld's corners and bars, Mini V2 17.11.), less only a phone's camera hole (`hole`: its left,
+/// top, right and bottom edges in pixels, 19.11.: on 20:9 phones it stood over the menu's left edge). The area as (x, y
+/// from the bottom, w, h), with its top edge from the window's top.
+pub fn menu_view((w, h): (i32, i32), hole: [i32; 4]) -> ((i32, i32, i32, i32), i32) {
+    let [l, t, r, b] = hole.map(|v| v.max(0));
+    // A hole that would leave less than half the window is no hole the menu can keep out of: the whole window.
+    let (l, r) = if l + r > w / 2 { (0, 0) } else { (l, r) };
+    let (t, b) = if t + b > h / 2 { (0, 0) } else { (t, b) };
+    ((l, b, (w - l - r).max(1), (h - t - b).max(1)), t)
+}
+
 /// Android uses density-independent units for readable type, preserving the usable viewport's aspect.
 /// This leaves landscape room for a detail panel and portrait room for additional rows, without stretching.
 pub fn mobile_size((w, h): (u32, u32), density: f32) -> (u32, u32) {
@@ -448,6 +503,42 @@ pub fn mobile_size((w, h): (u32, u32), density: f32) -> (u32, u32) {
 
 #[cfg(test)]
 mod mobile_tests {
+    /// Tall Android screens (19.11.2026): laid out on 1080 lines and scaled up by whole pixels; a 1080-line phone, the Mini
+    /// V2 and Linux (an HDMI screen) keep their own size.
+    #[test]
+    fn tall_android_screens_are_laid_out_on_1080_lines_and_scaled_up_sharp() {
+        use super::{logical_size_for, ScaledFrame};
+        assert_eq!(logical_size_for((3120, 1440), true), (2340, 1080), "QHD+ phone");
+        assert_eq!(logical_size_for((2560, 1600), true), (1728, 1080), "16:10 tablet");
+        assert_eq!(logical_size_for((1440, 3120), true), (1080, 2340), "upright");
+        assert_eq!(logical_size_for((2400, 1080), true), (2400, 1080), "a 1080-line phone");
+        assert_eq!(logical_size_for((1240, 1080), true), (1240, 1080), "Mini V2");
+        assert_eq!(logical_size_for((2560, 1440), false), (2560, 1440), "Linux keeps its own");
+        // A one-pixel checker scaled up: every screen pixel is one of the two colours (no blend: sharp), both are there.
+        let (logical, panel) = (logical_size_for((3120, 1440), true), (3120, 1440));
+        let mut f = ScaledFrame::default();
+        let mut out = vec![0u32; (panel.0 * panel.1) as usize];
+        let input: Vec<u32> = (0..logical.0 * logical.1).map(|i| if (i % logical.0 + i / logical.0) % 2 == 0 { 0xffffff } else { 0x000000 }).collect();
+        f.downscale(&input, logical, &mut out, panel);
+        assert!(out.iter().all(|&p| p == 0xffffff || p == 0), "only the source's colours");
+        assert!(out.contains(&0xffffff) && out.contains(&0));
+        assert_eq!(out[0], 0xffffff);
+        assert_eq!(out[(panel.0 * panel.1 - 1) as usize], input[(logical.0 * logical.1 - 1) as usize], "the corners map to the corners");
+    }
+
+    /// The handhelds' pause menu on Android: the Mini V2 (no hole, safe insets 60/48/60/64 that the menu ignores) keeps the
+    /// whole window; a 20:9 phone's camera hole (52 dp at 2.625, either side in landscape, or the top) is kept clear and
+    /// nothing else is (19.11.2026: the hole stood over the menu's left edge).
+    #[test]
+    fn the_pause_menu_keeps_out_of_a_camera_hole_and_nothing_else() {
+        assert_eq!(super::menu_view((1240, 1080), [0; 4]), ((0, 0, 1240, 1080), 0), "Mini V2: the whole panel");
+        let hole = (52.0f32 * 2.625).round() as i32;
+        assert_eq!(super::menu_view((2400, 1080), [hole, 0, 0, 0]), ((hole, 0, 2400 - hole, 1080), 0), "hole on the left");
+        assert_eq!(super::menu_view((2400, 1080), [0, 0, hole, 0]), ((0, 0, 2400 - hole, 1080), 0), "hole on the right");
+        assert_eq!(super::menu_view((1080, 2400), [0, hole, 0, 0]), ((0, 0, 1080, 2400 - hole), hole), "portrait: the top edge");
+        assert_eq!(super::menu_view((2400, 1080), [2000, 0, 0, 0]), ((0, 0, 2400, 1080), 0), "nonsense: the whole window");
+    }
+
     #[test]
     fn phone_rotation_preserves_aspect_and_density_controls_readability() {
         let portrait = super::mobile_size((1216, 2640), 3.0);

@@ -150,20 +150,36 @@ game runs smoothly" (`system_notes`).
 X and Y where they belong, L2/R2 as keys, both sticks, FN is BTN_MODE and so HOME without a rule of its own. Power is the
 rk817's key, volume `gpio-keys-vol`; battery the rk817's supply renamed `battery` (ROCKNIX's RK3326 patch).
 
-**Wi-Fi.** The R36S has none (`wifi: false`): the Wi-Fi page says the device has none, Add games offers the second card
-(TF2, `has_second_card_slot`), no page offers downloads or phone upload, and Updates says "This device has no Wi-Fi."
-instead of "Check Wi-Fi" when it can't reach the server (`update::no_wifi_here`, also on the RG28XX). Every other page
-that needs a network (Tailscale, Sync, Web companion, Remote access, RetroAchievements, starter pack, PortMaster, cheats,
-the time and clock lines, the Tour) says so or the way without one (`device::no_wifi_chip`, `device::NEEDS_NETWORK`;
-Box art: covers from a computer), never "Connect to Wi-Fi": `tests/no_wifi_walk.rs` paints every snapshot state as an
-RG28XX, and the navigation explorer's R36S and RG28XX walks check every frame. A chip that does answer (some later boards, a USB
-dongle on the OTG port) still wins (`system_ctl::AutoHw`).
+**Wi-Fi.** For USB adapters, see [USB Wi-Fi on ROCKNIX](#usb-wi-fi-on-rocknix). Without an adapter, the R36S
+can still take an update file and games from the second card (TF2). Copy box art from a computer into a `covers` folder beside
+the games. Pages that need a network explain what is available offline.
 
 **Panels.** R36S units since 2024 have other panels that need `overlays/mipi-panel.dtbo` on the card's first partition; the
 screen size stays 640 × 480, so the profile is the same (docs/SD-IMAGE-RK3326.md).
 
 **Not checked on a device:** everything above (read from ROCKNIX's files), sleep, sound (ROCKNIX swaps the speaker and
 headphone paths on this board), speed.
+
+## USB Wi-Fi on ROCKNIX
+
+On a board without built-in Wi-Fi, plug a compatible adapter into the USB data port before starting the handheld
+(the OTG port on the R36S). When the kernel provides a wireless interface at pocket-ui startup, Wi-Fi setup, online updates,
+box art downloads and sync use the existing ROCKNIX network stack. Settings → Connections → Wi-Fi checks for the adapter
+again when opened. If it appears after startup, the page reports it and asks you to restart. If the kernel shows no
+wireless interface, the page asks you to plug in an adapter and restart. Updates from a card remain available.
+
+| Board family and ROCKNIX version | `rtl8xxxu` | `mt7601u` | `rtw88_usb` | Evidence |
+|---|---|---|---|---|
+| H700 (RG28XX, RG35XX 2024), 20261001 and 20261101 | Disabled | Disabled | USB chip drivers disabled | [20261001 kernel config](https://github.com/ROCKNIX/distribution/blob/c445081a59518f37d9776e5412dd7b14910696f7/projects/ROCKNIX/devices/H700/linux/linux.aarch64.conf), [20261101 kernel config](https://github.com/ROCKNIX/distribution/blob/cefc14339a4ae18c02bb69888f27835e50664b60/projects/ROCKNIX/devices/H700/linux/linux.aarch64.conf) |
+| RK3326 (R36S), 20261101 image a | Module present | Module and firmware present | Modules present, including RTL8821CU and RTL8822BU | Inspected the release image's `SYSTEM` and [kernel config](https://github.com/ROCKNIX/distribution/blob/cefc14339a4ae18c02bb69888f27835e50664b60/projects/ROCKNIX/devices/RK3326/linux/linux.aarch64.conf) |
+| RK3566 (RK2023), 20261101 Generic | Configured as module | Configured as module | Configured as modules, including RTL8821CU and RTL8822BU | [Kernel config](https://github.com/ROCKNIX/distribution/blob/cefc14339a4ae18c02bb69888f27835e50664b60/projects/ROCKNIX/devices/RK3566/linux/linux.aarch64.conf) |
+
+[ROCKNIX's network package list](https://github.com/ROCKNIX/distribution/blob/cefc14339a4ae18c02bb69888f27835e50664b60/projects/ROCKNIX/packages/virtual/network/package.mk)
+selects NetworkManager and iwd. Both appear in the H700 20261001 build plan and in the RK3326 20261101 image.
+[NetworkManager uses iwd for Wi-Fi](https://github.com/ROCKNIX/distribution/blob/cefc14339a4ae18c02bb69888f27835e50664b60/projects/ROCKNIX/packages/network/networkmanager/config/NetworkManager.conf).
+ConnMan is not part of this configuration. The listed dongle drivers are missing from the checked H700 configurations,
+so dongles that need them require a ROCKNIX kernel build with those drivers enabled. Actual USB enumeration, firmware
+loading and connecting with individual adapters have not been verified on hardware.
 
 ## The four devices
 
@@ -498,10 +514,9 @@ What pocket-ui does about what is missing (`Device::has_fan`, `has_touch`, `has_
   `/dev`, no wake-ups) makes the shelf read again, or say the card is out. pocket-core's saves then fail at `write_atomic`'s
   fsync and `save_trouble` says so; ROCKNIX's standalone emulators can't, the notice afterwards is all there is.
 
-- **Wi-Fi (RG28XX, RG35XX 2024 without a chip):** the Wi-Fi page (first start and Settings) says "This device has no
-  Wi-Fi. Everything else works without it." and offers nothing to choose; the Settings row reads "None on this device";
-  Quick settings show no Wi-Fi row; the radio is "absent" instead of the mock's pretend networks. Pages that need the
-  network (Store, downloads, updates) keep their own offline states.
+- **Wi-Fi (RG28XX, RG35XX 2024 without a chip):** Settings → Connections → Wi-Fi explains how to start with a USB
+  adapter. Without one at startup, Quick settings skip the Wi-Fi row, and the Store, downloads and updates keep their
+  offline states. See [USB Wi-Fi on ROCKNIX](#usb-wi-fi-on-rocknix) for driver availability.
 - **Time zone:** the H700 image has no `steamos-set-timezone`. Without it pocket-ui stores the zone with ROCKNIX's
   `set_setting system.timezone`, restarts `tz-data.service` and calls `timedatectl set-timezone` (the helper's own
   steps). The service restart is unverified on hardware.

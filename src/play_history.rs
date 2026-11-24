@@ -423,6 +423,29 @@ fn counts_as_session(secs: u64, ended: bool) -> bool {
 }
 
 /// Works out a period. `today` is the local day now (for "this week" and the streak running now).
+/// Seconds the game at `path` was played on the local `day`: its ended sessions, each stretch split at midnight.
+pub fn played_on(log: &Log, path: &str, day: i64) -> u64 {
+    let mut secs = 0;
+    for s in log.sessions.iter().filter(|s| log.games.get(s.game).is_some_and(|g| g.path == path)) {
+        for (at, t) in s.stretches() {
+            split(at, s.tz, t, |d, part| {
+                if d == day {
+                    secs += part;
+                }
+            });
+        }
+    }
+    secs
+}
+
+/// Seconds the game at `path` was played today (the pause menu's line, `pause_page::paused_here`): what the log has for
+/// today and the running session's part since midnight (`session` seconds; it is in the log only once it ends).
+pub fn played_today(log: &Log, path: &str, session: u64, now: u64, tz: i32) -> u64 {
+    let today = local_day(now, tz);
+    let since_midnight = (now as i64 + tz as i64 - today * DAY).max(0) as u64;
+    played_on(log, path, today) + session.min(since_midnight)
+}
+
 pub fn summarise(log: &Log, period: Period, today: i64, d: &dyn Describe) -> Summary {
     // Which games are one (merged versions): a key per game of the log.
     let mut keys: HashMap<String, usize> = HashMap::new();
@@ -1145,6 +1168,29 @@ mod tests {
         assert_eq!((y25.secs, y26.secs), (3600, 3600), "an hour in each year");
         assert_eq!((y25.sessions, y26.sessions), (1, 0), "the session counts where it started");
         assert_eq!(y26.games.len(), 1, "but the game was played in 2026 too");
+    }
+
+    /// The pause menu's "played 42 min today" (Neon polish 21.11.2026): today's part of the game's sessions only (one
+    /// from last night counts from midnight), not another game's, and the running session only since midnight.
+    #[test]
+    fn played_today_counts_this_game_since_midnight_and_the_running_session() {
+        let games = vec![game("Doom", "ports"), game("Tetris", "gb")];
+        let sessions = vec![
+            session(0, at(2026, 11, 20, 23, 30), 3600),
+            session(0, at(2026, 11, 21, 9, 0), 600),
+            session(1, at(2026, 11, 21, 10, 0), 1200),
+            session(0, at(2026, 11, 19, 12, 0), 900),
+        ];
+        let log = build(games, sessions, Vec::new(), Vec::new());
+        let path = "/storage/roms/ports/Doom.rom";
+        let today = day_of(2026, 11, 21);
+        assert_eq!(played_on(&log, path, today), 1800 + 600, "30 min after midnight and 10 min this morning");
+        let now = at(2026, 11, 21, 14, 0);
+        assert_eq!(played_today(&log, path, 300, now, TZ), 2400 + 300, "and the running five minutes");
+        // A session that began yesterday evening counts only since midnight.
+        let just_after = at(2026, 11, 21, 0, 20);
+        assert_eq!(played_today(&log, path, 3 * 3600, just_after, TZ), 2400 + 1200);
+        assert_eq!(played_today(&log, "/storage/roms/gb/Other.gb", 60, now, TZ), 60, "a game the log doesn't know");
     }
 
     #[test]

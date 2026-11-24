@@ -10,7 +10,7 @@ shelf of your games in their real boxes. Everything works with buttons, and touc
 too.
 
 You can read this guide right on your handheld under Settings → Help & tools → **Manual**. The manual is in English,
-while the menus support English, German, Spanish, Brazilian Portuguese, French and Italian
+while the menus support English, German, Spanish, Brazilian Portuguese, French, Italian and Korean
 ([Settings → System → Language](language.md)).
 
 pocket-ui is in active alpha and tested daily on the Retroid Pocket Mini V2 alongside several other handhelds. These
@@ -86,7 +86,7 @@ pages cover what works today and clearly flag anything that is still experimenta
 6. [Options](options.md): picture, screen frames, controls, shortcuts, extras and run-ahead in a game, [Screen frame and Screen orientation](options-screen.md), and [Cheats](options-cheats.md); [their shorter list](options-big.md) for PlayStation 2, GameCube, Wii and 3DS.
 7. [Controls](controls.md): every button, screen by screen; [in Settings, setup and on the touch screen](controls-settings.md), with the power and volume keys.
 8. [Settings](settings.md): the Settings categories and the entries of Look; [Playing and Games](settings-playing.md): the entries of those two categories; [Screen & sound, Controls](settings-sound.md): brightness, volume, the screen and sounds; the buttons and controllers; [Connections, System and Help & tools](settings-system.md): Wi-Fi, Bluetooth, Tailscale, SSH, Sync, PC streaming, the clock, sleep, backups, the Tour and this guide; [quick settings, sleep and power](quick-settings.md); [storage](storage.md): what takes up space on the SD card, clean-ups, hidden games; [Bluetooth](bluetooth.md): pairing controllers, headphones and speakers.
-9. [Language](language.md): English, German, Spanish, Brazilian Portuguese, French or Italian menus, and what stays English.
+9. [Language](language.md): English, German, Spanish, Brazilian Portuguese, French, Italian or Korean menus, and what stays English.
 10. [Night light](night-light.md): warmer, less blue colours in the evening, on a schedule or all the time.
 11. [Colours and style](theme.md): the colour sets, fonts and the Retro style for every screen, switched in place.
 12. [Performance and fan](performance.md): what games start with, the fan in the menus, Smooth fan, the readout.

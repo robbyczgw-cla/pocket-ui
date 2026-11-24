@@ -165,10 +165,10 @@ impl Entry {
     pub fn desc(self, keep_game: bool) -> &'static str {
         match self {
             Entry::Picture => PICTURE_DESC,
-            Entry::Emulator => "Settings of the emulator itself, such as colours and palettes.",
+            Entry::Emulator => "Core-specific options, like palettes and hardware tweaks.",
             Entry::Controls => "Which button does what, and the left stick.",
-            Entry::Zoom => "The picture larger, to read small text. Move with the D-pad.",
-            Entry::Cheats => "Infinite lives and the like, from the libretro cheat database.",
+            Entry::Zoom => "Zoom in to read tiny text. Pan around with the D-pad.",
+            Entry::Cheats => "Infinite lives and more, from the libretro cheat database.",
             Entry::Extras => EXTRAS_DESC,
             Entry::FastForward => FF_DESC,
             Entry::Rewind => REWIND_DESC,
@@ -178,7 +178,7 @@ impl Entry {
             Entry::Keep if keep_game => "Changes show at once and stay for this game. Left or right: every game on this console.",
             Entry::Keep => "Changes show at once and stay for every game on this console. Left or right: this game only.",
             Entry::Restore => RESTORE_DESC,
-            Entry::Screenshot => "A picture of the game as it is now.",
+            Entry::Screenshot => "Snap a screenshot right now.",
         }
     }
 
@@ -195,11 +195,11 @@ impl Entry {
 /// Over the game on Android: Off and FPS (the sensors and Pixel Path are Linux's).
 pub const OVER_GAME_VALUES: [&str; 2] = ["off", "fps"];
 /// The row's line: Linux's first line, what the player draws.
-pub const OVER_GAME_DESC: &str = "FPS shows frames per second and CPU load in the top left corner.";
+pub const OVER_GAME_DESC: &str = "FPS shows frame rate and CPU load in the top-left corner.";
 
 /// Fast-forward speed's values and their labels, Linux's (`options`' row), and its line.
 pub const FF_VALUES: [(&str, &str); 5] = [("2", "2x"), ("3", "3x"), ("4", "4x"), ("8", "8x"), ("max", "As fast as possible")];
-pub const FF_DESC: &str = "How fast the game runs while fast-forward is on.\nSound is muted meanwhile.";
+pub const FF_DESC: &str = "Game speed while fast-forwarding.\nAudio is muted meanwhile.";
 /// The label of a speed; Left/Right step through `FF_VALUES` (`ff_step`).
 pub fn ff_label(speed: crate::play_speed::FastForward) -> &'static str {
     let v = speed.value();
@@ -212,10 +212,10 @@ pub fn ff_step(speed: crate::play_speed::FastForward, delta: i32) -> crate::play
     crate::play_speed::FastForward::parse(FF_VALUES[(at + delta).rem_euclid(FF_VALUES.len() as i32) as usize].0)
 }
 /// Rewind's line, Linux's.
-pub const REWIND_DESC: &str = "Remembers the last minute so you can play it backwards.\nHold HOME + L2. Uses some extra power.";
+pub const REWIND_DESC: &str = "Buffers the last minute so you can rewind.\nHold HOME + L2. Uses extra battery.";
 
 /// Earlier states' line, Linux's (`options`' row).
-pub const EARLIER_DESC: &str = "Keeps a state every 5 minutes of play, half an hour back,\nand where each session began: Earlier in this menu.\nOff by default for N64, PSP, DS, Dreamcast and Saturn (big states).";
+pub const EARLIER_DESC: &str = "Auto-saves every 5 min (up to 30 min back) plus\nsession start, under Earlier in this menu.\nOff by default on N64, PSP, DS, Dreamcast & Saturn (large states).";
 
 /// "Off" / "On": Earlier states' value, Linux's.
 pub fn earlier_label(on: bool) -> &'static str {
@@ -227,15 +227,15 @@ pub fn earlier_label(on: bool) -> &'static str {
 }
 
 /// Restore defaults' line, and what it says after the first A and after the second: Linux's page uses these too.
-pub const RESTORE_DESC: &str = "Removes the saved settings for this console and this game.";
-pub const RESTORE_ASK: &str = "Press A again to restore the defaults. B keeps your settings.";
+pub const RESTORE_DESC: &str = "Clears custom settings for this console and game.";
+pub const RESTORE_ASK: &str = "Press A again to reset to defaults. B cancels.";
 pub const RESTORE_DONE: &str = "Back to defaults.";
 
 /// Linux's Picture group line names the orientation, which the player hasn't: the page says what it has.
 pub const PICTURE_DESC: &str = "Size, look and frame.";
 
 /// Controls → Hold to toggle's line, Linux's (`emu_menu::control_rows`).
-pub const HOLD_DESC: &str = "Pick a button: one press holds it down, the next lets go.\nFor buttons you would hold, like run.";
+pub const HOLD_DESC: &str = "Pick a button: tap once to hold, tap again to let go.\nHandy for run or charge buttons.";
 
 /// "Off" / "FPS": the value's label, Linux's.
 pub fn over_game_label(on: bool) -> &'static str {
@@ -311,7 +311,7 @@ impl OptNav {
 }
 
 /// Resolution's line, Linux's.
-pub const RESOLUTION_DESC: &str = "The resolution the 3D picture is drawn at. Original is the console's own; 2x and up are sharper and cost the GPU more. Takes effect the next time the game starts.";
+pub const RESOLUTION_DESC: &str = "Internal 3D resolution. Original matches the real console; 2x and up look sharper but work the GPU harder. Applies on next launch.";
 
 /// Resolution's index (factor less one) after one step Left or Right, round through the factors this handheld offers
 /// (`render_scale::offers`: Original up to the highest that held full speed).
@@ -343,7 +343,7 @@ fn picture_row_shown(key: &str, system: &str, range: Option<crate::render_scale:
 /// Rumble's key, values and labels, and its line: Linux's (`option_table`).
 pub const RUMBLE_KEY: &str = "rumble";
 pub const RUMBLE_VALUES: [(&str, &str); 4] = [("off", "Off"), ("low", "Low"), ("medium", "Medium"), ("high", "High")];
-pub const RUMBLE_DESC: &str = "How strongly games shake the console, for games that rumble.\nOff keeps it still.";
+pub const RUMBLE_DESC: &str = "Rumble strength for games that support vibration.\nOff disables it.";
 /// The label of a saved rumble value (Medium where none or an unknown one is saved, Linux's default).
 pub fn rumble_label(value: Option<&str>) -> &'static str {
     RUMBLE_VALUES.iter().find(|(v, _)| Some(*v) == value).map_or("Medium", |(_, l)| *l)
@@ -844,7 +844,7 @@ mod tests {
                         for sel in [0, names.len() - 1] {
                             let rows: Vec<OptRow> = names.iter().enumerate().map(|(i, n)| OptRow::new(*n, if i == sel { *value } else { "" }, if i == sel { desc.as_str() } else { "" })).collect();
                             let mut hits = crate::touch::HitMap::default();
-                            let page = OptionsPage { heading: Some("Options"), counts: None, rows: &rows, sel, footer: None, explanation: false, accent: 0x808080, corner: &corner, picture: None };
+                            let page = OptionsPage { heading: Some("Options"), counts: None, rows: &rows, sel, footer: None, description_above_hints: false, explanation: false, accent: 0x808080, corner: &corner, picture: None };
                             let out = paint_options(&mut c, &mut text, &mut hits, &page);
                             let at = format!("{lang:?} {size:?} {pw}x{ph} ({w}x{h}) sel {sel}: {:?}", desc.chars().take(40).collect::<String>());
                             let painted: Vec<&str> = out.desc.iter().flat_map(|l| l.split_whitespace()).collect();
@@ -954,7 +954,7 @@ mod tests {
                         for sel in 0..rows.len() {
                             let mut hits = crate::touch::HitMap::default();
                             let preview = crate::pause_page::PicturePreview { rows: shown, layout, live: &live };
-                            let page = OptionsPage { heading: Some("Options \u{203a} Picture"), counts: None, rows: &opt, sel, footer: None, explanation: false, accent: 0x808080, corner: &corner, picture: Some(preview) };
+                            let page = OptionsPage { heading: Some("Options \u{203a} Picture"), counts: None, rows: &opt, sel, footer: None, description_above_hints: false, explanation: false, accent: 0x808080, corner: &corner, picture: Some(preview) };
                             let out = paint_options(&mut c, &mut text, &mut hits, &page);
                             if out.rows.get(sel).copied().flatten().is_none() {
                                 faults.push(format!("{at}: row {} not on the screen when selected", rows[sel].key));
@@ -1080,7 +1080,7 @@ mod tests {
         let top_rows = top(Has { emulator: true, controls: true, cheats: true });
         let paint = |c: &mut crate::gfx::Canvas, text: &mut crate::text::Text, heading: &str, rows: &[OptRow], sel: usize| {
             let mut hits = crate::touch::HitMap::default();
-            let page = OptionsPage { heading: Some(heading), counts: None, rows, sel, footer: None, explanation: false, accent: 0x808080, corner: &corner, picture: None };
+            let page = OptionsPage { heading: Some(heading), counts: None, rows, sel, footer: None, description_above_hints: false, explanation: false, accent: 0x808080, corner: &corner, picture: None };
             paint_options(c, text, &mut hits, &page)
         };
         for lang in crate::i18n::Lang::ALL {

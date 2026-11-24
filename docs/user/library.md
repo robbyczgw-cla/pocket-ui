@@ -1,112 +1,101 @@
 # Your library: game cards, play status, ratings and notes
 
-pocket-ui is made for a small set of games you actually play. Every game has a **card**: one calm
-page with its box, what is known about it, how much you have played it, where you are with it, and
-what else you own by the same people.
+Every game on your shelf has its own **game card**: a clean page showing its cover, release info, your play time, status,
+notes, saves and related games already in your collection.
 
-Long selected names scroll to the end and back once, then rest. Reselect the row to read it again. While a menu is
-still, pocket-ui sleeps between real changes such as the clock or battery indicator.
+Long highlighted titles scroll gently to the end and back once before resting (reselect to scroll again). When nothing
+is moving, pocket-ui rests idle until the clock, battery or a button press updates.
 
-Home's small title cards keep the console readable by using a smaller size or its usual short name when there is no box art.
+On Home, small title cards without box art scale down or use short console names so everything stays legible.
 
 ## Opening a card
 
-Select a game on the shelf, in a system's list or in Favourites and press **X** (the top face button).
-The hint bar shows "X Details" whenever a game is selected.
+Highlight any game on the shelf, inside a console list or in Favourites and press **X** ("X Details" in the hint bar).
 
-An empty game file cannot start: **Problem** on the info page, the box's front and back, and the full card explains
-why and what to copy again. On the full card page the whole explanation scrolls with the page, including with larger
-text or a long game title.
+If a ROM file is empty and can't launch, a **Problem** notice on the info page, box front/back and full card explains
+why and tells you to recopy it (scrolling cleanly even with Large text or long titles).
 
 | Button | On the card |
 |---|---|
-| A | Play the game. On one of the rows under "Your game" (a save with two versions, Echoes, Versions, Stickers & Screenshots, Controls) or on Hide or delete: open it. |
-| B | Back to the list, at the same game. |
-| Y | Set the play status, or your [rating](#my-rating) (the row under the statuses). Under them: [Wrong game? Choose another](#wrong-game-choose-another) and [Wrong pictures? Look up again](#wrong-pictures-look-up-again). |
-| X | Write or change your note. |
-| START | Open [This game](options.md#this-game): the game's picture, frame, performance, controls and emulator, without starting it. On a PortMaster port: its [Performance & fan](performance.md#portmaster-ports). |
-| D-pad Up / Down | Scroll the page. Down moves onto the rows (the save line, Curator's rows) once they are in view, Up from the first one goes back to scrolling. At the end of the card Down lands on **Hide or delete**. |
-| L1 / R1 | Scroll a whole page. |
-| D-pad Right | Only on a card opened by X on [Just Play](curator.md#just-play): pick another game. |
+| A | Play the game, or open any highlighted row under "Your game" (save conflict, Echoes, Versions, Stickers, Screenshots, Delete from the card, Hide from the shelf). |
+| B | Return to the shelf at the same game. |
+| Y | Set play status, [My rating](#my-rating), [Wrong game? Choose another](#wrong-game-choose-another) or [Wrong pictures? Look up again](#wrong-pictures-look-up-again). |
+| X | Write or edit your personal note. |
+| START | Open [This game](options.md#this-game) to tweak picture, frame, performance, controls or emulator before launching (or [Performance & fan](performance.md#portmaster-ports) for PortMaster ports). |
+| D-pad Up / Down | Scroll the card; once interactive rows (saves, Curator) enter view, Down steps into them and Up returns to scrolling. The last two rows are **Delete from the card** and **Hide from the shelf**. |
+| L1 / R1 | Scroll a full page. |
+| D-pad Right | On a card opened with X from [Just Play](curator.md#just-play): roll another suggestion. |
 
 ## The info page (Split)
 
-In the Split [look](settings.md) X opens the game's **info page**: everything on one screen, nothing
-to turn over. The box art at the left (a title card with the console when there is none), under it your game: status,
-time played, when you last played, your rating, achievements, **Save slots** ("3 of 8", or "All empty") with the
-slots on the game's memory card or cartridge and when the newest was saved, as in the
-[pause menu](pause-menu-saves.md#save-slots-where-i-quit-and-before-load) (games on pocket-ui's own host), a PortMaster port's speed
-and "Update available, in Extras" when there is a newer version. At the right the title, the system and year ("Favourite" when it is one of
-yours), the facts (developer, publisher, genre, series, players, reviews) and the description from Wikipedia or your
-gamelist, with its source under it. Facts and description scroll together below the fixed title and year, so a long list of facts never hides the description. Without one the page says "No description yet."
+In the **Split** layout, X opens the game's **info page**, putting everything at a glance on one screen. On the left: cover art
+(or a console title card), status, play time, last played, star rating, achievements, **Save slots** ("3 of 8" or "All
+empty" shown on the console's cartridge/memory card for pocket-core games, just like the
+[pause menu](pause-menu-saves.md#save-slots-where-i-quit-and-before-load)), plus speed and "Update available, in Extras"
+for PortMaster ports. On the right: title, console and year ("Favourite" if starred), metadata (developer, publisher,
+genre, series, players, review scores) and a Wikipedia or gamelist description with source credit. Facts and description
+scroll smoothly beneath the fixed header so long info blocks never push the summary away.
 
 | Button | On the info page |
 |---|---|
-| A | Play the game; on a picked developer, publisher, series or genre, show your games with it ([Connections](#connections)). |
-| B | Back to the list, at the same game. |
-| Y | Set the play status or your rating. |
-| X | Write or change your note. |
-| START | [This game](options.md#this-game); on a PortMaster port its Performance & fan. |
-| D-pad Up / Down | Pick the developer, publisher, genre or series (the ones with an arrow), then scroll through the facts and description. |
-| L1 / R1 | Scroll the facts and description a page. |
-| SELECT | Details: the card's full page with its rows (Echoes, Screenshots, Hide or delete…). SELECT there comes back to the info page. |
+| A | Play the game, or open [Connections](#connections) when highlighting a linked developer, publisher, series or genre. |
+| B | Return to your list. |
+| Y | Set play status or star rating. |
+| X | Write or edit your note. |
+| START | Open [This game](options.md#this-game) (or Performance & fan on ports). |
+| D-pad Up / Down | Step through linked facts (marked with an arrow), then scroll facts and description. |
+| L1 / R1 | Page through facts and description. |
+| SELECT | Toggle the full Details page (Echoes, Screenshots, Delete from the card…); SELECT returns to the info page. |
 
-Long game names on the info page and full Details page use a main title and a smaller subtitle, split at " - " or ": ". Up to three lines fit into the existing heading area; the type becomes smaller before words are shortened. The cover, system/year and facts stay in place.
-
-The Shelf and Cabinet looks open the game box instead. On the full details page, the headings above other games by the same developer or in the same series use a smaller size when needed to stay readable in full.
+Long titles on both the info page and full Details page split gracefully at ` - ` or `: ` into a main title and smaller
+subtitle (up to three lines, scaling down before truncating) without shifting cover art or facts. Shelf and Cabinet open
+the interactive 3D game box instead.
 
 ## The game box
 
-In the Shelf and Cabinet looks the card opens as the game's box, almost the whole screen, the same case as on the
-shelf: a cardboard box for cartridges (a Super Nintendo box lies on its side), the jewel case of a PlayStation or
-Saturn disc, the DVD case of a PS2, GameCube, Wii or Xbox game in its colour, the Mega Drive's clamshell, the UMD case,
-the DS case, pocket-ui's own case for other systems. The front is the cover. The box opens as it comes up: the
-cartridge, card or disc slides half out of it, at its real size. A picture that has not been loaded yet appears when it is ready; you can keep moving through the list or opening the box while it loads.
-Without cover art, the cartridge's label shows the game's name; if its subtitle is too long, the shortened name
-keeps its original language, including with the German interface.
+In **Shelf** and **Cabinet**, pressing X lifts the game's actual box onto the screen: cardboard cartridge box (horizontal
+for SNES), PS1/Saturn jewel case, colour-coded PS2/GameCube/Wii/Xbox DVD case, Mega Drive clamshell, PSP UMD case, DS
+case, or pocket-ui's signature case. As it opens, the cartridge, card or disc slides partway out at true scale while
+artwork finishes loading asynchronously. Without cover art, cartridge labels display the game title in its original
+language.
 
 | Button | On the box |
 |---|---|
-| D-pad Left / Right | Turn the box over. (On a card of [Just Play](curator.md#just-play), Right picks another game and Left turns it.) |
-| D-pad Down (front) | With [Photos of big moments](#photos-of-big-moments) on: open the case, its photos lie in it. With photos in it the hint bar says **Photos** in place of START. |
-| D-pad Up / Down, L1 / R1 | On the back: scroll it. Down also picks the developer, publisher, genre or series once it is in view. |
-| A | Play the game; on a picked fact of the back, show your games with it ([Connections](#connections)). |
-| B, Y, X | As on the card below: back, status and rating, note. |
-| START | [This game](options.md#this-game), as on the card. |
-| SELECT | Show the card as a page, with its rows (Echoes, Screenshots, Hide or delete…). SELECT on the page brings the box back. pocket-ui keeps your choice: the next card opens the same way. |
+| D-pad Left / Right | Flip the box between front and back *(on a [Just Play](curator.md#just-play) card, Right rolls a new pick and Left flips)*. |
+| D-pad Down (front) | With [Photos of big moments](#photos-of-big-moments) On, opens the case to browse your milestone photos (the hint bar shows **Photos** in place of START when photos exist). |
+| D-pad Up / Down, L1 / R1 | Scroll the back of the box; Down also steps into linked developer, publisher, series and genre pills. |
+| A | Play the game, or follow a highlighted fact into [Connections](#connections). |
+| B, Y, X | Back, status & rating, personal note. |
+| START | Open [This game](options.md#this-game). |
+| SELECT | Switch to the full Details page (Echoes, Screenshots, Delete from the card…); SELECT flips back to the box, and pocket-ui remembers which view you prefer. |
 
-L1 and R1 leave a picked fact and page through the back; A then plays the game again.
+Pressing L1/R1 leaves any highlighted fact so A plays the game again.
 
-The back is laid out like a real box's: the title on a band at the top, the screenshot and the title screen beside the
-description, then the facts (year, developer, publisher, genre, players, reviews) and your game (status, play time,
-rating, achievements), the system's name at the foot. Without a description from Wikipedia or your gamelist the
-English card shows a sentence made of the facts; in German the back leaves it out, since the facts under it say the same. What isn't there yet gets a plain place of its own: a dark
-screen with the console and "No picture yet", "No description yet", or the line that the game isn't in the offline
-list. Under "No description yet" a line says why: "No Wikipedia article for this game" when there is none (it stays that way), or "Offline: the description comes with Wi-Fi" when the game has an article that isn't loaded yet (it arrives on its own with the next connection).
+The back mirrors a real retail box: title banner up top, gameplay screenshot and title screen beside the blurb, metadata
+and your play stats underneath, and the console logo at the bottom. If no description is cached yet, it tells you why
+("No Wikipedia article for this game" vs "Offline: the description comes with Wi-Fi", which fetches automatically next
+time you're online).
 
 ## Where you are in the game
 
-Turn the box over, and for a game pocket-ui can read, the line right under its name says where you are, taken from
-your own save: "8 badges · Charizard Lv. 45 · game clock 31:12" in Pokémon, "62% items · game clock 4:31" in Super Metroid, "43 of 96
-exits" in Super Mario World, "2 of 3 pendants · 9 hearts" in A Link to the Past. Under it, small: in Pokémon Gold, Silver, Crystal, Ruby, Sapphire, Emerald, FireRed and LeafGreen your team's
-little icons and the row of badges (the ones you won bright), in the DS games up to SoulSilver the icons, taken from your own game file as the game draws them;
-in Super Metroid and Super Mario World a slim bar; in A Link to the Past the pause menu's pendants or crystals, again from your own game file. The same line stands beside
-**Continue** on the shelf and on the [Where was I?](continue.md#where-was-i) card. No account, no Wi-Fi. Cozy extras →
-**Progress from saves** switches it off: no line, and no save is read.
+Flip the box over and, for supported games, pocket-ui reads your actual in-game save right beneath the title: *"8 badges ·
+Charizard Lv. 45 · game clock 31:12"* in Pokémon, *"62% items · game clock 4:31"* in Super Metroid, *"43 of 96 exits"*
+in Super Mario World, or *"2 of 3 pendants · 9 hearts"* in A Link to the Past. Under that sits real visual art pulled
+from your own ROM: your Pokémon party sprites and earned badges (Gold/Silver/Crystal, Ruby/Sapphire/Emerald,
+FireRed/LeafGreen, and party icons through DS SoulSilver), progress bars for Super Metroid and Super Mario World, or
+A Link to the Past's pendants and crystals. The same live progress shows beside **Continue** on the shelf and on
+[Where was I?](continue.md#where-was-i), 100% offline with no account needed. Turn off Settings → Look → Cozy extras →
+**Progress from saves** to disable save reading completely.
 
-For a game whose save pocket-ui can't read, your [RetroAchievements](achievements.md) stand in its place when you
-are signed in: "34 of 60 achievements · 56%", on the back, beside Continue and on Where was I?. Only a game with
-achievements on the site and at least one of them unlocked gets the line; the line from the save always comes first.
-The numbers are kept on the card, so they show without Wi-Fi too; with Wi-Fi they are renewed in the background after
-you play and at most once an hour. **Progress from saves** off hides this line as well.
+For games whose save format isn't supported yet, your [RetroAchievements](achievements.md) step in when signed in
+(*"34 of 60 achievements · 56%"*, shown once you've unlocked at least one; cached offline and refreshed on Wi-Fi at most
+once an hour after play; hidden if **Progress from saves** is Off).
 
 ![The back of the Super Metroid box: "62% items · game clock 4:31" with its bar at the top, then a picture from the game and the description](pictures/case-back.webp)
 
-It reads the game's own save (the `.srm`, `.sav` or `.dsv` the game writes when you save in it), not a save state, so it is the
-same on every Pocket and with every emulator. The badges, items or exits are what the game had when you last saved in
-it; the game clock is the game's own, as its menu shows it, and not the time pocket-ui counted under Played. A game you
-played on another Pocket or emulator says "Played: Not here yet" until you play it here. The Pokémon is the first of your team that isn't an egg, by the name the game
-shows.
+Progress always reads the game's real save file (`.srm`, `.sav`, `.dsv`), never a save state, so it matches across every
+Pocket and emulator. The game clock is the game's own internal timer (separate from pocket-ui's Played counter; imported
+saves from another handheld read "Played: Not here yet" until you play here).
 
 | Games | Versions |
 |---|---|
@@ -119,140 +108,96 @@ shows.
 | Final Fantasy III (VI), EarthBound, Chrono Trigger, Fire Emblem, The Sacred Stones, Kirby & the Amazing Mirror | USA |
 | Role-playing games: Super Mario RPG, Lufia II, Pokémon Mystery Dungeon: Red Rescue Team, Final Fantasy VI Advance, Tactics Ogre: The Knight of Lodis, Breath of Fire II, Mario & Luigi: Superstar Saga | USA |
 | Banjo-Kazooie, Metroid Fusion, GoldenEye 007 | USA |
-| Mother 3 | the English fan translation 1.3a (HQ Sound) |
+| Mother 3 | English fan translation 1.3a (HQ Sound) |
 
-Each of these was checked against saves the game wrote, so the line says what the game's own screens say.
-
-pocket-ui recognises the game by what is in its file, not by its name, and checks the save the way the game itself
-does. A hack, a fan translation, another version, a save the game would call damaged, or a game that hasn't been saved
-yet shows no line at all, never a wrong one. A Link to the Past, Super Mario All-Stars and others keep several files: the line is
-the file you saved last (with only one file, that one; with several, from the next time you save).
+Games are matched strictly by ROM content and verified with real save checksums. Unrecognised hacks, other revisions or
+corrupt saves show nothing rather than guessing wrong. Multi-slot RPGs (like A Link to the Past or Super Mario
+All-Stars) show the slot you saved most recently.
 
 ## Photos of big moments
 
-Off unless you switch it on (Settings → Screen & sound → **Photos of big moments**). Then, when your own save shows a big step, pocket-ui keeps a photo of that moment, like an instant photo, in the game's case:
-a new badge in Pokémon, a level of ten for the leader of your party, a boss's remains, an instrument, an essence or a
-medallion in Zelda, a Star Spirit in Paper Mario, a gold cup in Mario Kart 64, a medal in Star Fox 64, the stars that
-open a door in Super Mario 64, every tenth percent, exit, Jiggy or balloon, a new chapter or mission. The game's clock
-alone never counts. It works for every game in the list under [Where you are in the game](#where-you-are-in-the-game),
-in pocket-core on the handhelds and in the player of pocket-ui for Android.
+Off until you turn on Settings → Screen & sound → **Photos of big moments**. Whenever your in-game save hits a milestone
+in any supported game above (a Pokémon badge, every 10th level for your party leader, Zelda boss remains/instruments/
+essences/medallions, Paper Mario Star Spirits, Mario Kart 64 gold cups, Star Fox 64 medals, Super Mario 64 star doors,
+every 10% items/exits/Jiggies/balloons, or new chapters/missions), pocket-ui quietly snaps a retro instant photo and
+tucks it inside the game's case (works in pocket-core and pocket-ui for Android's player; clock time alone never
+triggers it).
 
-Nothing interrupts your game: the photo is taken quietly. When you quit (Save & quit), with Animations on Cozy, it slides
-into the case as the game goes back in, with a soft click: several photos of the session go in as a small pile. The next
-time you open the case they lie on top with a small red **New** tab. Its third value, **Also in play**
-(off unless you choose it), shows the moment over the game as well: a soft flash, the shutter and the photo
-sliding up out of the screen's bottom edge, developing from milky grey to its colours (not on the TrimUI Brick and in
-pocket-ui for Android).
+Play stays completely uninterrupted. When you **Save & quit** (with Game start animation set to Cozy), your new photo (or
+a little stack of them) slides softly into the case with a click, wearing a red **New** tab next time you open it. Pick
+the third setting, **Also in play**, if you want a subtle shutter flash and developing Polaroid-style snap right during
+gameplay *(Linux handhelds only; TrimUI Brick and pocket-ui for Android offer Off and On)*.
 
-On the box's front, **Down** opens the case: the photos lie in it, the newest on top, with what happened, the game's
-clock and the day under it ("Badge 3 · 4 h 12 min · 18 Nov 2026").
+From the front of the box, press **Down** to open the case and flip through your album, newest on top, stamped with the
+milestone, game clock and date (*"Badge 3 · 4 h 12 min · 18 Nov 2026"*):
 
 | Button | In the open case |
 |---|---|
-| D-pad Left / Right | The photo before or after it. |
-| A | Look closer: the photo in your hand, its note written on it. B puts it back. |
-| X | Delete the photo; A deletes it, B keeps it. |
+| D-pad Left / Right | Flip through photos. |
+| A | Hold the photo up closer with its caption (B puts it back). |
+| X | Delete photo (A confirms, B keeps). |
 | B, D-pad Up | Close the case. |
 
-The photo is the game's picture from a few seconds before you saved (so it shows the game, not the save menu), at most
-320 pixels wide. One step gives one photo, even if you load an older save and play it again; a session adds five at
-most, and a game keeps its newest 30 (1.5 MB): beyond that the oldest go. They are kept in `album/<system>/<game>/` in
-pocket-ui's data folder and never leave the device. Off, there is no camera at all: nothing is taken or kept, and the box has no Photos row in its hint bar. Cozy
-extras → **Progress from saves** off reads no save, so it takes no photo either. A case without photos says why in a
-sentence.
+Each snap captures the gameplay frame a few seconds *before* you opened the save menu (up to 320 px wide). Milestones
+don't duplicate if you reload an older save, capped at 5 per session and 30 per game (~1.5 MB, oldest cycled out).
+Stored privately in `album/<system>/<game>/` and never uploaded anywhere. Turning it Off (or turning Cozy extras →
+**Progress from saves** Off) disables snapping cleanly.
 
 ## Stickers on the case
 
-Collectors mark their cases, and you can too: five stickers that go on the game's case, slightly crooked as if you put
-them on yourself. **Completed** (a green tick), **100 %** (a gold seal), **Favourite** (a star), **Playing now** and
-**Game of the year** with a year you choose. On the card (or the box, or the info page, then SELECT for the page),
-move down to the **Stickers** row and press A: the list contains those five stickers. The list scrolls to fit your screen and text size. A puts one on or takes it off. On Game of the year, Left and Right change its
-year first (it starts at the game's release year, or this year when that isn't known); with the sticker on, the new
-year is kept at once. B closes the list. In the box with Playful cases, when you close the list, each sticker you put on is pressed onto the case in front of you (a short spring, a quiet click) and each one you took off lifts away. Any button skips it.
+Mark your favourite boxes with five slightly tilted collector stickers: **Completed** (green tick), **100 %** (gold
+seal), **Favourite** (star), **Playing now** and **Game of the year** (with your chosen year). On the full card page
+(press SELECT from the box or info page), highlight **Stickers** and press A. Toggle stickers with A; on Game of the
+year, adjust the year with Left/Right (defaults to release year or current year). In the box with Playful cases On,
+closing the sheet presses each new sticker down with a subtle click and lifts removed ones away (any button skips).
 
-The Shelf and Cabinet looks show them: on the case's front when it is out of the shelf, on the game box, and one small
-sticker at the top of the case's spine on the shelf (Game of the year, 100 %, Completed, Playing now or Favourite,
-the first of these the game has). The other looks show no cases, so no stickers either. They are kept in
-`library.json` with your other notes about the game, follow [Sync](sync.md) to your other Pockets and are in your
-backups.
+Stickers appear on box fronts in Shelf and Cabinet, plus one mini badge at the top of the spine on the shelf (priority:
+Game of the year → 100 % → Completed → Playing now → Favourite). Saved in `library.json`, synced via [Sync](sync.md) and
+included in backups.
 
 ## Connections
 
-The developer, publisher, series and genre on the info page and on the box's back lead to **your other games** with
-the same one. A small arrow after a value says it leads somewhere; Down picks it
-(a paper pill), A opens the list:
+On the info page and box back, developer, publisher, series and genre values marked with an arrow jump straight to
+**your other games** sharing them. Highlight a pill with Down and press A:
 
-- **Developer**: "More from Criterion Games", in release order.
-- **Publisher**: "More published by Electronic Arts", in release order.
-- **Series**: "Burnout series, in release order", this game among them, so you see where it stands.
-- **Genre**: "More racing games", by name.
+- **Developer:** "More from Criterion Games" (chronological)
+- **Publisher:** "More published by Electronic Arts" (chronological)
+- **Series:** "Burnout series, in release order" (includes this game for context)
+- **Genre:** "More racing games" (alphabetical)
 
-The list is a shelf of your games in your look: A plays one, X opens its card (where its own facts lead on), B goes
-back to the card you came from. If the library changes while the list is open, B still finds that game; if it has
-been removed, B goes to Home. A game you have on two systems is there once, the version you prefer, as in the other
-lists that mix systems ([Versions](curator.md#versions)).
-
-The facts are the ones on the card: the offline game list's, or your EmulationStation gamelist's where it has them.
-Spellings don't have to match: "Criterion", "Criterion Games" and "Criterion Studios" are one developer, "Racing" and
-"racing video game" one genre. Where the data names no series, the titles can: "Burnout 2 - Point of Impact" and
-"Burnout 3 - Takedown" are the Burnout series, and with "Burnout" itself on your card "Burnout Revenge" is too; the
-card then shows **Series** Burnout. It takes two different games, never one game on two systems.
-
-A value only leads somewhere when you have another game with it. One you don't (the only game of a studio on your
-card) is plain text without an arrow, and a game without any facts has nothing to pick: Down scrolls, A plays.
-If the library is still getting ready when you open a card, its connections appear there as soon as they are ready. Settings → Look → [Cozy extras](settings.md#cozy-extras) → **Game connections** switches
-them off; the values are then only shown.
+Opens as a normal shelf: A plays, X opens another card, B steps right back to where you came from (merging multi-console
+copies to your preferred [Versions](curator.md#versions)). Smart matching handles name variations ("Criterion" /
+"Criterion Games" / "Criterion Studios", "Racing" / "racing video game") and infers series from titles when you own two
+or more entries. Links only appear when you actually own another matching game. Disable anytime under Settings → Look →
+[Cozy extras](settings.md#cozy-extras) → **Game connections**.
 
 ## What the card shows
 
-- **The label at the top**: the box art (when cover art was downloaded, see [Box art & downloads](extras.md)), the
-  name, system, year and number of players, and your status with the time played.
-- **Pictures**: under the facts, the game running and its title screen ("In the game", "Title screen"), when the
-  free collection has them and Settings → Games → Box art & downloads → **Pictures** is Box art and screenshots ([Box art & downloads](extras.md#pictures)).
-  A game without them has no such heading and no gap.
-- **About the game**: developer, publisher, genre, series and review scores where they are known.
-  A score reads, for example, "Metacritic 92 · via Wikidata". When the offline game list spells the game
-  differently from your file, "Listed as" shows its name, so you can see what the card is about.
-- **Your game**: status, your rating (five stars, or "None. Press Y" before you give one), time played and number
-  of sessions, when you last played, your note, **Save slots** on the game's memory card or cartridge, the cartridge wearing the game's own label (games on
-  pocket-ui's own host, as in the [pause menu](pause-menu-saves.md#save-slots-where-i-quit-and-before-load)), "Continue: 2 h ago"
-  when the game is waiting where you quit (under the slots, or on its own row for a game without them), and how many of
-  the game's achievements you unlocked when it has some on RetroAchievements ([Achievements](achievements.md)).
-  **Battery** says how long the charge you have now lasts in this game and how much of it the game uses an hour
-  ("About 3 h 20 min left, 18% an hour"), from the same measurements as the pause menu (see
-  [Battery in this game](pause-menu.md#battery-in-this-game)): "Measuring this game…" until there is enough, the
-  console's or all your games' time in brackets while only those are measured, and the rate alone on the charger.
-  In the first moments after pocket-ui starts it may say "Loading…" while the measurements are read.
-  A PortMaster port also has **Speed**, its performance and fan ("Auto, fan Auto"; "Loading…" in those first
-  moments, when START says "Still reading the ports' settings…" instead of opening the page). When the port was seen keeping
-  a processor core busy all the time, "Busy core? Press START" appears under it until you have opened that page; START opens
-  [Performance & fan](performance.md#portmaster-ports), which offers Battery in one press.
-- **Two versions of this game's save**: only when [Sync](sync.md) found that this game's save changed on two devices
-  before they could sync. The row says "Two versions of this game's save. Choose one…" (or "… of a save state", or
-  "… of the memory card" for a PS2 or GameCube card, which every game of that console shares). A on it opens the
-  [choice](sync.md#two-versions-of-a-save). Without Syncthing, or with nothing to choose, there is no such row.
-- **Echoes**, **Versions** and **Stickers**, three rows from [Curator](curator.md#curator) (each can be switched off in
-  Settings → Games → Curator).
-- **Screenshots (3)**: only on a game you took screenshots of (HOME + A while you play). The row says how many, and when
-  the newest was taken ("Newest: Today"). A opens a [gallery](playing.md#looking-at-your-screenshots) of this game's
-  screenshots; B comes back to the card.
-- **Description**: a few sentences from the game's English Wikipedia article (see below). Without a
-  connection, a short line made of the facts above. A game with a description in your
-  [EmulationStation gamelist](library-files.md#your-emulationstation-gamelists) shows that one, unless Wikipedia's text is on the
-  card already.
-- **More by …** and **Other games in …**: games **from your own library** by the same developer or
-  in the same series. The card never lists games you do not have; it is not a store.
-- **Hide or delete**, the last row of every card: see [below](#hide-or-delete-a-game).
+- **Header:** box art, title, console, release year, player count, status and play time.
+- **Pictures:** "In the game" screenshot and "Title screen" when available and Settings → Games → Box art & downloads →
+  **Pictures** is set to Box art and screenshots ([Box art & downloads](extras.md#pictures)).
+- **About the game:** developer, publisher, genre, series and Wikidata review scores (e.g. "Metacritic 92 · via
+  Wikidata"), plus "Listed as" if database spelling differs from your filename.
+- **Your game:** status, star rating, play time, sessions, last played, note, visual **Save slots** on the cartridge or
+  memory card ([pause menu](pause-menu-saves.md#save-slots-where-i-quit-and-before-load)), "Continue: 2 h ago",
+  [Achievements](achievements.md) progress and live **Battery** estimate ("About 3 h 20 min left, 18% an hour"; see
+  [Battery in this game](pause-menu.md#battery-in-this-game)). PortMaster ports also show **Speed** (plus "Busy core?
+  Press START" when detected; see [PortMaster ports](performance.md#portmaster-ports)).
+- **Two versions of this game's save:** appears only when [Sync](sync.md) spots a save conflict between devices. Press A
+  to pick the winner ([Two versions of a save](sync.md#two-versions-of-a-save)).
+- **Echoes**, **Versions** and **Stickers:** Curator rows (each toggleable under Settings → Games → Curator).
+- **Screenshots (N):** appears once you've snapped screenshots with HOME + A ("Newest: Today"); press A for this game's
+  [gallery](playing.md#looking-at-your-screenshots).
+- **Description:** opening summary from English Wikipedia (or your [gamelist](library-files.md#your-gamelists) / offline
+  facts fallback).
+- **More by … / Other games in …:** only games **you actually own**, never a store.
+- **Delete from the card** and **Hide from the shelf:** the last two rows of the card ([details below](#hide-or-delete-a-game)).
 
-A console's [Credits & links](console-pages.md#credits--links) (X on a system, then X again) lists your games by the
-makers of the console in the same way, and A there opens their cards.
-
-Games that are not in the offline game list (homebrew, test ROMs, hacks with unusual names) still get
-a card with your status, time and note.
+Even homebrew, ROM hacks and test ROMs not in the offline database get a full card with your status, play time and note.
 
 ## Play status
 
-Press **Y** on the card and pick one:
+Press **Y** on a card to pick a status:
 
 | Status | Mark on the shelf |
 |---|---|
@@ -262,121 +207,72 @@ Press **Y** on the card and pick one:
 | Completed | a tick |
 | Dropped | a dash |
 
-The mark sits at the right end of the game's spine on the shelf, and the pulled-out label starts its
-line with the status ("Playing, last played 2 h ago ...").
+Marks show on the right edge of spines and lead your game subtitle ("Playing, last played 2 h ago ...").
 
-After the **second session** of a game you have not given a status (a session is at least a minute of
-play), the card suggests **Playing**: "Playing? Press Y". A game with at least a minute of play time from
-before pocket-ui counted sessions (it shows in the recent games) gets the same suggestion right away. The picker then opens on Playing. It is only a
-suggestion; nothing changes until you choose. Choosing any status, "Not started" included, ends the
-suggestion for that game.
+After your **second session** (at least 1 minute each) of an unmarked game, the card gently prompts "Playing? Press Y" with
+Playing highlighted; picking any status (including Not started) clears the prompt.
 
 ## My rating
 
-Your own one-to-five stars for a game, next to its status: how much **you** liked it, whatever the reviews say.
-Press **Y** on the card and go down to **My rating**, under Dropped. Left and Right give fewer or more stars, A keeps
-them, B leaves them as they were. All the way left is "Not rated" again. The card shows the stars under "Your game";
-"Rated 4 stars" shows for a moment when you set them.
-
-Ratings are a [Lens](curator.md#lens) filter (**My rating**), an order for the Lens's games and your smart shelves (**Best
-rated first**), and part of what [Just Play](curator.md#just-play) and [Echoes](curator.md#echoes) know about your taste: five stars
-count like a star for Favourites, four half that, three nothing, and one or two stars against games like it. A game
-you have not rated counts as before.
+Rate any game 1–5 stars under **Y → My rating** (all the way left clears back to "Not rated"). Feeds into
+[Lens](curator.md#lens) filtering, **Best rated first** sorting, plus [Just Play](curator.md#just-play) and
+[Echoes](curator.md#echoes) taste weights (5 stars = strong boost like a Favourite, 4 = mild boost, 3 = neutral, 1–2 =
+discourage similar picks).
 
 ## Wrong game? Choose another
 
-If the card shows facts about a different game (or about none, although the game is well known), press
-**Y** and pick the row under My rating, **Wrong game? Choose another**. pocket-ui lists the games of that system
-whose names are closest to your file's, with system, year and developer, the one shown now marked "now",
-and **None of these** at the end, which shows no facts. A picks. Your choice is kept for that file in
-`library.json` and comes before the automatic match from then on; picking the game the name finds
-anyway goes back to the automatic match. The box art stays as it was: covers are found by the game's checksum
-or its file name in the libretro thumbnail collection, not through these facts; for a wrong cover, see the next
-section.
-
-A name recognised while a background check is interrupted by play reaches the shelf when the check resumes,
-even if the resumed check finds the same games.
-
-The facts are matched the way the covers are: by the usual name of the release when pocket-ui recognised the game
-by its checksum or, for a PlayStation 1 or 2 disc, by the serial on the disc ([below](library-files.md#playstation-1-and-2-discs)),
-else by the file name. A choice made here comes before both.
+Wrong metadata? Press **Y → Wrong game? Choose another** to pick the closest match on that console (or **None of these**
+to clear facts). Saved in `library.json` and overrides automatic checksum/serial/filename matching. *(Covers are matched
+separately; see the next section.)*
 
 ## Wrong pictures? Look up again
 
-If a game shows the wrong box art, screenshot or title screen, or none although the collection should have them,
-press **Y** on its card and pick the last row, **Wrong pictures? Look up again**. pocket-ui deletes the game's
-pictures, reads the game file again to recognise it by its checksum (for a PlayStation 1 or 2 disc: by the serial on
-the disc, [below](library-files.md#playstation-1-and-2-discs)), and looks it up once more, by the name that gives first and by the
-file name after it. The card says how it went, for example "Found 3 pictures for
-Mega Man & Bass (USA)" or "No pictures found for this game"; when it found the game's usual name, the facts follow
-it too.
-If the lookup changes the recognised name, the shelf follows when you leave the card. If a replacement file is no
-longer recognised, its file name (or its EmulationStation name) returns instead of keeping the old game's title.
-
-- It needs Wi-Fi. Offline the card says "Connect to Wi-Fi first to look up pictures." and nothing is changed.
-- While the automatic download runs, the card asks you to try again in a moment.
-- When the collection can't be reached, the card says so; the game is looked up again with the next download.
-- A picture of your own under the game's name is replaced too. Put it back afterwards if you want to keep it.
-- The row is there for the consoles the collection has pictures for.
+Wrong or missing cover/screenshot? Press **Y → Wrong pictures? Look up again** (requires Wi-Fi). pocket-ui clears cached
+images for that game, re-checks its ROM checksum or PS1/PS2 disc serial
+([PlayStation 1 and 2 discs](library-files.md#playstation-1-and-2-discs)) and fetches fresh art, updating the shelf
+title and facts if the match changed. *(Note: also replaces any custom PNG under that filename.)*
 
 ## Notes
 
-Press **X** on the card to write a short note, for example "after the first boss". It uses the same
-keyboard as the Wi-Fi password: A types, B deletes (B on an empty field leaves without saving), X is
-Shift, Y switches to symbols, START saves. A note has up to 80 characters. To remove a note, delete its
-text and press START.
+Press **X** on a card to jot down an 80-character note (like "after the first boss") using the on-screen keyboard (START
+saves; clear text + START removes it).
 
 ## Hide or delete a game
 
-At the very end of a game's card, under everything else, is the row **Hide or delete**. A on it offers two things:
+The last two rows of a game's card (press SELECT to view card rows; right after Stickers and Screenshots, above the
+description) are **Delete from the card** and **Hide from the shelf**:
 
-- **Hide from the shelf**: the game stays on the SD card but leaves every list: Home's recent games, its system's list,
-  Favourites, the search, Curator (Lens, smart shelves, Echoes, Versions), Recent games, On start
-  and the [web companion](web-companion.md). Good for BIOS test files, demos, the second disc of a game you start from
-  its playlist, a version you don't want. The card closes and says where to bring it back: Settings → System → Storage →
-  **Hidden games**, where A on a game shows it again. Hiding is kept in `library.json` (below), by the game's path.
-  [Play history](curator.md#play-history) still counts the time you played it: it is a record of what happened.
-- **Delete from the SD card…**: shows what it frees first ("Frees 2.3 GB: 3 files.") and the first file names, then asks
-  twice: A on **Delete 2.3 GB**, then A again ("Press A again to delete. B keeps it."). Every file of the game goes: a
-  `.cue` with its `.bin` tracks, a `.gdi` with its tracks, an `.m3u` with all its discs and their tracks, a game that is
-  a folder with what is in it. A folder that held only that game goes when it is empty afterwards. Its box art and
-  pictures go too.
+- **Hide from the shelf:** hides the game everywhere (Home, lists, Favourites, Search, Curator, On start,
+  [web companion](web-companion.md)) without deleting a single byte, great for BIOS tests, demos or spare discs. Restore
+  anytime under Settings → System → Storage → **Hidden games** ([Play history](curator.md#play-history) keeps past time).
+- **Delete from the card:** names the game, previews space freed and filenames ("Frees 2.3 GB: 3 files."), then asks
+  twice (A, then A again; B cancels). Removes every file belonging to the game (`.cue` + `.bin`, `.gdi`, `.m3u` discs,
+  single-game folders, `.zip` or `.7z`), plus its cover art, screenshots, `gamelist.xml` entry with exclusive scraped
+  media, and its [Shelf space](settings-playing.md) slot, clearing it immediately from Recent games, Continue and
+  Favourites.
 
-  **Saves and states** stay unless you change the row above Delete to "Delete too" (A or left/right; it shows how much
-  they take). Saves are the files beside the game with its name (`.srm`, `.sav`, a PS1 memory card …); states are the
-  slots, the Continue state and Before load in the states folder. Shared memory cards (PS2, GameCube) are never a
-  game's, and a PS2 game's states are named after its disc and stay. With [Sync](sync.md) sharing saves or states,
-  the sheet says that they are deleted from your other devices too. A game in a folder of its own keeps the files in it that
-  look like saves unless you choose "Delete too".
+  **Saves and states** stay safe by default unless you flip the row above Delete to **"Delete too"** (shared PS2/GameCube
+  memory cards and PS2 disc states are never deleted automatically; if [Sync](sync.md) is active, you're warned that
+  deleting saves removes them on synced devices too). Deletion is permanent (no recycle bin), though play time, status and
+  notes stay in `library.json` if you ever re-add the game.
 
-  Deleting is for good: there is no bin. The time played, status and note stay in `library.json` in case the game comes
-  back.
+  Unavailable while a game is running or in [Kids mode](kids-mode.md) (kids have no game card), and hidden where
+  pocket-ui can't write to your ROM folder: pocket-ui beta for dArkOS mounts games read-only, and on Android your games
+  sit in shared folders managed by other apps (delete them with your Files app there). The
+  [web companion](web-companion.md) offers the exact same Delete action on each game's page.
 
 ## Where it is kept
 
-Status, ratings, notes and session counts are in one file, `/storage/.config/pocket-ui/library.json`, next to
-your favourites. It is written so that a power cut cannot leave it empty or half-written, and the last
-good copy is kept as `library.json.bak`; pocket-ui uses the copy if the file is ever damaged. Games are
-remembered by their file path: renaming or moving a ROM starts it fresh, as with favourites.
+Statuses, ratings, notes and session counts live in `/storage/.config/pocket-ui/library.json` (written safely against
+power cuts with an automatic `library.json.bak` fallback, keyed by file path).
 
-Descriptions loaded from Wikipedia are kept in `/storage/.config/pocket-ui/wikipedia/`, so each one is
-loaded only once. Delete the folder to load them again.
-
-While Wi-Fi is on and no game runs, pocket-ui loads the missing descriptions on its own, one after the
-other with a pause between them, the way it downloads missing cover art; the shelf shows
-a small dot at the top right (the one the covers show) while it does. Starting a game stops it after the current one, and it
-goes on after the game. Only games with an entry in the offline game list and a Wikipedia article are
-asked for.
+Wikipedia descriptions cache once in `/storage/.config/pocket-ui/wikipedia/` (delete the folder to re-fetch) and fill
+in quietly in the background on Wi-Fi while idle (sharing the little corner dot with box art).
 
 ## Where the facts come from
 
-- **Wikidata** (CC0, public domain): name, year, developer, publisher, genre, series, game mode,
-  number of players and review scores. pocket-ui ships a compact copy of these facts for about 30
-  systems, so the card works offline. Review scores are the ones Wikidata records, with the reviewer
-  named; pocket-ui does not take anything from Metacritic, OpenCritic or HowLongToBeat itself.
-- **Wikipedia** (CC BY-SA 4.0): the description. It is not shipped with pocket-ui. When you open a card
-  with Wi-Fi on, pocket-ui asks Wikipedia for the lead of the game's article, shows it with
-  "Text: Wikipedia, “<article>”, CC BY-SA 4.0" underneath, and keeps it on the SD card. With Wi-Fi on it
-  also loads the descriptions of your other games in advance (see above). This means Wikipedia sees which
-  games are in your library, as it would if you looked them up in a browser. pocket-ui introduces itself
-  as `pocket-ui-wiki/0.1` and sends nothing else about you.
+- **Wikidata** (CC0 public domain): bundled offline across ~30 consoles for title, year, developer, publisher, genre,
+  series, game mode, player count and Wikidata-recorded review scores (naming the reviewer).
+- **Wikipedia** (CC BY-SA 4.0): fetched on demand over Wi-Fi and cached locally with attribution
+  (`Text: Wikipedia, “<article>”, CC BY-SA 4.0`). Identifies itself simply as `pocket-ui-wiki/0.1` and sends nothing
+  personal beyond the requested article titles.

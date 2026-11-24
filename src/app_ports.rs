@@ -41,18 +41,22 @@ impl App {
 
     pub(crate) fn empty_ports_press(&mut self, button: Button) -> bool {
         if !self.empty_ports() || button != super::CONFIRM { return false; }
-        self.setup = Some(self.new_extras_setup().only(pocket_ui::setup::Only::Extras).at_portmaster());
+        let setup = self.new_extras_setup().only(pocket_ui::setup::Only::Extras);
+        // Without Wi-Fi: straight to installing from the card (`ports_card`).
+        let card = pocket_ui::ports_card::offered() && pocket_ui::wifi::ip().is_none();
+        self.setup = Some(if card { setup.at_ports_card() } else { setup.at_portmaster() });
         true
     }
 
     pub(crate) fn paint_empty_ports(&mut self, c: &mut Canvas, with_hints: bool) {
         let dy = pocket_ui::ui_art::above_words(c, pocket_ui::ui_art::Art::NoGames, super::MARGIN, false, super::EMPTY_ART_TOP, 300, 50);
         self.text.draw(c, pocket_ui::text::Face::Title, 50, super::MARGIN, 300 + dy, pocket_ui::palette::pal().chalk, "No ports yet");
-        let line = "Get PC and indie games from PortMaster in Settings › Games › Box art & downloads.";
+        let card = pocket_ui::ports_card::offered() && pocket_ui::device::no_wifi_chip();
+        let line = if card { "Add PC and indie games from portmaster.games via SD card. Press A to see how." } else { "Get PC and indie games from PortMaster in Settings › Games › Box art & downloads." };
         for (i, line) in self.text.wrap_prose(pocket_ui::text::Face::Body, 28, line, c.w - 2 * super::MARGIN).iter().enumerate() {
             self.text.draw(c, pocket_ui::text::Face::Body, 28, super::MARGIN, 350 + dy + i as i32 * 40, pocket_ui::palette::pal().dust, line);
         }
-        if with_hints { self.paint_hint_row(c, &[("A", "Get PortMaster"), ("B", "Back")]); }
+        if with_hints { self.paint_hint_row(c, &[("A", if card { "Open" } else { "Get PortMaster" }), ("B", "Back")]); }
     }
 
     pub(crate) fn empty_ports_snapshot(&mut self, state: &str) -> bool {

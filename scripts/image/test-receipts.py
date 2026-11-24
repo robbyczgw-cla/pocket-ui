@@ -253,6 +253,36 @@ sys.exit(0)
         other.write_bytes(b'damaged')
         self.upload(False)
 
+    def test_r36s_beta_folder_with_only_its_own_list_is_a_release(self):
+        # The R36S beta card sits in its own folder with its own list, so it can be uploaded (or not) without
+        # touching the other images' SHA256SUMS-images asset. Before 0.7 such a folder was refused
+        # "no image release checksum lists".
+        self.image.unlink()
+        self.notes(self.image).unlink()
+        (self.root/'SHA256SUMS-images').unlink()
+        image = self.root/f'pocket-ui-{VERSION}-r36s.img.xz'
+        image.write_bytes(b'r36s fixture image')
+        self.notes(image).write_text('r36s fixture notes\n')
+        self.checked(image)
+        # self.sums (through self.log) writes SHA256SUMS-images too: the folder keeps only the R36S list.
+        lines = (self.root/'SHA256SUMS-images').read_text()
+        (self.root/'SHA256SUMS-images').unlink()
+        manifest = self.root/'SHA256SUMS-images-r36s'
+        manifest.write_text(lines)
+        self.release()
+        self.cli('verify',self.root,'--tag','v'+VERSION)
+        dry = json.loads(self.upload(True,'--dry-run').stdout)
+        self.assertEqual(dry['assets'],[str(image),str(self.notes(image)),str(manifest)])
+        self.assertFalse(self.calls.exists())
+        self.upload(True)
+        calls = self.calls.read_text().splitlines()
+        self.assertIn(str(manifest),calls)
+        self.assertNotIn(str(self.root/'SHA256SUMS-images'),calls)
+        # Its list is bound like the others: a changed one is refused.
+        self.calls.unlink()
+        manifest.write_text(lines+'\n')
+        self.upload(False)
+
     def test_missing_unlisted_and_duplicate_assets_are_refused(self):
         self.checked()
         self.notes(self.image).unlink()

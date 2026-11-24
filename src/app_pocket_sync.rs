@@ -490,6 +490,7 @@ impl App {
                 }
                 if r.as_ref().is_ok_and(|rep| !rep.fetched.is_empty()) {
                     self.curator.touch();
+                    self.case_saves_came();
                 }
                 self.pocket_sync.syncing.remove(&id);
                 self.pocket_sync.log = Log::load(&self.pocket_sync.dir);
@@ -515,6 +516,7 @@ impl App {
                 if !done.iter().all(|(_, _, r)| r.as_ref().is_ok_and(|rep| rep.fetched.is_empty())) {
                     // What came changes the cases (saves read by "the case knows") and Continue: look again.
                     self.curator.touch();
+                    self.case_saves_came();
                 }
             }
             Event::Received => {
@@ -538,6 +540,7 @@ impl App {
                 }
                 if !got.is_empty() {
                     self.curator.touch();
+                    self.case_saves_came();
                 }
             }
             Event::Nearby(found) => {
@@ -802,9 +805,9 @@ impl App {
         let note: String = match (&p.problem, &p.line, p.prefs.enabled, p.pockets.is_empty()) {
             (Some(why), ..) => format!("Not listening. {why}"),
             (None, Some(line), ..) => line.clone(),
-            (None, None, false, _) => "Off. Switch it on on every Pocket that should share saves.".into(),
-            (None, None, true, true) => "No Pocket paired yet. Choose Pair a Pocket on this one and on the other.".into(),
-            (None, None, true, false) => pocket_ui::device::wifi_or("Only your Pockets on the same Wi-Fi or in your Tailscale. No cloud.", pocket_ui::device::NEEDS_NETWORK).into(),
+            (None, None, false, _) => "Off. Turn it on for every Pocket you want to sync.".into(),
+            (None, None, true, true) => "No Pocket paired yet. Open Pair a Pocket on both devices.".into(),
+            (None, None, true, false) => pocket_ui::device::wifi_or("Direct sync over your Wi-Fi or Tailscale. No cloud.", pocket_ui::device::NEEDS_NETWORK).into(),
         };
         let hints = p.hints();
         let foot = pocket_ui::kit::footer(c, &mut self.text, &mut self.hits, &hints, p.describe(p.row()), 2, pal().text);
@@ -835,7 +838,7 @@ impl App {
         let (row, font) = (pocket_ui::type_scale::row(64, 34), 34u32);
         if p.nearby.is_empty() {
             y += 50;
-            let looking = pocket_ui::device::wifi_or("Looking… Open Pair a Pocket on the other Pocket too, on the same Wi-Fi.", pocket_ui::device::NEEDS_NETWORK);
+            let looking = pocket_ui::device::wifi_or("Searching… Open Pair a Pocket on the other Pocket on the same Wi-Fi.", pocket_ui::device::NEEDS_NETWORK);
             for l in self.text.wrap_prose(Face::Body, 28, looking, width) {
                 self.text.draw(c, Face::Body, 28, left, y, pal().text, &l);
                 y += pocket_ui::type_scale::line(28, 8);
@@ -857,7 +860,7 @@ impl App {
         }
         self.hits.list(sel, p.nearby.len(), 0.0, row as f32);
         let line = p.line.clone().unwrap_or_default();
-        let desc = if line.is_empty() { "Pick the other Pocket and type its code." } else { line.as_str() };
+        let desc = if line.is_empty() { "Pick the other Pocket, enter its code." } else { line.as_str() };
         let hints = p.hints();
         self.nu_foot(c, &hints, desc, pal().text);
     }
@@ -887,7 +890,7 @@ impl App {
         }
         pocket_ui::shares::mark("pocket-code", x0, by, total, bh);
         let mut y = by + bh + 70;
-        for l in self.text.wrap_prose(Face::Body, 26, "Up and Down change the digit, Left and Right move. A pairs. Five wrong tries and the code is gone.", c.w - 2 * left) {
+        for l in self.text.wrap_prose(Face::Body, 26, "Up/Down change digits, Left/Right move, A pairs. Five wrong tries expire the code.", c.w - 2 * left) {
             self.text.draw(c, Face::Body, 26, left, y, pal().dust, &l);
             y += pocket_ui::type_scale::line(26, 8);
         }

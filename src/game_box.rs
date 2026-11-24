@@ -432,6 +432,14 @@ fn edge_columns(c: &mut Canvas, a: (f32, f32), b: (f32, f32), cy: f32, h: f32, c
     }
 }
 
+/// The height a turning face is drawn at, `rh` the room's (its height at rest), `sin` how far round it is (0 at rest, 1 half
+/// way), `near` the perspective's growth at its nearest edge: a touch smaller while it turns, and so small that the nearest
+/// edge (`tall * near`) is no taller than the room. Rows above and below the face inside its picture are the page's ground:
+/// past the room they painted over the title line and into the hint bar.
+fn turn_height(rh: i32, sin: f32, near: f32) -> f32 {
+    (rh as f32 * (1.0 - 0.08 * sin)).min(rh as f32 / near.max(1.0))
+}
+
 fn widths(w: i32, h: i32, front_w: i32) -> (i32, i32) {
     let (_, _, side) = room(w, h);
     let avail = w - 2 * side;
@@ -665,16 +673,12 @@ impl BoxView {
         };
         let (rx, ry, rw, rh) = rect;
         let cy = (ry + rh / 2) as f32;
-        // A touch smaller while it turns, so its nearer edge stays inside the room it stands in.
-        let tall = rh as f32 * (1.0 - 0.08 * sin);
         // The face toward you: the near face (z = -half_d) before half way, the far one (z = +half_d) seen from behind after.
         let (a, b) = if cos >= 0.0 {
             (project(rot(-half_w, -half_d)), project(rot(half_w, -half_d)))
         } else {
             (project(rot(half_w, half_d)), project(rot(-half_w, half_d)))
         };
-        let dark = ((1.0 - cos.abs()) * 120.0) as u32;
-        face_columns(c, &scratch, w, (rx, ry, rw, rh), a, b, cy, tall, dark, None);
         // The edge between them: the box's right side faces you all through a half turn (its normal's z is -sin). While the
         // front turns away, that side is the case's own, at the case's right edge, not at the far end of the game out beside
         // it (ritual review 14.11., finding 7: the side stood apart, beyond the cartridge), and the game stands in front of
@@ -684,6 +688,15 @@ impl BoxView {
         let case_part = inp.front.map_or(1.0, |f| f.w as f32 / rw.max(1) as f32).clamp(0.0, 1.0);
         let side_x = if front_away { -half_w + along * case_part } else { half_w };
         let (e0, e1) = (project(rot(side_x, -half_d)), project(rot(side_x, half_d)));
+        // A touch smaller while it turns, and never taller at its nearer edge than the room it stands in (`turn_height`):
+        // the perspective grew it past the room into the title line and the hint bar (the Brick's wider back, its shorter
+        // focal length; the Plus's Game Boy and PSP boxes too: Brick review 20.11.).
+        let near = a.1.max(b.1).max(e0.1).max(e1.1);
+        let tall = turn_height(rh, sin, near);
+        crate::shares::mark("box-room", rx, ry, rw, rh);
+        crate::shares::mark("box-turn", rx, (cy - tall * near / 2.0).floor() as i32, rw, (tall * near).ceil() as i32);
+        let dark = ((1.0 - cos.abs()) * 120.0) as u32;
+        face_columns(c, &scratch, w, (rx, ry, rw, rh), a, b, cy, tall, dark, None);
         // As tall as the case (the back stands the room's height), from the face it leaves to the face it comes to.
         let case_h = inp.front.map_or(rh, |f| f.h.min(rh)) as f32;
         let (h_from, h_to) = if self.back { (case_h, rh as f32) } else { (rh as f32, case_h) };
@@ -1239,6 +1252,21 @@ fn paint_shot(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i32
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_turning_face_is_never_taller_than_its_room() {
+        // At rest it is the room's height; half way round a little smaller; and however near its edge comes (the
+        // Brick's focal length with its wider back grew it 1.22 times half way), that edge stays in the room.
+        assert_eq!(turn_height(600, 0.0, 1.0), 600.0);
+        assert!((turn_height(600, 1.0, 1.0) - 552.0).abs() < 0.01);
+        for near in [1.0, 1.05, 1.16, 1.22, 1.5] {
+            for sin in [0.0, 0.3, 0.7, 1.0] {
+                assert!(turn_height(600, sin, near) * near <= 600.0 + 0.01, "near {near} sin {sin}");
+            }
+        }
+        // Where the touch smaller is enough (the Plus's SNES box), it stays as it was.
+        assert!((turn_height(776, 1.0, 1.05) - 776.0 * 0.92).abs() < 0.01);
+    }
 
     #[test]
     fn a_box_back_keeps_up_with_descriptions_pictures_scrolling_and_unwrapping() {

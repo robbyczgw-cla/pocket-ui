@@ -97,6 +97,14 @@ pub(crate) struct Kids {
     kept_moment: bool,
 }
 
+fn pin_reset_help(brick: bool) -> String {
+    if brick {
+        format!("Forgot it? Put {} in the Roms folder on the SD card and restart.", kids::RESET_FILE)
+    } else {
+        format!("Forgot it? Put a file called {} in the top folder of the card's ROCKNIX drive and restart.", kids::RESET_FILE)
+    }
+}
+
 impl App {
     pub(crate) fn kids_load(&mut self) {
         self.kids.cfg = Config::load(&self.data_dir);
@@ -1204,7 +1212,11 @@ impl App {
             lines.push("That's not it. Try again.".to_string());
         }
         // From the first look: the grown-up who forgot the PIN should not have to guess wrong three times to learn this.
-        lines.push(format!("Forgot it? Put a file called {} in the top folder of the card's ROCKNIX drive and restart.", kids::RESET_FILE));
+        #[cfg(feature = "brick")]
+        let brick = pocket_ui::device::brick();
+        #[cfg(not(feature = "brick"))]
+        let brick = false;
+        lines.push(pin_reset_help(brick));
         let spx = (38.0 * u).round() as u32;
         let width = c.w - (100.0 * u) as i32;
         let wrapped: Vec<String> = lines.iter().flat_map(|line| self.text.wrap_prose_at_most(Face::Body, spx, line, width, 2)).collect();
@@ -1309,7 +1321,7 @@ impl App {
         let draft = flow.draft.clone();
         match stage {
             Stage::Welcome => {
-                self.kids_title(c, pal().chalk, "Set it up for a child", "It takes two minutes. Your child gets a big, simple shelf with only the games you pick. Settings stay out of reach, behind your PIN.");
+                self.kids_title(c, pal().chalk, "Set it up for a child", "Takes two minutes. Kids get a big, simple shelf with only your chosen games, and Settings stay locked behind a PIN.");
                 let mut y = (420.0 * u) as i32;
                 let lpx = (40.0 * u).round() as u32;
                 let margin = (72.0 * u) as i32;
@@ -1326,12 +1338,12 @@ impl App {
                 self.paint_hint_row(c, &[("A", "Start"), ("B", if self.kids.over_setup { "Skip" } else { "Back" })]);
             }
             Stage::Pin { dials, first, mismatch } => {
-                let (t, l) = if first.is_some() { ("Once more", "Enter the same PIN again, so a slip doesn't lock you out.") } else { ("Pick a PIN", "Four digits for you, not for your child. You'll need it to leave Kids mode.") };
+                let (t, l) = if first.is_some() { ("Once more", "Enter the same PIN again to confirm.") } else { ("Pick a PIN", "Pick a 4-digit parent PIN. You'll use it to exit Kids mode.") };
                 self.kids_title(c, pal().chalk, t, l);
                 paint_dials(self, c, dials, (430.0 * u) as i32, None, false);
                 if mismatch {
                     let mut spx = (38.0 * u).round() as u32;
-                    let line = "Those two were different. Pick one again.";
+                    let line = "PINs didn't match. Try again.";
                     while spx > (26.0 * u) as u32 && self.text.width(Face::Body, spx, line) > c.w - (144.0 * u) as i32 {
                         spx -= 1;
                     }
@@ -1359,12 +1371,12 @@ impl App {
                 self.paint_hint_row(c, &[("D-PAD", "Choose"), ("A", "Next"), ("B", "Back")]);
             }
             Stage::Limit => {
-                self.kids_title(c, pal().chalk, "How long per day?", "When the time is up, the game saves itself and a friendly screen says goodbye until tomorrow.");
+                self.kids_title(c, pal().chalk, "How long per day?", "When time's up, the game auto-saves and a friendly screen says goodbye until tomorrow.");
                 self.kids_value(c, &limit_label(draft.minutes));
                 self.paint_hint_row(c, &[("D-PAD", "Choose"), ("A", "Next"), ("B", "Back")]);
             }
             Stage::Volume => {
-                self.kids_title(c, pal().chalk, "How loud at most?", "The volume keys stop here. Good for small ears and headphones.");
+                self.kids_title(c, pal().chalk, "How loud at most?", "Caps maximum volume. Great for young ears and headphones.");
                 self.kids_value(c, &volume_label(draft.volume));
                 self.paint_hint_row(c, &[("D-PAD", "Choose"), ("A", "Next"), ("B", "Back")]);
             }
@@ -1808,6 +1820,23 @@ pub(crate) fn paint_backdrop(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, the
                     }
                 });
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn brick_pin_recovery_names_the_roms_folder_in_every_language() {
+        use pocket_ui::i18n::{tr_in, Lang};
+        let help = pin_reset_help(true);
+        let lines: Vec<String> = Lang::ALL.into_iter().filter(|l| l.complete()).map(|lang| tr_in(lang, &help)).collect();
+        for (index, line) in lines.iter().enumerate() {
+            assert!(line.contains(kids::RESET_FILE) && line.contains("Roms"), "{line}");
+            assert!(!line.contains("ROCKNIX"), "{line}");
+            assert!(!lines[..index].contains(line), "{line}");
         }
     }
 }

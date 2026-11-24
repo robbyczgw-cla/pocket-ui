@@ -682,7 +682,7 @@ mod tests {
         let row = setting(crate::render_scale::KEY).expect("Picture has Resolution");
         assert_eq!(row.name, "Resolution", "the same row name as PS2, GameCube, Wii and Xbox");
         assert_eq!(row.choices.iter().map(|c| c.value).collect::<Vec<_>>(), crate::render_scale::VALUES);
-        assert!(row.desc.ends_with("Takes effect the next time the game starts."));
+        assert!(row.desc.ends_with("Applies on next launch."));
         assert!(GROUPS.iter().find(|g| g.name == "Picture").unwrap().settings.iter().any(|s| s.key == row.key));
         // This test machine is no handheld (`device::current` has no model): no row, no starting value, no value offered,
         // so a console's Picture page and what pocket-core is given stay as they were. The handhelds' numbers are
@@ -893,12 +893,12 @@ mod tests {
         let mut s = GameSettings::load(&dir, "snes", Path::new("x.sfc"));
         let (sharpness, effect) = (setting("sharpness").unwrap(), setting("effect").unwrap());
         s.values.insert("sharpness".into(), "crisp".into());
-        assert_eq!(describe(sharpness, Some(&s)), "All pixels the same size at any scaling; at Integer it looks like Sharp.");
+        assert_eq!(describe(sharpness, Some(&s)), "Even pixels at any scale; matches Sharp at Integer scaling.");
         for _ in 0..4 {
             s.step(effect, 1);
         }
         assert_eq!(s.value_of("effect"), "softglow");
-        assert_eq!(describe(effect, Some(&s)), "A soft halo around bright parts; the rest stays clear.");
+        assert_eq!(describe(effect, Some(&s)), "Soft glow around bright highlights; crisp elsewhere.");
         for sh in sharpness.choices {
             assert!(value_descs("sharpness").iter().any(|(v, _)| *v == sh.value), "{}", sh.value);
         }

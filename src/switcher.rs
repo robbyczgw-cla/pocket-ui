@@ -778,9 +778,9 @@ impl Switcher {
 
         if self.entries.is_empty() {
             let (t, s) = if self.only_hidden {
-                ("No recent games on the shelf", "Games from systems taken off the shelf stay out of this list (Settings › Games › Systems on the shelf).")
+                ("No recent games on the shelf", "Hidden systems stay out of this list (Settings › Games › Systems on the shelf).")
             } else {
-                ("Nothing played yet", "The games you play show up here, ready to pick up where you left off.")
+                ("Nothing played yet", "Games you play land here, ready to jump straight back in.")
             };
             // A handheld asleep under a blanket above the words (`ui_art`), the words moved down if it needs room.
             let dy = crate::ui_art::above_words(c, crate::ui_art::Art::NothingPlayed, c.w / 2, true, PAD + PILL + 24, c.h / 2 - 10, 50);

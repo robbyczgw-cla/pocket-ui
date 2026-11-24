@@ -242,7 +242,7 @@ pub struct Ctx<'a> {
     pub pocket_core: Option<&'a str>,
     /// Other verified pocket-core choices, e.g. bundled H700 gpSP beside mGBA.
     pub pocket_cores: &'static [&'static str],
-    /// pocket-core takes this game's file (not a 7z, a file type it opens). True for the system as a whole.
+    /// pocket-core takes this game's file (a file type its core opens, or a zip or 7z it unpacks). True for the system as a whole.
     pub file_ok: bool,
     /// pocket-core couldn't start this game before (`fallback.json`): it goes to the next choice down.
     pub fell_back: bool,
@@ -370,7 +370,7 @@ pub fn game_choice(ctx: &Ctx, cfg: &Cfg, file: &str) -> Option<Runner> {
 
 /// The emulator and core a game (`file`, its file name) or the system as a whole (None) starts with: the game's
 /// choice, else the console's, else the default (pocket-core where it hosts the system, else ROCKNIX's default). A
-/// pocket-core choice the game can't take (a 7z, a game pocket-core couldn't start) goes to the next level down.
+/// pocket-core choice the game can't take (a file type its core doesn't open, a game pocket-core couldn't start) goes to the next level down.
 pub fn resolve(ctx: &Ctx, cfg: &Cfg, file: Option<&str>) -> Resolved {
     let mut blocked = false;
     let game = file.and_then(|f| game_choice(ctx, cfg, f));
@@ -749,7 +749,7 @@ const NO_REWIND: &[&str] = &[
     "neogeocd",
     "odyssey2",
     "psp",
-    "pspockets",
+    "pspminis",
     "saturn",
     "sega32x",
     "zxspectrum",
@@ -1335,12 +1335,12 @@ mod tests {
             run(&resolve(&ctx("gba", &gba, None), &cfg, Some("Zelda.gba"))),
             ("retroarch", "mgba", From::Default)
         );
-        // A 7z: pocket-core doesn't open it.
+        // A file type pocket-core's core doesn't open.
         let c = Ctx {
             file_ok: false,
             ..ctx("gba", &gba, Some("mgba"))
         };
-        assert_eq!(run(&resolve(&c, &cfg, Some("Zelda.7z"))), ("retroarch", "mgba", From::Default));
+        assert_eq!(run(&resolve(&c, &cfg, Some("Zelda.rar"))), ("retroarch", "mgba", From::Default));
         // PICO-8 without the official binary: RetroArch's fake08 stands in for the default.
         let pico = vec![
             EsEmulator {
@@ -1443,7 +1443,7 @@ mod tests {
             "one game on pocket-core, the console on RetroArch"
         );
         assert_eq!(run(&resolve(&c, &cfg, Some("Other.gba"))), ("retroarch", "vbam", From::Console));
-        // The game's pocket-core can't take a 7z: the console's choice.
+        // The game's pocket-core can't take the file: the console's choice.
         let z = Ctx {
             file_ok: false,
             ..ctx("gba", &gba, Some("mgba"))
@@ -1465,7 +1465,7 @@ mod tests {
             ("retroarch", "vbam", From::Console),
             "a RetroArch choice stays one"
         );
-        // What can be picked: pocket-core first (not for a 7z), then es_systems.cfg's pairs.
+        // What can be picked: pocket-core first (not for a file it can't take), then es_systems.cfg's pairs.
         let list = choices(&c);
         assert_eq!(list[0], Runner::new("pocket-core", "mgba"));
         assert_eq!(list.len(), 1 + 6 + 3);

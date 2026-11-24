@@ -473,8 +473,8 @@ fn power_menu_lines_show_whole_in_large_text_where_the_screen_has_room() {
     let stub = wayland(tmp);
     let mut found = Vec::new();
     let cases = [
-        ("sys:power", "The power button wakes it. Uses a few percent of the battery an hour."),
-        ("sys:power-game", "Saves the game. The power button wakes it. Uses a few percent of the battery an hour."),
+        ("sys:power", "Power button wakes it. Uses a few % battery per hour."),
+        ("sys:power-game", "Saves your game and sleeps. Power button wakes it (~a few % battery/hr)."),
     ];
     for (i, ((picture, device), (retro, font), (state, want))) in [("1280x960", ""), ("1440x1440", "rgcubexx")].into_iter()
         .flat_map(|p| [("off", "barlow"), ("cocoa", "retro")].into_iter().map(move |l| (p, l)))
@@ -897,6 +897,13 @@ fn textfit_031_port_files_heading_stays_inside_the_page() {
     check_settings_setup_textfit(&["port-files:on:wargus.zip", "port-files:off:wargus.zip:6", "setup:ports-shared:rx"]);
 }
 
+/// PortMaster games from the card (no Wi-Fi, 23.11.2026): its three steps, the list with its reasons, the long
+/// install line and an error stay inside the page in every language, at Large too.
+#[test]
+fn ports_from_the_card_stay_inside_the_page() {
+    check_settings_setup_textfit(&["setup:ports-card-empty", "setup:ports-card-empty-games", "setup:ports-card-found:d", "setup:ports-card-installing", "setup:ports-card-failed"]);
+}
+
 /// The captive portal's "Other ways online" heading lost its end in Retro/Large/Spanish.
 #[test]
 fn textfit_031_other_ways_heading_stays_inside_the_page() {
@@ -1157,7 +1164,7 @@ fn textfit_brick_031_credits_keep_the_source_line_whole() {
 #[test]
 fn textfit_brick_031_password_note_stays_whole() {
     check_brick_031_visible(&["achievements:password"],
-        &[("en", &["Sent once to sign in, never kept. The Pocket keeps only the sign-in key."]),
+        &[("en", &["Used once to sign in, never stored. The Pocket saves only a token."]),
           ("de", &["Passwort einmal zur Anmeldung; gespeichert wird nur der Schlüssel."]),
           ("es", &["Se envía una vez al entrar; solo se guarda la clave, nunca la contraseña."])]);
 }
@@ -1174,7 +1181,7 @@ fn textfit_brick_031_pixel_path_grades_stay_clear_of_the_selected_explanation() 
 fn textfit_brick_031_extras_without_wifi_keeps_the_explanation_whole() {
     // The NextUI profile has no network page; the standalone card offers Wi-Fi setup instead.
     check_brick_031_visible_in(&["setup:extras", "setup:extras:da"],
-        &[("en", &["This device has no Wi-Fi, so the downloads aren't available."]),
+        &[("en", &["No Wi-Fi on this handheld, so downloads aren't available."]),
           ("de", &["Kein WLAN: Downloads sind nicht verfügbar."]),
           ("es", &["Sin Wi-Fi, las descargas no están disponibles."])], false);
     check_brick_031_visible(&["setup:extras"],
@@ -1214,7 +1221,7 @@ fn textfit_brick_031_info_keeps_the_year_beside_a_favourite() {
 /// online (`extras-portmaster-installed` starts on the PortMaster row) and offline, in Barlow and Retro, normal and Large.
 /// Returns the problems found; `rows` is how many rows the device lists.
 fn extras_explanations_whole(device: &str, standalone: bool, sizes: &[&str], rows: usize) -> Vec<String> {
-    const BOX_ART: &str = "The front of each game's box, from a free collection online. Pictures come from a free collection online: no account is needed, and only a game's name is sent. Off downloads nothing by itself.";
+    const BOX_ART: &str = "Real box art for your games, fetched free online. Box art downloads free online: no account, only game titles sent. Off skips auto downloads.";
     let tmp = tempfile::tempdir().unwrap();
     fake_library(tmp.path());
     let stub = wayland(tmp.path());
@@ -1304,7 +1311,148 @@ fn italian_in_normal_and_large_text_nothing_overlaps_or_runs_off_the_picture() {
     language_matrix("it", "Italian");
 }
 
+/// Korean while `ko.tsv` is still empty: every line of the German table (the complete one) as made-up Korean, words of
+/// real Korean sentences, about one syllable for two English letters (Korean lines run about as wide as English: a
+/// syllable is a whole em), the placeholders, numbers, key names (A, SELECT) and names with a dash or dot (Wi-Fi,
+/// pocket-ui) kept as they are. Painted through `POCKETUI_I18N_TABLE`, so the matrix sees Korean on every page before a
+/// translator has written a line.
+fn korean_placeholder_table(dir: &Path) -> PathBuf {
+    const SENTENCES: &str = "설정에서 언어를 바꿀 수 있습니다 게임을 계속하려면 버튼을 누르세요 저장된 게임이 없습니다 와이파이에 연결되지 않았습니다 \
+        화면 밝기와 소리를 조절합니다 최근에 플레이한 게임 업데이트를 내려받는 중입니다 카드에 남은 공간이 부족합니다 \
+        컨트롤러를 다시 연결해 주세요 이 게임의 업적을 확인하세요 즐겨찾기에 추가했습니다 다음에 다시 시도해 주세요 \
+        선반에 표지를 정리합니다 배터리가 얼마 남지 않았습니다 새 버전을 설치하고 다시 시작합니다";
+    let words: Vec<&str> = SENTENCES.split_whitespace().collect();
+    let mut next = 0;
+    let keep = |w: &str| {
+        let core = w.trim_matches(|c: char| ".,:;?!()\"'".contains(c));
+        core.is_empty()
+            || core.contains(['{', '\\'])
+            || core.chars().any(|c| c.is_ascii_digit() || !c.is_alphanumeric() && c != '\'' && c != '’')
+            || core.len() > 1 && core.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+            || core == "A" || core == "B" || core == "X" || core == "Y"
+    };
+    let mut korean = |letters: usize| {
+        let mut out: Vec<&str> = Vec::new();
+        let mut syllables = 0;
+        let want = (letters + 1) / 2;
+        while syllables < want.max(1) {
+            let w = words[next % words.len()];
+            next += 1;
+            syllables += w.chars().count();
+            out.push(w);
+        }
+        out.join(" ")
+    };
+    let mut table = String::from("# Korean placeholder lines for the layout matrix (tests/text_size.rs), not a translation.\n");
+    let german = std::fs::read_to_string(Path::new(&ROOT).join("assets/i18n/de.tsv")).unwrap();
+    for line in german.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()) {
+        let Some((en, _)) = line.split_once('\t') else { continue };
+        let source = en.strip_prefix('!').unwrap_or(en);
+        let mut said = Vec::new();
+        for part in source.split("\\n") {
+            let mut out: Vec<String> = Vec::new();
+            let mut run = 0;
+            for w in part.split(' ') {
+                if keep(w) {
+                    if run > 0 {
+                        out.push(korean(run));
+                        run = 0;
+                    }
+                    out.push(w.to_string());
+                } else {
+                    run += w.chars().filter(|c| c.is_alphabetic()).count();
+                    if w.ends_with(['.', '?', '!', ':']) {
+                        out.push(korean(run) + &w[w.len() - 1..]);
+                        run = 0;
+                    }
+                }
+            }
+            if run > 0 {
+                out.push(korean(run));
+            }
+            said.push(out.join(" "));
+        }
+        table += &format!("{en}\t{}\n", said.join("\\n"));
+    }
+    let path = dir.join("ko-placeholder.tsv");
+    std::fs::write(&path, table).unwrap();
+    path
+}
+
+/// The text-fit matrix (`language_matrix`) in Korean: hangul from the shipped fonts (Noto Sans KR in Barlow, Galmuri11 in
+/// Retro) must not run into anything English doesn't (`cargo test --release --test text_size korean -- --ignored`). With
+/// `ko.tsv`'s own lines once Korean is complete (`Lang::complete`); before, the nightly run skips it (22.11.2026: 478
+/// findings of placeholder lines kept the night red), and `KO_PLACEHOLDER_MATRIX=1` runs it with
+/// `korean_placeholder_table`'s lines by hand.
+#[test]
+#[ignore = "release check: the Korean text-fit matrix, 640x480, 1024x768 and 720x720, Normal and Large (complete Korean only)"]
+fn korean_in_normal_and_large_text_nothing_overlaps_or_runs_off_the_picture() {
+    let placeholder = std::env::var_os("KO_PLACEHOLDER_MATRIX").is_some_and(|v| v == "1");
+    match korean_matrix(pocket_ui::i18n::Lang::Ko.complete(), placeholder) {
+        None => eprintln!("SKIPPED: Korean is not complete yet (ko.tsv, Lang::complete); KO_PLACEHOLDER_MATRIX=1 runs the matrix with placeholder lines"),
+        Some(false) => language_matrix("ko", "Korean"),
+        Some(true) => {
+            let tmp = tempfile::tempdir().unwrap();
+            let table = korean_placeholder_table(tmp.path());
+            language_matrix_with("ko", "Korean (placeholder lines)", &[("POCKETUI_I18N_TABLE", &format!("ko:{}", table.display()))]);
+        }
+    }
+}
+
+/// Which Korean matrix runs: `None` none (Korean not complete, no placeholder run asked for), `Some(false)` with
+/// `ko.tsv`'s lines, `Some(true)` with placeholder lines.
+fn korean_matrix(complete: bool, placeholder: bool) -> Option<bool> {
+    match (complete, placeholder) {
+        (_, true) => Some(true),
+        (true, false) => Some(false),
+        (false, false) => None,
+    }
+}
+
+/// The nightly run takes the Korean matrix by itself once `complete: true` is set, with the real lines; until then it
+/// is skipped (not red), and a placeholder run is only by hand.
+#[test]
+fn the_korean_matrix_waits_for_a_complete_korean_and_then_uses_its_own_lines() {
+    assert_eq!(korean_matrix(false, false), None);
+    assert_eq!(korean_matrix(true, false), Some(false));
+    assert_eq!(korean_matrix(false, true), Some(true));
+    assert_eq!(korean_matrix(true, true), Some(true));
+    assert_eq!(korean_matrix(pocket_ui::i18n::Lang::Ko.complete(), false).is_some(), pocket_ui::i18n::Lang::Ko.complete());
+}
+
+/// The placeholder table is Korean, parses, and keeps what a translation keeps (the placeholders, the key names).
+#[test]
+fn the_korean_placeholder_lines_are_korean_and_keep_their_placeholders() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = korean_placeholder_table(tmp.path());
+    // For renders by hand: `KO_PLACEHOLDER_OUT=<file>` keeps a copy.
+    if let Some(out) = std::env::var_os("KO_PLACEHOLDER_OUT") {
+        std::fs::copy(&path, out).unwrap();
+    }
+    let table = std::fs::read_to_string(&path).unwrap();
+    let lines: Vec<(&str, &str)> = table.lines().filter(|l| !l.starts_with('#')).filter_map(|l| l.split_once('\t')).collect();
+    assert!(lines.len() > 3000, "{}", lines.len());
+    let holes = |s: &str| {
+        let mut h: Vec<String> = s.split('{').skip(1).filter_map(|p| p.split_once('}')).map(|(n, _)| n.to_string()).collect();
+        h.sort();
+        h
+    };
+    for (en, ko) in &lines {
+        assert_eq!(holes(en), holes(ko), "{en:?} -> {ko:?}");
+    }
+    // Korean nearly everywhere: only lines of nothing but kept words (names with a dash, keys, numbers) stay as they are.
+    let korean = lines.iter().filter(|(_, ko)| ko.chars().any(|c| ('가'..='힣').contains(&c))).count();
+    assert!(korean * 100 >= lines.len() * 97, "{korean} of {} lines Korean", lines.len());
+    let logout = lines.iter().find(|(en, _)| *en == "Press A again to log out. B keeps you signed in.").map(|(_, ko)| *ko).expect("a line of de.tsv");
+    assert!(logout.contains(" A ") && logout.contains(" B "), "the keys stay: {logout}");
+}
+
 fn language_matrix(language: &'static str, name: &str) {
+    language_matrix_with(language, name, &[]);
+}
+
+/// `language_matrix` with `extra` set for every snapshot (both languages').
+fn language_matrix_with(language: &'static str, name: &str, extra: &[(&str, &str)]) {
     let tmp = tempfile::tempdir().unwrap();
     fake_library(tmp.path());
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
@@ -1324,9 +1472,10 @@ fn language_matrix(language: &'static str, name: &str) {
     ];
     let mut found = Vec::new();
     for (label, picture, size, env, only) in runs {
+        let env: Vec<(&str, &str)> = env.iter().chain(extra).copied().collect();
         let render = |lang: &'static str| {
             let jobs: Vec<_> = states().into_iter().enumerate().map(|(i, (safe, state))| (format!("{lang}-{label}-{size}-{i}"), size, lang, safe, state)).collect();
-            render_all_in(tmp.path(), &bin, stub.as_ref(), jobs, Some(picture), only, env, false)
+            render_all_in(tmp.path(), &bin, stub.as_ref(), jobs, Some(picture), only, &env, false)
         };
         // A finding is the state; where English has a fault of its own on the same page, the language's is not new.
         let fault = |line: &str| line.split_once(" (").map(|(state, _)| state.to_string());

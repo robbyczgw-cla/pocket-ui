@@ -14,7 +14,8 @@
 //! writer: they hold it for each of their own steps. Two differences, both for robustness:
 //! - the wait is bounded (`WAIT`): a write that cannot get the lock fails instead of hanging a thread for ever;
 //! - a lock whose process is gone (killed with SIGKILL, so its `trap` never ran) is removed. ROCKNIX's scripts would
-//!   wait for it for ever, games included.
+//!   wait for it for ever, games included. So is an empty lock older than `EMPTY_STALE`: its taker died between
+//!   creating it and writing its id (21.11.2026: one such file in /tmp stopped every Wi-Fi write for an hour).
 //! Threads of this process take turns on a mutex first, so they never race each other for the file.
 //!
 //! ROCKNIX main (after 20261001) changed `wait_lock`: it opens the same file for appending (`exec {fd}>>lock`), takes
@@ -38,6 +39,8 @@ const SEED: &str = "/usr/config/system/configs/system.cfg";
 pub const WAIT: Duration = Duration::from_secs(10);
 /// How often the lock is tried while someone else holds it (ROCKNIX's `wait_lock` sleeps 1 s).
 const POLL: Duration = Duration::from_millis(50);
+/// An empty lock this old was left by a taker that died before it wrote its id (`echo` follows `noclobber` at once).
+const EMPTY_STALE: Duration = Duration::from_secs(5);
 
 /// Threads of this process wait here before they try the lock file.
 static IN_PROCESS: Mutex<()> = Mutex::new(());
@@ -234,8 +237,12 @@ impl<'a> Held<'a> {
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
                     if let Some(dead) = holder_gone(path) {
                         // Removed only if it still names the same dead process: another waiter may have taken it since.
-                        if std::fs::read_to_string(path).is_ok_and(|t| t.trim() == dead) {
-                            eprintln!("system.cfg: removed a lock left by process {dead}, which has ended");
+                        if std::fs::read_to_string(path).is_ok_and(|t| t.trim() == dead) && (!dead.is_empty() || empty_and_old(path)) {
+                            if dead.is_empty() {
+                                eprintln!("system.cfg: removed an empty lock left by a process that ended before it wrote its id");
+                            } else {
+                                eprintln!("system.cfg: removed a lock left by process {dead}, which has ended");
+                            }
                             let _ = std::fs::remove_file(path);
                         }
                         continue;
@@ -286,10 +293,13 @@ impl Drop for Held<'_> {
     }
 }
 
-/// The process id in the lock, if that process has ended. An empty file is a lock being taken right now
-/// (`noclobber` creates it, then `echo` writes the id): not gone.
+/// The process id in the lock, if that process has ended ("" for an empty lock older than `EMPTY_STALE`). A fresh
+/// empty file is a lock being taken right now (`noclobber` creates it, then `echo` writes the id): not gone.
 fn holder_gone(lock: &Path) -> Option<String> {
     let text = std::fs::read_to_string(lock).ok()?;
+    if text.trim().is_empty() {
+        return empty_and_old(lock).then(String::new);
+    }
     let pid: i32 = text.trim().parse().ok()?;
     if pid <= 0 {
         return None;
@@ -297,6 +307,12 @@ fn holder_gone(lock: &Path) -> Option<String> {
     // ESRCH: no such process. EPERM means it exists.
     let gone = unsafe { libc::kill(pid, 0) } != 0 && io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH);
     gone.then(|| pid.to_string())
+}
+
+/// Whether the lock is empty and was last written `EMPTY_STALE` ago or longer.
+fn empty_and_old(lock: &Path) -> bool {
+    std::fs::read_to_string(lock).is_ok_and(|t| t.trim().is_empty())
+        && std::fs::metadata(lock).and_then(|m| m.modified()).is_ok_and(|t| t.elapsed().is_ok_and(|age| age >= EMPTY_STALE))
 }
 
 #[cfg(test)]
@@ -404,6 +420,24 @@ mod tests {
         let pid = child.id();
         child.wait().unwrap();
         std::fs::write(&c.lock, format!("{pid}\n")).unwrap();
+        c.set("a", "1").unwrap();
+        assert_eq!(c.get("a").as_deref(), Some("1"));
+        assert!(!c.lock.exists());
+    }
+
+    /// 21.11.2026: a taker killed between creating the lock and writing its id left an empty /tmp/.system.cfg.lock;
+    /// with no id to check, every later write timed out (Wi-Fi never connected) until the file was removed by hand.
+    #[test]
+    fn an_empty_lock_left_long_ago_is_removed_and_a_fresh_one_is_waited_for() {
+        let d = tmp("empty");
+        let mut c = SystemCfg::at(&d.join("system.cfg"));
+        c.wait = Duration::from_millis(200);
+        std::fs::write(&c.lock, "").unwrap();
+        let e = c.set("a", "1").unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::TimedOut, "a lock being taken right now stays");
+        assert!(c.lock.exists());
+        let old = std::time::SystemTime::now() - Duration::from_secs(60);
+        std::fs::File::options().write(true).open(&c.lock).unwrap().set_modified(old).unwrap();
         c.set("a", "1").unwrap();
         assert_eq!(c.get("a").as_deref(), Some("1"));
         assert!(!c.lock.exists());

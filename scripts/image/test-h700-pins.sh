@@ -204,6 +204,9 @@ bad_host=$(echo "$hosts" | grep -Ev '^[a-z][a-z0-9-]{0,23}$|^$')
   && ok "image-defaults.sh has one NAME line and sets system.hostname from it" || bad "image-defaults.sh: NAME line"
 sed "s/^NAME=pocket-ui\$/NAME=$(image_hostname rg28xx)/" deploy/image/image-defaults.sh | grep -qx 'NAME=pocket-rg28xx' && ok "the build's sed puts the model's name on the NAME line" || bad "sed does not set NAME"
 python3 -I scripts/image/test-tree-firmware.py && ok "Classic speaker labels do not hide valid firmware" || bad "firmware path parser"
+sh scripts/image/test-card-texts.sh >"${TMPDIR:-/tmp}/pu-card-texts.$$" 2>&1 && ok "every card's SOURCE-OFFER, README and grub.cfg name its model and image, no other (scripts/image/test-card-texts.sh)" \
+  || { cat "${TMPDIR:-/tmp}/pu-card-texts.$$" >&2; bad "scripts/image/test-card-texts.sh"; }
+rm -f "${TMPDIR:-/tmp}/pu-card-texts.$$"
 
 # RK3566 release images carry Experimental; legacy beta notes remain accepted.
 # The warning must label the card, not just mention experimental options.

@@ -99,6 +99,10 @@ fn shown(opens: Opens) -> bool {
 }
 
 fn shown_on(opens: Opens, sticks: bool, nextui_owned: bool) -> bool {
+    // No Bluetooth chip and no stick (the R36S, the RG28XX: `system_ctl::no_bluetooth`): no row that does nothing.
+    if matches!(opens, Opens::Bluetooth) && pocket_ui::system_ctl::no_bluetooth() {
+        return false;
+    }
     shown_in(opens, sticks, nextui_owned, pocket_ui::device::android_profile())
 }
 
@@ -140,7 +144,13 @@ fn device_key(opens: Opens) -> Option<&'static str> {
         Opens::Tailscale => "tailscale",
         Opens::Tools => "tools",
         Opens::PerfFan => "perf_fan",
-        Opens::Setup(Only::Wifi | Only::Remote) | Opens::Bluetooth => "radios",
+        Opens::Setup(Only::Wifi) => "radios",
+        // Radios too (`device::hides_in`), but the dArkOS port leaves these two out and keeps the Wi-Fi row.
+        Opens::Bluetooth => "bluetooth",
+        Opens::Setup(Only::Remote) => "remote",
+        // Need the GPU path or a writable games folder: not in the dArkOS port (`darkos::NEEDS_GPU`, `LEAVES_OUT`).
+        Opens::Frames => "frames",
+        Opens::Romm => "romm",
         Opens::Time => "time",
         Opens::Kids => "kids",
         Opens::Updates => "updates",
@@ -211,7 +221,7 @@ pub(crate) fn row_line(i: usize) -> &'static str {
 pub(crate) fn row_line_in(i: usize, android: bool) -> &'static str {
     if android {
         match SETTINGS[i].1 {
-            Opens::FirstStart => return "Language, your games and the look again, step by step. Your games and saves stay.",
+            Opens::FirstStart => return "Re-run setup for language, games and look. Your games and saves stay safe.",
             Opens::About => return "Version, games, free space and battery.",
             Opens::Setup(Only::Games) => return "Where each system's games and BIOS files go.",
             Opens::Setup(Only::Extras) => return "Box art and starter pack.",
@@ -227,10 +237,15 @@ pub(crate) fn row_line_in(i: usize, android: bool) -> &'static str {
     if matches!(SETTINGS[i].1, Opens::Controllers) && (android || !shown(Opens::Bluetooth)) {
         return CONTROLLERS_LINE_UNPAIRED;
     }
-    // A handheld without Wi-Fi (`device::no_wifi_chip`): its first start has no Wi-Fi step, its Add games no file sharing.
-    if pocket_ui::device::no_wifi_chip() {
+    // The dArkOS port: Wi-Fi is dArkOS's, its page shows the connection (`setup::DARKOS_WIFI`).
+    if matches!(SETTINGS[i].1, Opens::Setup(Only::Wifi)) && pocket_ui::device::darkos_port() {
+        return "Set up in dArkOS. Shows whether it is connected.";
+    }
+    // A handheld without Wi-Fi of ours (`device::no_own_wifi`, also the dArkOS port): its first start has no Wi-Fi step, its Add games
+    // no file sharing.
+    if pocket_ui::device::no_own_wifi() {
         match SETTINGS[i].1 {
-            Opens::FirstStart => return "Language, your games and the look again, step by step. Your games and saves stay.",
+            Opens::FirstStart => return "Re-run setup for language, games and look. Your games and saves stay safe.",
             Opens::Setup(Only::Games) => return "Where each system's games and BIOS files go.",
             _ => {}
         }
@@ -239,10 +254,10 @@ pub(crate) fn row_line_in(i: usize, android: bool) -> &'static str {
     if pocket_ui::device::brick() {
         match SETTINGS[i].1 {
             Opens::Leds => return "The Brick's lights, the F1 and F2 keys and the mute slider.",
-            Opens::Haptics => return "A soft tick as you move, and how strong it is. Games rumble on their own (pause menu, Options).",
+            Opens::Haptics => return "Light tactile clicks as you browse, and their strength. Game rumble is set in Options.",
             // Nothing on the card updates TrimUI's system: "and the system" promised what the page can't do.
             Opens::Updates => return "New versions of pocket-ui.",
-            Opens::PerfFan => return "How fast the processor may run, in games and in menus.",
+            Opens::PerfFan => return "CPU speed limits for games and menus.",
             Opens::Setup(Only::Extras) if !pocket_ui::ports::offered() => return "Box art and game pictures.",
             Opens::Setup(Only::Extras) => return "Box art, PortMaster games, cheats.",
             _ => {}
@@ -426,14 +441,14 @@ const REMIND_OFF_LINE: &str = "No reminder after a long break.";
 
 /// The line under Console boot screen while it is On: which starts, which consoles, and what it needs.
 /// Photos of big moments switched on: what happens now (Off, the row says what it would do).
-const PHOTOS_ON_LINE: &str = "On: photos are taken quietly. When you quit, they slide into the game's case: Down on its box opens it.";
+const PHOTOS_ON_LINE: &str = "On: snapshots save quietly and slip into the case when you quit (press Down on the box).";
 /// Photos of big moments' third value (where pocket-core draws the game) and its line.
 const PHOTOS_IN_PLAY: &str = "Also in play";
-const PHOTOS_IN_PLAY_LINE: &str = "Also in play: a soft flash and the photo out of the screen's edge while you play. It goes into the game's case too.";
-const BOOT_ON_LINE: &str = "Game Boy, Game Boy Advance, PlayStation, Dreamcast, Saturn, Mega-CD and PC Engine CD games start with their boot screen when nothing is continued. Needs your BIOS file in roms/bios.";
+const PHOTOS_IN_PLAY_LINE: &str = "Also live: soft flash and edge slide-out during play, then tucked into the case.";
+const BOOT_ON_LINE: &str = "Plays classic console boot logos on GB, GBA, PS1, Dreamcast, Saturn, Mega-CD and PC Engine CD on fresh launches. Needs BIOS in roms/bios.";
 
 /// The line under Continue where I quit while it is Off.
-const REMEMBER_OFF_LINE: &str = "Quit keeps no moment: the next start is fresh, and the older moment stays under Load.";
+const REMEMBER_OFF_LINE: &str = "Quit won't auto-save: next launch starts fresh, keeping older states under Load.";
 
 impl App {
     /// Photos of big moments' value: Off, On, or Also in play (settings.json's `moment_in_play`, where the device has it).
@@ -956,7 +971,7 @@ mod tests {
             if short == full {
                 continue;
             }
-            for lang in [pocket_ui::i18n::Lang::De, pocket_ui::i18n::Lang::Fr, pocket_ui::i18n::Lang::Es, pocket_ui::i18n::Lang::It, pocket_ui::i18n::Lang::Pt] {
+            for lang in [pocket_ui::i18n::Lang::De, pocket_ui::i18n::Lang::Fr, pocket_ui::i18n::Lang::Es, pocket_ui::i18n::Lang::It, pocket_ui::i18n::Lang::Pt, pocket_ui::i18n::Lang::Ko] {
                 assert_ne!(pocket_ui::i18n::tr_in(lang, tab_label(k)), tab_label(k), "{short} has no {lang:?} line");
             }
         }
@@ -979,7 +994,7 @@ mod tests {
         text.set_translate(false);
         // Every line as a device with or without sticks can show it, in every language.
         let mut lines: Vec<String> = Vec::new();
-        for lang in pocket_ui::i18n::Lang::ALL {
+        for lang in pocket_ui::i18n::Lang::ALL.into_iter().filter(|l| l.complete()) {
             let tr = |s: &str| match lang.table() {
                 Some(t) => t.translate(s).unwrap_or_else(|| panic!("no {lang:?} line for {s:?}")).to_string(),
                 None => s.to_string(),
@@ -1331,7 +1346,7 @@ mod tests {
         assert!(with.contains("PPSSPP") && with.contains("Runs on"), "{with}");
         let without = closed_line(&[]);
         assert!(without.contains("no emulator app") && !without.contains("can play it"), "{without}");
-        for lang in pocket_ui::i18n::Lang::ALL {
+        for lang in pocket_ui::i18n::Lang::ALL.into_iter().filter(|l| l.complete()) {
             for line in [&with, &without] {
                 let shown = pocket_ui::i18n::tr_in(lang, line);
                 assert!(lang == pocket_ui::i18n::Lang::En || shown != *line, "{lang:?} has no translation of {line:?}");

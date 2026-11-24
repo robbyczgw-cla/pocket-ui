@@ -37,7 +37,7 @@ struct Card {
 impl Card {
     fn new() -> Card {
         // A short path: the stub's socket has to fit.
-        let dir = tempfile::Builder::new().prefix("pui-p1-").tempdir_in("/tmp").unwrap();
+        let dir = tempfile::Builder::new().prefix("pui-p1-").tempdir().unwrap();
         let ok = Command::new("python3")
             .env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.path().to_str().unwrap(), "dark"])

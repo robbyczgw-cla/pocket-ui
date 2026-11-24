@@ -32,7 +32,7 @@ pub(crate) struct OpenConsole {
 const BACK_MAX: usize = 8;
 
 /// `--snapshot` draws the pages as on the device, where pocket-core is installed.
-static ASSUME_POCKET_CORE: AtomicBool = AtomicBool::new(false);
+pub(crate) static ASSUME_POCKET_CORE: AtomicBool = AtomicBool::new(false);
 
 fn pocket_core_installed() -> bool {
     ASSUME_POCKET_CORE.load(Ordering::Relaxed) || Path::new(host_bin()).exists()
@@ -497,6 +497,7 @@ impl App {
         let mut us = Vec::new();
         let mut changes = 0;
         let (glyphs, patterns, passes) = (self.text.drawn_on_the_spot(), self.text.pattern_runs(), pocket_ui::gfx::design_passes());
+        let shadows = pocket_ui::cabinet_art::SHADOWS_MADE.load(std::sync::atomic::Ordering::Relaxed);
         let mut worst = (0.0, String::new());
         for b in &moves {
             let previous = self.sel;
@@ -524,6 +525,7 @@ impl App {
             patterns: self.text.pattern_runs() - patterns,
             worst: worst.1,
             design_passes: (pocket_ui::gfx::design_passes() - passes) as f64 / us.len().max(1) as f64,
+            shadows_made: pocket_ui::cabinet_art::SHADOWS_MADE.load(std::sync::atomic::Ordering::Relaxed) - shadows,
         }
     }
 }
@@ -562,4 +564,7 @@ pub(crate) struct ShelfBench {
     pub worst: String,
     /// Painted natively: how often a frame still went through `Canvas::design` (code not native yet), per move.
     pub design_passes: f64,
+    /// Shape shadows (`cabinet_art::ShapeShadow`) made in the measured moves, after the list was browsed twice: 0 when
+    /// every console's and handheld's shadow was kept.
+    pub shadows_made: usize,
 }

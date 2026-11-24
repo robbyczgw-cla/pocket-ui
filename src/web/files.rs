@@ -45,9 +45,24 @@ pub struct Roots {
     pub ports: PathBuf,
     /// Where HOME + A in a game saves its pictures (`screenshot`); read-only for the companion.
     pub screenshots: PathBuf,
+    /// Save states (`slots::states_dir`, `<states>/<system>/`): a game's states are read, and put back from the browser
+    /// with a backup of the one replaced (`saves.rs`).
+    pub states: PathBuf,
+    /// Where the games' saves are when not beside the games: the Brick's and dArkOS's `POCKET_CORE_SAVE_DIR`, with the
+    /// games' layout below it (`<saves>/<system>/<game>.srm`, as `app_pocket_sync::card_layout`). None: beside the games.
+    pub saves: Option<PathBuf>,
     /// Uploads under way, as temporary files ([`UPLOADS_DIR`] in the ROMs folder: the same file system, so the rename
     /// into place is atomic). Only pocket-ui writes there, so only there are leftovers swept.
     pub uploads: PathBuf,
+}
+
+/// The saves' own folder on the Brick and dArkOS; None on ROCKNIX (beside the games).
+fn own_saves_dir() -> Option<PathBuf> {
+    #[cfg(feature = "brick")]
+    if let Some(s) = std::env::var_os("POCKET_CORE_SAVE_DIR").filter(|s| !s.is_empty()) {
+        return Some(PathBuf::from(s));
+    }
+    None
 }
 
 /// The folder of uploads under way, hidden in the ROMs folder (no system reads a folder starting with ".").
@@ -60,6 +75,8 @@ impl Default for Roots {
             bios: crate::hostsys::bios_dir(),
             ports: PathBuf::from(crate::ports::PORTS_DIR),
             screenshots: crate::screenshot::dir(),
+            states: crate::slots::states_dir(),
+            saves: own_saves_dir(),
             uploads: PathBuf::from("/storage/roms").join(UPLOADS_DIR),
         }
     }
@@ -68,7 +85,7 @@ impl Default for Roots {
 impl Roots {
     /// The same layout under `roms` (tests, the virtual device).
     pub fn under(roms: &Path) -> Roots {
-        Roots { roms: roms.to_path_buf(), bios: roms.join("bios"), ports: roms.join("ports"), screenshots: roms.join("screenshots"), uploads: roms.join(UPLOADS_DIR) }
+        Roots { roms: roms.to_path_buf(), bios: roms.join("bios"), ports: roms.join("ports"), screenshots: roms.join("screenshots"), states: roms.join("savestates"), saves: None, uploads: roms.join(UPLOADS_DIR) }
     }
 }
 

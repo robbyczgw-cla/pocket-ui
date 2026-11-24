@@ -19,7 +19,7 @@ use super::account::Account;
 use super::snapshot::Summary;
 
 /// The pause menu's line in place of Save, Load and Earlier.
-pub const MENU_LINE: &str = "Hardcore: no save states, rewind or cheats. Save in the game before you quit.";
+pub const MENU_LINE: &str = "Hardcore: no save states, rewind or cheats. Save in-game before quitting.";
 /// Over the game when Hardcore started it from its in-game save, though a moment was kept.
 pub const STARTED_FRESH: &str = "Hardcore: started from the in-game save";
 /// A Load, Earlier or the load shortcut in Hardcore.

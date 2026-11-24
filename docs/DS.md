@@ -27,9 +27,16 @@ In **Options → Controls**, assign **Stylus mode** and **Screen layout** to any
 button, for the system or a single game. On the Brick the defaults are L2 and
 R2. Stylus mode makes the D-pad move the pointer and the mapped DS A button
 touch; press the mode button again to return to the DS buttons. The right stick
-can also move the pointer. Layout cycles through both vertical arrangements,
-both horizontal arrangements, top only and bottom only. A held button changes
-the layout once. Layout and pointer position are included in DSperate moments.
+can also move the pointer. A short press of the layout button swaps the two
+screens of the current arrangement: top and bottom, left and right, or top only
+and bottom only. Held for 0.4 s, it shows the next arrangement, as before, once per
+hold: DSperate cycles through both vertical arrangements, both horizontal
+arrangements, top only and bottom only; melonDS through its four configured
+layouts, already swapped if a short press swapped them. Both cores and all
+platforms use the same rule (`src/ds_pad.rs`); the player swaps through the
+core options (`dsperate_screen_layout`, `melonds_screen_layout1..N`), so the
+cores themselves are unchanged. Layout and pointer position are included in
+DSperate moments.
 On a touchscreen, a touch reaches the bottom screen in its displayed position.
 
 ## Existing saves

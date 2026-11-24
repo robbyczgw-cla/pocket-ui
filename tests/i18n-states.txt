@@ -31,6 +31,7 @@ setup:first
 # The first start and About on the experimental siblings (docs/DEVICES.md): one line on the welcome step, a Device row.
 setup:first:device=rp5
 setup:first:device=mini
+setup:first:device=r36s
 about:device=flip2
 setup:first:a
 setup:first:y
@@ -48,6 +49,7 @@ setup:play
 setup:play:d
 setup:play-later
 setup:wifi
+setup:wifi:device=rg28xx
 setup:wifi-timeout
 setup:wifi-connecting
 setup:wifi-stuck
@@ -210,6 +212,7 @@ about-es
 report:es
 report:writing
 report:saved
+report:saved-card
 report:full
 report:readonly
 tools
@@ -269,7 +272,7 @@ storage:9:hidden-empty
 storage:2:done
 storage-notice
 card-manage:ps2:revenge:row
-card-manage:ps2:revenge:sheet
+card-manage:ps2:revenge:hide
 card-manage:ps2:revenge:delete
 card-manage:ps2:revenge:armed
 card-manage:ps2:revenge:saves
@@ -464,6 +467,8 @@ emu:gba:Golden Sun (USA, Europe).gba
 emu:snes:save
 runs-on
 runs-on:1
+shortcut-list
+shortcut-list:9
 this-game:gba
 this-game:gba::3:frame=shell
 this-game:gba::7
@@ -587,6 +592,8 @@ cheats-more
 cheats-only
 cheats-empty
 notice:twin
+notice:card-full
+notice:card-unwritable
 notice:bios:toast
 notice:update
 notice:card-update
@@ -921,6 +928,7 @@ safe rescue:kids-pin
 
 updates:connecting
 updates:fallback
+updates:downloading
 updates:timeout
 updates:unpacking
 updates:moving
@@ -947,6 +955,15 @@ setup:ports-get-update
 setup:ports-get-offline
 setup:ports-get-download
 setup:ports-get-error
+# PortMaster games from the card without Wi-Fi (src/ports_card.rs): the steps (also on the GAMES drive), the files found
+# (and the second row's reason), installing, done, failed.
+setup:ports-card-empty
+setup:ports-card-empty-games
+setup:ports-card-found
+setup:ports-card-found:d
+setup:ports-card-installing
+setup:ports-card-done
+setup:ports-card-failed
 # Settings → Games → RomM (src/app_romm.rs): not paired, paired, the pairing screen, the keyboard, each failure.
 romm
 romm:paired

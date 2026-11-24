@@ -55,12 +55,12 @@ fn value(p: &Prefs, row: Row) -> String {
 /// What the selected row is for.
 fn describe(p: &Prefs, row: Row) -> &'static str {
     match (row, p.mode) {
-        (Row::Mode, Mode::Off) => "Off: the screen keeps its own colours.",
-        (Row::Mode, Mode::On) => "On: warmer, less blue colours all the time, in the menus and in games.",
-        (Row::Mode, Mode::Scheduled) => "Scheduled: warmer, less blue colours every evening, from one time to another.",
+        (Row::Mode, Mode::Off) => "Off: normal screen colours.",
+        (Row::Mode, Mode::On) => "On: warmer, low-blue tint all the time, in menus and games.",
+        (Row::Mode, Mode::Scheduled) => "Scheduled: warmer, low-blue tint automatically each evening.",
         (Row::From, _) => "When the screen starts to turn warmer. A, or left and right, moves it by half an hour.",
         (Row::Until, _) => "When the colours are back to normal. A, or left and right, moves it by half an hour.",
-        (Row::Strength, _) => "How warm it gets. A change takes a second or two, even in the middle of a game.",
+        (Row::Strength, _) => "Warmth level. Updates smoothly in a second or two, even in-game.",
     }
 }
 

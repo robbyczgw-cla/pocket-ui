@@ -312,7 +312,7 @@ pub fn check(listing: &Listing, host: &dyn Host, stop: &AtomicBool, progress: &m
                     }
                 }
             }
-            None if matches!(ext.as_str(), "zip" | "iso" | "chd" | "cue" | "gdi" | "m3u" | "pbp" | "cso") => {
+            None if matches!(ext.as_str(), "zip" | "7z" | "iso" | "chd" | "cue" | "gdi" | "m3u" | "pbp" | "cso") => {
                 *unplaced.entry(folder_of(relative)).or_default() += 1;
             }
             None => {
@@ -671,7 +671,7 @@ mod tests {
             }
             let said = app_missing(profile).unwrap_or_else(|| panic!("{name}: a start without {app} says nothing"));
             assert!(said.contains(app) && said.contains("Get it from"), "{name}: {said}");
-            for lang in [crate::i18n::Lang::De, crate::i18n::Lang::Es, crate::i18n::Lang::Pt, crate::i18n::Lang::Fr, crate::i18n::Lang::It] {
+            for lang in [crate::i18n::Lang::De, crate::i18n::Lang::Es, crate::i18n::Lang::Pt, crate::i18n::Lang::Fr, crate::i18n::Lang::It, crate::i18n::Lang::Ko] {
                 let shown = crate::i18n::tr_in(lang, said);
                 assert_ne!(shown, said, "{name} in {lang:?}: {said}");
                 assert!(shown.contains(app), "{name} in {lang:?} drops the app's name: {shown}");

@@ -94,6 +94,11 @@ if [ -f scripts/reader-inventory.py ]; then
     out=$(python3 -I scripts/reader-inventory.py 2>&1) || fail "reader inventory (scripts/reader-inventory.py)" "$out" \
         "a new or changed file reader: add its fault case and run scripts/reader-inventory.py --write (tests/data_sources.rs)"
 fi
+# The CHANGELOG guard (20.11.2026): published sections as their tag, no line twice, no vetoed line (the list beside the repo).
+if [ -f scripts/check-changelog.py ]; then
+    out=$(python3 -I scripts/check-changelog.py 2>&1) || fail "CHANGELOG guard (scripts/check-changelog.py)" "$out" \
+        "new lines go under ## [Unreleased]; a published section stays as its tag (--restore X.Y.Z); no line twice"
+fi
 total=0
 for filter in doc_checks:: document_check:: manual:: i18n::; do
     part=$(mktemp "${TMPDIR:-/tmp}/preflight-test.XXXXXX") || exit 1

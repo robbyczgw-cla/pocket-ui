@@ -37,6 +37,16 @@ Bookkeeping (an unlinked doc, an undocumented variable or module, a code-shape c
 Spanish or Portuguese line) never blocks a merge since 14.11.: `sh scripts/bookkeeping.sh` prints it as warnings in the
 nightly run and the release check ([Documentation checks](tests.md#documentation-checks)).
 
+**CHANGELOG guard (`scripts/check-changelog.py`, well under a second).** One of the gate's fast checks before any build,
+also in `scripts/preflight.sh`. A section already published (`[0.5.1]` …, listed with its SHA-256 in
+`scripts/changelog-published.txt`) must stay byte-equal to its public tag; a line of a section not published yet
+(`[Unreleased]`) must occur only once in the file. Outside the gate it also refuses lines that match the maintainer's list of
+vetoed features (`--vetoed FILE` or `CHANGELOG_VETOED`; the gate runs `--no-vetoed`, so every host gives the same verdict). Findings read
+`FINDING<TAB>published|duplicate|vetoed<TAB>CHANGELOG.md:line<TAB>…`. A changed published section goes back with
+`scripts/check-changelog.py --restore X.Y.Z` (fetches the public tag from `CHANGELOG_PUBLIC_REPO`, default the public repository), `--diff X.Y.Z` shows the difference first. Why: the
+queue unions CHANGELOG.md on conflicts, and on 20.11.2026 one train put nine copies of `[Unreleased]` lines back under the
+published `[0.5.1]` with a green gate.
+
 **Before you queue, run one command:** `~/bin/heavy timeout 1500 sh scripts/preflight.sh` in your worktree (about 10 minutes with a warm target at two Cargo jobs, more cold). It rebases on `main` (a clean
 tree is required; `PREFLIGHT_NO_REBASE=1` skips it), runs the leak scan, the compile stage (Linux `--all-targets`, Brick, Android with
 `android/player` and `android/handheld`) and then the same cheap checks the gate runs, and stops at the first failure with its output.

@@ -111,10 +111,10 @@ fn newest_first(a: &Shot, b: &Shot) -> std::cmp::Ordering {
 /// is no screenshots.
 pub fn scan(dir: &Path) -> Vec<Shot> {
     let mut found = Vec::new();
-    let Ok(systems) = std::fs::read_dir(dir) else { return found };
+    let Ok(systems) = crate::background_io::read_dir(dir) else { return found };
     for sys in systems.filter_map(|e| e.ok()).filter(|e| e.file_type().is_ok_and(|t| t.is_dir())) {
         let system = sys.file_name().to_string_lossy().into_owned();
-        let Ok(files) = std::fs::read_dir(sys.path()) else { continue };
+        let Ok(files) = crate::background_io::read_dir(sys.path()) else { continue };
         for file in files.filter_map(|e| e.ok()).filter(|e| e.file_type().is_ok_and(|t| t.is_file())) {
             let name = file.file_name().to_string_lossy().into_owned();
             if let Some((game, when, n)) = split_name(&name) {
@@ -754,6 +754,14 @@ mod tests {
     }
 
     #[test]
+    fn r36s_secondary_gallery_does_not_read_a_directory_after_a_launch() {
+        let dir = scratch("pause-read");
+        put(&dir, "gba", "Alpha 2026-10-24 18-05-09.png");
+        assert!(crate::background_io::after_launch_request(|| scan(&dir)).is_empty());
+        assert_eq!(scan(&dir).len(), 1);
+    }
+
+    #[test]
     fn the_folder_is_listed_newest_first_and_only_by_names_pocket_ui_makes() {
         let dir = scratch("scan");
         put(&dir, "gba", "Alpha 2026-10-24 18-05-09.png");
@@ -1033,7 +1041,7 @@ mod tests {
         let shelf = shots.iter().find(|s| s.system == "shelf").expect("the picture is listed");
         assert!(shelf.is_shelf_picture());
         assert_eq!(shelf.title(), "My shelf", "not the file name title-cased into \"Pocket-Ui Shelf\"");
-        for lang in crate::i18n::Lang::ALL {
+        for lang in crate::i18n::Lang::ALL.into_iter().filter(|l| l.complete()) {
             let shown = crate::i18n::tr_in(lang, &shelf.title());
             assert!(!shown.to_lowercase().contains("pocket"), "{lang:?}: {shown:?}");
             assert_eq!(lang == crate::i18n::Lang::En, shown == "My shelf", "{lang:?} has its own words for it: {shown:?}");

@@ -218,7 +218,8 @@ impl App {
         self.big_pause_press(CONFIRM);
     }
 
-    /// All the games of the systems on the shelf, in their stable order (`big_shelf::arrange`).
+    /// All the games of the systems on the shelf, in their stable order (`big_shelf::arrange`); with Shelf space on, only
+    /// those on the shelf (the rest are in the crate, as in the other looks; 19.11.2026: Easy showed every game).
     pub(crate) fn big_items(&mut self) -> Vec<Item> {
         let shown: Vec<usize> = (0..self.systems.len()).filter(|s| !self.hidden.contains(&self.systems[*s].name)).collect();
         let favourites: Vec<(usize, usize)> = self
@@ -230,7 +231,7 @@ impl App {
             })
             .collect();
         let counts: Vec<(usize, usize)> = shown.iter().map(|s| (*s, self.systems[*s].games.len())).collect();
-        let order = big_shelf::arrange(&counts, &favourites);
+        let order = big_shelf::arrange_on_shelf(&counts, &favourites, |(s, g)| self.shelf_space.on_shelf(&self.systems[s].games[g].path));
         (self.big.groups, self.big.front, self.big.total) = (order.groups, order.front, order.total);
         order.games.into_iter().map(|(s, g)| Item::Game(s, g)).collect()
     }

@@ -1,473 +1,287 @@
 # Android preview
 
-This APK is an early Android version of pocket-ui. Pick ROM folders through Android's folder picker; recognised
-system folders can contain subfolders. The app remembers access and the selected game. It reads M3U/CUE disc sets
-as one entry. GB/GBC/GBA run in our own player with mGBA, NES with Nestopia, SNES with bsnes, Master System/Game Gear with Gearsystem, Mega Drive cartridges with ClownMDEmu, WonderSwan with Beetle WonderSwan, Atari 2600 with Stella, PC Engine with Beetle PCE Fast, Neo Geo Pocket/Color with Beetle NGP, Atari Lynx with Handy and PlayStation with PCSX ReARMed ([PlayStation](#playstation)). Settings can select Gambatte for GB/GBC; its saves and states are separate from mGBA. Saturn is also bundled. PSP, DS, N64 and Dreamcast are optional downloads for the built-in player. Other larger systems need an installed emulator.
-No games, BIOS or keys are supplied. Install and configure external emulators separately.
+pocket-ui for Android brings the same cozy shelf and built-in game player to Android handhelds and phones. Pick your ROM
+folders via Android's folder picker (subfolders inside recognised console folders work automatically, and M3U/CUE disc
+sets group cleanly into one game). Built-in player cores include mGBA (GB/GBC/GBA, with optional Gambatte for GB/GBC in
+Settings, with separate saves/states), Nestopia (NES), bsnes (SNES), Gearsystem (Master System/Game Gear), ClownMDEmu (Mega
+Drive), Beetle WonderSwan, Stella (Atari 2600), Beetle PCE Fast (PC Engine), Beetle NGP (Neo Geo Pocket/Color), Handy
+(Atari Lynx), PCSX ReARMed ([PlayStation](#playstation)), YabaSanshiro (Saturn), melonDS DS (Nintendo DS), PPSSPP (PSP),
+Mupen64Plus-Next (N64) and Flycast (Dreamcast). Heavier systems like PS2, GameCube, Wii, 3DS and Xbox launch straight
+into installed emulator apps. No games, BIOS files or keys are included.
 
-On a phone the tabs are at the bottom: Games, Favourites, Search and Settings. **Curator** (filters such as genre, players and
-length) comes back as a fifth tab with Settings → **Curator tab**. Tap a game to select it
-(its case lifts), tap it again or tap Play to start it. Hold your finger on a game to open its card; Info does the same.
-In portrait the shelves stack and scroll up and down with a flick; tap the Games tab again to go back to the top. In
-landscape the shelf fills the page beside the selected game; drag along it. The card has Play, Favourite, Turn over
-(Shelf and Cabinet) and Back. Settings rows change at one tap. Curator's filters have tick boxes and a Show games button.
-Search: tap the field for the keyboard; Done or Android's Back closes it and shows the matching games.
-With a gamepad, D-pad moves, A chooses, B goes back, X opens the box, Y stars, L/R change tabs, START opens Settings,
-SELECT opens quick settings and R2 opens [your other apps](#your-other-apps). The key hints appear above the tabs as soon as you press a controller key and go away
-when you touch the screen again.
+On phones, four bottom tabs (**Games**, **Favourites**, **Search** and **Settings**) keep navigation thumb-friendly (add
+**Curator** as a fifth tab via Settings → **Curator tab**). Tap once to lift a case, tap again (or tap Play) to launch,
+and long-press or tap Info for the game card. Portrait stacks shelves vertically (tap the Games tab to jump back to the
+top); landscape lays the shelf beside the highlighted game. Connect a gamepad and D-pad, A/B/X/Y, L/R (tabs), START
+(Settings), SELECT (Quick settings) and R2 ([your other apps](#your-other-apps)) take over automatically, showing button
+hints until you touch the screen again.
 
-The player has touch controls on a phone. Back, Pause or the controller's Menu opens Continue, Save, Load, Earlier,
-Options, Zoom, Screenshot and Save & quit. A game started from the Handheld view has the handhelds' pause menu instead
-(rows at the left, the save's picture at the right; Zoom and Screenshot under Options). With touch the menu is made of large buttons: one tap does it, and the arrows beside "Slot N"
-choose one of eight manual slots; Options shows each setting with arrows to change it and scrolls by dragging. With a controller the
-same page shows a selection ring (A chooses, B continues, L/R choose the slot). The D-pad moves the ring the way the buttons sit on
-the screen, also between two buttons side by side; on "Slot N" Left and Right choose the slot.
-GBA and SNES also have on-screen L/R shoulder buttons.
-A game's first still picture stays visible until the game sends a newer picture.
-Save & quit writes a separate auto state; the next start continues there. It closes the game only after that state is written, however long the phone takes, and a write is never half done. Two games with one file name in different folders keep their own states on the phone. Android Home suspends/saves the game. Back through Android's recent apps it waits paused; through the app icon (or Home,
-when pocket-ui is your default launcher) the library opens with the game first under Continue. Disc sheets and playlists keep one Continue entry for the whole game, including CUE/BIN and M3U sets; their tracks and discs stay together. Your saves and save states are private app data, and Android deletes them when the app is removed:
-make a [save backup](#save-backup) first. ROM-folder permission does not expose another emulator's private saves.
+On phones, touch controls appear automatically and hide the moment you press a controller button (tap the screen once to
+bring them back). Back, Pause or controller Menu opens the pause menu (Continue, Save, Load, Earlier, Options, Zoom,
+Screenshot, Save & quit; launching from Handheld view opens the classic side-by-side handheld pause menu instead).
+**Save & quit** writes a dedicated auto-state safely before closing (Android Home suspends and saves too), keeping
+separate states even when two games share a filename in different folders, and keeping multi-disc CUE/BIN and M3U games
+under one Continue entry. Because Android deletes private app data when you uninstall, make a
+[save backup](#save-backup) first (or enable Saved copies below).
 
-If a moment cannot be resumed, or your in-game save is newer, the recovery message tells you where the moment was
-kept under **Load**. After changing app versions, this keeps the moment that was just attempted and its own picture.
+If an older save state can't resume, or your in-game save is newer, Recovery tells you cleanly and keeps that state under
+**Load** (preserving it across app updates too).
 
-Type and buttons are sized for the phone's density (buttons at least 48 dp), in portrait and landscape, and stay clear
-of the camera hole, rounded corners and the gesture bar.
-The preview has emulator evidence, not a claim of tested Mini V2 or Vivo hardware, all emulator versions or final
-audio quality. Extra in-app cores and hardware rendering are still being developed.
+UI controls stay at least 48 dp and steer clear of camera cutouts, rounded corners and gesture bars in both portrait and
+landscape.
 
-On a handheld every button of its pad works: L2/R2 (also as analog triggers) and the stick buttons L3/R3 reach games,
-and R2 on a game card opens its Controls. A trigger resting part way in doesn't count as pressed. The Odin's "L2/R2 mode"
-(analog, digital or both) makes no difference.
+On Android handhelds, every physical input works including analogue L2/R2 triggers and L3/R3 stick clicks (resting a
+trigger halfway won't false-fire, and Odin's L2/R2 mode setting works in any mode). R2 on a game card opens its Controls.
 
-**A and B.** In menus (Mobile and Handheld view) the button Android calls A confirms and B goes back, whichever physical
-button the handheld's "Controller style" makes of it: on the Odin, Xbox style confirms with the bottom button and Odin
-style with the right one. The hints show A for the button that confirms. The Handheld view has no Button layout of its
-own: Settings → Buttons there only chooses the Button symbols. In a game the buttons keep their places like on the
-original console (the right-hand button is the console's A), on the Odin in either style, and on Xbox- and
-Switch-style pads. Changing the Odin's Controller style during a game pauses it and the pad stays player 1.
+**A and B:** Menus (both Mobile and Handheld views) follow your handheld's Android Controller style (on Odin, Xbox style
+confirms with bottom, Odin style with right; Settings → Buttons on Handheld view adjusts **Button symbols** only).
+In-game controls stay faithful to the original console layout (right button = console A) across Odin, Xbox- and
+Switch-style pads. Flipping Odin's Controller style mid-game pauses safely and keeps Player 1 assigned.
 
-**A second controller.** A Bluetooth or USB pad plugged in or switched on is player 2 in a game that has a second player
-port, the handheld's own pad stays player 1. In a game with only one player port every pad plays player 1. A pad that
-drops out mid-game pauses the game; it gets its player back when it returns. Up to four players; menus take any pad.
+**Multiplayer:** Plugging in or pairing a Bluetooth/USB controller adds Player 2–4 automatically while your built-in pad
+stays Player 1 (single-player games accept input from any pad). Disconnecting a pad pauses the game and reclaims its
+slot on reconnect. Up to four players; menus respond to every connected pad.
 
-**Default launcher.** pocket-ui can be the default launcher of an Android handheld: press Home and Android asks which app to use
-(or Settings → Apps → Default apps → Home app). The app never sets this itself. B and Back never close it.
+**Default launcher:** Want pocket-ui as your handheld's default launcher? Press Home and pick pocket-ui (or go to
+Android Settings → Apps → Default apps → Home app). pocket-ui never sets itself automatically, and B/Back never exit it.
 
-**Time and battery.** At the right end of the top line of every page (Games, Favourites, Search, Settings and the rest) the launcher shows the time and the battery, as the handhelds do. The time follows Android's own setting: 13:28 on a 24-hour clock, 1:28 PM on a 12-hour one. The battery reads "87%", and "87%, charging" on the charger. A device without a battery shows the time alone. It stays out while Android's own status bar is showing (nothing twice), and in a game. Where a very large font leaves no room, "charging" goes first, then the battery, then the time, so the page's name and its game count are never cut for it. It needs no permission.
+**Time and battery:** Every page header displays the clock (following Android's 12/24-hour format) and battery ("87%",
+"87%, charging") without needing extra permissions, staying hidden whenever Android's status bar is visible or mid-game,
+and gracefully dropping extra words on huge font sizes so titles never clip.
 
 ### Your other apps
 
-**Apps** at the top of the Games page (R2 on a controller) pulls out the drawer: the phone's other apps, such as the
-Play Store, Settings and your Android games, as quiet cards by name. If an icon is missing or damaged, its field says **App**. Tap one or press A to open it; when you come back,
-the drawer is where you left it, and B or Back goes to the game you were on. To put an Android game on your shelves,
-hold its card (or press Y): it says **On the shelf** and stands on its own **Android** shelf beside your consoles, in a
-case with its name. Hold it again (Y) to take it off. Android marks some apps as games; their cards say **Looks like a
-game**, but only you put a game on the shelf. A game on the Android shelf starts its app, and favourites, stickers and
-play time work as for your other games. An app you uninstall leaves the shelf by itself.
+Tap **Apps** at the top of Games (or press R2 on a pad) to open a clean drawer with Play Store, Settings and your
+Android games (missing icons show **App**). Tap or press A to launch; B/Back returns to your shelf. Long-press any app
+(or press Y) to pin it onto a dedicated **Android** shelf right beside your retro consoles, complete with favourites,
+stickers and play time (uninstalled apps leave automatically). Android's game tags show "Looks like a game", though
+only you choose what goes on your shelf.
 
-On phones, Select and Start sit above the D-pad and face buttons in portrait, so their touch areas do not overlap.
-The system Back gesture opens the pause menu; from core Options it returns to the pause menu first.
+On phones, Select and Start sit cleanly above the portrait D-pad and face buttons so taps never overlap. System Back
+opens the pause menu (and steps back from Options first without quitting). The pause menu adapts to Light/Dark mode and
+language, wrapping long game titles and status lines cleanly. Screenshots save privately for now (carousel import and
+gallery export are still preview items).
 
-The pause menu follows the app's light/dark appearance and language. Its heading shows the game's whole name, in two or three lines when it is long, and never translated; a long status line under it ("Saved to slot 2", an error) wraps instead of being cut.
+Nintendo DS (melonDS DS) and **experimental** PSP (PPSSPP), Nintendo 64 (Mupen64Plus-Next), Dreamcast (Flycast) and
+Saturn (YabaSanshiro) all run inside pocket-ui's own player. Experimental systems carry an "Experimental" label while
+speed, audio and Continue reliability are still being refined (don't keep your only progress copy solely in states
+there; DS is not experimental). On DS, both screens stack with bottom-screen touch; N64 adds Z/C buttons and temporary
+audio buffering on fresh starts to smooth out intro loads; PSP draws native cross/circle/square/triangle symbols and
+holds rapid taps for at least one frame so quick presses never drop.
 
-The box's empty-picture hint points to the Android pause menu. Screenshots are still stored privately; importing
-them into the box's picture carousel and exporting them to the phone gallery remain preview work.
+Single-file games (including PSP ISOs and cartridges) load straight from your chosen folder without duplicating storage
+(keep your card/folder mounted while playing). Multi-file games or stream-only storage providers make a cached copy
+(showing progress + Cancel over 64 MiB, caching up to five large titles and auto-pruning older copies while keeping
+saves untouched).
 
-With a connected controller, the player starts without touch controls. Using a controller hides them; touch the game once to reveal them again. Back or controller Menu still opens the pause menu.
+Real 3D game cases, printed discs, cartridges, Cabinet TV previews, interactive stickers (**Completed**, **100 %**,
+**Favourite**, **Playing now**, **Game of the year**), shelf decorations, time-of-day lighting, Cozy extras, Connections,
+Rediscover, [Continue](continue.md#on-an-android-phone) and [RetroAchievements](#retroachievements) all work right on
+Android (Split hides cases and stickers; *This game* pre-launch options aren't in Mobile view yet). In Shelf and
+Cabinet, rows stack vertically in portrait (swipe sideways along a shelf, up/down between shelves) and fill the screen
+in landscape.
 
-Nintendo DS (melonDS DS) and, as **experimental** systems, PSP (PPSSPP), Nintendo 64 (Mupen64Plus-Next) and Dreamcast
-(Flycast) are in the app too, in our player. The system line before Play or Continue and the Controls page identify PSP,
-N64 and Dreamcast (like the bundled Saturn) as experimental. Compatibility, full game speed, sound and saving/Continue are still being tested for them; do not rely on them
-for your only copy of progress. DS is not marked experimental. PSP has four face buttons and L/R. On DS, both screens share the display;
-the lower screen accepts the stylus. N64 has Z and C buttons; the touch arrows move its analog stick. A fresh N64 start temporarily buffers extra sound to bridge intro loading; it returns to the normal sound delay during silence or gradually during continuous music. Later loading stalls can still interrupt sound while N64 remains experimental.
+**First start:** 7 touch steps (Welcome, Language, Game folders, Look, Covers & pictures, Controls, Ready), or just 4
+streamlined steps when using a controller (Language, Games, Look, Ready, with covers auto-fetching on unmetered Wi-Fi).
+Auto-scans common ROM folders (`ROMs`, `Emulation/roms`, `RetroArch/roms` across internal storage and SD cards), spots
+installed external emulator apps (linking to official pages for missing ones, never downloading apps itself), and flags
+missing BIOS files with their folders. Supports English, German, Spanish, Brazilian Portuguese, French, Italian and Korean;
+choose Shelf, Easy, Split or Cabinet, Cozy or Quick animations, and Dark or Light mode. Re-run anytime via Settings →
+First start.
 
-Single-file games, including PSP ISOs and small cartridges, normally load directly from the folder you chose, without
-using space for a second copy. Keep the card or folder available while playing. Some storage providers only offer streams,
-and games with several files need their files together; these still use an app copy. For a required copy over 64 MiB,
-a window shows progress and Cancel, and later starts reuse it. The app keeps up to five big copies and clears older ones
-when it needs room; your saves stay. An older copy is removed when that game successfully starts directly.
-PSP is still experimental: not every game runs at full speed yet.
+**Covers and pictures:** choosing "Download on Wi-Fi" loads box art, screenshots and Wikipedia descriptions on demand as
+you browse over unmetered Wi-Fi (never bulk-scraping your whole card in the background; cached art works offline).
+Change anytime under Settings → Covers and pictures.
 
-PSP face controls use drawn cross/circle/square/triangle symbols, independent of the UI font. Short gamepad presses are held for at least one emulated frame so a quick tap is not lost between Android input events and rendering.
+**Picture & Screen frames:** Player Options → Picture matches pocket-ui OS: **Screen scaling** (Aspect, Integer,
+Fullscreen), **Look** (Clean, Smooth, Soft, Bloom, LCD grid with LCD colours on handhelds, Scanlines, Old TV), **Screen
+frame** (same hardware-drawn bezels as Linux, excluding Ambient; **Console** picks the matching handheld shell or monitor
+surround, **CRT TV** draws the tube TV) and **Resolution** on supported Snapdragon handhelds. With touch controls on,
+frames sit safely inside cutouts and clear of buttons; with a controller connected, the picture uses the entire display
+exactly like pocket-ui OS (e.g. GBA 6× integer at 1440×960 on 1080p). **Save settings for** switches between This system
+and This game.
 
-The 0.1.5 Android preview draws the current real game cases, discs and cartridges. Cabinet shows a TV beside the shelf in wide landscape and below it in portrait; the TV currently
-shows cover/console art. X opens the case in Shelf/Cabinet or the shared info page in the other looks.
-The info page and back of the box show your eight save slots on the system's save medium.
-The pause menu has the same slim, coloured save row as the handheld version. Menus and opening a case
-use the current sounds; a brief CRT power-on accompanies a new in-app game and is skipped by input.
-With Cozy starts, the insertion sound follows the cartridge reaching the console; a misleading
-audio-driver delay on a local fast output no longer brings the sound forward by half a second.
-Connections (a developer, publisher, series or genre shared with other games of yours has an arrow; tap it for those
-games) and Rediscover (Curator; fills after a year of play on the phone) work; This game is not yet available in this
-Android preview. [RetroAchievements](#retroachievements) work in the games pocket-ui plays itself.
+Options inside the player group cleanly into Picture, Sound, Controls and Speed, tucking core-specific settings under
+**Advanced (this emulator)** (SNES exposes six plain-English toggles like "Less sprite flicker"). Touch controls mimic a
+real pad: rollable round D-pad, console-accurate button layouts (PlayStation shapes on PSP, C buttons on N64, 6 buttons on
+Mega Drive), shoulders, translucent styling and optional haptics (Off by default; respects Android vibration settings).
 
-**Your games stand on shelves** in the Shelf and Cabinet looks: the games you played last on top, then your
-Favourites, then a shelf for each system. Upright, swipe along a shelf to see more of it and up or down to move through them.
-Sideways, one shelf fills the screen: swipe up or down, or use the two arrows at the top, to get to the next. On a controller Up and Down change the shelf.
-With only one system and nothing played yet, your games stand in simple rows.
-
-**Stickers:** on a game's card tap **Stickers** (or press SELECT): Completed, 100 %, Favourite, Playing now and Game of the
-year with a year you choose go on its case. Completed and 100 % also earn the trophy and the framed "100 %" on your shelf.
-Split shows no cases, so no stickers either; the sticker page says so.
-
-Cozy extras have their switches in Settings. Printed discs print the cover on an open box's disc;
-light by time of day and decorations apply to Shelf and Cabinet. The pause menu uses a slim row of save blocks.
-
-
-First start has seven short setup steps by touch: welcome, language, game folders, look,
-covers and pictures, controls, and ready. With a controller in your hands it has four: the language
-on the welcome page, your games, the look, and ready (covers come on their own on unmetered Wi-Fi;
-Settings has the switch). Continue advances, Back returns, and Skip leaves a step for later. If you
-close the app or return from the folder picker, setup resumes where you left it. On a phone the first
-start stands upright, with large buttons. Settings → First start opens the guide again. You can finish
-without games or a network connection.
-
-The games step looks for games that are already on the device, in the folders other apps use
-(ROMs, Emulation/roms, RetroArch/roms and the like, on internal storage and every card): choosing one
-opens Android's folder picker right there. It names the emulator apps it found for systems pocket-ui
-doesn't play itself (one switch takes them for Plays with), links to the official page of an app you
-don't have yet (nothing is downloaded by pocket-ui), and says which BIOS a system you have still
-needs, with its folder.
-
-Choose English, German, Spanish, Brazilian Portuguese, French or Italian, one of the four looks (Shelf, Easy, Split, Cabinet; Minimal or Cards from an
-earlier build open as Split), Cozy or Quick animations, and dark or light pages.
-Choose your ROM folder through Android's own picker and allow read access. Choosing another folder
-adds it to your library; existing folder permissions stay in place. An empty folder is harmless:
-choose another one or skip and add games later in Settings. Your ROM files stay in their folders.
-You can select the folder above your system folders, or a system folder itself, such as `psp`, `ps1` or
-`Genesis`. The selected folder's name supplies the system when a disc or zip cannot say it; a system
-folder inside it takes precedence. If no games are found, the page explains which folder to choose; a folder
-chosen later in Settings that brings no new games says so in a short message.
-
-Covers and pictures asks whether to download as you browse. Download on Wi-Fi loads covers,
-screenshots and available game descriptions for the selected game over Wi-Fi without a data limit.
-Not now keeps downloads off; Settings → Covers and pictures changes the choice later. Already
-cached pictures still work offline. This does not download every game in the background. Some game
-descriptions are supplied in English by Wikipedia even when menus are in another language.
-
-The Android app icon is the pixel cartridge with the paper label and lowercase p; Android can also use its monochrome themed icon.
-
-
-In the player's Options, Picture has the rows of pocket-ui OS's Options → Picture, with the same values and words (see
-[Picture](options-screen.md)): Screen scaling (Aspect, Integer or Fullscreen), Look (Clean, Smooth, Soft, Bloom, and LCD grid with
-LCD colours on the handhelds or Scanlines and Old TV on TV consoles), Screen frame (every frame but Ambient) with its finish
-or TV cabinet, and Resolution on handhelds measured for it. A game from the Handheld view keeps them in that view's own
-settings, so its This game page shows the same. Aspect is the
-phone default: landscape uses the available height with side bars; portrait places the picture at
-the top, above the touch controls. Integer uses whole physical source scanlines while keeping the
-core's display aspect. Fullscreen fills the available picture area and changes the aspect ratio.
-With a controller (the built-in pad of a handheld or one attached, so no touch controls on the screen) the picture uses
-the whole screen and sits exactly where pocket-ui OS puts it on a screen of that size: a Game Boy Advance game at
-Integer on a 1920×1080 handheld is 6× (1440×960), Aspect fills the height, a frame fills what the picture leaves.
-The frames are Linux's, the same pictures drawn by the same code (see [Screen frame](options-screen.md#screen-frame)).
-**Console** is the one Linux's Auto picks for the console: a Game Boy, Game Boy Color or Game Boy Advance shell, the Nintendo
-DS with its hinge, the PSP's piano black, a monitor surround for the home consoles. **CRT TV** is the old tube TV in its
-cabinet. With the touch controls on the screen the frame stands around the picture inside the safe area (never under the system bars, the camera hole or the
-gesture zones), above the touch controls on an upright phone and between the two groups of buttons when the phone is turned,
-so it does not lie under a button; only on a nearly square screen (a foldable's inner display), where the controls have
-no room beside the picture, they lie over the frame's edge as they do over the picture. There it takes a margin of about a twelfth of the shorter side, so the picture is a little
-smaller than without a frame; None, the start choice, keeps the full size. With a controller the picture keeps its size, as on pocket-ui OS. Effects run in GLES
-for software and hardware cores. Sharp uses nearest filtering; Smooth uses linear filtering;
-CRT adds scanlines and edge shading, and Scanlines adds just the line pattern.
-Save settings for selects This system or This game. A game override wins at the next launch;
-selecting This system writes the system default and removes this game's override.
-
-Version 0.1.5-android.6: a USB or Bluetooth controller works in the whole app, not only in games. Its D-pad and left
-stick move through the shelves and menus; the key hints appear as soon as you use it. The pause menu is the same
-large page with a controller (a ring shows where you are) and always fits on the screen, also in landscape. Options
-are grouped into Picture, Sound, Controls and Speed; settings that belong to one emulator (its model, BIOS and
-others that need a restart, and those named in the emulator's own terms) are under "Advanced (this emulator)", closed
-until you open it. SNES games show six options in plain words, such as "Less sprite flicker" and "Show screen edges".
-The touch controls look like a pad: a round D-pad you can roll your thumb around (diagonals too), round buttons in
-each system's own layout (PlayStation shapes on PSP, C buttons on N64, six buttons on Mega Drive), shoulder buttons
-and small Select/Start pills. They are see-through, sit beside the picture in landscape and under it in portrait,
-tick when pressed only if Settings → Haptics and your phone's touch vibration are both on, and hide while you play with a controller. Haptics defaults off.
-
-
-Continue is here too: your last five games stand a little open and Continue goes straight back to the moment you left. See [Continue](continue.md#on-an-android-phone).
-
-Version 0.1.6-android.8 adds the rest of the Cozy extras (see below). Version 0.1.6-android.7 brought the newer look of pocket-ui: real cases and cartridges, stickers, the TV on the Cabinet,
-new colour sets and the new logo. Settings has new rows: Colours (five sets), Style (Barlow, Retro), Motion
-(Full, Reduced, Off), Button symbols (letters, Xbox colours or PlayStation shapes in the controller hints) and Cozy
-extras, where case sounds, the old-TV switch-on, the TV on the Cabinet, stickers and playful animations can each be
-switched off. Settings that need hardware a phone does not have (LEDs, fan, sleep, Tailscale) are not shown.
-
-Saturn (YabaSanshiro) and Dreamcast (Flycast) are also **experimental** in the app's own player,
-with the same pause menu, Save, Load and Continue. Dreamcast touch arrows also move the analog stick. Saturn needs a BIOS from your own console:
-put `saturn_bios.bin`, `sega_101.bin` or `mpr-17933.bin` in one of your chosen folders. Dreamcast
-can start with its built-in replacement; the app says when no BIOS was found. For better compatibility,
-add `dc_boot.bin` (or `dc_bios.bin`) and `dc_flash.bin` to a chosen `bios` folder. Run **Game check**
-after adding files. No BIOS is supplied. The app reads the originals and keeps private copies.
-
-Saturn discs can be CUE/BIN, ISO, CHD or M3U; Dreamcast discs can be GDI, CUE/BIN, CDI, CHD or M3U.
-Keep a sheet with all the files it names in the same folder. The shelf uses the shared disc insertion
-animation; no other emulator app is needed. Large discs need free internal storage for their copy.
+**Saturn & Dreamcast** (experimental): Saturn requires `saturn_bios.bin`, `sega_101.bin` or `mpr-17933.bin` in a chosen
+folder (supports CUE/BIN, ISO, CHD, M3U). Dreamcast boots with a built-in HLE BIOS or improves compatibility with
+`dc_boot.bin` / `dc_bios.bin` and `dc_flash.bin` inside a chosen `bios` folder (supports GDI, CUE/BIN, CDI, CHD, M3U).
+Run **Game check** after adding BIOS files. pocket-ui copies originals into private app storage without touching your
+files.
 
 ## Game check
 
-Settings → **Game check** asks the same question of the folders you chose. It reads your folders' lists through Android, nothing
-is downloaded, deleted or changed, and saves are not touched. It answers **All good** with how many games are ready, or a short
-list. Choosing a folder with new games offers the check, from Settings or from the Games page; **Not now**, B and Android's Back
-leave it where you came from. Tap a row or use A; Android's Back or B goes back,
-**Check again** (X) looks at everything again.
+Settings → **Game check** scans your selected folders offline without touching or deleting anything, reporting **All
+good** with your ready game count or a concise issue list (auto-offered when adding a folder with new games; press X to
+re-check):
 
 | Row | Example | What to do |
 |---|---|---|
-| **Folders that can't be read** | "Android no longer lets pocket-ui read Games."; "Games is not there any more." | **Choose it again**; your games are safe. A folder that is gone can be forgotten here, its files stay |
-| **Discs missing a file** | "Disc: Game.cue is there, its Game.bin is missing." or "is empty" | Put the file next to it with that name. A file whose name differs only in capitals is found and needs no renaming |
-| **Empty files**, **Zips that won't start** | As above | Copy the game into the folder again |
-| **Same game twice** | `Game (1).gba` next to `Game.gba` | Both stay on the shelf. A phone can't hide a copy yet; delete it with a file manager if you want |
-| **Wrong folder or file type** | A `.gba` in `snes`, `.sfcc`, `Game.sfc.part`; a folder whose name says no system, for a type that doesn't say either (`.iso`, `.chd`, `.zip`) | The line names the folder or the name it should have. A cartridge's type says its system, so `Sega Genesis/Sonic.md` is fine. Pick the folder above your system folders, or a recognised system folder itself |
-| **Emulator apps to install** | "2 games need the ARMSX2 app, which isn't installed." | Install it from its official site or store. A game an installed emulator takes is no fault |
-| **Can't start in this app yet** | A game over 512 MB on systems other than PSP, PlayStation, Saturn and Dreamcast; a big game requiring a copy when the phone hasn't room for it; PC Engine CD; PlayStation Vita | The game stays on the shelf |
-| **Tips** | "No PlayStation BIOS found. Games start with the player's built-in stand-in, and a few need the real one."; "PlayStation 2 needs a BIOS file from your own console."; "PlayStation, Saturn and Dreamcast BIOS files are read from your bios folder." | Your choice. Tips don't take the green away |
+| **Folders that can't be read** | "Android no longer lets pocket-ui read Games."; "Games is not there any more." | Pick **Choose it again** (your files are safe) or forget a removed folder |
+| **Discs missing a file** | "Disc: Game.cue is there, its Game.bin is missing." / "is empty" | Copy the missing track beside it (case-insensitive matching works automatically) |
+| **Empty files**, **Zips that won't start** | Corrupt or empty archive | Recopy the game file |
+| **Same game twice** | `Game (1).gba` beside `Game.gba` | Both stay visible; remove the duplicate with a file manager if desired |
+| **Wrong folder or file type** | `.gba` inside `snes`, `.sfcc`, `Game.sfc.part`, or ambiguous `.iso`/`.chd`/`.zip` in an unrecognised folder | Move or rename as suggested (cartridge extensions auto-detect even inside custom folders like `Sega Genesis/Sonic.md`) |
+| **Emulator apps to install** | "2 games need the ARMSX2 app, which isn't installed." | Install the app from its official store or GitHub |
+| **Can't start in this app yet** | Files >512 MB outside PSP/PS1/Saturn/Dreamcast, large copies exceeding free storage, PC Engine CD or Vita | Stays safely on the shelf |
+| **Tips** | Optional PlayStation/PS2/Dreamcast BIOS notes | Purely informational; never takes away **All good** |
 
-Missing BIOS files appear as tips in Game check. Saturn needs one before it can start; PlayStation and Dreamcast can start with built-in replacements
-([PlayStation](#playstation)); each emulator app keeps its own in a folder other apps can't read, so nobody here can know. Which core RetroArch has is out of sight in the same
-way, so that is a tip too. A game's content is not read, so a damaged game with the right size and name is only found when it starts.
-
-With a controller (a handheld's own buttons count) the app stays in landscape, either way up; without one it turns with
-the phone.
+With a controller connected (including built-in handheld buttons), pocket-ui locks cleanly to landscape (either way up);
+on phones without a pad, it rotates freely.
 
 ## PlayStation
 
-PlayStation games start in this app's own player with PCSX ReARMed, the core pocket-ui uses on handhelds.
+PlayStation runs inside pocket-ui's built-in player on **PCSX ReARMed**:
 
-- **What it reads:** `.cue` with its `.bin` tracks, `.chd`, `.pbp`, `.iso` and `.m3u` for a game on several discs, in a
-  folder named `psx` (or `ps1`, `PlayStation`). A `.cue` with its tracks, or an `.m3u` with its discs, is one game on the
-  shelf. A track whose name differs from the `.cue`'s only in capitals is found.
-- **Storage:** a single `.pbp`, `.iso` or standalone `.chd` can load directly. CUE/BIN, playlists and CHD that need a parent file
-  still use an app copy, keeping the
-  disc's files and any parent together. A required copy over 64 MiB shows one progress bar and Cancel; later starts reuse it.
-  All of a game's files must lie in the folder of its `.cue` or `.m3u`, or in folders below it.
-- **BIOS:** not needed to start. Without one, games run with the player's built-in stand-in; a few games need the real one.
-  Put a BIOS from your own console, such as `scph5501.bin`, in a folder named `bios` among the folders you chose. The app
-  copies it into its own storage at the next PlayStation start. When none is found, the first PlayStation start says so
-  once while the app runs, and the Game check lists it as a tip. No BIOS is supplied.
-- **Several discs:** an `.m3u` starts with its first disc. When the game asks for the next one, open the pause menu,
-  **Options**, and change **Disc** (for example "Disc 2 of 2").
+- **Formats:** `.cue`/`.bin`, `.chd`, `.pbp`, `.iso` and multi-disc `.m3u` inside `psx`, `ps1` or `PlayStation`
+  (case-insensitive track names match automatically).
+- **Storage:** single `.pbp`, `.iso` and standalone `.chd` files launch directly; CUE/BIN, M3U playlists and
+  parent-linked CHDs copy into app cache (progress bar + Cancel above 64 MiB; reused on later starts; keep all disc
+  files inside or below the `.cue`/`.m3u` folder).
+- **BIOS:** optional. Built-in HLE works out of the box, though dropping a real `scph5501.bin` into a chosen `bios`
+  folder improves compatibility for tricky titles (auto-imported on next PS1 launch; noted once if missing).
+- **Multi-disc:** open Pause → **Options → Disc** when a game prompts for the next disc.
 
 ## Games in other emulator apps
 
-PlayStation 2, GameCube and Wii, 3DS and Xbox games are on the shelf like the others and start in their emulator app,
-straight into the game: no second menu in between. Close the game in the app's menu and you are back on the shelf.
-Continue shows only games of this app's own player, which keeps their moment.
+PS2, GameCube, Wii, 3DS and Xbox games sit right on your shelf and launch straight into their dedicated Android apps.
+Exit the game there and you're right back on your shelf (Continue covers pocket-ui's own player only):
 
 | System | Folder and files | App | Where to get it | Once in the app |
 |---|---|---|---|---|
 | PlayStation 2 | `ps2`: `.iso`, `.chd`, `.cso` | ARMSX2 (NetherSX2 also works) | github.com/ARMSX2/ARMSX2, Releases | Add your console's BIOS |
-| GameCube and Wii | `gamecube`, `wii`: `.rvz`, `.iso`, `.gcm` | Dolphin | F-Droid, Google Play or dolphin-emu.org | Nothing |
-| 3DS | `3ds`: `.3ds`, `.cci`, `.cxi`, `.3dsx` | Azahar | azahar-emu.org or Google Play | Its first-start steps (a folder for its data) |
-| Xbox | `xbox`: `.iso` (also `.xiso.iso`) | hakuX | github.com/rfandango/hakuX, Releases | Choose your Xbox games folder |
+| GameCube and Wii | `gamecube`, `wii`: `.rvz`, `.iso`, `.gcm` | Dolphin | F-Droid, Google Play or dolphin-emu.org | Set up its pad, touch buttons and picture once (below) |
+| 3DS | `3ds`: `.3ds`, `.cci`, `.cxi`, `.3dsx` | Azahar | azahar-emu.org or Google Play | Complete first-start data folder setup |
+| Xbox | `xbox`: `.iso` (also `.xiso.iso`) | hakuX | github.com/rfandango/hakuX, Releases | Pick your Xbox games folder |
 
-**Leaving a game.** Close it in the app's own menu and you are back in pocket-ui: ARMSX2 Back → **Close**, Dolphin Back →
-**Exit Emulation**, hakuX Back → **Exit**, and Azahar Back → scroll the side menu to **Close Game** → **OK**. Azahar's game
-starts in a fresh Azahar task, so it doesn't matter that you opened Azahar's own screens before; without that, Close Game
-used to end on Azahar's game list and pocket-ui stayed out of sight. Settings → **Help** has the same list.
+**Setting up Dolphin.** Because Dolphin doesn't take settings from pocket-ui, Handheld view shows a quick one-time setup
+card before your first GameCube or Wii game (matching Dolphin's English menus): Settings › GameCube Input › GameCube
+Controller 1: Standard Controller → Device: your built-in pad (same under Wii Input for Wii); hide touch controls with
+Back → Overlay Controls › Toggle Controls › Toggle All; set Screen Orientation During Emulation: Landscape and Graphics
+Settings › Aspect Ratio: Auto. Hit **Start the game** when ready. The card stays handy on the game card as **Setting up
+Dolphin**.
 
-When the app isn't installed, Play says which app it is and where to get it, and nothing is started or counted as
-played. Saves and save states stay in the emulator app; the time you were away counts as played.
+**Leaving a game:** close via each app's own menu to return straight to pocket-ui: ARMSX2 Back → **Close**, Dolphin
+Back → **Exit Emulation**, hakuX Back → **Exit**, Azahar Back → side menu → **Close Game → OK** (Azahar launches in a
+fresh task so closing always returns cleanly to pocket-ui; also listed under Settings → **Help**).
+
+If an app isn't installed, Play tells you which app you need and where to get it. External apps manage their own saves;
+pocket-ui still tracks your play time.
 
 ## Plays with
 
-Every system with pocket-ui's own player starts in it. Settings → **Plays with** lets you change that per system: the
-page lists each of your systems that has an emulator app on the phone that pocket-ui knows (RetroArch, PPSSPP,
-DuckStation), and A steps through **pocket-ui** and the installed apps. Only installed apps are offered, so the page is
-empty until you install one. Nintendo 64, PSP, Saturn and Dreamcast carry a small "Experimental" next to
-**pocket-ui**: the own player for them is still being tested. A game of a system set to an app starts there, comes back
-to pocket-ui when you leave it, and counts play time and the shelf as for the apps above. Continue and the pause menu
-belong to that app then; set the system back to **pocket-ui** and Continue is there again. RetroArch needs the system's
-core installed in RetroArch itself. An app you remove falls back to pocket-ui by itself. Nothing is chosen for you.
+Every system with a built-in core runs inside pocket-ui by default. Settings → **Plays with** lets you hand any system
+over to an installed external emulator (RetroArch, PPSSPP, DuckStation). Only installed apps appear, and uninstalling one
+falls back to pocket-ui automatically. Experimental built-in cores (N64, PSP, Saturn, Dreamcast) are labelled
+"Experimental" beside **pocket-ui**. External apps use their own pause menus and Continue (RetroArch needs its matching
+core installed inside RetroArch); switch back to **pocket-ui** anytime to restore pocket-ui's pause menu and Continue.
 
 ## Save backup
 
-Settings → **Save backup** has three rows.
+Settings → **Save backup** gives you three ways to protect your progress:
 
-- **Export saves** writes every game's saves and save states (the moment you quit at, your slots and their pictures) into
-  one file, `pocket-ui-saves-<date>.zip`. Android asks where it goes: any folder, a card or a cloud folder. The row
-  shows how many games have something to keep. If a listed save disappears during export, the export fails and removes
-  the incomplete backup.
-- **Import saves** asks for such a file and brings its saves back. A game without saves on this phone gets the backup's.
-  When some games already have saves here, the page asks first: **Keep this phone's saves** only adds the games that have
-  none, **Use the backup's saves** replaces those games' saves with the backup's. Nothing is replaced without that answer.
+- **Export saves:** packs all in-game saves, save states, slots and thumbnails into a single
+  `pocket-ui-saves-<date>.zip` wherever you choose (internal storage, SD card or cloud folder; aborts cleanly if any
+  file disappears mid-export).
+- **Import saves:** restores from any pocket-ui backup ZIP. Games without local saves restore straight away; if local
+  saves already exist, you choose **Keep this phone's saves** (fill missing only) or **Use the backup's saves**
+  (overwrite). Nothing is overwritten without asking.
+- **Saved copies:** shows live status of automatic folder backups (On, Off, Folder missing) and triggers an immediate
+  sync on A (or reopens folder permissions if Off/missing).
 
-- **Saved copies** shows whether the copies below are working (On, Off, Folder missing). With A it copies now; when it is
-  Off or the folder is missing, A opens the folder choice again.
-
-After installing the app again, choose the same game folder, then import: every game finds its saves. On another phone or
-card a game is found again by its console and file name; a game that isn't on the shelf yet keeps its saves waiting until
-its folder is chosen. A file that is no pocket-ui backup is refused and nothing changes. Settings, favourites and stickers
-are not part of a backup, and neither is the list of what you played last: after an import each game continues where it
-was when you start it, and the Continue shelf fills again as you do.
+Reinstalling or moving phones? Pick the same ROM folder and import, and games reconnect by console and filename (games not on
+the shelf yet hold their saves until their folder is added). Settings, favourites, stickers and the Continue shelf list
+aren't part of save backups (Continue refills as you play).
 
 ### Saved copies in your game folder
 
-You don't have to export first. When a game ends (**Save & quit**, or the game closing), pocket-ui copies that game's
-saves and save states into a folder called `pocket-ui saves` inside the game folder you chose, one folder per game, with
-a short `README.txt`. The copy runs in the background after the game is over, never while you play, and Save & quit
-doesn't wait for it. Android doesn't delete that folder when the app is removed.
+No manual exports needed: whenever a game closes (**Save & quit** or exit), pocket-ui quietly mirrors its saves and
+states in the background into a `pocket-ui saves` folder inside your chosen ROM folder (one subfolder per game plus a
+`README.txt`), completely safe from Android app uninstalls.
 
-After installing the app again, choose the same game folder: pocket-ui finds `pocket-ui saves` and brings back the saves of
-every game that has none yet, and says so. A game that already has saves on the phone is never overwritten: files that
-are the same are left alone, and when the phone and the copy differ (for example you played a bit before choosing the
-folder), nothing is replaced, the page names how many games differ, and both versions stay as they are. A newer save never
-loses to an older one: a file is only written over another when it is different and was written later.
-If reading a saved copy fails or stops partway through, the phone's existing save stays intact.
-
-pocket-ui needs permission to write into your game folder for this. The folder choice asks for it; if you chose your folder
-with an older version (read only), or Android refuses, Settings → Save backup → **Saved copies** says **Off** and A
-leads to the folder choice. If the card is out or the folder was removed it says **Folder missing**, and after a failed copy a
-short message appears; it is tried again when the next game ends. Don't rename or edit the files in `pocket-ui saves`. The
-copies hold your saves and save states, not settings, favourites or the Continue shelf.
+Reinstall pocket-ui, point it at the same ROM folder, and missing saves restore automatically. Existing saves on the
+device are never overwritten blindly: identical files skip, newer saves win over older copies, and conflicts are flagged
+without losing either version, and failed reads never touch your phone's save. Requires write permission to your ROM
+folder (grant when picking the folder; if denied or missing, **Saved copies** reads **Off** or **Folder missing**).
+Don't manually rename files inside `pocket-ui saves`.
 
 ## Help
 
-Settings → **Help** has short answers to what players ask most: choosing your games folder, loading more systems, the pause
-menu, saving and carrying on, the copy of your saves, **Plays with**, leaving a game in another emulator app, and reporting a
-problem. Choose a topic with A and its answer appears above the list; B goes back.
+Settings → **Help** offers quick built-in answers on picking folders, extra systems, pause menu, saves, **Plays with**,
+exiting external emulators and reporting bugs (A opens a topic, B returns).
 
 ## RetroAchievements
 
-[RetroAchievements](https://retroachievements.org) counts the achievements you unlock in classic games, with a free
-account. In pocket-ui's own player they work as on the handhelds ([Achievements](achievements.md)); a game that another
-emulator app plays has them from that emulator, and pocket-ui does nothing there.
+Works right inside pocket-ui's own player just like on Linux handhelds ([Achievements](achievements.md); external apps
+handle their own).
 
-**Sign in once:** Settings → **RetroAchievements** → **Sign in**. Type your user name and press START (or Done), then
-your password: it shows as dots, the last character readable. The password is sent once, over HTTPS, and is not kept:
-the site answers with a sign-in key and only that key is saved on the device, in pocket-ui's private files, readable by
-the app alone. A wrong name or password says so in the site's words, and the next try has your name filled in.
-**Log out** is the same row (press it twice: the first press asks) and deletes the key; what you unlocked stays on the site.
-
-**Without signing in nothing happens:** no network request, no list, no extra row. The app asks the site only while you
-are signed in.
-
-**While you play:** the game starts as fast as without an account. The game is identified from its file, also when
-it was opened straight from your folder without a copy, and from a zip, an ISO, a CUE sheet or an M3U playlist; a game
-the site doesn't know gets no note. A note over the game says how many you have ("Achievements: 12 of 40"). An unlock
-brings a small card at the top for four seconds: its picture, "Achievement unlocked" with its points, and its title,
-one card after the other. Save states, Earlier and cheats stay available: this is the *softcore* mode (no hardcore, as
-on the handhelds), and a loaded moment starts watching again from that point, so loading can't unlock anything.
-
-**The list:** with an account, the pause menu has an **Achievements** row, last, which lists the game's achievements:
-the locked ones first with your progress where the game counts it, then the unlocked ones, each with its description.
-B (or the Back button) goes back; a controller scrolls with Up and Down, a finger by dragging.
-
-**Without a network:** a game you played online before keeps its achievements, and you can unlock them offline. Unlocks
-the site hasn't confirmed are kept and sent, with the time you earned them, the next time a game starts with a network
-(the list says how many wait).
-
-**A golden sticker:** when every achievement of a game is unlocked, the "100 %" sticker comes onto its case by itself,
-once. It counts for the trophy on the shelf like a finished game does (Cozy extras → Decorations); take it off from the
-card's Stickers whenever you like and it stays off.
-
-**Limits:** a disc in the **CHD** format can't be identified (pocket-ui has no CHD reader; the pause menu says so);
-a CUE/BIN, ISO or M3U copy of the same disc can. There is no unlock sound on Android yet.
+- **Sign in:** Settings → **RetroAchievements → Sign in** with your free retroachievements.org username and password
+  (sent once over HTTPS and never saved; only the private token stays on device, and **Log out** asks twice and clears it). Zero
+  network traffic unless you sign in.
+- **In-game:** zero startup delay, works on direct ROMs, zips, ISOs, CUEs and M3Us (shows "Achievements: 12 of 40" and
+  4-second unlock cards; *softcore* mode keeps save states, Earlier and cheats active; loading states resets triggers).
+- **Achievements list:** bottom row of the pause menu, showing locked achievements with progress first, then unlocked ones.
+- **Offline:** previously played games unlock offline and queue uploads for your next online launch.
+- **Auto 100% sticker:** mastering every achievement automatically places the golden "100 %" sticker on the box once
+  (counts toward your shelf trophy; removable anytime).
+- **Limits:** `.chd` discs can't be hashed on Android yet (use CUE/BIN, ISO or M3U for achievements), and unlock chimes
+  aren't on Android yet.
 
 ## Report a problem
 
-Settings → **Report a problem** (the last row) puts what helps find a problem into one text: pocket-ui's version and
-build, your device (model, Android version, screen and density, text size, game controllers by their USB ids), the look
-and language, your games per system and the core that plays each, the sound counters of the player's last audio line,
-and the end of the logs of the app and of the player. It has three rows:
-
-- **Share the report** opens Android's share sheet with the text: send it to yourself, to a chat or to a mail app.
-- **Copy the report** puts the text on the clipboard, to paste into a new issue on pocket-ui's GitHub page
-  (Issues → New issue → Bug report) or into a mail to robby@robbyczesany.com. Say what happened and, if it matters, which game.
-- **Back**.
-
-Nothing is sent by the app, and no file is left on the phone. The text is at most 60,000 characters, so it fits an
-issue; when the log is longer, the newest lines stay. Where something is missing the report says so ("No game has
-played sound yet"). **Left out:** network and e-mail addresses, passwords and tokens, user names in paths, the folder
-names inside your phone's storage and the addresses of folders you picked, and your games' names (each becomes a system
-and a short code such as `[game gba 1a2b3c4d]`, the same for the same game; name the game in your report if it matters).
-The phone's own name and the controllers' names are never read.
+Settings → **Report a problem** builds one clean diagnostic text (app version/build, Android device/display/controllers
+by USB ID, look/language, per-system game counts and cores, last audio stats and log tail, capped at 60,000 chars) with
+**Share the report**, **Copy the report** (for GitHub Issues or email to robby@robbyczesany.com) and **Back**. Nothing
+is uploaded automatically, and private details (IPs, emails, passwords, tokens, folder paths, phone/controller names and
+game titles, replaced by consistent anonymous IDs like `[game gba 1a2b3c4d]`) are scrubbed out automatically.
 
 ## Easy and Just Play
 
-Settings → Look (also in first start) offers Easy: one large game with previous and
-next buttons. Tap Play or Continue to start it; tap its name for Info. On a controller,
-arrows change games, A starts and X opens Info. Games and Quick settings offer Just
-Play: it chooses a game and starts it straight away. Automatic choices use the app's
-bundled player; choose games for other emulator apps yourself. On a controller, X on Quick
-settings' Just Play row shows the chosen game's card first, with a line saying why; Right
-on that card brings another.
+Pick **Easy** under Settings → Look (or first start) for one giant game at a time with Previous/Next and Play/Continue.
+**Just Play** (on Games and Quick settings) picks and launches a built-in-player game in one tap, or press X on Quick
+settings' Just Play row with a controller to preview why it picked that game (Right rolls another).
 
-The pause menu's Save & quit saves your in-game data and a moment before returning
-to the library. If saving fails, the menu stays open with the error. The picture
-choices remain Sharp, Smooth, CRT and Scanlines. Shorter older PSP moments may be
-kept rather than resumed because the bundled emulator cannot safely check their length.
-
-The Games shelf now calls its first row Continue and includes only games whose open
-moment was verified by the Android worker. Recently played external games without
-an internal moment remain on their system shelf. Easy keeps its single-game order.
+The Games shelf's top **Continue** row lists only verified resumable moments from pocket-ui's player (recently played
+external-app titles stay on their console shelf). Failed **Save & quit** stays open with the error; older short PSP
+states may stay under Load instead of auto-resuming.
 
 ## Android 0.2
 
-[Zoom and Hold to toggle](controls.md#on-android) help
-with small dialogue and keeping one game button pressed. Android's font scale and the app's
-Text size use the larger choice, up to 200% system text. With Settings → Remind me where I was switched on (it is off by default), [Where was I?](continue.md#on-an-android-phone)
-can hold a resumed picture briefly for reading after a long break.
-Back returns one page, and only Save & quit leaves gameplay. A controller disconnect pauses
-play and brings back the touch pad. Battery saver pauses optional media downloads and the startup animation; it leaves the game speed and saved preferences alone.
-A refused old PSP moment opens Recovery with a clear explanation and keeps the original
-under Load. The in-game save remains safe.
+[Zoom and Hold to toggle](controls.md#on-android) help with small RPG text and holding down run buttons. **Text size**
+respects the larger of the app setting and Android's font scale (up to 200%). Turning on Settings → **Remind me where I
+was** (Off by default) shows [Where was I?](continue.md#on-an-android-phone) after long breaks and waits for a press.
+Battery saver pauses optional artwork downloads and startup animations without throttling gameplay.
 
+**Retro style** (Settings → Style → Retro) brings pixel fonts, chunky frames and Cocoa/Pea palettes. Cards from other
+handhelds (`Game Boy Advance (GBA)`, `Sega Genesis`, existing local box art) work straight out of the box without
+writing to your card. For mGBA, Gambatte, bsnes and Nestopia, dropping a matching `.cht` file beside a ROM adds
+**Cheats** to Pause → Options (saved per game/core; memory-write codes flagged; no bundled database).
 
-Settings → **Style → Retro** gives menus pixel type and frames. **Colours** then chooses Cocoa or Pea; Appearance
-still chooses dark/light. Long selected names have a three-line title/subtitle band beside or below their cover.
-Folders from another card, such as `Game Boy Advance (GBA)` or `Sega Genesis`, work without renaming. Box art already
-inside a chosen folder is preferred to downloaded pictures, and nothing is written to the card.
-
-For mGBA, Gambatte, bsnes and Nestopia, a `.cht` file with the game's exact filename stem next to the ROM adds
-**Cheats** to pause → Options. Codes start Off and are remembered for that game and core. Unsupported memory-write
-cheats are explained. External apps manage their own cheats. This preview includes no cheat database.
-
-A failed Save & quit keeps the player open and says why. A Load that cannot keep Before load leaves the game
-unchanged. If both a Load and its recovery fail, play and saving stop: load another moment, or choose **Return to
-library** to close that session safely. Earlier saves are kept. **Where was I?** now waits for a press; that press
-only dismisses the reminder.
-
-Settings → **Updates** downloads a newer, matching signed APK over Wi-Fi and asks Android to install it.
-Games and settings stay. Do not uninstall to update. If you do uninstall, Android asks whether to **Keep app data**: tick it and your saves, moments and settings are there again when you install pocket-ui later. Without it they are gone (Settings → Save backup keeps them in a file). The preview does not use
-the SD-card updater and does not announce Linux releases as Android updates.
-
-Game and system names keep their original spelling in every language, including phone rows, title bands, box headers and the pause header. Buttons and instructions follow the selected language.
-
-Box headers leave room between the game name and its system at large Android font sizes.
-
-The in-app player requests Android’s low-latency callback audio path and adjusts the sample rate gently to keep its short queue stable. Output latency and Bluetooth behaviour depend on the device; speaker timing still needs a listening check.
+Save safety stays strict: failed loads keep Before load intact, double failures pause safely with **Return to library**,
+and Earlier states remain safe. Game and console titles always stay in their original language across all UI elements,
+and the player requests Android's low-latency audio path with gentle sample-rate tuning.
 
 ## More systems
 
-Every system of the built-in player is in the APK: the small systems through PlayStation and Saturn, and since 0.5.x
-also PSP (with PPSSPP's system files), DS, N64 and Dreamcast. There is nothing to download and no **More systems?** step.
-A system you downloaded with an older version keeps working: the app uses its own copy and removes the downloaded one at
-its next start; your saves, save states and the system's options stay. No games or console BIOS are included.
+Since 0.5.x, **every built-in core ships inside the APK**, from 8-bit through PS1 and Saturn plus PSP (with PPSSPP's
+system files), DS, N64 and Dreamcast. Nothing extra needs downloading. Older separately downloaded cores clean up
+automatically on next start while preserving saves, states and options. No games or console BIOS files are included.
 
 ## Licences
 
-**Settings → Licences** lists pocket-ui's own licence (GPL version 2 or later) and every emulator in the app, the optional
-downloads too. Choose one to see its licence, where its source code is (upstream and exact commit) and the patches applied
-to it. The complete source of each emulator comes next to the APK on its release page; you can also ask for it any time
-(open an issue titled "Source request"). The licence texts are in the app's package as well.
+**Settings → Licences** lists pocket-ui's GPL v2+ licence alongside every bundled emulator's licence, exact upstream
+commit and patches (matching source bundles live beside each release APK, or open a "Source request" issue anytime).
 
 ## Updates over Wi-Fi
 
-Open **Settings → Updates**. It shows the installed version, a newer pocket-ui when one is available,
-**Check again**, and **Check for updates automatically**, using the same signed channel rules as Linux.
-The Android channel is separate. If it has not been published yet, the page says so.
+Open **Settings → Updates** to check your version, tap **Check again**, or toggle **Check for updates automatically**.
+Uses its own signed Android APK channel over **Wi-Fi only** (never mobile data; press B or Cancel to stop). First time
+only, Android asks permission to install updates from pocket-ui, then asks to confirm each install; reopen pocket-ui
+once done; games, folder permissions, settings and saves stay untouched. *(Never uninstall to update; if you ever do
+uninstall, tick Android's **Keep app data** or back up saves first.)*
 
-Choose **Install pocket-ui …**, then **Install now**. The download needs Wi-Fi, shows its progress,
-and **B** or the on-screen **Cancel** stops it. If Wi-Fi disappears, the update stops; it never uses
-mobile data. A changed download or a different APK signing key produces an explanation and leaves
-the app as it was.
-
-The first time, Android asks you to allow this app to install updates. Enable that permission and
-return to pocket-ui. Confirm Android's update dialog. Later updates retain that permission, but
-Android still asks you to confirm the installation. pocket-ui closes afterwards; open it again. The first
-opening confirms the installed version. Games, app settings,
-ROM-folder access and saves stay in place. Android's Cancel button cancels its confirmation dialog.
-Automatic checks run while the launcher is idle on Wi-Fi; they never install an update by themselves.
-The handheld view looks at the same channel from its shelf (once a day, on Wi-Fi, not during a game) and says a newer
-version once on a card: **A** installs it the same way, **B** closes the card. The Mobile view's switch turns both off.
+In Handheld view, idle daily Wi-Fi checks show a one-time shelf card when a new release drops (**A** installs, **B**
+dismisses; turning off auto-check in Mobile view disables both).

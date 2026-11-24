@@ -213,7 +213,7 @@ pub fn dir(data_dir: &Path) -> PathBuf {
 
 /// The paired account, if there is one with a token.
 pub fn account(data_dir: &Path) -> Option<Account> {
-    let text = std::fs::read_to_string(dir(data_dir).join(ACCOUNT_FILE)).ok()?;
+    let text = crate::background_io::read_to_string(dir(data_dir).join(ACCOUNT_FILE)).ok()?;
     let a: Account = serde_json::from_str(&text).ok()?;
     (!a.server.is_empty() && token(data_dir).is_some()).then_some(a)
 }
@@ -717,7 +717,7 @@ pub fn save_catalog(data_dir: &Path, cat: &Catalog) -> std::io::Result<()> {
 /// The list as the last refresh kept it, for the account that is paired now (a list of another server is no list).
 pub fn load_catalog(data_dir: &Path) -> Option<Catalog> {
     let account = account(data_dir)?;
-    let text = std::fs::read(dir(data_dir).join(CATALOG_FILE)).ok()?;
+    let text = crate::background_io::read(dir(data_dir).join(CATALOG_FILE)).ok()?;
     let cat: Catalog = serde_json::from_slice(&text).ok()?;
     (cat.server == account.server).then_some(cat)
 }
@@ -734,7 +734,7 @@ fn clear_cache() {
 /// The list for the shelf, read once per change of its file (the library's scan asks once per system).
 pub fn shelf_catalog(data_dir: &Path) -> Option<Arc<Catalog>> {
     let file = dir(data_dir).join(CATALOG_FILE);
-    let stamp = std::fs::metadata(&file).and_then(|m| m.modified()).ok();
+    let stamp = crate::background_io::metadata(&file).and_then(|m| m.modified()).ok();
     stamp?;
     let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
     if let Some((d, s, cat)) = cache.as_ref() {
@@ -750,6 +750,10 @@ pub fn shelf_catalog(data_dir: &Path) -> Option<Arc<Catalog>> {
 /// The server's games of `system` (whose folder is `dir`) that aren't among `local` (by file name, any case): each at the
 /// path its download will have. Their names are RomM's.
 pub fn shelf_games(data_dir: &Path, system: &str, dir: &Path, local: &[crate::library::Game]) -> Vec<crate::library::Game> {
+    // The dArkOS port shows the games folders read only: a RomM game could never download there (`darkos::LEAVES_OUT`).
+    if crate::device::darkos_port() {
+        return Vec::new();
+    }
     let Some(cat) = shelf_catalog(data_dir) else { return Vec::new() };
     let have: std::collections::HashSet<String> = local.iter().filter_map(|g| g.path.file_name()?.to_str().map(str::to_lowercase)).collect();
     let folders: std::collections::HashSet<String> = local.iter().filter_map(|g| g.path.parent()?.file_name()?.to_str().map(str::to_lowercase)).collect();
@@ -758,7 +762,7 @@ pub fn shelf_games(data_dir: &Path, system: &str, dir: &Path, local: &[crate::li
         .filter(|e| e.system == system)
         .filter(|e| match &e.launch {
             None => !have.contains(&e.file.to_lowercase()),
-            Some(_) => !folders.contains(&e.file.to_lowercase()) && !dir.join(&e.file).exists(),
+            Some(_) => !folders.contains(&e.file.to_lowercase()) && !crate::background_io::exists(dir.join(&e.file)),
         })
         .map(|e| crate::library::Game { name: e.name.clone(), path: e.path_in(dir) })
         .collect()

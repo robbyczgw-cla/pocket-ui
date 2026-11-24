@@ -65,6 +65,11 @@ fn scene_bottom(h: i32) -> i32 {
     }
 }
 
+/// The plinth can reach under the hints. Complete shelves and their name plates need the actual hint-bar edge.
+fn shelves_bottom(h: i32) -> i32 {
+    scene_bottom(h).min(hint_band_top(h))
+}
+
 /// The cabinet's top board and its plinth.
 const TOP_H: i32 = 40;
 const PLINTH_H: i32 = 56;
@@ -198,19 +203,28 @@ impl Reader {
                         let (lock, cv) = &*worker.queue;
                         let mut q = lock.lock().unwrap();
                         loop {
+                            if pocket_ui::background_io::paused() {
+                                q = if q.now.is_empty() && q.soon.is_empty() {
+                                    cv.wait(q).unwrap()
+                                } else {
+                                    cv.wait_timeout(q, Duration::from_millis(150)).unwrap().0
+                                };
+                                continue;
+                            }
                             if let Some(job) = q.now.pop_front() {
                                 break (job, false);
                             }
-                            if !pocket_ui::covers::game_on() {
-                                if let Some(job) = q.soon.pop_front() {
-                                    break (job, true);
-                                }
+                            if let Some(job) = q.soon.pop_front() {
+                                break (job, true);
                             }
                             q = cv.wait(q).unwrap();
                         }
                     };
-                    let got = read(&job.0, job.1, None);
-                    worker.done.lock().unwrap().push((job.0, job.1, got, soon));
+                    if let Some(got) = pocket_ui::background_io::job(|| read(&job.0, job.1, None)) {
+                        worker.done.lock().unwrap().push((job.0, job.1, got, soon));
+                    } else if !soon {
+                        worker.queue.0.lock().unwrap().now.push_back(job);
+                    }
                 }
             })
             .expect("cabinet reader thread");
@@ -292,6 +306,12 @@ const LIVED_WARM_AFTER: Duration = Duration::from_millis(90);
 /// Lived-in shelf: the most of the UI thread one turn of making them ahead takes (a turn makes at least one).
 const LIVED_WARM_BUDGET: Duration = Duration::from_millis(3);
 
+/// The Cabinet: how long after the last button the shelves next to the selected one are made ahead
+/// (`App::cabinet_warm_tick`), and the most of the UI thread one turn takes (a turn makes at least one spine).
+const CABINET_WARM_AFTER: Duration = Duration::from_millis(120);
+const CABINET_WARM_BUDGET: Duration = Duration::from_millis(3);
+const CABINET_WARM_COLOURS: Duration = Duration::from_secs(2);
+
 /// Large fronts shared by Shelf, the game box and its idle warmer. Bound entries independently of rendered frames:
 /// Cabinet uses these for box warming too, and never paints the Shelf that used to be their only cleanup path.
 const FRONT_KEEP: usize = 12;
@@ -310,8 +330,11 @@ pub(crate) struct Inserting {
     lead: Duration,
     /// The film tearing off, painted over the scene's first moments.
     tear: Option<super::app_shrink_wrap::Tear>,
-    /// The Shelf look's page under the launch as its first frame painted it (`App::launch_shelf_restore`).
+    /// The Shelf or Cabinet page under the launch once static (`App::launch_shelf_restore`).
     kept: Option<LaunchShelf>,
+    /// The Cabinet's static shelves/walls/spines behind the showcase while the console beside the TV fades out
+    /// (`paint_cabinet`), reused for the first ~120 ms before `kept` takes over the whole page.
+    cab_body: Option<(CabinetBodyKey, Vec<u32>, Vec<(usize, usize)>)>,
     /// The case's shadow where it stood on the shelf (x, y, w, h, the floor it is cut at, how far it had turned): it
     /// goes with the case, so it is painted over the kept page each frame (`App::launch_shelf_shadow`).
     shadow: Option<(i32, i32, i32, i32, i32, f32)>,
@@ -320,6 +343,8 @@ pub(crate) struct Inserting {
 thread_local! {
     /// Home's page painted (not copied) during a launch: the launch bench's count (`bench_playful`, tests/launch_frames.rs).
     pub(crate) static LAUNCH_PAGES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// Cartridge/disc pictures built during launch (`launch_game_pic`), for focus-warm tests (`tests/brick_insert_warm.rs`).
+    pub(crate) static LAUNCH_GAME_BUILDS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
     /// Lived-in shelf: thread CPU of `paint_lived_feet` and of building the row (`shelf_row`) for the
     /// bench (`bench_playful` prints them): total time and calls.
     pub(crate) static LIVED_FEET: std::cell::Cell<(Duration, u32)> = const { std::cell::Cell::new((Duration::ZERO, 0)) };
@@ -328,13 +353,15 @@ thread_local! {
     pub(crate) static LIVED_POSED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
-/// The Shelf look's page under a launch: what the frame shows before the scene goes over it, and what it was painted
-/// for. Nothing on it moves while the case goes into its console (the case and its shadow are the scene's), so the
-/// frames after the first copy it instead of painting the shelf again (H700: a launch frame cost about as much as a
-/// whole Home frame on top of the scene, 14.11.).
+/// The Shelf or Cabinet page under a launch: what the frame shows before the scene goes over it, and what it was painted
+/// for. Nothing on it moves while the case goes into its console (in Cabinet once the console beside the TV has faded),
+/// so the frames after copy it instead of painting the whole page again.
 pub(crate) struct LaunchShelf {
     key: LaunchShelfKey,
     px: Vec<u32>,
+    /// Once the scene's dim ramp reaches its plateau (`rise >= 1.0`), `px` is shaded in place to this `keep` factor so
+    /// every remaining frame is a single copy with zero extra buffer allocation or full-screen RMW.
+    dimmed_keep: Option<u32>,
 }
 
 #[derive(PartialEq)]
@@ -345,10 +372,38 @@ struct LaunchShelfKey {
     void: u32,
     /// The cases made again (a sealed game's film off, `cabinet_frozen_changed`).
     gen: u64,
+    /// Room lighting/decor rebuild count (`ROOM_REBUILDS`).
+    room_gen: usize,
+    /// Shelf vs Cabinet look.
+    cabinet: bool,
     /// The status corner's minute.
     clock: Option<String>,
     sel: usize,
     with_hints: bool,
+}
+
+/// What the cached Cabinet shelves/walls/spines buffer (`Inserting::cab_body`) was painted for.
+#[derive(PartialEq)]
+struct CabinetBodyKey {
+    size: (i32, i32, usize, usize),
+    void: u32,
+    gen: u64,
+    room_gen: usize,
+    sel: (usize, usize),
+    show_bottom: i32,
+    sy: i32,
+    cut: bool,
+    peek: bool,
+}
+
+/// What the cached launch cartridge/disc picture (`CabinetUi::launch_game`) was built for.
+struct LaunchGameKey {
+    front: Rc<Pic>,
+    system: String,
+    game: media::Game,
+    h: i32,
+    has_cover: bool,
+    look: Look,
 }
 
 impl Inserting {
@@ -449,7 +504,7 @@ impl Ejecting {
 }
 
 #[derive(Default)]
-struct Timing {
+pub(crate) struct Timing {
     frames: u32,
     total: Duration,
     worst: Duration,
@@ -458,6 +513,29 @@ struct Timing {
     cpu_worst: Duration,
     /// What was made during the frame being painted, and how long it took.
     made: Vec<(&'static str, Duration)>,
+    /// The frame's parts in CPU time (`App::paint_cabinet`), with `POCKETUI_FRAME_LOG` only.
+    parts: Vec<(&'static str, Duration)>,
+}
+
+impl Timing {
+    /// With the frame log on: the CPU time since `lap` as part `what` of this frame, and `lap` moved on.
+    pub(crate) fn part(&mut self, what: &'static str, lap: &mut Duration) {
+        if frame_log().is_some() {
+            let now = thread_cpu();
+            self.parts.push((what, now.saturating_sub(*lap)));
+            *lap = now;
+        }
+    }
+}
+
+/// `POCKETUI_FRAME_LOG` set (not 0): the Cabinet logs its slow frames, those over its value in ms if it is a number
+/// (0.5 on a fast computer), else over 6 ms; with the time of each part of the frame.
+fn frame_log() -> Option<Duration> {
+    static LOG: std::sync::OnceLock<Option<Duration>> = std::sync::OnceLock::new();
+    *LOG.get_or_init(|| {
+        let v = std::env::var("POCKETUI_FRAME_LOG").ok().filter(|v| v != "0")?;
+        Some(Duration::from_secs_f64(v.parse::<f64>().ok().filter(|ms| *ms > 0.0).unwrap_or(6.0) / 1000.0))
+    })
 }
 
 pub(crate) struct CabinetUi {
@@ -530,6 +608,8 @@ pub(crate) struct CabinetUi {
     warm: Option<PathBuf>,
     /// Where each case was painted, for taps: (rectangle, shelf, case); the pulled-out one last.
     drawn: Vec<(i32, i32, i32, i32, usize, usize)>,
+    /// The selected shelf's name plate was painted this frame (`cabinet-outcome`'s `plate`).
+    plate_shown: bool,
     pub(crate) insert: Option<Inserting>,
     /// The way back from a game, while it plays (`App::begin_eject`); its case uses `insert` going backwards.
     pub(crate) eject: Option<Ejecting>,
@@ -538,6 +618,17 @@ pub(crate) struct CabinetUi {
     pub(crate) ajar_at: Option<Instant>,
     /// The game box's cartridge or card, made for the case front it came out of (`box_game`).
     box_game: Option<(Rc<Pic>, Rc<Pic>)>,
+    /// The focused or launching game's cartridge/disc (`launch_game_pic`), pre-warmed while resting on a case.
+    launch_game: Option<(LaunchGameKey, Rc<Pic>)>,
+    /// Scratch buffer for keeping the hint bar pixels across `paint_insert` without allocating every frame.
+    hint_scratch: Vec<u32>,
+    /// Pre-faulted pixel buffer reused by `Inserting::cab_body` and `LaunchShelf::px` so Frame 0 and Frame 8 never
+    /// trigger 3 MB `mmap` page-fault spikes mid-animation.
+    launch_px: Vec<u32>,
+    /// Focused game whose insert assets are being pre-warmed (`insert_warm_tick`), and how many passes ran.
+    insert_warm: Option<(Item, u8)>,
+    /// The cabinet's width and the shelves' width inside its walls at the last frame (`cabinet_warm`).
+    warm_geometry: Option<(i32, i32)>,
     /// Fronts with case stickers and the same without (`app_case_stickers`).
     pub(crate) bare_fronts: super::app_case_stickers::BareFronts,
     /// Sealed fronts and the same without their film (`app_shrink_wrap`): the launch tears the film off the one shown.
@@ -559,7 +650,7 @@ pub(crate) struct CabinetUi {
     /// The consoles of the start scene (`scene_sprite`), by system and the shelf's scale in percent.
     scene_consoles: HashMap<(String, i32), Option<Rc<pocket_ui::system_art::Sprite>>>,
     frame: u64,
-    timing: Timing,
+    pub(crate) timing: Timing,
     /// Curator's shelves as last made (`App::cabinet_curator_keys`): one coming or going makes the shelves again.
     curator_keys: Vec<ShelfKey>,
     /// The case out of its shelf and the one going back, with their shelves: a game on two shelves (Favorites and
@@ -615,6 +706,11 @@ impl Default for CabinetUi {
             eject: None,
             ajar_at: None,
             box_game: None,
+            launch_game: None,
+            hint_scratch: Vec::new(),
+            launch_px: Vec::new(),
+            insert_warm: None,
+            warm_geometry: None,
             bare_fronts: Default::default(),
             wrap_fronts: Default::default(),
             press: None,
@@ -628,6 +724,7 @@ impl Default for CabinetUi {
             frame: 0,
             timing: Timing::default(),
             curator_keys: Vec::new(),
+            plate_shown: false,
             out_on: None,
             back_on: None,
         }
@@ -691,6 +788,8 @@ impl CabinetUi {
         self.shelf_waiting = false;
         self.homemade = None;
         self.box_game = None;
+        self.launch_game = None;
+        self.insert_warm = None;
         self.colors_gen += 1;
         self.dirty = true;
         self.bare_fronts.prune();
@@ -700,9 +799,21 @@ impl CabinetUi {
     /// New box art arrived: look again for games that had none.
     pub(crate) fn covers_changed(&mut self) {
         self.colors_gen += 1;
+        self.launch_game = None;
+        self.insert_warm = None;
         self.cover_files.retain(|_, f| f.is_some());
+        pocket_ui::dir_index::changed();
         self.colors.retain(|_, c| !matches!(c, Slot::Missing));
         self.labels.retain(|_, c| !matches!(c, Slot::Missing));
+    }
+
+    /// A player's cover changed. Existing case art and colors of this game have to be read again.
+    pub(crate) fn cover_replaced(&mut self, rom: &Path) {
+        self.cover_files.remove(rom);
+        pocket_ui::dir_index::changed();
+        self.colors.remove(rom);
+        self.labels.retain(|(path, _, _), _| path != rom);
+        self.language_changed();
     }
 
     /// Port metadata may replace a fallback picture with its real cover. Rebuild those cases after publication.
@@ -775,10 +886,7 @@ impl CabinetUi {
     }
 
     fn log_frame(&mut self, took: Duration, cpu: Duration) {
-        static LOG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        if !*LOG.get_or_init(|| std::env::var("POCKETUI_FRAME_LOG").is_ok_and(|v| v != "0")) {
-            return;
-        }
+        let Some(slow) = frame_log() else { return };
         let t = &mut self.timing;
         t.frames += 1;
         t.total += took;
@@ -786,10 +894,11 @@ impl CabinetUi {
         t.cpu_total += cpu;
         t.cpu_worst = t.cpu_worst.max(cpu);
         let made = std::mem::take(&mut t.made);
+        let frame_parts = std::mem::take(&mut t.parts);
         let ms = |d: Duration| d.as_secs_f64() * 1000.0;
-        if cpu > Duration::from_millis(6) {
-            let parts: Vec<String> = made.iter().map(|(what, d)| format!("{what} {:.1}", ms(*d))).collect();
-            println!("cabinet: slow frame {:.2} ms, cpu {:.2} ms (made: {})", ms(took), ms(cpu), parts.join(", "));
+        if cpu > slow {
+            let list = |l: &[(&str, Duration)]| l.iter().map(|(what, d)| format!("{what} {:.2}", ms(*d))).collect::<Vec<_>>().join(", ");
+            println!("cabinet: slow frame {:.2} ms, cpu {:.2} ms (made: {}) (parts: {})", ms(took), ms(cpu), list(&made), list(&frame_parts));
         }
         if t.frames == 60 {
             println!(
@@ -805,6 +914,11 @@ impl CabinetUi {
 
     pub(crate) fn made(&mut self, what: &'static str, since: Instant) {
         self.timing.made.push((what, since.elapsed()));
+    }
+
+    /// [`Timing::part`] of this frame.
+    fn part(&mut self, what: &'static str, lap: &mut Duration) {
+        self.timing.part(what, lap);
     }
 }
 
@@ -836,8 +950,13 @@ fn printed_disc(text: &mut pocket_ui::text::Text, system: &str, h: i32, look: Lo
     }
 }
 
+/// How often `case_info` copied an entry's title, system and ROM (`bench-bigcard`: a shelf switch must not do it for
+/// every game of the system).
+pub(crate) static CASE_INFOS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 impl App {
     fn case_info(&self, item: Item) -> Info {
+        CASE_INFOS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         match item {
             Item::Recent(i) => {
                 let r = &self.recents.list[i];
@@ -901,19 +1020,68 @@ impl App {
         }
     }
 
+    /// `case_info(item).system`, borrowed: a row of 22,000 games is laid out without copying a string per game
+    /// (`shelf_row`, `lay_row`; a player's R36S with systems of 13,500 and 22,000 games).
+    pub(crate) fn item_system(&self, item: Item) -> &str {
+        match item {
+            Item::Recent(i) => &self.recents.list[i].system,
+            Item::Game(s, _) | Item::System(s) => &self.systems[s].name,
+            Item::Streaming => "streaming",
+            Item::Favorites => "favorites",
+            Item::Sticker(_) => "sticker",
+            Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::History | Item::Review(_) | Item::Rediscover | Item::JustPlay => "curator",
+            Item::Crate => "crate",
+            Item::Search => "search",
+        }
+    }
+
+    /// The ROM of a game on the shelf (Continue's or a system's), borrowed (`case_info(item).rom`).
+    pub(crate) fn item_path(&self, item: Item) -> Option<&Path> {
+        match item {
+            Item::Recent(i) => self.recents.list.get(i).map(|r| r.path.as_path()),
+            Item::Game(s, g) => self.systems.get(s).and_then(|s| s.games.get(g)).map(|g| g.path.as_path()),
+            _ => None,
+        }
+    }
+
     /// The case a game (or one of Curator's boxes) stands in on the shelf (`media`).
     pub(crate) fn medium(&self, item: Item) -> Medium {
         match item {
             Item::Streaming | Item::JustPlay | Item::Crate | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => Medium::Keep,
-            _ => Medium::of(&self.case_info(item).system),
+            _ => Medium::of(self.item_system(item)),
         }
     }
 
     fn form_factor(&self, item: Item) -> FormFactor {
         match item {
             Item::Streaming | Item::JustPlay | Item::Crate | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover => FormFactor::DvdCase,
-            _ => FormFactor::of(&self.case_info(item).system),
+            _ => FormFactor::of(self.item_system(item)),
         }
+    }
+
+    /// A new library gives every numeric case, row and shelf position a new meaning.
+    pub(crate) fn cabinet_library_changed(&mut self) {
+        self.cover_prefetch_stop();
+        self.end_eject();
+        self.recycle_insert();
+        let cab = &mut self.cabinet;
+        cab.cab = Cabinet::default();
+        cab.dirty = true;
+        cab.pull = Pull::default();
+        cab.placed = false;
+        cab.scroll_x.clear();
+        cab.drawn.clear();
+        cab.out_on = None;
+        cab.back_on = None;
+        cab.last_out = None;
+        cab.last_ajar = None;
+        cab.shelf_row = None;
+        cab.shelf_front_for = None;
+        cab.shelf_spine_only = None;
+        cab.shelf_waiting = false;
+        cab.shelf_lit = None;
+        cab.insert_warm = None;
+        cab.box_game = None;
     }
 
     /// The shelves, made again when something on them changed.
@@ -1157,18 +1325,15 @@ impl App {
         let lead = self.tear_wrap(path, cozy, at);
         let power_on = self.apply_power_on(cozy, hosted);
         let medium = self.medium(item);
-        let disc_rig = cozy && {
-            let info = self.case_info(item);
-            let kind = media::Game::of(&info.system, &info.rom.to_string_lossy());
-            pocket_ui::playful::on() && pocket_ui::insert_rig::takes_disc(&info.system, kind)
-        };
-        for cue in pocket_ui::insert_scene::cues(cozy, medium, disc_rig, pocket_ui::playful::on()) {
+        let info = self.case_info(item);
+        let kind = media::Game::of(&info.system, &info.rom.to_string_lossy());
+        let playful = pocket_ui::playful::on();
+        let mechanism = (cozy && playful).then(|| pocket_ui::insert_rig::moving_kind(&info.system, kind)).flatten();
+        for cue in pocket_ui::insert_scene::cues(cozy, medium, kind, FormFactor::of(&info.system), mechanism, playful) {
             self.play_sound_after(cue.sound, cue.after + lead, cue.db);
         }
         // A handheld that lights its display: its power switch with its power light.
         if power_on {
-            let info = self.case_info(item);
-            let kind = media::Game::of(&info.system, &info.rom.to_string_lossy());
             let cue = pocket_ui::insert_scene::switch_on_cue(pocket_ui::insert_scene::scene_system(&info.system), kind);
             self.play_sound_after(cue.sound, cue.after + lead, cue.db);
         }
@@ -1301,9 +1466,20 @@ impl App {
     /// The game ended (or never came up): the case is back on the shelf. The Shelf look paints the insert only while
     /// `launch_at` is set, so nothing else would clear it, and the played game's case stayed blank in its own list.
     pub(crate) fn end_insert(&mut self) {
-        self.cabinet.insert = None;
+        self.recycle_insert();
         // The just-played game's resume preview or kept frame may have replaced the file at the same path.
         self.cabinet.tv.pictures_changed();
+    }
+
+    /// Drops the active insert scene while returning its reusable framebuffer backing to `CabinetUi::launch_px`.
+    fn recycle_insert(&mut self) {
+        if let Some(ins) = self.cabinet.insert.take() {
+            if let Some(kept) = ins.kept {
+                self.cabinet.launch_px = kept.px;
+            } else if let Some((_, px, _)) = ins.cab_body {
+                self.cabinet.launch_px = px;
+            }
+        }
     }
 
     /// How much of the console beside the Cabinet's TV (or of the handheld standing in its place) shows, 0 to 1: it is the
@@ -1381,6 +1557,7 @@ impl App {
             lead: Duration::ZERO,
             tear: None,
             kept: None,
+            cab_body: None,
             shadow: None,
         });
         true
@@ -1405,7 +1582,7 @@ impl App {
             self.cabinet.cover_files.insert(rom.to_path_buf(), found.clone());
             return found;
         }
-        let mut candidates = vec![pocket_ui::covers::cover_path(&self.data_dir, system, rom)];
+        let mut candidates = vec![pocket_ui::covers::active_cover_path(&self.data_dir, system, rom)];
         if system == "ports" {
             let launcher = rom.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
             candidates.extend(pocket_ui::ports::launcher_images(&launcher));
@@ -1719,6 +1896,30 @@ impl App {
         self.cabinet.scene_consoles.entry((system.to_string(), w)).or_insert_with(|| pocket_ui::system_art::get(system).map(|s| Rc::new(s.fitted(w, high)))).clone()
     }
 
+    /// The width `scene_sprite(system, h)` (or its stand-in) would have, without fitting/copying its pixels.
+    fn scene_sprite_width(system: &str, h: i32) -> f32 {
+        let fitted_w = |sys: &str| -> Option<i32> {
+            let s = pocket_ui::system_art::get(sys)?;
+            let r = media::shelf_scale_for(h) / media::SHELF_SCALE;
+            let (max_w, max_h) = if r >= 1.0 {
+                (560, Self::scene_high(sys, 330))
+            } else {
+                ((560.0 * r).round() as i32, (Self::scene_high(sys, 330) as f32 * r).round() as i32)
+            };
+            if s.w == 0 || s.h == 0 || max_w <= 0 || max_h <= 0 {
+                return Some(0);
+            }
+            let scale = (max_w as f32 / s.w as f32).min(max_h as f32 / s.h as f32);
+            if scale >= 1.0 {
+                let k = if scale.floor() / scale >= 0.75 { scale.floor() } else { scale };
+                Some((s.w as f32 * k) as i32)
+            } else {
+                Some(((s.w as f32 * scale) as u32).max(1) as i32)
+            }
+        };
+        fitted_w(system).or_else(|| fitted_w(pocket_ui::insert_scene::STAND_IN)).unwrap_or(360) as f32
+    }
+
     /// The shelf's scale changed (the screen's height did: HDMI plugged in): the shelves and their pictures are made again.
     pub(crate) fn cabinet_scale_changed(&mut self) {
         self.cabinet.dirty = true;
@@ -1727,6 +1928,8 @@ impl App {
         self.cabinet.labels.clear();
         self.cabinet.shelf_shown.clear();
         self.cabinet.walls.clear();
+        self.cabinet.launch_game = None;
+        self.cabinet.insert_warm = None;
         self.cabinet.placed = false;
     }
 
@@ -1765,11 +1968,16 @@ impl App {
     /// The scroll that shows shelf `cs` right under the top board ending at `top` (sunk by its part of `sink`, the tallest
     /// shelf's); near the cabinet's end the plinth stays on the hints' line and the selection goes on down instead, as a
     /// list stops at its end.
-    fn cabinet_scroll_for(&self, h: i32, cs: usize, top: i32, sink: i32) -> i32 {
-        let cab = &self.cabinet.cab;
+    fn cabinet_scroll_for(cab: &cabinet::Cabinet, h: i32, cs: usize, top: i32, sink: i32) -> i32 {
         let own_sink = (sink - (cab.tallest_pitch() - cab.pitch(cs))).max(0);
+        // A shelf taller than the room under the showcase (a shelf of DVD cases, Curator's, on the Brick's 768 lines) goes
+        // that much further behind the top board, by its empty headroom only (`HEADROOM` less 6 lines, the spines stay
+        // whole): its board and name plate stand over the hints instead of fading out under them (Brick review 20.11.: the
+        // Curator plate was missing).
+        let over = top - own_sink + cab.pitch(cs) - shelves_bottom(h);
+        let tuck = over.clamp(0, (cabinet::HEADROOM - 6 - own_sink).max(0));
         let end = cab.height() + PLINTH_H - scene_bottom(h);
-        (cab.y(cs) - top + own_sink).min(end).max(-top)
+        (cab.y(cs) - top + own_sink + tuck).min(end).max(-top)
     }
 
     /// The last shelf standing whole over the hints at scroll `sy` (its board's bottom; 0: none) and whether more follow.
@@ -1778,7 +1986,7 @@ impl App {
         let mut lowest = 0;
         for s in 0..cab.shelves.len() {
             let bottom = cab.y(s) - sy + cab.pitch(s);
-            if bottom > scene_bottom(h) {
+            if bottom > shelves_bottom(h) {
                 return (lowest, true);
             }
             lowest = bottom;
@@ -1789,13 +1997,14 @@ impl App {
     pub(crate) fn paint_cabinet(&mut self, c: &mut Canvas) {
         let started = Instant::now();
         let cpu_started = thread_cpu();
+        let mut lap = cpu_started;
         let now = pocket_ui::frame_clock::now();
         self.cabinet.frame += 1;
         self.cabinet_poll();
         self.cabinet_shelves();
         let (light, earned) = self.room_sync();
-        c.clear(pal().void);
         self.cabinet.drawn.clear();
+        self.cabinet.plate_shown = false;
         self.cabinet.last_ajar = None;
         self.cabinet.window_at = None;
         // The app's selection becomes a case (after the look was changed on a system card, say); the look step's
@@ -1805,7 +2014,10 @@ impl App {
         } else {
             self.cabinet_preview_cursor()
         };
-        let Some((cs, ci)) = at else { return };
+        let Some((cs, ci)) = at else {
+            c.clear(pal().void);
+            return;
+        };
         let item = self.cabinet.cab.shelves[cs].cases[ci].item;
         self.cabinet.pull.follow(item, self.moved_at);
         let on = Some((item, self.cabinet.cab.shelves[cs].key));
@@ -1817,6 +2029,7 @@ impl App {
         let cab_w = c.w - 2 * CAB_X;
         let view = cab_w - 2 * art::WALL;
         let inner_x = CAB_X + art::WALL;
+        self.cabinet.warm_geometry = Some((cab_w, view));
         // The frame (top board, showcase, TV) is the cabinet's, the same on every shelf; the shelves scroll under it.
         let (room, top, sink) = self.cabinet_plan(c.w, c.h);
         self.cabinet.show_room = room;
@@ -1826,7 +2039,7 @@ impl App {
             self.cabinet.show_top.set(top as f32, now);
         }
         let show_bottom = self.cabinet.show_top.value(now).round() as i32;
-        let want_sy = self.cabinet_scroll_for(c.h, cs, top, sink);
+        let want_sy = Self::cabinet_scroll_for(&self.cabinet.cab, c.h, cs, top, sink);
         let want_y = want_sy as f32;
         let key = self.cabinet.cab.shelves[cs].key;
         let current_x = self.cabinet.scroll_x.get(&key).map_or(0.0, |t| t.target());
@@ -1853,131 +2066,187 @@ impl App {
         // The selected shelf alone is taller than the room (a tiny screen): as much of it as fits.
         let cut = lowest <= show_bottom;
         if cut {
-            lowest = scene_bottom(c.h);
+            lowest = shelves_bottom(c.h);
         }
         // Room left under the last whole shelf where the scroll goes: the next one's top looks in (it fades out at the
         // hints), no plinth; a sliver of it would read as a fault, the plinth closes the cabinet there instead.
         let peek = !cut && {
             let (end, more) = self.cabinet_stack(c.h, want_sy);
-            more && scene_bottom(c.h) - end >= PEEK_MIN
+            more && shelves_bottom(c.h) - end >= PEEK_MIN
         };
-        let clip = (show_bottom, if peek { scene_bottom(c.h) } else { lowest });
+        let clip = (show_bottom, if peek { shelves_bottom(c.h) } else { lowest });
         let floor_y = self.cabinet.cab.y(cs) - sy + self.cabinet.cab.shelves[cs].height + 3;
 
-        // The cabinet's top board and plinth, at its ends.
-        if self.cabinet.boards.as_ref().is_none_or(|(page, b, _)| b.w != cab_w || *page != pal().void) {
-            self.cabinet.walls.retain(|(w, _, _, _), _| *w == cab_w);
-            let lit = |mut p: Pic| {
-                self.cabinet.room.lit.tint_all(&mut p.px);
-                Rc::new(p)
-            };
-            let boards = (lit(art::top_board(cab_w, TOP_H)), lit(art::top_board(cab_w, PLINTH_H)));
-            self.cabinet.boards = Some((pal().void, boards.0, boards.1));
-        }
-        let (_, top_board, plinth) = self.cabinet.boards.clone().unwrap();
-        // The top board closes the cabinet under the showcase, the plinth under the last whole shelf in view: the
-        // cabinet always stands whole.
-        art::blit(c, &top_board, CAB_X, show_bottom - TOP_H, 256, (0, c.h));
-        if pocket_ui::scene_check::recording() {
-            // What stands on the top board (the TV, its console, a case out in the showcase) stands on its top, 12
-            // lines into it as it is seen a little from above (`paint_cabinet_tv`'s `board_y`).
-            pocket_ui::scene_check::set_origin(0, 0);
-            pocket_ui::scene_check::surface("the cabinet's top board", show_bottom - TOP_H - 12, 12, CAB_X, CAB_X + cab_w);
-        }
-        if !cut && !peek {
-            art::blit(c, &plinth, CAB_X, lowest, 230, (0, scene_bottom(c.h)));
-        }
-
+        // During the first ~120 ms of a Cabinet launch (while the console beside the TV fades out and before the whole
+        // page can be kept in `LaunchShelf`), the shelves/walls/spines below the showcase are already completely static.
+        let can_cache_body = self.launch_at.is_some()
+            && self.cabinet.eject.is_none()
+            && self.sample_cover.is_none()
+            && self.cabinet.placed
+            && !pocket_ui::scene_check::recording()
+            && !pocket_ui::text::boxes::on()
+            && !self.cabinet.scroll_y.moving(now)
+            && !self.cabinet.show_top.moving(now)
+            && !self.cabinet.scroll_x.values().any(|t| t.moving(now))
+            && !self.cabinet.pull.animating(now);
+        let body_key = can_cache_body.then(|| CabinetBodyKey {
+            size: (c.w, c.h, c.stride(), c.pixels().len()),
+            void: pal().void,
+            gen: self.cabinet.colors_gen,
+            room_gen: ROOM_REBUILDS.load(std::sync::atomic::Ordering::Relaxed),
+            sel: (cs, ci),
+            show_bottom,
+            sy,
+            cut,
+            peek,
+        });
         let mut out: Vec<(usize, usize)> = Vec::new();
-        // A bookend, a plant or a lamp on a shelf with room beside its games: four in view at most.
-        let mut props = 0;
-        // The trophy and the framed "100 %" stand on the first shelf with room for them (`app_room_extras::deco_for`).
-        let awards_on = self.awards_shelf(&earned, view);
-        for s in 0..self.cabinet.cab.shelves.len() {
-            let top = self.cabinet.cab.y(s) - sy;
-            let (inner, pitch) = (self.cabinet.cab.shelves[s].height, self.cabinet.cab.pitch(s));
-            if top + pitch < clip.0 || top > clip.1 {
-                continue;
-            }
-            let floor = top + inner + 3;
-            if pocket_ui::scene_check::recording() {
-                // The shelf's board goes on past the walls where the shelf scrolls.
-                let sc = self.cabinet.scroll_x.get(&self.cabinet.cab.shelves[s].key).map_or(0.0, |t| t.value(now)).round() as i32;
-                let (from, to) = (inner_x - sc, inner_x - sc + self.cabinet.cab.shelves[s].width.max(view));
-                pocket_ui::scene_check::set_origin(0, 0);
-                pocket_ui::scene_check::surface("a shelf of the cabinet", floor, 0, from.min(inner_x), to.max(inner_x + view));
-            }
-            // The shelves away from the selected one are a little darker.
-            let away = (floor - floor_y).abs() as f32;
-            let shade = 256 - (away * 0.22).min(70.0) as u32;
-            let skey = self.cabinet.cab.shelves[s].key;
-            let scroll = self.cabinet.scroll_x.get(&skey).map_or(0.0, |t| t.value(now)).round() as i32;
-            // Its props (`prop_plan`); a glowing lamp's light is in the back wall's picture (`lit_wall`), made once.
-            let plan = if props < 4 { self.prop_plan(s, inner_x, view, scroll, (light, &earned, awards_on == Some(s))) } else { Vec::new() };
-            let wall = match plan.iter().find(|p| p.2) {
-                Some((lamp, x, _)) if light.lamp > 0 => self.lit_wall(s, cab_w, (lamp.clone(), x - CAB_X), light.lamp),
-                _ => self.wall_pic(inner, s as u32 % 3, cab_w),
-            };
-            art::blit(c, &wall, CAB_X, top, shade, clip);
-            let first = self.cabinet.cab.shelves[s].nearest(scroll).saturating_sub(1);
-            for i in first..self.cabinet.cab.shelves[s].cases.len() {
-                let case = self.cabinet.cab.shelves[s].cases[i];
-                let x = inner_x + self.cabinet.cab.shelves[s].x(i) - scroll;
-                if x > inner_x + view {
-                    break;
+        let body_hit = body_key.as_ref().is_some_and(|key| {
+            if let Some((saved_key, px, saved_out)) = self.cabinet.insert.as_ref().and_then(|i| i.cab_body.as_ref()) {
+                if saved_key == key {
+                    c.pixels_mut().copy_from_slice(px);
+                    out.extend_from_slice(saved_out);
+                    return true;
                 }
-                let here = Some((case.item, skey));
-                if self.cabinet.pull.openness(case.item, now) > 0.0 && (here == self.cabinet.out_on || here == self.cabinet.back_on) {
-                    out.push((s, i));
+            }
+            false
+        });
+
+        if !body_hit {
+            c.clear(pal().void);
+            // The cabinet's top board and plinth, at its ends.
+            if self.cabinet.boards.as_ref().is_none_or(|(page, b, _)| b.w != cab_w || *page != pal().void) {
+                self.cabinet.walls.retain(|(w, _, _, _), _| *w == cab_w);
+                let lit = |mut p: Pic| {
+                    self.cabinet.room.lit.tint_all(&mut p.px);
+                    Rc::new(p)
+                };
+                let boards = (lit(art::top_board(cab_w, TOP_H)), lit(art::top_board(cab_w, PLINTH_H)));
+                self.cabinet.boards = Some((pal().void, boards.0, boards.1));
+            }
+            let (_, top_board, plinth) = self.cabinet.boards.clone().unwrap();
+            // The top board closes the cabinet under the showcase, the plinth under the last whole shelf in view: the
+            // cabinet always stands whole.
+            art::blit(c, &top_board, CAB_X, show_bottom - TOP_H, 256, (0, c.h));
+            if pocket_ui::scene_check::recording() {
+                // What stands on the top board (the TV, its console, a case out in the showcase) stands on its top, 12
+                // lines into it as it is seen a little from above (`paint_cabinet_tv`'s `board_y`).
+                pocket_ui::scene_check::set_origin(0, 0);
+                pocket_ui::scene_check::surface("the cabinet's top board", show_bottom - TOP_H - 12, 12, CAB_X, CAB_X + cab_w);
+            }
+            if !cut && !peek {
+                art::blit(c, &plinth, CAB_X, lowest, 230, (0, scene_bottom(c.h)));
+            }
+
+            // A bookend, a plant or a lamp on a shelf with room beside its games: four in view at most.
+            let mut props = 0;
+            // The trophy and the framed "100 %" stand on the first shelf with room for them (`app_room_extras::deco_for`).
+            let awards_on = self.awards_shelf(&earned, view);
+            self.cabinet.part("setup", &mut lap);
+            for s in 0..self.cabinet.cab.shelves.len() {
+                let top = self.cabinet.cab.y(s) - sy;
+                let (inner, pitch) = (self.cabinet.cab.shelves[s].height, self.cabinet.cab.pitch(s));
+                if top + pitch < clip.0 || top > clip.1 {
                     continue;
                 }
-                let pic = self.spine_pic(case.item, case.medium);
-                let y = floor - pic.h;
-                // Inside the walls only; in the room's light (half its dimming, no tint: `Light::case_shade`).
-                self.blit_between(c, &pic, x, y, light.shaded(shade), clip, inner_x, inner_x + view);
-                pocket_ui::scene_check::put_pic_in(format!("shelf {s} case {i}"), &pic, x, y, pocket_ui::scene_check::Rests::Settled, true, clip);
-                // A little shadow on the back panel at the right of each case.
-                art::soft_shadow(
-                    c,
-                    x + pic.w,
-                    y + 6,
-                    3,
-                    pic.h - 6,
-                    5,
-                    0.35 * shade as f32 / 256.0,
-                    (clip.0.max(top), clip.1.min(floor)),
-                );
-                self.cabinet.drawn.push((x, y, pic.w, pic.h, s, i));
+                let floor = top + inner + 3;
+                if pocket_ui::scene_check::recording() {
+                    // The shelf's board goes on past the walls where the shelf scrolls.
+                    let sc = self.cabinet.scroll_x.get(&self.cabinet.cab.shelves[s].key).map_or(0.0, |t| t.value(now)).round() as i32;
+                    let (from, to) = (inner_x - sc, inner_x - sc + self.cabinet.cab.shelves[s].width.max(view));
+                    pocket_ui::scene_check::set_origin(0, 0);
+                    pocket_ui::scene_check::surface("a shelf of the cabinet", floor, 0, from.min(inner_x), to.max(inner_x + view));
+                }
+                // The shelves away from the selected one are a little darker.
+                let away = (floor - floor_y).abs() as f32;
+                let shade = 256 - (away * 0.22).min(70.0) as u32;
+                let skey = self.cabinet.cab.shelves[s].key;
+                let scroll = self.cabinet.scroll_x.get(&skey).map_or(0.0, |t| t.value(now)).round() as i32;
+                // Its props (`prop_plan`); a glowing lamp's light is in the back wall's picture (`lit_wall`), made once.
+                let plan = if props < 4 { self.prop_plan(s, inner_x, view, scroll, (light, &earned, awards_on == Some(s))) } else { Vec::new() };
+                let wall = match plan.iter().find(|p| p.2) {
+                    Some((lamp, x, _)) if light.lamp > 0 => self.lit_wall(s, cab_w, (lamp.clone(), x - CAB_X), light.lamp),
+                    _ => self.wall_pic(inner, s as u32 % 3, cab_w),
+                };
+                art::blit(c, &wall, CAB_X, top, shade, clip);
+                let first = self.cabinet.cab.shelves[s].nearest(scroll).saturating_sub(1);
+                for i in first..self.cabinet.cab.shelves[s].cases.len() {
+                    let case = self.cabinet.cab.shelves[s].cases[i];
+                    let x = inner_x + self.cabinet.cab.shelves[s].x(i) - scroll;
+                    if x > inner_x + view {
+                        break;
+                    }
+                    let here = Some((case.item, skey));
+                    if self.cabinet.pull.openness(case.item, now) > 0.0 && (here == self.cabinet.out_on || here == self.cabinet.back_on) {
+                        out.push((s, i));
+                        continue;
+                    }
+                    let pic = self.spine_pic(case.item, case.medium);
+                    let y = floor - pic.h;
+                    // Inside the walls only; in the room's light (half its dimming, no tint: `Light::case_shade`).
+                    self.blit_between(c, &pic, x, y, light.shaded(shade), clip, inner_x, inner_x + view);
+                    pocket_ui::scene_check::put_pic_in(format!("shelf {s} case {i}"), &pic, x, y, pocket_ui::scene_check::Rests::Settled, true, clip);
+                    // A little shadow on the back panel at the right of each case.
+                    art::soft_shadow(
+                        c,
+                        x + pic.w,
+                        y + 6,
+                        3,
+                        pic.h - 6,
+                        5,
+                        0.35 * shade as f32 / 256.0,
+                        (clip.0.max(top), clip.1.min(floor)),
+                    );
+                    self.cabinet.drawn.push((x, y, pic.w, pic.h, s, i));
+                }
+                props += self.paint_props(c, &plan, floor, light.shaded(shade), clip);
+                let shown = self.paint_plate(c, s, inner_x + 18, floor + 5, shade, clip);
+                if s == cs {
+                    self.cabinet.plate_shown = shown;
+                }
             }
-            props += self.paint_props(c, &plan, floor, light.shaded(shade), clip);
-            self.paint_plate(c, s, inner_x + 18, floor + 5, shade, clip);
-        }
 
-        // A shelf taller than the room is cut: it fades out over the hints' edge.
-        if cut {
-            art::fade_band_to(c, lowest - 34, lowest, pal().void);
-        }
-        if peek {
-            art::fade_band_to(c, scene_bottom(c.h) - PEEK_FADE, scene_bottom(c.h), pal().void);
+            // A shelf taller than the room is cut: it fades out over the hints' edge.
+            if cut {
+                art::fade_band_to(c, lowest - 34, lowest, pal().void);
+            }
+            if peek {
+                art::fade_band_to(c, clip.1 - PEEK_FADE, clip.1, pal().void);
+            }
+            if let Some(key) = body_key {
+                let mut px = self.cabinet.insert.as_mut().and_then(|i| i.cab_body.take()).map(|(_, p, _)| p).unwrap_or_else(|| std::mem::take(&mut self.cabinet.launch_px));
+                px.clear();
+                px.extend_from_slice(c.pixels());
+                if let Some(ins) = self.cabinet.insert.as_mut() {
+                    ins.cab_body = Some((key, px, out.clone()));
+                } else {
+                    self.cabinet.launch_px = px;
+                }
+            }
         }
 
         // The TV on the top board, showing the selected game (`app_cabinet_tv`); the cases out of the shelf keep clear of it.
+        self.cabinet.part("shelves", &mut lap);
         let info = self.case_info(item);
         let cover = self.cover_file(&info.system, &info.rom);
         self.paint_cabinet_tv(c, &info.system, &info.rom, cover, show_bottom - TOP_H - 12, room, now);
+        self.cabinet.part("tv", &mut lap);
         // The window on the wall over the top board, left of the TV: the same on every shelf; the cases out of the
         // shelf pass in front of it.
         self.paint_cabinet_window(c, show_bottom - TOP_H - 12, room);
 
         // The cases out of the shelf, up in the showcase: the one going back first, the selected one over it.
         out.sort_by_key(|&(s, i)| (s, i) == (cs, ci));
+        self.cabinet.part("window", &mut lap);
         for (s, i) in out {
             self.paint_out(c, s, i, sy, now, inner_x, show_bottom);
         }
+        self.cabinet.part("out", &mut lap);
 
         // The way into the console (and back out) is painted last of all, over the title and the hints, so that it dims
         // them with the rest like every look (`App::paint`, `paint_eject`; polish review 12.11.).
         self.paint_cabinet_title(c, cs, item);
+        self.cabinet.part("title", &mut lap);
         // Taps are handled by `cabinet_tap`; swipes move by a case sideways and by a shelf up and down.
         let len = self.cabinet.cab.shelves[cs].cases.len();
         self.hits.row(pocket_ui::touch::Area::new(0, SCENE_TOP - lift(c.h), c.w, scene_bottom(c.h) - SCENE_TOP + lift(c.h)), ci);
@@ -2166,9 +2435,10 @@ impl App {
     }
 
     /// The shelf's name on a small paper card in a holder on the board's edge.
-    fn paint_plate(&mut self, c: &mut Canvas, s: usize, x: i32, y: i32, shade: u32, clip: (i32, i32)) {
+    /// The name plate of shelf `s` on its board's edge, if the board is in view (`clip`): whether it was painted.
+    fn paint_plate(&mut self, c: &mut Canvas, s: usize, x: i32, y: i32, shade: u32, clip: (i32, i32)) -> bool {
         if y < clip.0 || y + 26 > clip.1 {
-            return;
+            return false;
         }
         let (name, sticker) = self.shelf_name(self.cabinet.cab.shelves[s].key);
         // A card in a brass holder as high as the board's edge: the design's size whatever Settings → Text size says.
@@ -2184,13 +2454,14 @@ impl App {
             let colour = stripe("sticker");
             c.round_rect(x, y - 2, w + 4, 28, 13, dim(colour));
             self.text.draw(c, Face::Body, 20, x + 13, y + 18, dim(cabinet::ink_on(colour)), &name);
-            return;
+            return true;
         }
         // A brass-coloured holder, the card in it (in the colours of Settings → Look → Theme: `palette::Scheme`).
         let plate = pocket_ui::palette::scheme();
         c.round_rect(x - 3, y - 3, w + 6, 30, 4, dim(plate.holder));
         c.round_rect(x, y, w, 24, 2, dim(plate.card));
         self.text.draw(c, Face::Body, 20, x + 11, y + 19, dim(plate.card_ink), &name);
+        true
     }
 
     /// A case out of its shelf: sliding out and turning (`openness` 0 to 1).
@@ -2450,39 +2721,112 @@ impl App {
 
     /// Starting a game: the console comes up, the case opens and the cartridge, card or disc slides out of it, the case
     /// fades and the game goes into the console (every system the same way, 0.1.4).
-    /// What the kept launch page (`LaunchShelf`) is painted for, this frame; None where nothing is kept: not the Shelf
-    /// look, not a launch, no scene, or the visible text recorded for the checks (a copy draws no words).
+    /// What the kept launch page (`LaunchShelf`) is painted for, this frame; None where nothing is kept: not Shelf or
+    /// settled Cabinet, not a launch, no scene, or scene/text checks recording (a copy draws no words/surfaces).
     fn launch_shelf_key(&self, c: &Canvas, big: bool, with_hints: bool) -> Option<LaunchShelfKey> {
-        if big || self.theme != super::Theme::Shelf || self.launch_at.is_none() || self.cabinet.insert.is_none() || pocket_ui::text::boxes::on() {
+        let cabinet = self.theme == super::Theme::Cabinet;
+        if big
+            || (!cabinet && self.theme != super::Theme::Shelf)
+            || self.launch_at.is_none()
+            || self.cabinet.eject.is_some()
+            || pocket_ui::text::boxes::on()
+            || pocket_ui::scene_check::recording()
+        {
             return None;
+        }
+        let ins = self.cabinet.insert.as_ref()?;
+        if cabinet {
+            let now = pocket_ui::frame_clock::now();
+            if self.cabinet.dirty
+                || !self.cabinet.placed
+                || self.sample_cover.is_some()
+                || self.cabinet.scroll_y.moving(now)
+                || self.cabinet.show_top.moving(now)
+                || self.cabinet.scroll_x.values().any(|t| t.moving(now))
+                || self.cabinet.pull.animating(now)
+                || self.cabinet.tv.busy(now)
+                || self.cabinet.tv.is_live()
+                || (ins.scene.cozy && self.console_beside_shows(now) > 0.0)
+            {
+                return None;
+            }
         }
         Some(LaunchShelfKey {
             size: (c.w, c.h, c.stride(), c.pixels().len()),
             void: pal().void,
             gen: self.cabinet.colors_gen,
+            room_gen: ROOM_REBUILDS.load(std::sync::atomic::Ordering::Relaxed),
+            cabinet,
             clock: pocket_ui::status_corner::clock(),
             sel: self.sel,
             with_hints,
         })
     }
 
-    /// A launch frame after the first in the Shelf look: the page as the first one painted it, copied (true); false
-    /// when there is none for this frame, which is then painted as ever and kept (`launch_shelf_keep`).
-    pub(crate) fn launch_shelf_restore(&mut self, c: &mut Canvas, big: bool, with_hints: bool) -> bool {
-        let Some(key) = self.launch_shelf_key(c, big, with_hints) else { return false };
-        let Some(kept) = self.cabinet.insert.as_ref().and_then(|i| i.kept.as_ref()).filter(|k| k.key == key) else { return false };
-        c.pixels_mut().copy_from_slice(&kept.px);
-        true
+    /// A launch frame after the page is static in Shelf or Cabinet: copies the kept page and, at `n == 1` when no
+    /// shrink-wrap tear is running, fuses or reuses the scene's full-screen dim pass. Returns `(restored, already_dimmed)`.
+    pub(crate) fn launch_shelf_restore(&mut self, c: &mut Canvas, big: bool, with_hints: bool) -> (bool, bool) {
+        let Some(key) = self.launch_shelf_key(c, big, with_hints) else { return (false, false) };
+        let now = pocket_ui::frame_clock::now();
+        let Some(ins) = self.cabinet.insert.as_mut() else { return (false, false) };
+        let Some(kept) = ins.kept.as_mut().filter(|k| k.key == key) else { return (false, false) };
+        let pre_dim = c.n() == 1 && c.stride() == c.w as usize && c.pixels().len() == (c.w * c.h) as usize && ins.tear.is_none();
+        if !pre_dim {
+            if kept.dimmed_keep.is_some() {
+                return (false, false);
+            }
+            c.pixels_mut().copy_from_slice(&kept.px);
+            return (true, false);
+        }
+        let elapsed = now.saturating_duration_since(ins.at);
+        let st = cabinet::insert_at(elapsed, ins.scene.cozy);
+        let keep = 256 - (st.dim * 256.0) as u32;
+        if let Some(done) = kept.dimmed_keep {
+            if done == keep {
+                c.pixels_mut().copy_from_slice(&kept.px);
+                return (true, true);
+            }
+            return (false, false);
+        }
+        if keep >= 256 {
+            c.pixels_mut().copy_from_slice(&kept.px);
+            return (true, true);
+        }
+        if st.rise >= 1.0 {
+            // Dim ramp has reached its constant plateau (`dim == 0.6`): shade `kept.px` in place once so every
+            // remaining frame of the launch is a single pure copy with zero extra 3 MB allocation.
+            for (dst, src) in c.pixels_mut().iter_mut().zip(&mut kept.px) {
+                let s = ((*src & 0xff00ff) * keep >> 8 & 0xff00ff) | ((*src & 0x00ff00) * keep >> 8 & 0x00ff00);
+                *src = s;
+                *dst = s;
+            }
+            kept.dimmed_keep = Some(keep);
+            return (true, true);
+        }
+        for (dst, &src) in c.pixels_mut().iter_mut().zip(&kept.px) {
+            *dst = ((src & 0xff00ff) * keep >> 8 & 0xff00ff) | ((src & 0x00ff00) * keep >> 8 & 0x00ff00);
+        }
+        (true, true)
     }
 
     /// The page just painted under a launch, kept for the frames after (`launch_shelf_restore`).
     pub(crate) fn launch_shelf_keep(&mut self, c: &Canvas, big: bool, with_hints: bool) {
         let Some(key) = self.launch_shelf_key(c, big, with_hints) else { return };
+        let recycled = std::mem::take(&mut self.cabinet.launch_px);
         if let Some(ins) = self.cabinet.insert.as_mut() {
-            let mut px = ins.kept.take().map(|k| k.px).unwrap_or_default();
+            // Reuse `cab_body`'s already-faulted pixel buffer when handing off from Cabinet's beside-TV fade to `kept`.
+            let mut px = ins
+                .kept
+                .take()
+                .map(|k| k.px)
+                .or_else(|| ins.cab_body.take().map(|(_, p, _)| p))
+                .unwrap_or(recycled);
+            ins.cab_body = None;
             px.clear();
             px.extend_from_slice(c.pixels());
-            ins.kept = Some(LaunchShelf { key, px });
+            ins.kept = Some(LaunchShelf { key, px, dimmed_keep: None });
+        } else {
+            self.cabinet.launch_px = recycled;
         }
     }
 
@@ -2499,10 +2843,147 @@ impl App {
         }
     }
 
+    /// Builds or reuses the launch cartridge, card or printed disc for `front` (`CabinetUi::launch_game`).
+    #[allow(clippy::too_many_arguments)]
+    fn launch_game_pic(
+        &mut self,
+        system: &str,
+        medium: Medium,
+        game: media::Game,
+        front: &Rc<Pic>,
+        from_h: i32,
+        look: Look,
+        title: &str,
+        has_cover: bool,
+        screen_h: i32,
+        stage_k: f32,
+        seated: i32,
+    ) -> Option<Rc<Pic>> {
+        let target_h = if game.is_round() {
+            let sw = Self::scene_sprite_width(system, screen_h);
+            game.size_beside(medium, from_h).1.max(2 * pocket_ui::insert_scene::over_drive(game, sw, stage_k) as i32).max(seated)
+        } else {
+            game.size_beside(medium, from_h).1
+        };
+        if let Some((cached, pic)) = &self.cabinet.launch_game {
+            if Rc::ptr_eq(&cached.front, front)
+                && cached.system == system
+                && cached.game == game
+                && cached.h == target_h
+                && cached.has_cover == has_cover
+                && cached.look == look
+            {
+                return Some(pic.clone());
+            }
+        }
+        LAUNCH_GAME_BUILDS.with(|n| n.set(n.get() + 1));
+        let k = from_h as f32 / medium.size().front_h.max(1) as f32;
+        let cover = media::cover_of(&self.bare_front(front), medium, k);
+        let t0 = Instant::now();
+        let cover = has_cover.then_some(&cover);
+        let pic = if game.is_round() {
+            Some(printed_disc(&mut self.text, system, target_h, look, title, cover))
+        } else {
+            media::game_pic(&mut self.text, game, target_h, look, title, cover, None)
+        };
+        self.cabinet.made("game", t0);
+        let pic = pic.map(Rc::new)?;
+        self.cabinet.launch_game = Some((
+            LaunchGameKey { front: front.clone(), system: system.to_string(), game, h: target_h, has_cover, look },
+            pic.clone(),
+        ));
+        Some(pic)
+    }
+
+    /// Pre-decodes/scales the focused game's console rig (or plain sprite) and cartridge/disc while resting on a case,
+    /// and pre-faults the reusable launch background buffer so Frame 0 after A has no asset-load or page-fault spike.
+    pub(crate) fn warm_focused_insert(&mut self, w: i32, h: i32) -> bool {
+        if w <= 0 || h <= 0 || !matches!(self.theme, super::Theme::Cabinet | super::Theme::Shelf | super::Theme::Big) {
+            return false;
+        }
+        let step = pocket_ui::scaled_layout::step().max(1) as usize;
+        let need = (w as usize / step).saturating_mul(h as usize / step);
+        if self.cabinet.launch_px.capacity() < need {
+            self.cabinet.launch_px.resize(need, 0);
+            // Touch one element per 4 KiB page during idle so the OS faults the backing pages before A is pressed.
+            for i in (0..need).step_by(1024) {
+                self.cabinet.launch_px[i] = 1;
+            }
+            self.cabinet.launch_px.clear();
+        }
+        let Some(item) = self.items.get(self.sel).copied().filter(|i| matches!(i, Item::Recent(_) | Item::Game(..))) else {
+            return false;
+        };
+        let info = self.case_info(item);
+        let medium = self.medium(item);
+        let look = self.case_look(&info, medium);
+        let shown = pocket_ui::insert_scene::scene_system(&info.system).to_string();
+        let game = media::Game::of(&shown, &info.rom.to_string_lossy());
+        let stage_k = media::shelf_scale_for(h) / media::SHELF_SCALE;
+        let cozy = cabinet::starts_cozy(self.cozy(), pocket_ui::motion::level());
+        let sp = pocket_ui::system_art::picture_id(&shown) == "gba-sp";
+        let rig = if (cozy && pocket_ui::playful::on()) || sp {
+            pocket_ui::insert_scene::Rigged::cached_scaled(&shown, game, pocket_ui::insert_rig::SCALE * stage_k)
+        } else {
+            None
+        };
+        if rig.is_none() {
+            let _ = self.scene_sprite(&shown, h).or_else(|| self.scene_sprite(pocket_ui::insert_scene::STAND_IN, h));
+        }
+        let front = if self.theme == super::Theme::Cabinet {
+            let key = CaseKey { rom: info.rom.clone(), medium, look, case: self.case_stickers_of(&info.rom), ajar: self.is_frozen_item(item), sealed: self.sealed(&info.rom) };
+            self.cabinet.shown.get(&key).map(|(_, f, _, _)| f.clone())
+        } else {
+            self.cabinet.shelf_lit.as_ref().map(|(f, _, _)| f.clone())
+        };
+        let Some(front) = front else { return rig.is_some() };
+        let has_cover = self.cover_file(&info.system, &info.rom).is_some();
+        let seated = rig.as_ref().map_or(0, |r| r.rig.seated_h(r.scale));
+        let _ = self.launch_game_pic(&shown, medium, game, &front, front.h, look, &info.title, has_cover, h, stage_k, seated);
+        true
+    }
+
+    /// Idle pre-warm of the focused game's insert assets (150 ms after input, and once more at 500 ms once covers settle).
+    pub(crate) fn insert_warm_tick(&mut self, now: Instant) -> Option<Instant> {
+        const AFTER_MS: [u64; 2] = [150, 500];
+        let idle = matches!(self.theme, super::Theme::Cabinet | super::Theme::Shelf | super::Theme::Big)
+            && self.launch_at.is_none()
+            && self.cabinet.eject.is_none()
+            && self.card.is_none()
+            && self.running.is_none()
+            && self.menu.is_none()
+            && self.switcher.is_none()
+            && self.settings_page.is_none()
+            && self.window.is_some();
+        let item = self.items.get(self.sel).copied().filter(|i| idle && matches!(i, Item::Game(..) | Item::Recent(_)));
+        let Some(item) = item else {
+            self.cabinet.insert_warm = None;
+            return None;
+        };
+        let tries = match self.cabinet.insert_warm {
+            Some((i, n)) if i == item => n,
+            _ => 0,
+        };
+        let Some(&after) = AFTER_MS.get(tries as usize) else { return None };
+        let due = self.last_input + Duration::from_millis(after);
+        if now < due {
+            return Some(due);
+        }
+        let (w, h) = self.screen_size();
+        self.cabinet_poll();
+        self.warm_focused_insert(w as i32, h as i32);
+        self.cabinet.insert_warm = Some((item, tries + 1));
+        AFTER_MS.get(tries as usize + 1).map(|a| self.last_input + Duration::from_millis(*a))
+    }
+
     pub(crate) fn paint_insert(&mut self, c: &mut Canvas, now: Instant) {
+        self.paint_insert_with(c, now, false);
+    }
+
+    pub(crate) fn paint_insert_with(&mut self, c: &mut Canvas, now: Instant, already_dimmed: bool) {
         // Back from the game (or it never came up): the cabinet as it was, unless the case is on its way back (`eject`).
         if self.launch_at.is_none() && self.cabinet.eject.is_none() {
-            self.cabinet.insert = None;
+            self.recycle_insert();
         }
         // A sealed game's film is off (`app_shrink_wrap`): the rest of its case, its spine on the shelf, is made again
         // without it, once.
@@ -2530,51 +3011,59 @@ impl App {
         if ins.scene.game.is_none() {
             let seated = ins.scene.rig.as_ref().map_or(0, |r| r.rig.seated_h(r.scale));
             let (look, title, has_cover) = (ins.scene.look, ins.scene.title.clone(), ins.scene.has_cover);
-            let k = from.3 as f32 / medium.size().front_h.max(1) as f32;
-            let cover = media::cover_of(&self.bare_front(&front), medium, k);
-            let console = self.console_sprite(&system);
-            let t0 = Instant::now();
-            let cover = has_cover.then_some(&cover);
-            let pic = if game.is_round() {
-                // Printed at the larger of its two sizes, out of the case and over the drive (`draw_game`).
-                let sw = self.scene_sprite(&system, c.h).or_else(|| self.scene_sprite(pocket_ui::insert_scene::STAND_IN, c.h)).map_or(360, |s| s.w as i32) as f32;
-                let seated = seated;
-                let h = game.size_beside(medium, from.3).1.max(2 * pocket_ui::insert_scene::over_drive(game, sw, stage_k) as i32).max(seated);
-                Some(printed_disc(&mut self.text, &system, h, look, &title, cover))
-            } else {
-                media::game_pic(&mut self.text, game, game.size_beside(medium, from.3).1, look, &title, cover, console.as_deref())
-            };
-            self.cabinet.made("game", t0);
+            let pic = self.launch_game_pic(&system, medium, game, &front, from.3, look, &title, has_cover, c.h, stage_k, seated);
             if let Some(ins) = self.cabinet.insert.as_mut() {
-                ins.scene.game = pic.map(Rc::new);
+                ins.scene.game = pic;
             }
         }
-        // A system without a picture: its game goes into the crate of games, not into an empty box.
-        let sprite = self.scene_sprite(&system, c.h).or_else(|| self.scene_sprite(pocket_ui::insert_scene::STAND_IN, c.h));
+        let has_rig = self.cabinet.insert.as_ref().is_some_and(|i| i.scene.rig.is_some());
+        // Only plain (non-rig) scenes use the fitted console sprite; a system without a picture gets the stand-in crate.
+        let sprite = if has_rig {
+            None
+        } else {
+            self.scene_sprite(&system, c.h).or_else(|| self.scene_sprite(pocket_ui::insert_scene::STAND_IN, c.h))
+        };
         // The Shelf look has no scene of its own: the console comes up onto its board, as the cases stand on it (18.11.:
         // on the screen's floor it hung over the board on some screens and stood in front of it on others).
         let floor = match self.cabinet.shelf_row.as_ref().filter(|_| self.theme == super::Theme::Shelf) {
             Some(row) => shelf_layout(c.w, c.h, row.tallest).floor,
             // In front of the cabinet, on its bottom board's top, a little back from its front edge over the hints: its
             // contact shadow shows on the board (tests/polish_1.rs).
-            None => scene_bottom(c.h) - (10.0 * stage_k) as i32,
+            // On the Brick's 768 lines the scene's plinth reaches 12 lines past the board's (`scene_bottom`): the console stands
+            // on the board as on the Plus, over the hints by the Plus's share, so the HuCard going into a PC Engine's front
+            // clears the hint bar (Brick review 20.11.: it was cut by it).
+            None => scene_bottom(c.h).min(pocket_ui::kit::content_bottom(c.h)) - (10.0 * stage_k) as i32,
         };
-        let Some(ins) = self.cabinet.insert.as_mut() else { return };
-        let elapsed = now.saturating_duration_since(ins.at);
         // The console comes up from below the screen's edge, and the hint bar is not part of the scene: it stays where
         // it is, dimmed with everything else, and the console never passes over it (polish review 12.11.).
         // The band's screen rows are kept (at `n` = 2 from the screen row its top edge rounds to, as `rect` rounds).
         let band = hint_band_top(c.h).clamp(0, c.h);
+        // For tests/brick_look_proportions.rs: the room between the stage's floor and the hint bar.
+        pocket_ui::shares::mark("insert-stage", 0, floor, c.w, band - floor);
         let at = (c.screen_y(band).max(0) as usize * c.stride()).min(c.pixels().len());
-        let kept = c.pixels()[at..].to_vec();
+        let mut kept = std::mem::take(&mut self.cabinet.hint_scratch);
+        kept.clear();
+        kept.extend_from_slice(&c.pixels()[at..]);
+        let Some(ins) = self.cabinet.insert.as_mut() else {
+            self.cabinet.hint_scratch = kept;
+            return;
+        };
+        let elapsed = now.saturating_duration_since(ins.at);
         let dim = cabinet::insert_at(elapsed, ins.scene.cozy).dim;
-        ins.scene.paint(c, elapsed, sprite.as_deref(), pocket_ui::insert_scene::Stage { floor, k: stage_k });
+        if already_dimmed {
+            ins.scene.paint_dimmed(c, elapsed, sprite.as_deref(), pocket_ui::insert_scene::Stage { floor, k: stage_k });
+        } else {
+            ins.scene.paint(c, elapsed, sprite.as_deref(), pocket_ui::insert_scene::Stage { floor, k: stage_k });
+        }
         // A sealed game's film flying off over it (`app_shrink_wrap`).
         if let Some(tear) = ins.tear.as_ref() {
             tear.paint(c, now);
         }
         c.pixels_mut()[at..].copy_from_slice(&kept);
-        art::dim(c, band, c.h, 256 - (dim * 256.0) as u32);
+        self.cabinet.hint_scratch = kept;
+        if !already_dimmed {
+            art::dim(c, band, c.h, 256 - (dim * 256.0) as u32);
+        }
     }
 }
 
@@ -2597,7 +3086,7 @@ impl App {
         let item = self.items.get(self.sel).copied().filter(|i| matches!(i, Item::Recent(_) | Item::Game(..)));
         let why = match item {
             _ if !why.is_empty() => why,
-            Some(i) if self.case_info(i).rom == rom => "",
+            Some(i) if self.item_path(i) == Some(rom) => "",
             _ => "the shelf is not on the game",
         };
         let Some(item) = item.filter(|_| why.is_empty()) else {
@@ -2636,7 +3125,7 @@ impl App {
             return;
         }
         // The shelf stands on the game again (a game's exit leaves it on the first row).
-        if let Some(at) = self.items.iter().position(|i| matches!(i, Item::Recent(_) | Item::Game(..)) && self.case_info(*i).rom == rom) {
+        if let Some(at) = self.items.iter().position(|i| self.item_path(*i) == Some(rom)) {
             self.select(at);
         }
         self.begin_eject(rom, system, None);
@@ -2655,8 +3144,8 @@ impl App {
         let Some((item, way)) = self.cabinet.eject.as_ref().filter(|e| !e.ready).map(|e| (e.item, e.way)) else { return };
         let info = self.case_info(item);
         let kind = media::Game::of(&info.system, &info.rom.to_string_lossy());
-        let lid = pocket_ui::playful::on() && pocket_ui::insert_rig::takes_disc(&info.system, kind);
-        let way = pocket_ui::eject::Way { lid, ..way };
+        let mechanism = pocket_ui::playful::on().then(|| pocket_ui::insert_rig::moving_kind(&info.system, kind)).flatten();
+        let way = pocket_ui::eject::Way { lid: mechanism.is_some(), ..way };
         if let Some(ej) = self.cabinet.eject.as_mut() {
             ej.way = way;
             ej.ready = true;
@@ -2668,8 +3157,8 @@ impl App {
         // way back has only the case's. With the session's photos the way back holds before its case shuts
         // (`eject::PhotoHold`): what comes after the hold comes that much later, and a soft click as the photos are in.
         let sounds = match ej.failed.as_ref() {
-            Some(_) => vec![(pocket_ui::ui_sound::opening(medium), ej.case_shut_at())],
-            None => ej.way.sounds(medium),
+            Some(_) => vec![(pocket_ui::ui_sound::closing(medium), ej.case_shut_at())],
+            None => ej.way.sounds(medium, kind, FormFactor::of(&info.system), mechanism),
         };
         let hold = ej.hold();
         for (sound, at) in sounds {
@@ -3076,10 +3565,10 @@ impl App {
         // The pixels the frame cleared, against the page's own (`page_px`, screen pixels; `gfx::take_cleared`): the whole
         // page once, not twice.
         let cleared = pocket_ui::gfx::take_cleared();
-        println!("cabinet-outcome case={x},{y},{w},{case_h} shelf={top},{} showcase={} tv={} hints={} board={} place={place} ajar={ajar} handheld={} cleared={cleared}/{} console={} console_place={} window={}",
+        println!("cabinet-outcome case={x},{y},{w},{case_h} shelf={top},{} showcase={} tv={} hints={} board={} place={place} ajar={ajar} handheld={} cleared={cleared}/{} console={} console_place={} window={} plate={}",
             top + self.cabinet.cab.shelves[s].height, self.cabinet.show_room,
             self.cabinet.tv.left.is_some(), pocket_ui::kit::hint_bar_top(h), self.cabinet.show_top.target().round() as i32, self.cabinet.tv.handheld, page_px,
-            rect(self.cabinet.tv.console_at), rect(self.cabinet.tv.console_place), rect(self.cabinet.window_at));
+            rect(self.cabinet.tv.console_at), rect(self.cabinet.tv.console_place), rect(self.cabinet.window_at), self.cabinet.plate_shown);
     }
 
     /// Playful animations in a Shelf snapshot: `POCKETUI_SNAPSHOT_HELD=<steps>:<ms>` paints Right held for `steps`
@@ -3427,6 +3916,11 @@ impl App {
             return false;
         }
         let Some(item) = self.items.get(self.sel).copied() else { return false };
+        if std::env::var_os("POCKETUI_SNAPSHOT_WARM_FOCUS").is_some_and(|v| !v.is_empty() && v != "0") {
+            let canvas = super::snap_canvas(buf, w, h);
+            let (cw, ch) = (canvas.w, canvas.h);
+            self.warm_focused_insert(cw, ch);
+        }
         if !self.begin_insert(item) {
             println!("launch-series started=false");
             return true;
@@ -3446,17 +3940,33 @@ impl App {
         let rom = self.case_info(item).rom;
         let len = len + self.tear_wrap(&rom, cozy, t0);
         let frames = (len.as_secs_f64() * 60.0).ceil() as u32;
+        let pages_before = LAUNCH_PAGES.get();
+        let rigs_before = pocket_ui::insert_scene::rig_loads();
+        let games_before = LAUNCH_GAME_BUILDS.get();
+        let print_frames = std::env::var_os("POCKETUI_LAUNCH_SERIES_TIMES").is_some_and(|v| !v.is_empty() && v != "0");
+        let skip_png = std::env::var_os("POCKETUI_LAUNCH_SERIES_NO_PNG").is_some_and(|v| !v.is_empty() && v != "0");
         let mut times = Vec::new();
         for k in 0..frames {
             pocket_ui::frame_clock::freeze(t0 + pocket_ui::frame_clock::frames(k));
             let t = Instant::now();
+            let cpu0 = if print_frames { thread_cpu() } else { Duration::ZERO };
             // Painted as the shelf shot before it and as a real start: natively on a small panel (`snap_canvas`). A design
             // canvas here was written out as if it were the panel's pixels (2x text, every other row).
             self.paint(&mut super::snap_canvas(buf, w, h));
-            times.push(t.elapsed());
-            super::write_png(buf, w, h, &format!("{dir}/{k:04}.png"));
+            let dt = t.elapsed();
+            times.push(dt);
+            if print_frames {
+                let cpu = thread_cpu().saturating_sub(cpu0);
+                println!("launch-frame k={k} wall_us={:.0} cpu_us={:.0}", dt.as_secs_f64() * 1e6, cpu.as_secs_f64() * 1e6);
+            }
+            if !skip_png {
+                super::write_png(buf, w, h, &format!("{dir}/{k:04}.png"));
+            }
         }
-        println!("launch-series {} cozy={cozy}", bench_line("paint", &times));
+        let pages = LAUNCH_PAGES.get().saturating_sub(pages_before);
+        let rig_loads = pocket_ui::insert_scene::rig_loads().saturating_sub(rigs_before);
+        let game_builds = LAUNCH_GAME_BUILDS.get().saturating_sub(games_before);
+        println!("launch-series {} cozy={cozy} pages={pages} rig_loads={rig_loads} game_builds={game_builds}", bench_line("paint", &times));
         true
     }
 }
@@ -3757,6 +4267,15 @@ fn forward_drop(f: f32) -> i32 {
     (5.0 * f).round() as i32
 }
 
+/// How wide an entry stands in the Shelf look's row at scale `f`, in its case `m` (`App::row_media`): its case's spine,
+/// or Shelf space's crate as the box (`app_crate::home_box`).
+fn row_width_of(item: Item, m: Medium, f: f32) -> i32 {
+    if item == Item::Crate {
+        return super::app_crate::home_box(f).0;
+    }
+    (m.template_size().spine as f32 * f).round() as i32
+}
+
 /// Which group of Home an entry belongs to: the shelf leaves a wider gap where one ends (Curator and Search, the recent
 /// games, Favorites and the pinned rows, the systems).
 fn shelf_group(item: Item) -> u8 {
@@ -3891,9 +4410,35 @@ impl App {
         (info, key)
     }
 
+    /// Each entry of the row's case (`shelf_medium`), worked out once per system along the row.
+    fn row_media(&self) -> Vec<Medium> {
+        let mut last: Option<(&str, Medium)> = None;
+        self.items
+            .iter()
+            .map(|&item| {
+                if !matches!(item, Item::Game(..) | Item::Recent(_)) {
+                    return self.shelf_medium(item);
+                }
+                let system = self.item_system(item);
+                match last {
+                    Some((s, m)) if s == system => m,
+                    _ => {
+                        let m = self.shelf_medium(item);
+                        last = Some((system, m));
+                        m
+                    }
+                }
+            })
+            .collect()
+    }
+
     /// An entry's spine standing on the shelf at `f` screen pixels a template pixel, its title at the text size's
     /// spine size (`media::spine_px`); a system's spine carries its short name ("SNES"). Made once and kept.
     pub(crate) fn stand_pic(&mut self, item: Item, m: Medium, f: f32) -> Rc<Pic> {
+        // Shelf space's crate stands on the board as the box itself, not a case (19.11.2026).
+        if item == Item::Crate {
+            return self.home_box_pic(f);
+        }
         let want = spine_want(f);
         let (info, key) = self.shelf_key(item, m);
         let key = (key, (f * 100.0) as i32 * 1000 + want as i32);
@@ -3923,6 +4468,12 @@ impl App {
     /// front not made yet is then left for the next frame (None), and the first frame after a move costs about what
     /// the list looks' does (tests/shelf_moves.rs).
     pub(crate) fn stand_front(&mut self, item: Item, m: Medium, k: f32, later: bool) -> (Rc<Pic>, Option<Rc<Pic>>) {
+        // Shelf space's crate, selected: the box large, standing on the front's bottom edge, not a case's front.
+        if item == Item::Crate {
+            let (fw, fh) = media::front_size(m, k);
+            let pic = self.home_box_front(fw, fh);
+            return (pic.clone(), Some(pic));
+        }
         let (info, key) = self.shelf_key(item, m);
         let file = self.cover_file(&info.system, &info.rom);
         let fh = (m.size().h as f32 * k).round() as i32;
@@ -3987,13 +4538,15 @@ impl App {
         let gap = (2.0 * f).round() as i32;
         let group_gap = up4((12.0 * f).round() as i32);
         // A few games: the row stands a little in from the shelf's end, not squeezed against it.
+        // Each entry's case once (a system's shelf of 22,000 games asks one system, not 22,000 copies of its name).
+        let media = self.row_media();
         let natural: i32 = {
             let mut end = 0;
             for (i, &item) in self.items.iter().enumerate() {
                 if i > 0 && shelf_group(item) != shelf_group(self.items[i - 1]) {
                     end += group_gap;
                 }
-                let w = (self.shelf_medium(item).template_size().spine as f32 * f).round() as i32;
+                let w = row_width_of(item, media[i], f);
                 end = up4(end + w + gap);
             }
             end - gap
@@ -4004,19 +4557,19 @@ impl App {
         // Settings → Look → Lived-in shelf: the row's poses (`pocket_ui::lived_in`). A row that fits the shelf standing
         // straight (its props after its end) never grows past it: no stack then, and if it still would, no wider spaces,
         // and last no leaning either (0.5.2, mixed rows at 1280x720 had to scroll only for their stacks).
-        let mut plans = self.lived_in_plans(true);
-        let (mut spines, mut lived, mut tallest) = self.lay_row(f, lead, &plans);
+        let mut plans = self.lived_in_plans(true, &media);
+        let (mut spines, mut lived, mut tallest) = self.lay_row(f, lead, &plans, &media);
         let fits_straight = lead + natural <= view;
         let past = |spines: &[(i32, i32, Medium)]| spines.iter().map(|&(x, w, _)| x + w).max().unwrap_or(0) > view;
         if !plans.is_empty() && fits_straight && past(&spines) {
-            plans = self.lived_in_plans(false);
-            (spines, lived, tallest) = self.lay_row(f, lead, &plans);
+            plans = self.lived_in_plans(false, &media);
+            (spines, lived, tallest) = self.lay_row(f, lead, &plans, &media);
             if past(&spines) {
                 plans.iter_mut().for_each(|p| p.extra = 0);
-                (spines, lived, tallest) = self.lay_row(f, lead, &plans);
+                (spines, lived, tallest) = self.lay_row(f, lead, &plans, &media);
             }
             if past(&spines) {
-                (spines, lived, tallest) = self.lay_row(f, lead, &[]);
+                (spines, lived, tallest) = self.lay_row(f, lead, &[], &media);
             }
         }
         let spines_end = spines.iter().map(|&(x, w, _)| x + w).max().unwrap_or(0);
@@ -4047,9 +4600,9 @@ impl App {
 
     /// The row's spines laid out from `lead` on at scale `f` (`shelf_row`): each entry's left end, width across and case,
     /// with its plan's pose where `plans` has one (Lived-in shelf; empty: every case standing straight), and the tallest
-    /// case in template pixels.
+    /// case in template pixels. `media`: each entry's case (`row_media`).
     #[allow(clippy::type_complexity)]
-    fn lay_row(&self, f: f32, lead: i32, plans: &[pocket_ui::lived_in::Plan]) -> (Vec<(i32, i32, Medium)>, Vec<(pocket_ui::lived_in::Plan, i32, i32)>, f32) {
+    fn lay_row(&self, f: f32, lead: i32, plans: &[pocket_ui::lived_in::Plan], media: &[Medium]) -> (Vec<(i32, i32, Medium)>, Vec<(pocket_ui::lived_in::Plan, i32, i32)>, f32) {
         let up4 = |v: i32| (v + 3) / 4 * 4;
         let gap = (2.0 * f).round() as i32;
         let group_gap = up4((12.0 * f).round() as i32);
@@ -4064,8 +4617,8 @@ impl App {
             if i > 0 && shelf_group(item) != shelf_group(self.items[i - 1]) {
                 x += group_gap;
             }
-            let m = self.shelf_medium(item);
-            let w = (m.template_size().spine as f32 * f).round() as i32;
+            let m = media[i];
+            let w = row_width_of(item, m, f);
             let h = (m.template_size().h as f32 * f).round() as i32;
             tallest = tallest.max(m.template_size().h as f32);
             let Some(plan) = plans.get(i).copied() else {
@@ -4229,6 +4782,82 @@ impl App {
         (self.lived_warm(LIVED_WARM_BUDGET) > 0).then(|| now + Duration::from_millis(16))
     }
 
+    /// The Cabinet: the spines and back walls of the two shelves over and under the selected one made ahead, in idle
+    /// moments after a move, so a Down or Up to a shelf not seen yet does not make twenty spines and a wall in one frame
+    /// (a big card's first walk through its systems: 12-23 ms on the build computer,
+    /// 21.11.2026). From `CABINET_WARM_AFTER` after the last button, for at most `CABINET_WARM_BUDGET` at a time; when to come
+    /// back while some are left or covers' colours are still being read.
+    pub(crate) fn cabinet_warm_tick(&mut self, now: Instant) -> Option<Instant> {
+        let idle = self.theme == pocket_ui::settings::Theme::Cabinet
+            && self.window.is_some()
+            && self.card.is_none()
+            && self.running.is_none()
+            && self.menu.is_none()
+            && self.switcher.is_none()
+            && self.settings_page.is_none()
+            && self.cabinet.eject.is_none()
+            && self.cabinet.insert.is_none();
+        if !idle || self.cabinet.warm_geometry.is_none() {
+            return None;
+        }
+        let due = self.last_input + CABINET_WARM_AFTER;
+        if now < due {
+            return Some(due);
+        }
+        // Covers' colours still on their way remake those spines: looked at again for a while after the move.
+        let colours = self.cabinet.pending > 0 && now < self.last_input + CABINET_WARM_COLOURS;
+        (self.cabinet_warm(CABINET_WARM_BUDGET) > 0 || colours).then(|| now + Duration::from_millis(16))
+    }
+
+    /// Makes the spines (and walls) of the shelves next to the selected one that are not made yet, the nearest shelf
+    /// first, until `budget` of wall time is used (at least one); how many were made.
+    pub(crate) fn cabinet_warm(&mut self, budget: Duration) -> usize {
+        let Some((cab_w, view)) = self.cabinet.warm_geometry else { return 0 };
+        self.cabinet_poll();
+        self.cabinet_shelves();
+        let Some((cs, _)) = self.cabinet_cursor() else { return 0 };
+        let t0 = Instant::now();
+        let mut made = 0;
+        for s in [cs + 1, cs.wrapping_sub(1), cs + 2, cs.wrapping_sub(2)] {
+            let Some(shelf) = self.cabinet.cab.shelves.get(s) else { continue };
+            let scroll = self.cabinet.scroll_x.get(&shelf.key).map_or(0.0, |t| t.target()).round() as i32;
+            let first = shelf.nearest(scroll).saturating_sub(1);
+            let cases: Vec<cabinet::Case> = (first..shelf.cases.len()).take_while(|&i| shelf.x(i) - scroll <= view).map(|i| shelf.cases[i]).collect();
+            let inner = shelf.height;
+            let walls = self.cabinet.walls.len();
+            self.wall_pic(inner, s as u32 % 3, cab_w);
+            made += self.cabinet.walls.len() - walls;
+            for case in cases {
+                if made > 0 && t0.elapsed() >= budget {
+                    return made;
+                }
+                let spines = self.cabinet.spines.len();
+                self.spine_pic(case.item, case.medium);
+                made += self.cabinet.spines.len() - spines;
+            }
+        }
+        made
+    }
+
+    /// Reproduce the idle warm pass between a card rescan and the next full redraw.
+    pub(crate) fn cabinet_card_swap_check(&mut self) {
+        self.theme = super::Theme::Cabinet;
+        self.cabinet.inline = true;
+        self.screen = super::Screen::Home;
+        self.rebuild();
+        let last = self.systems.len() - 1;
+        self.sel = self.items.iter().position(|&i| i == Item::System(last - 1)).unwrap();
+        self.cabinet_shelves();
+        self.cabinet.warm_geometry = Some((600, 500));
+        self.cabinet.last_out = Some((Item::Game(last, 0), (0, 0, 1, 1)));
+        let fresh = self.systems[..last].to_vec();
+        self.library_rescanned(fresh, None);
+        assert_eq!(self.systems.len(), last);
+        self.cabinet_warm(Duration::from_secs(2));
+        assert!(self.cabinet.last_out.is_none(), "the old case position must not survive the swap");
+        println!("cabinet card swap warmed the new library");
+    }
+
     /// The Shelf look's row laid out again at the next frame (Lived-in shelf switched: with or without its poses).
     pub(crate) fn forget_shelf_row(&mut self) {
         self.cabinet.shelf_row = None;
@@ -4270,18 +4899,18 @@ impl App {
 
     /// Settings → Look → Lived-in shelf: the row's plan (`pocket_ui::lived_in::plan_sized`) from its games' ROM names,
     /// with or without stacks; none (the row stands straight) when it is off or the row is not only games (Home).
-    fn lived_in_plans(&self, stacks: bool) -> Vec<pocket_ui::lived_in::Plan> {
+    fn lived_in_plans(&self, stacks: bool, media: &[Medium]) -> Vec<pocket_ui::lived_in::Plan> {
         if !self.lived_in || !self.items.iter().all(|i| matches!(i, Item::Game(..))) {
             return Vec::new();
         }
         let seeds: Vec<u64> = self
             .items
             .iter()
-            .map(|&i| pocket_ui::lived_in::seed(&self.case_info(i).rom.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()))
+            .map(|&i| pocket_ui::lived_in::seed(&self.item_path(i).and_then(|p| p.file_name()).map(|n| n.to_string_lossy()).unwrap_or_default()))
             .collect();
         let fixed: Vec<bool> = self.items.iter().map(|&i| self.is_frozen_item(i)).collect();
         // A mixed row (Favourites, a smart shelf): the cases' lengths, so a stack has the small ones on top.
-        let sizes: Vec<f32> = self.items.iter().map(|&i| self.shelf_medium(i).template_size().h as f32).collect();
+        let sizes: Vec<f32> = media.iter().map(|m| m.template_size().h as f32).collect();
         pocket_ui::lived_in::plan_sized(&seeds, &fixed, &sizes, stacks)
     }
 
@@ -4512,6 +5141,11 @@ impl App {
                 // Playful animations: it springs up, a touch past and back.
                 open = pocket_ui::playful::back_out(pocket_ui::playful::secs(self.moved_at, now) / super::PULL.as_secs_f32());
             }
+            // Shelf space's crate is a box on the board: it is not pulled up out of the row like a case (it hung over
+            // the board, 19.11.2026); the room above shows it large.
+            if self.items.get(i) == Some(&Item::Crate) {
+                open = 0.0;
+            }
             let rise = (open * lay.lift as f32).round() as i32;
             if rise > 0 {
                 // Out of its place in the tile, up out of the row (leaning with it: the hole is where its picture was).
@@ -4599,7 +5233,8 @@ impl App {
         // page under a launch is kept.
         if let Some(ins) = self.cabinet.insert.as_mut().filter(|i| i.item == item) {
             ins.shadow = (shadows && front.is_some()).then_some((fx + 10, fy + 12, fw, fh, lay.floor, turned));
-        } else if shadows && front.is_some() {
+        } else if shadows && front.is_some() && item != Item::Crate {
+            // (Not the crate's: its box stands at the bottom of the front's place, a case's shadow round it was a dark frame.)
             art::soft_shadow(c, fx + 10, fy + 12, fw, fh, 24, 0.45 * turned, (0, lay.floor));
         }
         match front {
@@ -5069,6 +5704,24 @@ fn fade_cols(c: &mut Canvas, x0: i32, x1: i32, y0: i32, y1: i32) {
 mod shelf_tests {
     use super::*;
 
+    #[test]
+    fn r36s_readers_cabinet_waits_for_the_game_before_reading_a_requested_cover() {
+        let _guard = super::super::READER_GAME_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let r = Reader::start();
+        pocket_ui::covers::set_game_on(true);
+        r.ask(PathBuf::from("no-cabinet-cover.png"), Kind::Cover(Medium::N64, 60));
+        std::thread::sleep(Duration::from_millis(300));
+        let early = r.take();
+        pocket_ui::covers::set_game_on(false);
+        assert!(early.is_empty(), "a foreground-priority cover job still belongs to the background reader");
+        let until = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < until {
+            if !r.take().is_empty() { return; }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        panic!("the cover request was lost");
+    }
+
     /// The meta line that takes two lines breaks at its comma where both parts fit: the system, then why the game is there
     /// whole, never one word of it alone on the second line (640x480 German Large, Rediscover, 18.11.2026). At every
     /// width: the words in order, nothing cut, and the second line no lone word while the reason fits a line of its own.
@@ -5088,6 +5741,28 @@ mod shelf_tests {
             }
             let (one, _) = meta_wrap(&mut text, meta, width, 1);
             assert!(one.len() <= 1, "width {width}: one line asked, {one:?}");
+        }
+    }
+
+    #[test]
+    fn the_selected_shelf_board_stays_above_the_hints_when_there_is_headroom() {
+        use pocket_ui::type_scale::{self, TextSize};
+        for size in [TextSize::Normal, TextSize::Medium, TextSize::Large] {
+            type_scale::set(size);
+            for h in [720, 768, 800, 960, 1080, 1440] {
+                for medium in Medium::ALL {
+                    let shelves = (0..3).map(|s| {
+                        (s, vec![cabinet::Case { item: Item::Game(s, 0), ff: FormFactor::of("snes"), medium }])
+                    }).collect();
+                    let cab = cabinet::Cabinet::build(Vec::new(), Vec::new(), Vec::new(), shelves);
+                    let pitch = cab.pitch(1);
+                    // The showcase leaves exactly enough room for the selected shelf down to the plinth line.
+                    let top = scene_bottom(h) - pitch;
+                    let scroll = App::cabinet_scroll_for(&cab, h, 1, top, 0);
+                    let board_bottom = cab.y(1) - scroll + pitch;
+                    assert!(board_bottom <= hint_band_top(h), "{medium:?}, {size:?}, {h} lines: the shelf board reaches {board_bottom}");
+                }
+            }
         }
     }
 
@@ -5150,6 +5825,7 @@ mod shelf_tests {
                     lead: Duration::ZERO,
                     tear: None,
                     kept: None,
+                    cab_body: None,
                     shadow: None,
                 });
             }

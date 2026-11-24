@@ -345,7 +345,7 @@ impl Medium {
 pub fn is_digital(system: &str) -> bool {
     matches!(
         system,
-        "ports" | "android" | "j2me" | "pico-8" | "pico8" | "tic-80" | "tic80" | "scummvm" | "openbor" | "easyrpg" | "solarus" | "lutro" | "love" | "pygame" | "wiiware" | "pspockets" | "steam" | "moonlight" | "streaming"
+        "ports" | "android" | "j2me" | "pico-8" | "pico8" | "tic-80" | "tic80" | "scummvm" | "openbor" | "easyrpg" | "solarus" | "lutro" | "love" | "pygame" | "wiiware" | "pspminis" | "steam" | "moonlight" | "streaming"
     )
 }
 
@@ -1015,6 +1015,7 @@ impl Game {
             "ngp" | "ngpc" => Game::NeoGeoPocket,
             "wonderswan" | "wonderswancolor" => Game::WonderSwan,
             "atarilynx" | "lynx" => Game::Lynx,
+            "atarijaguar" | "jaguar" => Game::Cart,
             _ => Medium::of(system).game(),
         }
     }

@@ -189,19 +189,47 @@ pub fn look(lang: Lang, (w, h): (u32, u32), density: f32, cut: Cut, scale: f32, 
     (case.setup)(&mut u);
     let (sw, sh) = safe_area((w, h), density, cut);
     let (lw, lh) = u.canvas_for((sw, sh), density);
-    let mut px = vec![0; (lw * lh) as usize];
-    let mut text = Text::builtin();
-    u.paint(&mut Canvas::new(&mut px, lw, lh), &mut text, None);
-    pocket_ui::text::boxes::reset();
-    u.canvas_for((sw, sh), density);
-    u.paint(&mut Canvas::new(&mut px, lw, lh), &mut text, None);
-    pocket_ui::text::boxes::finish(&px, lw as i32, lh as i32);
+    // Reuse the thread's Text (keeping parsed fonts and rasterized glyph cache warm) and pixel buffer across the
+    // thousands of format/page checks instead of reparsing TTF fonts and allocating up to 18 MB per call.
+    thread_local! {
+        static TEXT: std::cell::RefCell<Text> = std::cell::RefCell::new(Text::builtin());
+        static PX: std::cell::RefCell<Vec<u32>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+    let len = (lw * lh) as usize;
+    let (f, blank) = PX.with(|px_cell| {
+        TEXT.with(|text_cell| {
+            let mut px = px_cell.borrow_mut();
+            px.resize(len, 0);
+            px.fill(0);
+            let mut text = text_cell.borrow_mut();
+            u.paint(&mut Canvas::new(&mut px, lw, lh), &mut text, None);
+            pocket_ui::text::boxes::reset();
+            u.canvas_for((sw, sh), density);
+            u.paint(&mut Canvas::new(&mut px, lw, lh), &mut text, None);
+            pocket_ui::text::boxes::finish(&px, lw as i32, lh as i32);
+            let hash = if WANT_HASH.load(std::sync::atomic::Ordering::Relaxed) {
+                px.iter().fold(0xcbf29ce484222325u64, |h, p| (h ^ u64::from(*p)).wrapping_mul(0x100000001b3))
+            } else {
+                0
+            };
+            // The largest empty band, top to bottom.
+            let bg = px[0];
+            let (mut run, mut best) = (0u32, 0u32);
+            for y in 0..lh {
+                let row = &px[(y * lw) as usize..((y + 1) * lw) as usize];
+                if row.iter().all(|p| *p == bg) { run += 1; best = best.max(run); } else { run = 0; }
+            }
+            if let Some(path) = shot {
+                let rgb: Vec<u8> = px.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8]).collect();
+                std::fs::write(path, pocket_ui::screenshot::encode_rgb(lw, lh, &rgb).unwrap()).unwrap();
+            }
+            (hash, best as f32 / lh as f32)
+        })
+    });
     let ink = std::fs::read_to_string(std::env::var_os("POCKETUI_TEXT_BOXES").unwrap()).unwrap_or_default();
     let visible = std::fs::read_to_string(std::env::var_os("POCKETUI_VISIBLE_TEXT").unwrap()).unwrap_or_default();
-    let mut f = Findings { canvas: (lw, lh), dp: u.dp, visible: visible.clone(), ..Default::default() };
-    if WANT_HASH.load(std::sync::atomic::Ordering::Relaxed) {
-        f.hash = px.iter().fold(0xcbf29ce484222325u64, |h, p| (h ^ u64::from(*p)).wrapping_mul(0x100000001b3));
-    }
+    let hash = f;
+    let mut f = Findings { canvas: (lw, lh), dp: u.dp, visible: visible.clone(), hash, blank, ..Default::default() };
     f.taps = u.regions.iter().filter(|r| !matches!(r.action, ui::Action::Label)).map(|r| (r.label.clone(), (r.area.x, r.area.y, r.area.w, r.area.h))).collect();
     let dp = u.dp;
     if !u.cut.is_empty() {
@@ -248,18 +276,6 @@ pub fn look(lang: Lang, (w, h): (u32, u32), density: f32, cut: Cut, scale: f32, 
         if field.area.y + field.area.h > top + 2 {
             f.lines.push(format!("KEYBOARD over the search field: field to {}, keys from {top}", field.area.y + field.area.h));
         }
-    }
-    // The largest empty band, top to bottom.
-    let bg = px[0];
-    let (mut run, mut best) = (0u32, 0u32);
-    for y in 0..lh {
-        let row = &px[(y * lw) as usize..((y + 1) * lw) as usize];
-        if row.iter().all(|p| *p == bg) { run += 1; best = best.max(run); } else { run = 0; }
-    }
-    f.blank = best as f32 / lh as f32;
-    if let Some(path) = shot {
-        let rgb: Vec<u8> = px.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8]).collect();
-        std::fs::write(path, pocket_ui::screenshot::encode_rgb(lw, lh, &rgb).unwrap()).unwrap();
     }
     f
 }
@@ -345,9 +361,13 @@ pub fn pad_look(system: &str, native: (u32, u32), aspect: f64, (w, h): (u32, u32
     let dir = tempfile::tempdir().unwrap();
     let settings = picture::Settings::load(dir.path(), system, std::path::Path::new("k"), picture::mobile_start());
     let rect = settings.rect((lw as i32, lh as i32), (vw as i32, vh as i32), native, aspect, true);
+    thread_local! {
+        static PAD_TEXT: std::cell::RefCell<Text> = std::cell::RefCell::new(Text::builtin());
+    }
     let mut pad = vec![0u32; (lw * lh) as usize];
-    let mut text = Text::builtin();
-    let (controls, dpad, menu) = painted_touch::touch_controls(&mut Canvas::new(&mut pad, lw, lh), &mut text, system, (lw as i32, lh as i32), dp, Some(rect), 0);
+    let (controls, dpad, menu) = PAD_TEXT.with(|t| {
+        painted_touch::touch_controls(&mut Canvas::new(&mut pad, lw, lh), &mut t.borrow_mut(), system, (lw as i32, lh as i32), dp, Some(rect), 0)
+    });
     let mut out = Vec::new();
     let (lwi, lhi) = (lw as i32, lh as i32);
     let mut all: Vec<(String, pocket_ui::touch::Area)> = controls.iter().map(|(a, bit)| (format!("button{bit}"), *a)).collect();
@@ -1140,8 +1160,14 @@ pub fn first_start_faults(lang: Lang, (w, h): (u32, u32), density: f32, cut: Cut
         }
     }
     if case.name == "onb1" {
+        // A language still being translated is not offered (`Lang::row`, Korean until its table is complete).
+        for l in Lang::ALL.into_iter().filter(|l| !Lang::row().contains(l)) {
+            if f.visible.lines().any(|v| v.contains(l.name())) {
+                faults.push(format!("LANGUAGE {} is offered before its translation is complete", l.name()));
+            }
+        }
         // Each language's name is its own word(s), whole; the name of the language in use is among them as the player wrote it.
-        for l in Lang::ALL {
+        for l in Lang::row() {
             let shown = f.visible.lines().any(|v| v.trim() == l.name());
             // "Português (Brasil)" may stand on two lines (at a word break); every word whole.
             let words = l.name().split(' ').all(|word| f.visible.lines().any(|v| v.split(' ').any(|x| x == word)));
@@ -1152,7 +1178,7 @@ pub fn first_start_faults(lang: Lang, (w, h): (u32, u32), density: f32, cut: Cut
                 faults.push(format!("LANGUAGE {} is not one line", l.name()));
             }
         }
-        if f.taps.iter().filter(|(_, r)| r.2 > 0).count() < Lang::ALL.len() + 1 {
+        if f.taps.iter().filter(|(_, r)| r.2 > 0).count() < Lang::row().len() + 1 {
             faults.push(format!("LANGUAGE fewer than six choices to tap: {:?}", f.taps.iter().map(|t| &t.0).collect::<Vec<_>>()));
         }
     }

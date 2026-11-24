@@ -12,13 +12,15 @@
 #   /storage/roms is the internal folder as without a card; the card's BIOS files are copied into it where missing;
 #   /run/pocket-ui/games-card-root names the card's root for pocket-ui.
 # - anything else (a ROCKNIX card with roms/, an Anbernic stock card with Roms/, a blank card, no card, the probe failing):
-#   ROCKNIX's automount runs, unchanged.
+#   ROCKNIX's automount runs. On Qualcomm SD images both mount paths admit only SD cards and USB storage, even if
+#   the kernel exposes internal UFS or eMMC.
 # A failure on the ArkOS path ends with the internal folder only: automount never gets an ArkOS card. Never fails the unit.
 # Tests: deploy/image/test-games-card.sh. The PU_ names are for those tests only.
 ARGS=("$@")
 MOUNTS=${PU_MOUNTS:-/proc/mounts}
 PARTITIONS=${PU_PARTITIONS:-/proc/partitions}
 SYSBLOCK=${PU_SYSBLOCK:-/sys/class/block}
+OS_RELEASE=${PU_OS_RELEASE:-/etc/os-release}
 STORAGE=${PU_STORAGE:-/storage}
 EXT=${PU_EXTERNAL:-/storage/games-external}
 ROMS=${PU_ROMS:-/storage/roms}
@@ -39,10 +41,40 @@ neogeo atari2600 ngp ngpc wonderswan wonderswancolor sfc famicom segacd sega32x 
 
 log() { { echo "$*" >>"$LOG"; } 2>/dev/null; }
 
-# ROCKNIX's own way, unchanged.
 automount() {
+  local script
   log "-> ROCKNIX's automount ($1)"
   rm -f "$MARKER"
+  if [ "$only_sd_usb" = 1 ]; then
+    # Keep ROCKNIX's games and merged-storage behavior. Guard its common mount entry point and clear an unsafe
+    # explicitly configured device so the normal scan can still find a card. If the upstream entry points change,
+    # use the SD card's STORAGE folder instead of running an unguarded delegate.
+    if script=$(awk '
+      /^GAMES_DEVICE=\$\(get_setting system[.]gamesdevice\)$/ {
+        print
+        print "if [ -n \"$GAMES_DEVICE\" ] && ! pocket_external_games_device \"$GAMES_DEVICE\"; then GAMES_DEVICE=; fi"
+        setting++
+        next
+      }
+      /^function mount_games\(\) \{$/ {
+        print
+        print "  pocket_external_games_device \"$1\" || return 0"
+        mount++
+        next
+      }
+      { print }
+      END { if (setting != 1 || mount != 1) exit 1 }
+    ' "$AUTOMOUNT"); then
+      export SYSBLOCK
+      export -f pocket_external_games_device root_of
+      exec /bin/bash -c "$script" "$AUTOMOUNT" "${ARGS[@]}"
+    fi
+    log "ROCKNIX automount could not be guarded: games from STORAGE only"
+    umount -f "$EXT" >/dev/null 2>&1
+    umount -f "$ROMS" >/dev/null 2>&1
+    games_from_storage
+    exit 0
+  fi
   exec "$AUTOMOUNT" "${ARGS[@]}"
   log "automount could not start"
   exit 0
@@ -79,6 +111,40 @@ root_of() {
   esac
 }
 
+pocket_external_games_device() {
+  local device root node
+  device=$(readlink -f -- "$1") || return 1
+  case $device in /dev/*) ;; *) return 1 ;; esac
+  root=$(root_of "$device")
+  case $root in
+    mmcblk*)
+      [ "$(cat "$SYSBLOCK/$root/device/type" 2>/dev/null)" = SD ]
+      ;;
+    *)
+      # UFS and USB mass storage both appear as SCSI disks. Only the USB disk has a USB bus ancestor.
+      node=$(readlink -f -- "$SYSBLOCK/$root") || return 1
+      [ -d "$node" ] || return 1
+      while [ -n "$node" ]; do
+        case $(readlink "$node/subsystem" 2>/dev/null) in */bus/usb) return 0 ;; esac
+        node=${node%/*}
+      done
+      return 1
+      ;;
+  esac
+}
+
+games_from_storage() {
+  local selected=${1:-} last
+  mkdir -p "$INT/roms" 2>/dev/null
+  mount --bind "$INT/roms" "$ROMS" >/dev/null 2>&1 || log "could not bind $INT/roms on $ROMS"
+  # Make the system folders on STORAGE, where the last mount on /storage/roms put them.
+  last=$(grep " $ROMS " "$MOUNTS" 2>/dev/null | tail -n 1 | cut -d" " -f1)
+  if [ -e "$DIRS_CONF" ] && [ -n "$last" ] && [ "$last" != "$selected" ]; then
+    systemd-tmpfiles --create "$DIRS_CONF" >/dev/null 2>&1
+  fi
+  [ -z "$(get_setting system.merged.device)" ] && set_setting system.merged.device internal
+}
+
 [ "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" -gt 262144 ] && mv -f "$LOG" "$LOG.old" 2>/dev/null
 log "== $(date 2>/dev/null)"
 mkdir -p "$RUN" 2>/dev/null
@@ -89,6 +155,9 @@ rm -f "$MARKER"
 type get_setting >/dev/null 2>&1 || get_setting() { :; }
 type set_setting >/dev/null 2>&1 || set_setting() { :; }
 shopt -s nullglob dotglob execfail
+
+only_sd_usb=0
+if grep -Eq '^HW_DEVICE="?SM(8250|8550|4450)"?$' "$OS_RELEASE" 2>/dev/null; then only_sd_usb=1; fi
 
 [ "$(get_setting system.automount)" = 0 ] && automount "automount switched off in ROCKNIX's settings"
 [ -n "$(get_setting system.gamesdevice)" ] && automount "a games device is set in ROCKNIX's settings"
@@ -117,6 +186,7 @@ for pat in 'mmcblk[0-9]' 'sd[a-z]' 'nvme[0-9]n[0-9]'; do
   while read -r part type; do
     [ -n "$part" ] || continue
     case $type in *fat* | ntfs) ;; *) continue ;; esac
+    if [ "$only_sd_usb" = 1 ] && ! pocket_external_games_device "$part"; then continue; fi
     root=$(root_of "$part")
     case $own in *" $root "*) continue ;; esac
     size=$(awk -v r="$root" '$4 == r {print $3}' "$PARTITIONS" 2>/dev/null)
@@ -159,15 +229,7 @@ if [ -n "$found" ]; then
   fi
 fi
 
-# The internal folder as /storage/roms, as automount's start_ms internal.
-mkdir -p "$INT/roms" 2>/dev/null
-mount --bind "$INT/roms" "$ROMS" >/dev/null 2>&1 || log "could not bind $INT/roms on $ROMS"
-# ROCKNIX's system folders, only where /storage/roms is STORAGE's (the last mount on it), never on the card.
-last=$(grep " $ROMS " "$MOUNTS" 2>/dev/null | tail -n 1 | cut -d" " -f1)
-if [ -e "$DIRS_CONF" ] && [ -n "$last" ] && [ "$last" != "$found" ]; then
-  systemd-tmpfiles --create "$DIRS_CONF" >/dev/null 2>&1
-fi
-[ -z "$(get_setting system.merged.device)" ] && set_setting system.merged.device internal
+games_from_storage "$found"
 
 if [ $card = 1 ]; then
   # BIOS files: copied where missing, never over one that is there, nothing written on the card.

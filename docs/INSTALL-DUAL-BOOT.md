@@ -117,10 +117,8 @@ black with these cards, so don't flash those. Write the card like the Mini V2 ca
 
 ### Installing OpenABL once
 
-**Risk:** OpenABL overwrites the bootloader partitions `abl_a` and `abl_b`. Your Android apps and data stay, but if
-flashing cuts out or goes wrong, the handheld may not boot, and in the worst case only EDL recovery brings it back. Only
-go ahead if you accept that. You still need a computer to write the microSD cards and keep the backup (no fastboot or USB
-cable needed).
+**Risk:** OpenABL overwrites the bootloader partitions `abl_a` and `abl_b`. If flashing fails, the handheld may stop
+booting and need EDL recovery. You need a computer to write the microSD cards and keep the backup.
 
 **Where the scripts come from:** our images leave the flashing scripts off on purpose, and OpenABL's own release download
 has none either. They are in the `openabl` folder of ROCKNIX's official image. ROCKNIX's guides:
@@ -162,14 +160,20 @@ and Android does not mount it; Linux still does. The boot files per bootloader a
 
 ### Internal storage on the SD cards
 
-On pocket-ui 0.6, the bundled GRUB and OpenABL entries for the Pocket Mini V2, Pocket 5, Flip 2, Pocket 6 and Nova
-use a device tree that disables internal storage (UFS). OpenABL v1.2 can also start `/KERNEL` directly or as a
-fallback. That boot image leaves UFS enabled. The Odin 2, Odin 2 Mini and Odin 2 Portal use `/KERNEL` as their
-normal boot path.
+The bundled GRUB and OpenABL entries for the Retroid Pocket Mini V2, Pocket 5, Flip 2, Pocket 6 (both layouts) and
+Nova load a device tree with internal UFS disabled. OpenABL v1.2 can fall back to `/KERNEL` or start it directly.
+That boot image includes device trees with UFS enabled. The Odin 2, Odin 2 Mini and Odin 2 Portal cards use
+`/KERNEL` as their normal boot path and leave UFS enabled.
 
-With UFS enabled, Linux can see its partitions. ROCKNIX's games automount can mount a qualifying partition
-read-write. Whether it picks a partition on a handheld with factory Android depends on the partition and
+**0.6 cards.** With UFS enabled, ROCKNIX can see its partitions. Its games automount can mount a qualifying
+partition read-write. Whether it picks a partition on a handheld with factory Android depends on the partition and
 its filesystem.
+
+**Cards built from 0.7 onward.** On Qualcomm SD images (SM8250, SM8550 and SM4450), the games automount
+accepts SD cards and USB storage. It skips internal UFS and eMMC even when the boot path exposes them to Linux.
+
+**Both versions.** If ROCKNIX is already installed internally, its `ROCKNIX` and `STORAGE` labels can take
+precedence during boot when the kernel can see that storage.
 
 ## Install on a ROCKNIX card you already use
 
@@ -270,9 +274,8 @@ until you switch again. [V] on the author's device.
   `0878019203` and `ad843ff62b`.
 - **Retroid's u-boot** (`rp-v1.0.1`, 2024.10) starts with `bootcmd=… bootefi bootmgr` and looks for
   `/EFI/BOOT/BOOTAA64.EFI`. [V] strings from the binary.
-- **The Mini V2 GRUB entry disables internal storage (UFS).** The memory test of 2026-10-21
-  ([FASTBOOT-TEST.md](FASTBOOT-TEST.md)) used the same setting and showed no `sd*` devices. [V] See
-  [Internal storage on the SD cards](#internal-storage-on-the-sd-cards) for the other boot paths.
+- **The GRUB device tree disables UFS.** The memory test of 2026-10-21
+  ([FASTBOOT-TEST.md](FASTBOOT-TEST.md)) used the same UFS setting and showed no `sd*` devices. [V]
 - Retroid's README also names **Power + Vol Up** to start the loader once. On Android firmware
   `RPMiniV2_V1.0.0.275_20260407` that did not work: Android started both times. [V] Use the boot mode instead.
 

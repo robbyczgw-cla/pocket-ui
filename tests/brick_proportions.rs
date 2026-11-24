@@ -42,7 +42,12 @@ impl Mark {
 }
 
 /// `--snapshot <state>` at `screen` with `POCKETUI_SHARES`: the marks by name.
-fn marks(lib: &Path, stub: &Option<Stub>, (size, device): (&str, &str), state: &str, look: &str) -> HashMap<String, Mark> {
+fn marks(lib: &Path, stub: &Option<Stub>, screen: (&str, &str), state: &str, look: &str) -> HashMap<String, Mark> {
+    marks_with(lib, stub, screen, state, look, None)
+}
+
+/// `marks` with a picture of the paused game behind the pause menu (`--snapshot <state> <png> <frame>`).
+fn marks_with(lib: &Path, stub: &Option<Stub>, (size, device): (&str, &str), state: &str, look: &str, frame: Option<&Path>) -> HashMap<String, Mark> {
     let png = lib.join(format!("{size}-{}-{look}.png", state.replace(':', "_")));
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
     if let Some(s) = stub {
@@ -53,6 +58,7 @@ fn marks(lib: &Path, stub: &Option<Stub>, (size, device): (&str, &str), state: &
     }
     let out = cmd
         .args(["--snapshot", state, png.to_str().unwrap()])
+        .args(frame.map(|f| f.to_str().unwrap()))
         .env("POCKETUI_DEVICE", device)
         .env("POCKETUI_SHARES", "1")
         .env("POCKETUI_MOCK", "1")
@@ -94,11 +100,20 @@ fn mark<'a>(m: &'a HashMap<String, Mark>, name: &str, what: &str) -> &'a Mark {
 /// with `width`, its width) within five points of the Plus's share on the Brick and no more than `pro_less` under it on
 /// the Smart Pro. Returns the problems.
 fn same_share(lib: &Path, stub: &Option<Stub>, state: &str, name: &str, width: bool, pro_less: f32) -> Vec<String> {
+    same_share_frame(lib, stub, state, name, width, pro_less, None)
+}
+
+/// `same_share` for the pause menu over a picture of the game (`marks_with`), height and width, the Smart Pro within five.
+fn same_share_with(lib: &Path, stub: &Option<Stub>, state: &str, name: &str, frame: Option<&Path>) -> Vec<String> {
+    same_share_frame(lib, stub, state, name, true, 0.05, frame)
+}
+
+fn same_share_frame(lib: &Path, stub: &Option<Stub>, state: &str, name: &str, width: bool, pro_less: f32, frame: Option<&Path>) -> Vec<String> {
     let mut bad = Vec::new();
     for look in ["barlow", "retro"] {
-        let plus = *mark(&marks(lib, stub, PLUS, state, look), name, &format!("{state} {look} Plus"));
+        let plus = *mark(&marks_with(lib, stub, PLUS, state, look, frame), name, &format!("{state} {look} Plus"));
         for (screen, less) in [(BRICK, 0.05), (SMART_PRO, pro_less)] {
-            let m = marks(lib, stub, screen, state, look);
+            let m = marks_with(lib, stub, screen, state, look, frame);
             let what = format!("{state} {look} {}", screen.0);
             let Some(s) = m.get(name) else {
                 bad.push(format!("{what}: {name} not painted (the Plus paints it)"));
@@ -120,7 +135,7 @@ fn same_share(lib: &Path, stub: &Option<Stub>, state: &str, name: &str, width: b
 }
 
 fn setup() -> (tempfile::TempDir, Option<Stub>, PathBuf) {
-    let tmp = tempfile::Builder::new().prefix("pui-brick-").tempdir_in("/tmp").unwrap();
+    let tmp = tempfile::Builder::new().prefix("pui-brick-").tempdir().unwrap();
     let stub = wayland(tmp.path());
     let lib = library_in(&tmp.path().join("lib"), None, "shelf");
     (tmp, stub, lib)
@@ -202,5 +217,146 @@ fn the_header_and_the_hint_bar_take_the_plus_share_on_the_brick() {
             }
         }
     }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
+
+/// What `--snapshot <state>` at `screen` paints, string by string (`POCKETUI_VISIBLE_TEXT`; a wrapped line is one string
+/// per line).
+fn visible(lib: &Path, stub: &Option<Stub>, (size, device): (&str, &str), state: &str, look: &str) -> Vec<String> {
+    let png = lib.join(format!("vis-{size}-{}-{look}.png", state.replace(':', "_")));
+    let txt = png.with_extension("txt");
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+    if let Some(s) = stub {
+        cmd.env("WAYLAND_DISPLAY", &s.1);
+    }
+    if look == "retro" {
+        cmd.env("POCKETUI_RETRO", "cocoa");
+    }
+    let out = cmd
+        .args(["--snapshot", state, png.to_str().unwrap()])
+        .env("POCKETUI_DEVICE", device)
+        .env("POCKETUI_VISIBLE_TEXT", &txt)
+        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
+        .env("POCKETUI_LANG", "en")
+        .env("POCKETUI_TEXT_SIZE", "normal")
+        .env("POCKETUI_SNAPSHOT_SIZE", size)
+        .env("POCKETUI_ES_SYSTEMS", lib.join("es_systems.cfg"))
+        .env("POCKETUI_DATA", lib.join("data"))
+        .output()
+        .expect("run pocket-ui");
+    assert!(out.status.success() && png.exists(), "{state} at {size}: {}", String::from_utf8_lossy(&out.stderr));
+    let _ = std::fs::remove_file(&png);
+    let text = std::fs::read_to_string(&txt).unwrap_or_default();
+    let _ = std::fs::remove_file(&txt);
+    text.lines().map(str::to_string).collect()
+}
+
+/// Neon polish 21.11.2026: the Brick's first start, in English at Normal text, cut the Shelf's line to "The one you pick
+/// shows its…" and showed none of the three lines under the rows (a note on two lines beside its pills took the one line
+/// kept for them; the Brick's Normal is a few pixels larger, `type_scale::brick_base`). The unit tests paint without the
+/// Brick's sizes, the share tests measure pictures, not words. On the Plus, the Brick and the Smart Pro, in Barlow and
+/// Retro: the look's line whole, what MENU (HOME) does in a game and where the look changes later.
+#[test]
+fn the_first_start_says_all_of_it_on_the_brick() {
+    let (_tmp, stub, lib) = setup();
+    let mut bad = Vec::new();
+    for screen in [PLUS, BRICK, SMART_PRO] {
+        for look in ["barlow", "retro"] {
+            let seen = visible(&lib, &stub, screen, "setup:first-look", look);
+            let what = format!("{} {look}", screen.0);
+            let blurb: Vec<&String> = seen.iter().filter(|l| l.starts_with("Games lined up on a shelf")).collect();
+            if blurb.len() != 1 || blurb[0].contains('…') {
+                bad.push(format!("{what}: the Shelf's line {blurb:?}"));
+            }
+            let all = seen.join(" ");
+            for want in ["opens the menu: save, load, quit.", "Change the look any time in Settings › Look."] {
+                if !all.contains(want) {
+                    bad.push(format!("{what}: missing \"{want}\" (painted: {seen:?})"));
+                }
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
+
+/// Neon polish 21.11.2026: Pocket Sync on the Brick said "Keep saves the same on your other Bricks", "Pair a Brick",
+/// "Which Bricks: Bricks with pocket-ui OS…", "A paired Brick is listed by its model", though it pairs any handheld with
+/// pocket-ui; "Pocket" there is any of them. A line wrapped or cut short is painted piece by piece, and each piece went
+/// through the Brick's words again: the headings were right and the paragraphs under them still said "Bricks". On the
+/// Brick and the Smart Pro, in Barlow and Retro, every Pocket Sync page and its row in Settings: no "Brick" but the
+/// TrimUI Brick's name, no "Smart Pro" at all.
+#[test]
+fn pocket_sync_names_no_brick_for_the_other_handhelds() {
+    let (_tmp, stub, lib) = setup();
+    let mut bad = Vec::new();
+    let states = ["pockets:on", "pockets:off", "pockets:none", "pockets:what", "pockets:pair", "pockets:nobody", "pockets:code", "settings:0:5"];
+    for (screen, word) in [(BRICK, "Brick"), (SMART_PRO, "Smart Pro")] {
+        for look in ["barlow", "retro"] {
+            let mut sync_row = false;
+            for state in states {
+                let seen = visible(&lib, &stub, screen, state, look);
+                sync_row |= state.starts_with("settings") && seen.join(" ").contains("other Pockets, without a computer.");
+                for line in &seen {
+                    let mut rest = line.as_str();
+                    while let Some(at) = rest.find(word) {
+                        if !rest[..at].ends_with("TrimUI ") {
+                            bad.push(format!("{} {look} {state}: {line}", screen.0));
+                            break;
+                        }
+                        rest = &rest[at + word.len()..];
+                    }
+                }
+            }
+            if !sync_row {
+                bad.push(format!("{} {look}: settings:0:5 shows no Pocket Sync line (the row moved?)", screen.0));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
+
+/// A made-up picture of a game (240x160, the GBA's), for the pause menu's background (`marks_with`).
+fn game_frame(dir: &Path) -> PathBuf {
+    let path = dir.join("frame.png");
+    let (w, h) = (240u32, 160u32);
+    let mut px = Vec::with_capacity((w * h * 3) as usize);
+    for y in 0..h {
+        for x in 0..w {
+            px.extend([(x * 255 / w) as u8, (y * 255 / h) as u8, 160]);
+        }
+    }
+    let mut enc = png::Encoder::new(std::fs::File::create(&path).unwrap(), w, h);
+    enc.set_color(png::ColorType::Rgb);
+    enc.set_depth(png::BitDepth::Eight);
+    enc.write_header().unwrap().write_image_data(&px).unwrap();
+    path
+}
+
+/// Neon polish 21.11.2026, the lead's choice A: on Continue, Options and Save & quit the pause menu's right two thirds
+/// stood empty (dark); they now show the paused game in Save's window. With a picture of the game behind the menu, the
+/// window (`pause-preview`) is there on each of the three rows, where Save's is (the same rectangle), on the Plus, the
+/// Brick and the Smart Pro in Barlow and Retro, and on the Brick within five points of the Plus's share.
+#[test]
+fn the_pause_menu_shows_the_paused_game_on_continue_options_and_quit() {
+    let (tmp, stub, lib) = setup();
+    let frame = game_frame(tmp.path());
+    let mut bad = Vec::new();
+    for look in ["barlow", "retro"] {
+        for screen in [PLUS, BRICK, SMART_PRO] {
+            let at = |state: &str| marks_with(&lib, &stub, screen, state, look, Some(&frame)).get("pause-preview").map(|m| m.r);
+            let save = at("menu:pocket-core:1");
+            // Continue (row 0), Options (3), Save & quit (4) of pocket-core's menu (Continue, Save, Load, Options, Save & quit).
+            for (state, row) in [("menu:pocket-core", "Continue"), ("menu:pocket-core:3", "Options"), ("menu:pocket-core:4", "Save & quit")] {
+                let what = format!("{look} {} {row}", screen.0);
+                match at(state) {
+                    None => bad.push(format!("{what}: no window with the game")),
+                    Some(r) if Some(r) != save => bad.push(format!("{what}: window at {r:?}, Save's at {save:?}")),
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+    bad.extend(same_share_with(&lib, &stub, "menu:pocket-core", "pause-preview", Some(&frame)));
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }

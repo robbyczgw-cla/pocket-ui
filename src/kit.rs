@@ -250,6 +250,12 @@ pub fn key_cap(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i3
 /// The least contrast between a key's letters and its cap (WCAG AA for text).
 pub const CAP_CONTRAST: f64 = 4.5;
 
+/// What a cap turned round (`cap_colours`: a light cap asked for, light letters given) aims for: WCAG AAA (7:1). The letters
+/// are thin, and a 640x480 panel shows the 1280x960 layout halved, which mixes a stroke with the cap around it: at 4.56:1
+/// (Clean's cap #79756d, white letters) the R36S's hint bar showed pale caps with letters Alex could not read (hand test
+/// 20.11.2026 #15d). With 7:1 the halved letters keep 4.5:1 (`a_halved_key_cap_keeps_its_letters_readable`).
+pub const TURNED_CAP_CONTRAST: f64 = 7.0;
+
 /// The colours a key cap is painted in for the cap `bg` and letters `fg` a page asks for (`pal().chip`, `pal().pill`):
 /// always light letters on a darker cap, at least `CAP_CONTRAST` apart. In the dark appearance the pages ask for a light
 /// cap with dark letters (Retro Cocoa's cream, Warm's grey); on the Brick's bright panel the thin dark strokes of a
@@ -260,13 +266,22 @@ pub const CAP_CONTRAST: f64 = 4.5;
 pub fn cap_colours(bg: u32, fg: u32) -> (u32, u32) {
     use crate::palette::{contrast, luminance};
     if luminance(bg) <= luminance(fg) {
-        return (bg, fg);
+        // A cap already darker than its letters (the light appearance) keeps its colour, a shade darker where the letters
+        // need it to hold `TURNED_CAP_CONTRAST` too (halved on 640x480 the same as a turned cap).
+        let mut cap = bg;
+        for k in (0..=255u32).step_by(5) {
+            cap = crate::gfx::mix(bg, 0x000000, k);
+            if contrast(fg, cap) >= TURNED_CAP_CONTRAST {
+                break;
+            }
+        }
+        return (cap, fg);
     }
     let text = pal().text;
     let light = if luminance(text) > luminance(bg) { text } else { bg };
     for k in (0..=255u32).rev().step_by(5) {
         let cap = crate::gfx::mix(fg, bg, k);
-        if luminance(cap) < luminance(light) && contrast(light, cap) >= CAP_CONTRAST {
+        if luminance(cap) < luminance(light) && contrast(light, cap) >= TURNED_CAP_CONTRAST {
             return (cap, light);
         }
     }
@@ -856,6 +871,67 @@ mod tests {
         crate::palette::set_colours(crate::palette::Colours::Warm);
         crate::retro::set_colours(crate::retro::Colours::Cocoa);
         assert!(faults.is_empty(), "{} key caps don't read:\n{}", faults.len(), faults.join("\n"));
+    }
+
+    /// R36S hand test 20.11.2026 #15d: on 640x480 (the layout halved) the B and A caps read as pale discs with letters
+    /// lost in them. Every look's cap, painted at the 1280x960 layout's size and halved as `scaled_layout` does (2:1 box):
+    /// the letters' strokes (the half of the letter's lit pixels furthest from the cap) keep 5:1 on average. Measured on
+    /// 21.11.: caps at 4.5:1 gave 3.9-4.6 there, caps at 7:1 6.0-7.1.
+    #[test]
+    fn a_halved_key_cap_keeps_its_letters_readable() {
+        use crate::font_style::{for_this_thread, FontStyle, RetroLetters};
+        use crate::palette::contrast;
+        let mut text = Text::new();
+        text.set_translate(false);
+        let mut faults = Vec::new();
+        let key_h = hint_key(960);
+        let (w, h) = (key_h * 3, key_h + 24);
+        let (x, y) = (12, 12);
+        for style in [FontStyle::Barlow, FontStyle::Retro] {
+            let _style = for_this_thread(style, RetroLetters::default());
+            let sets: Vec<(String, Box<dyn Fn()>)> = if style == FontStyle::Retro {
+                crate::retro::Colours::ALL.iter().map(|&k| (format!("{k:?}"), Box::new(move || crate::retro::set_colours(k)) as Box<dyn Fn()>)).collect()
+            } else {
+                crate::palette::Colours::ALL.iter().map(|&k| (format!("{k:?}"), Box::new(move || crate::palette::set_colours(k)) as Box<dyn Fn()>)).collect()
+            };
+            for (name, set) in sets {
+                set();
+                for t in [0u8, 255] {
+                    for key in ["A", "B"] {
+                        crate::palette::scoped(t, || {
+                            let mut buf = vec![0u32; (w * h) as usize];
+                            let mut c = Canvas::new(&mut buf, w as u32, h as u32);
+                            let base = y + key_h / 2 + type_scale::mid(SMALL);
+                            key_cap(&mut c, &mut text, (x, y, key_h, key_h), key, SMALL, base, (pal().chip, pal().pill));
+                            drop(c);
+                            // 2:1 box reduction, channel by channel.
+                            let half: Vec<u32> = (0..h / 2).flat_map(|py| (0..w / 2).map(move |px| (px, py))).map(|(px, py)| {
+                                let at = |dx: i32, dy: i32| buf[((py * 2 + dy) * w + px * 2 + dx) as usize];
+                                let ch = |sh: u32| ((at(0, 0) >> sh & 255) + (at(1, 0) >> sh & 255) + (at(0, 1) >> sh & 255) + (at(1, 1) >> sh & 255)) / 4;
+                                ch(16) << 16 | ch(8) << 8 | ch(0)
+                            }).collect();
+                            let (hx, hy, hk) = (x / 2, y / 2, key_h / 2);
+                            let inner: Vec<u32> = (hy + hk / 5..hy + hk * 4 / 5).flat_map(|py| (hx + hk / 5..hx + hk * 4 / 5).map(move |px| (px, py))).map(|(px, py)| half[(py * (w / 2) + px) as usize]).collect();
+                            let mut counts = std::collections::HashMap::new();
+                            for p in &inner {
+                                *counts.entry(*p).or_insert(0) += 1;
+                            }
+                            let cap = *counts.iter().max_by_key(|(_, n)| **n).unwrap().0;
+                            let mut lit: Vec<f64> = inner.iter().map(|p| contrast(*p, cap)).filter(|c| *c > 1.2).collect();
+                            lit.sort_by(|a, b| b.total_cmp(a));
+                            let top = &lit[..(lit.len() / 2).max(1)];
+                            let mean = top.iter().sum::<f64>() / top.len() as f64;
+                            if mean < 5.0 {
+                                faults.push(format!("{style:?} {name} {} \"{key}\": cap {cap:06x}, letters {mean:.2}:1 after halving", if t == 0 { "dark" } else { "light" }));
+                            }
+                        });
+                    }
+                }
+            }
+        }
+        crate::palette::set_colours(crate::palette::Colours::Warm);
+        crate::retro::set_colours(crate::retro::Colours::Cocoa);
+        assert!(faults.is_empty(), "{} halved key caps don't read:\n{}", faults.len(), faults.join("\n"));
     }
 
     /// "&" binds the words beside it: never at a line's start or end (a page's name, "Lights & buttons").

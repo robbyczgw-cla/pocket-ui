@@ -24,7 +24,8 @@ Android's `boot`, `system`, `vendor`, `userdata`, apps and saves are not touched
 ## Official install path (performed from Android, as root)
 1. Copy the `openabl` folder from the SD (the docs call it `rocknix_abl`) to Android internal storage.
 2. Settings → Handheld Settings → Advanced → Run Script as Root:
-   - `backup_abl.sh`: `dd` of `abl_a` / `abl_b` → `/sdcard/openabl/abl_{a,b}.img`
+   - `backup_abl.sh`: `dd` of `abl_a` / `abl_b` → `/sdcard/openabl/abl_{a,b}.img`. Run it exactly once before flashing
+     and copy both files to a computer. Running it again after flashing overwrites the original backup.
    - `flash_abl.sh`: `dd` of `abl_signed-SM8250.elf` → `abl_a` and `abl_b`
 3. Reboot holding **Vol−** → OpenABL menu → Device model "Retroid Pocket Mini V2" → Boot mode Linux → Start.
 

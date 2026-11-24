@@ -198,6 +198,12 @@ fn walk(storage: &Path) -> (Vec<Item>, usize) {
     (out, skipped)
 }
 
+/// Every save and state a backup would take under `storage` (paths relative to it), sorted, and how many entries could not
+/// be looked at: the web companion's "all saves as a ZIP" takes the same files.
+pub fn on_card(storage: &Path) -> (Vec<Item>, usize) {
+    walk(storage)
+}
+
 /// Free bytes and the size of a cluster on the file system that will hold `path`, the nearest folder that exists asked.
 fn room(path: &Path) -> Option<(u64, u64)> {
     let there = path.ancestors().find(|p| p.exists())?;

@@ -285,6 +285,16 @@ impl GameDb {
         self.sections.iter().map(|s| s.0.as_str()).collect()
     }
 
+    /// Keep the sections a lookup for this system can consult.
+    pub fn retain_for(&mut self, system: &str) {
+        let id = canonical(system);
+        self.loaded.retain(|system, _| system == id || related_systems(id).contains(&system.as_str()));
+    }
+
+    pub fn clear_loaded(&mut self) {
+        self.loaded.clear();
+    }
+
     /// The games of `system` (ROCKNIX's id; "genesis" finds "megadrive"), unpacked once.
     pub fn system(&mut self, system: &str) -> Option<Rc<SystemDb>> {
         let id = canonical(system);

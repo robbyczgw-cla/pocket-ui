@@ -81,9 +81,16 @@ pub fn playlist(system: &str) -> Option<&'static str> {
     })
 }
 
+pub mod custom;
+
 pub fn cover_path(data_dir: &Path, system: &str, rom: &Path) -> PathBuf {
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
     data_dir.join("covers").join(system).join(format!("{stem}.png"))
+}
+
+/// Box art to display. Downloaders continue to use the automatic cover's path.
+pub fn active_cover_path(data_dir: &Path, system: &str, rom: &Path) -> PathBuf {
+    custom::existing(data_dir, system, rom).unwrap_or_else(|| cover_path(data_dir, system, rom))
 }
 
 /// Lowercase letters and digits only, with (…) and […] groups removed: "Tetris (World) (Rev 1)" → "tetris".
@@ -179,14 +186,63 @@ pub(crate) fn sequel_word(word: &str) -> bool {
     (word.bytes().all(|b| b.is_ascii_digit()) && word != "1") || ["ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"].contains(&word)
 }
 
+/// A collection's names (a playlist's box art, one name per picture) with what [`best_match`] compares worked out once:
+/// every game's look-up compared its name with each entry's normalised name, title and words, made again for every
+/// entry each time (3,000–5,000 entries, up to four passes, for each game of the card: millions of new strings).
+#[derive(Clone, Debug, Default)]
+pub struct Index {
+    names: Vec<String>,
+    keys: Vec<Key>,
+}
+
+#[derive(Clone, Debug)]
+struct Key {
+    /// `normalize(name)`
+    plain: String,
+    /// `normalize` of the title before the first " - "
+    title: String,
+    /// `word_list(name)`
+    list: Vec<String>,
+    /// `words(name)`
+    words: std::collections::BTreeSet<String>,
+}
+
+impl Index {
+    pub fn new(names: Vec<String>) -> Index {
+        let keys = names
+            .iter()
+            .map(|n| {
+                let list = word_list(n);
+                Key { plain: normalize(n), title: normalize(n.split(" - ").next().unwrap_or(n)), words: list.iter().cloned().collect(), list }
+            })
+            .collect();
+        Index { names, keys }
+    }
+
+    /// The names, in the collection's order.
+    pub fn names(&self) -> &[String] {
+        &self.names
+    }
+
+    fn entries(&self) -> impl Iterator<Item = (&String, &Key)> {
+        self.names.iter().zip(&self.keys)
+    }
+}
+
+impl From<Vec<String>> for Index {
+    fn from(names: Vec<String>) -> Index {
+        Index::new(names)
+    }
+}
+
 /// Picks the box art for a ROM stem: the exact name if present, else the best same-title entry. Names
 /// that don't follow No-Intro get three looser tries, each only taken when it points at a single game:
 /// without a scene release number, the title without its subtitle, and one stray word too many.
-pub fn best_match<'a>(stem: &str, index: &'a [String]) -> Option<&'a str> {
+pub fn best_match<'a>(stem: &str, index: &'a Index) -> Option<&'a str> {
     let stem = crate::library::strip_inner_ext(stem);
     // libretro replaces these characters with '_' in file names.
     let wanted: String = stem.chars().map(|c| if "&*/:`<>?\\|".contains(c) { '_' } else { c }).collect();
-    if let Some(exact) = index.iter().find(|n| **n == wanted) {
+    if let Some(exact) = index.names.iter().find(|n| **n == wanted) {
         return Some(exact);
     }
     let stem = strip_release_number(stem);
@@ -194,12 +250,11 @@ pub fn best_match<'a>(stem: &str, index: &'a [String]) -> Option<&'a str> {
     if key.is_empty() {
         return None;
     }
-    if let Some(same) = index.iter().filter(|n| normalize(n) == key).min_by_key(|n| rank(n)) {
+    if let Some((same, _)) = index.entries().filter(|(_, k)| k.plain == key).min_by_key(|(n, _)| rank(n)) {
         return Some(same);
     }
     // "Crash Bandicoot 2" for "Crash Bandicoot 2 - Cortex Strikes Back (USA)".
-    let main_title = |n: &str| normalize(n.split(" - ").next().unwrap_or(n));
-    if let Some(titled) = one_game(index.iter().filter(|n| main_title(n) == key).collect()) {
+    if let Some(titled) = one_game(index.entries().filter(|(_, k)| k.title == key).map(|(n, _)| n).collect()) {
         return Some(titled);
     }
     // "Top Spin" for "Top Spin Tennis (USA)": the name is the start of one game's title (two words at least,
@@ -207,11 +262,9 @@ pub fn best_match<'a>(stem: &str, index: &'a [String]) -> Option<&'a str> {
     let start: Vec<String> = word_list(stem);
     if start.len() >= 2 {
         let longer: Vec<&String> = index
-            .iter()
-            .filter(|n| {
-                let w = word_list(n);
-                w.len() == start.len() + 1 && w.starts_with(&start) && !sequel_word(&w[start.len()])
-            })
+            .entries()
+            .filter(|(_, k)| k.list.len() == start.len() + 1 && k.list.starts_with(&start) && !sequel_word(&k.list[start.len()]))
+            .map(|(n, _)| n)
             .collect();
         if let Some(only) = one_game(longer.clone()).filter(|_| longer.iter().all(|n| normalize(n) == normalize(longer[0]))) {
             return Some(only);
@@ -225,18 +278,19 @@ pub fn best_match<'a>(stem: &str, index: &'a [String]) -> Option<&'a str> {
     }
     one_game(
         index
-            .iter()
-            .filter(|n| {
-                let w = words(n);
-                w.len() >= 2 && w.len() <= have.len() && have.len() - w.len() <= 1 && w.is_subset(&have) && !have.difference(&w).any(|x| sequel_word(x))
+            .entries()
+            .filter(|(_, k)| {
+                let w = &k.words;
+                w.len() >= 2 && w.len() <= have.len() && have.len() - w.len() <= 1 && w.is_subset(&have) && !have.difference(w).any(|x| sequel_word(x))
             })
+            .map(|(n, _)| n)
             .collect(),
     )
 }
 
 /// The entry for a game: under the name its checksum gave (`rom_id`) when the collection has it, else by its file
 /// name as [`best_match`] finds it.
-pub fn pick<'a>(stem: &str, identified: Option<&str>, index: &'a [String]) -> Option<&'a str> {
+pub fn pick<'a>(stem: &str, identified: Option<&str>, index: &'a Index) -> Option<&'a str> {
     identified.and_then(|name| best_match(name, index)).or_else(|| best_match(stem, index))
 }
 
@@ -292,7 +346,7 @@ pub fn fetch_index_in(playlist: &str, remote_dir: &str) -> Vec<String> {
     let cancel = crate::update::Cancel::new();
     #[cfg(not(target_os = "android"))]
     let _optional = crate::optional_data::lock(&cancel);
-    index_from(playlist, remote_dir, |url| (!game_on()).then(|| curl_listing(url)).flatten())
+    index_from(playlist, remote_dir, |url| (!crate::background_io::paused()).then(|| curl_listing(url)).flatten())
 }
 
 fn repository(playlist: &str) -> String {
@@ -370,7 +424,7 @@ fn symlink_target(url: &str, bytes: &[u8]) -> Option<String> {
 fn fetch_to(url: &str, tmp: &Path, extra: &[&str]) -> bool {
     // curl has exited before the card is written: a whole batch must not dirty the Brick's card during Wi-Fi input.
     #[cfg(feature = "brick")]
-    let ok = curl_with(url, None, extra).is_some_and(|bytes| !game_on() && crate::fsutil::write_atomic_bulk(tmp, &bytes).is_ok());
+    let ok = curl_with(url, None, extra).is_some_and(|bytes| !crate::background_io::paused() && crate::fsutil::write_atomic_bulk(tmp, &bytes).is_ok());
     #[cfg(not(feature = "brick"))]
     let ok = curl_with(url, Some(tmp), extra).is_some();
     ok
@@ -382,7 +436,7 @@ fn fetch_picture_to(url: &str, tmp: &Path, extra: &[&str]) -> bool {
         return false;
     }
     match symlink_in(url, tmp) {
-        Some(target) => !game_on() && fetch_to(&target, tmp, extra),
+        Some(target) => !crate::background_io::paused() && fetch_to(&target, tmp, extra),
         None => true,
     }
 }
@@ -392,7 +446,7 @@ fn fetch_picture_to(url: &str, tmp: &Path, extra: &[&str]) -> bool {
 fn symlink_in(url: &str, file: &Path) -> Option<String> {
     use std::io::Read;
     let mut bytes = Vec::new();
-    std::fs::File::open(file).ok()?.take(513).read_to_end(&mut bytes).ok()?;
+    crate::background_io::open(file).ok()?.take(513).read_to_end(&mut bytes).ok()?;
     symlink_target(url, &bytes)
 }
 
@@ -413,7 +467,7 @@ pub(crate) fn picture_available(playlist: &str, remote_dir: &str, name: &str, ex
         let _ = std::fs::create_dir_all(dir);
     }
     picture_from(playlist, remote_dir, name, |url| {
-        let ok = !game_on() && fetch_picture_to(url, scratch, extra) && crate::image::png_size(scratch).is_some();
+        let ok = !crate::background_io::paused() && fetch_picture_to(url, scratch, extra) && crate::image::png_size(scratch).is_some();
         let _ = std::fs::remove_file(scratch);
         ok
     })
@@ -427,16 +481,16 @@ pub fn download_from(playlist: &str, remote_dir: &str, name: &str, dest: &Path, 
     let cancel = crate::update::Cancel::new();
     #[cfg(not(target_os = "android"))]
     let _optional = crate::optional_data::lock(&cancel);
-    if game_on() { return false; }
+    if crate::background_io::paused() { return false; }
     if let Some(dir) = dest.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
     let tmp = dest.with_extension("part");
     picture_from(playlist, remote_dir, name, |url| {
-        if game_on() { return false; }
+        if crate::background_io::paused() { return false; }
         // A game that started meanwhile gets the CPU and the card: the picture is asked for again later.
         let fetched = fetch_picture_to(url, &tmp, extra);
-        let ok = fetched && !game_on() && accept(&tmp) && std::fs::rename(&tmp, dest).is_ok();
+        let ok = fetched && !crate::background_io::paused() && accept(&tmp) && std::fs::rename(&tmp, dest).is_ok();
         let _ = std::fs::remove_file(&tmp);
         ok
     })
@@ -446,14 +500,15 @@ pub fn download_from(playlist: &str, remote_dir: &str, name: &str, dest: &Path, 
 /// download and lookup (covers, pictures, descriptions, the checksums) stops at once, also the first start's own
 /// run, which had no game to wait for: a real Brick right after the first start lost sound for 4 chunks at the game's
 /// start while the last cover of a run was still being fetched, checked and written to its `sync`-mounted card.
-static GAME_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+#[cfg(test)]
+pub(crate) static READER_TEST: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 pub fn set_game_on(on: bool) {
-    GAME_ON.store(on, std::sync::atomic::Ordering::Release);
+    crate::background_io::set_game_on(on);
 }
 
 pub fn game_on() -> bool {
-    GAME_ON.load(std::sync::atomic::Ordering::Acquire)
+    crate::background_io::game_on()
 }
 
 /// One scrape at a time: the automatic one (src/auto_covers.rs) and Extras > Cover art write the same files.
@@ -482,7 +537,7 @@ pub fn busy() -> bool {
 /// The games a `.missing` list names, by ROM stem.
 pub fn listed_missing(data_dir: &Path, system: &str) -> std::collections::HashSet<String> {
     let file = data_dir.join("covers").join(system).join(".missing");
-    std::fs::read_to_string(file).unwrap_or_default().lines().map(str::to_string).collect()
+    crate::background_io::read_to_string(file).unwrap_or_default().lines().map(str::to_string).collect()
 }
 
 /// What `scrape_until` got through.
@@ -506,7 +561,10 @@ pub fn scrape(data_dir: &Path, games: &[(String, PathBuf)], progress: impl Fn(us
 /// The games `scrape_until` would look up: a known system, no cover on the card.
 pub fn todo<'a>(data_dir: &Path, games: &'a [(String, PathBuf)]) -> Vec<&'a (String, PathBuf)> {
     // An empty file gets no picture (a cover would claim the game is fine, `library_cache::is_empty_file`).
-    games.iter().filter(|(sys, rom)| playlist(sys).is_some() && !cover_path(data_dir, sys, rom).exists() && !crate::fsutil::is_empty_file(rom)).collect()
+    games.iter().take_while(|_| !crate::background_io::cancelled())
+        .filter(|(sys, rom)| playlist(sys).is_some() && !crate::background_io::exists(cover_path(data_dir, sys, rom))
+            && !crate::fsutil::is_empty_file(rom))
+        .collect()
 }
 
 /// `scrape`, checking `stop` before each game (a game was started): it ends after the cover it is on.
@@ -541,7 +599,8 @@ pub(crate) fn scrape_from(
         let list = playlist(sys).unwrap_or_default();
         let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
         let missing_file = data_dir.join("covers").join(sys).join(".missing");
-        let missing = std::fs::read_to_string(&missing_file).unwrap_or_default();
+        let missing = crate::background_io::read_to_string(&missing_file).unwrap_or_default();
+        if stop() { break; }
         if retry_missing || !missing.lines().any(|l| l == stem) {
             let catalog = Catalog::for_playlist(&mut index, remote, list, Kind::Box);
             match catalog.lookup(remote, stem, names.get(rom).map(String::as_str), &cover_path(data_dir, sys, rom)) {
@@ -552,7 +611,7 @@ pub(crate) fn scrape_from(
                 Lookup::Failed | Lookup::Unusable => failures += 1,
                 Lookup::Missing => {
                     failures = 0;
-                    if !missing.lines().any(|line| line == stem) {
+                    if !stop() && !missing.lines().any(|line| line == stem) {
                         let _ = crate::fsutil::write_atomic(&missing_file, format!("{missing}{stem}\n").as_bytes());
                     }
                 }
@@ -572,8 +631,29 @@ pub(crate) fn scrape_from(
 mod tests {
     use super::*;
 
-    fn index(names: &[&str]) -> Vec<String> {
-        names.iter().map(|s| s.to_string()).collect()
+    fn index(names: &[&str]) -> Index {
+        Index::new(names.iter().map(|s| s.to_string()).collect())
+    }
+
+    /// The cover job looks every game of the card up in a collection of thousands of names. Each look-up normalised
+    /// every entry again, up to four times (new strings and word sets each time): millions of allocations for a card's
+    /// worth of games. With the index made once it is a comparison per entry. Thread CPU.
+    #[test]
+    fn looking_up_many_games_in_a_big_collection_makes_its_keys_once() {
+        let names: Vec<String> = (0..4000).map(|i| format!("Some Game Title {i} - The Subtitle (USA) (Rev {})", i % 3)).collect();
+        let idx = Index::new(names);
+        let cpu = || {
+            let mut ts: libc::timespec = unsafe { std::mem::zeroed() };
+            assert_eq!(unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut ts) }, 0);
+            std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
+        };
+        let t = cpu();
+        // No exact name: every look-up goes through the looser tries; the last ones find nothing.
+        let found = (0..400).filter(|i| best_match(&format!("Some Game Title {} - The Subtitle (E)", i * 7), &idx).is_some()).count();
+        let none = (0..100).filter(|i| best_match(&format!("Unknown Thing Number {i} Deluxe Edition"), &idx).is_none()).count();
+        let took = cpu() - t;
+        assert_eq!((found, none), (400, 100));
+        assert!(took < std::time::Duration::from_millis(2500), "500 look-ups in 4,000 names took {took:?} of CPU");
     }
 
     #[test]
@@ -599,7 +679,7 @@ mod tests {
         let chd = format!("{name}.chd");
         let stem = Path::new(&chd).file_stem().unwrap().to_str().unwrap();
         assert_eq!(listing, [name]);
-        assert_eq!(best_match(stem, &listing), Some(name));
+        assert_eq!(best_match(stem, &Index::new(listing)), Some(name));
         assert!(github_index(tree.replace("false", "true").as_bytes()).is_empty());
         assert_eq!(repository("Philips - Videopac+"), "Philips_-_Videopac");
     }
@@ -835,7 +915,7 @@ mod tests {
     fn run(listing: &[&str], answer: crate::game_pictures::Fetched, stems: &[&str]) -> (crate::testutil::TestDir, Server, Scraped) {
         let d = crate::testutil::TestDir::new("cover-retry");
         let games: Vec<(String, PathBuf)> = stems.iter().map(|s| ("gba".to_string(), PathBuf::from(format!("/storage/roms/gba/{s}.gba")))).collect();
-        let server = Server { listing: index(listing), answer, asked: Default::default() };
+        let server = Server { listing: index(listing).names().to_vec(), answer, asked: Default::default() };
         let out = scrape_from(&server, &d, &games, false, |_, _, _| {}, || false);
         (d, server, out)
     }

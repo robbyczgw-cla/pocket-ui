@@ -31,10 +31,10 @@ fn tree(dir: &Path) -> Vec<(PathBuf, Vec<u8>, std::time::SystemTime)> {
 }
 
 #[test]
-fn an_arkos_cards_games_are_read_where_they_are_with_their_saves_and_nothing_is_written_on_it() {
+fn r36s_fix_b_reads_arkos_and_internal_games_in_place() {
     let tmp = tempfile::tempdir().unwrap();
     let roms = tmp.path().join("storage/roms");
-    let card = tmp.path().join("games-external");
+    let card = tmp.path().join("storage/games-external");
     // The device: ROCKNIX's folders, one game of its own.
     for id in ["gba", "snes", "psx", "pcengine", "ports", "bios"] {
         std::fs::create_dir_all(roms.join(id)).unwrap();
@@ -52,6 +52,8 @@ fn an_arkos_cards_games_are_read_where_they_are_with_their_saves_and_nothing_is_
     put(&card.join("gba/Golden Sun (USA).srm"), b"save of golden sun");
     put(&card.join("gba/Golden Sun (USA).state"), b"retroarch state");
     put(&card.join("snes/Super Metroid (Japan, USA).sfc"), b"rom");
+    put(&card.join("snes/Own Game.sfc"), b"rom");
+    put(&card.join("snes/Own Game (Japan).sfc"), b"rom");
     put(&card.join("psx/Final Fantasy VII (Disc 1).chd"), b"disc");
     put(&card.join("turbografx/Bonk's Adventure (USA).pce"), b"rom");
     put(&card.join("ports/Cave Story.sh"), b"#!/bin/bash\\n/roms/ports/cavestory/run");
@@ -66,6 +68,8 @@ fn an_arkos_cards_games_are_read_where_they_are_with_their_saves_and_nothing_is_
 
     assert!(games("gba").contains(&card.join("gba/Golden Sun (USA).gba")), "{:?}", games("gba"));
     assert!(games("snes").contains(&card.join("snes/Super Metroid (Japan, USA).sfc")) && games("snes").contains(&roms.join("snes/Own Game.sfc")), "the card's games beside the device's own: {:?}", games("snes"));
+    assert!(!games("snes").contains(&card.join("snes/Own Game.sfc")), "keep the existing path for a copy on both cards");
+    assert!(games("snes").contains(&card.join("snes/Own Game (Japan).sfc")), "keep distinct editions");
     assert!(games("psx").contains(&card.join("psx/Final Fantasy VII (Disc 1).chd")));
     assert!(games("pcengine").contains(&card.join("turbografx/Bonk's Adventure (USA).pce")), "ArkOS's turbografx is PC Engine");
     assert!(!games("ports").iter().any(|p| p.starts_with(&card)), "ArkOS's port scripts stay off the shelf: {:?}", games("ports"));
@@ -78,6 +82,22 @@ fn an_arkos_cards_games_are_read_where_they_are_with_their_saves_and_nothing_is_
 
     // Reading it changed nothing on the card.
     assert_eq!(tree(&card), before, "nothing on the card was written, moved or touched");
+
+    // ROCKNIX with an external roms/ folder and merged storage disabled: /storage/roms
+    // exposes TF2, and TF1 is still accessible at the internal backing path.
+    std::env::remove_var("POCKETUI_GAMES_CARD_ROOT");
+    let internal = tmp.path().join("storage/games-internal/roms");
+    put(&internal.join("gba/From TF1.gba"), b"rom");
+    put(&internal.join("snes/From TF1.sfc"), b"rom");
+    put(&internal.join("snes/Own Game.sfc"), b"rom");
+    let merged = library::load(&cfg).unwrap();
+    for (id, file) in [("gba", "From TF1.gba"), ("snes", "From TF1.sfc")] {
+        let sys = merged.iter().find(|s| s.name == id).unwrap();
+        assert!(sys.games.iter().any(|g| g.path == internal.join(id).join(file)));
+        assert!(library::read_sources(&cfg).contains(&(id.into(), internal.join(id))));
+    }
+    let snes = merged.iter().find(|s| s.name == "snes").unwrap();
+    assert_eq!(snes.games.iter().filter(|g| g.path.file_name().unwrap() == "Own Game.sfc").count(), 1);
 
     // The card out (its folder gone): no card, nothing read from it.
     std::env::set_var("POCKETUI_GAMES_CARD_ROOT", tmp.path().join("gone"));

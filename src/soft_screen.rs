@@ -124,7 +124,7 @@ pub fn tinted(look: &Look) -> bool {
 
 /// `blit` through the look's tables (`Look::tables`); the black around the picture stays black (a multiply keeps 0).
 pub fn blit_tinted(frame: &Frame, dst: &mut [u32], dw: usize, dh: usize, t: &[[u8; 256]; 3]) {
-    blit_map(frame, dst, dw, dh, |p| tint(p, t));
+    blit_map(&Src::of(frame), dst, dw, dh, |p| tint(p, t));
 }
 
 /// One 0RGB pixel through the look's tables.
@@ -136,7 +136,15 @@ impl SoftScreen {
     /// The picture as it is (XRGB8888, its own size) in a buffer of that size; the window's size is returned, as `show` does.
     fn show_native(&mut self, frame: &Frame) -> (u32, u32) {
         let window = self.window.inner_size();
-        let (w, h) = crate::brick_picture::to_xrgb(frame, &mut self.scratch);
+        let (w, h) = (frame.width, frame.height);
+        // An XRGB8888 picture without padding (a 3D core's read-back) is copied from where it is, not through `scratch` first.
+        let pixels: &[u8] = match as_is(frame) {
+            Some(p) => p,
+            None => {
+                crate::brick_picture::to_xrgb(frame, &mut self.scratch);
+                &self.scratch
+            }
+        };
         if let (Some(nw), Some(nh)) = (NonZeroU32::new(w), NonZeroU32::new(h)) {
             if self.size != (w, h) && self.surface.resize(nw, nh).is_ok() {
                 self.size = (w, h);
@@ -145,7 +153,7 @@ impl SoftScreen {
                 if let Ok(mut buffer) = self.surface.buffer_mut() {
                     // The night light and the colour temperature go through the tables here too: the bridge's shaders draw the
                     // picture as it comes.
-                    for (d, s) in buffer.iter_mut().zip(self.scratch.chunks_exact(4)) {
+                    for (d, s) in buffer.iter_mut().zip(pixels.as_chunks::<4>().0) {
                         let p = u32::from_le_bytes([s[0], s[1], s[2], 0]);
                         *d = match &self.tables { Some(t) => tint(p, t), None => p };
                     }
@@ -159,6 +167,12 @@ impl SoftScreen {
         }
         (window.width, window.height)
     }
+}
+
+/// The frame's bytes when they already are the native window's: XRGB8888, rows without padding, all of them there.
+fn as_is(frame: &Frame) -> Option<&[u8]> {
+    let len = frame.width as usize * frame.height as usize * 4;
+    (frame.format == PIXEL_XRGB8888 && frame.pitch == frame.width as usize * 4).then(|| frame.data.get(..len)).flatten()
 }
 
 /// Where the picture goes: the largest whole-number scale, centred; a picture larger than the screen is fitted instead.
@@ -193,20 +207,57 @@ fn pixel(format: u32, row: &[u8], x: usize) -> u32 {
 
 /// The frame into `dst` (0RGB, `dw` by `dh`), black around it. A row that repeats is copied, not converted again.
 pub fn blit(frame: &Frame, dst: &mut [u32], dw: usize, dh: usize) {
-    blit_map(frame, dst, dw, dh, |p| p);
+    blit_map(&Src::of(frame), dst, dw, dh, |p| p);
+}
+
+/// `blit` from a borrowed picture: pocket-fb's CPU copy takes the client's wl_shm buffer as it is, without copying it into
+/// a `Frame` first (a fresh copy of every picture, on every frame, on the Brick and dArkOS).
+pub fn blit_borrowed(width: u32, height: u32, pitch: usize, format: u32, data: &[u8], dst: &mut [u32], dw: usize, dh: usize) {
+    blit_map(&Src { width, height, pitch, format, data }, dst, dw, dh, |p| p);
+}
+
+/// The picture `blit_map` reads: a `Frame`'s fields, borrowed.
+struct Src<'a> {
+    width: u32,
+    height: u32,
+    pitch: usize,
+    format: u32,
+    data: &'a [u8],
+}
+
+impl<'a> Src<'a> {
+    fn of(f: &'a Frame) -> Src<'a> {
+        Src { width: f.width, height: f.height, pitch: f.pitch, format: f.format, data: &f.data }
+    }
+}
+
+/// Black around the picture's place: the rows above and below, and left and right of it on its rows. The picture's own
+/// pixels are written by `blit_map` anyway; clearing all of `dst` first wrote the whole screen twice on every frame.
+fn clear_around(dst: &mut [u32], dw: usize, dh: usize, (px, py, pw, ph): (usize, usize, usize, usize)) {
+    let (px, py) = (px.min(dw), py.min(dh));
+    let (pw, ph) = (pw.min(dw - px), ph.min(dh - py));
+    let (dst, beyond) = dst.split_at_mut(dw * dh);
+    beyond.fill(0);
+    dst[..py * dw].fill(0);
+    dst[(py + ph) * dw..].fill(0);
+    for row in dst[py * dw..(py + ph) * dw].chunks_exact_mut(dw) {
+        row[..px].fill(0);
+        row[px + pw..].fill(0);
+    }
 }
 
 // Monomorphised for neutral/tinted copies: no look test in the pixel loop. Convert and tint a source pixel
 // once before repeating it horizontally; repeated rows copy the finished colours. In particular a GBA
 // picture at 4x needs 240*160 table lookups, rather than another pass over all 1024*768 display pixels.
-fn blit_map(frame: &Frame, dst: &mut [u32], dw: usize, dh: usize, map: impl Fn(u32) -> u32) {
+fn blit_map(frame: &Src, dst: &mut [u32], dw: usize, dh: usize, map: impl Fn(u32) -> u32) {
     let (px, py, pw, ph) = placement((frame.width, frame.height), (dw as u32, dh as u32));
     let (px, py, pw, ph) = (px as usize, py as usize, pw as usize, ph as usize);
-    dst.fill(0);
     let (fw, fh) = (frame.width as usize, frame.height as usize);
-    if fw == 0 || fh == 0 || frame.pitch == 0 {
+    if fw == 0 || fh == 0 || frame.pitch == 0 || dw == 0 || dh == 0 || dst.len() < dw * dh || px + pw > dw || py + ph > dh {
+        dst.fill(0);
         return;
     }
+    clear_around(dst, dw, dh, (px, py, pw, ph));
     let mut last = None;
     for y in 0..ph {
         let sy = y * fh / ph;
@@ -217,7 +268,13 @@ fn blit_map(frame: &Frame, dst: &mut [u32], dw: usize, dh: usize, map: impl Fn(u
                 dst.copy_within(from..from + pw, at);
             }
             _ => {
-                let Some(row) = frame.data.get(sy * frame.pitch..) else { return };
+                let Some(row) = frame.data.get(sy * frame.pitch..) else {
+                    // A picture cut short: its missing rows stay black, as the whole-screen clear before left them.
+                    for row in dst[(py + y) * dw..(py + ph) * dw].chunks_exact_mut(dw) {
+                        row[px..px + pw].fill(0);
+                    }
+                    return;
+                };
                 if pw >= fw && pw % fw == 0 {
                     let scale = pw / fw;
                     for x in 0..fw {
@@ -240,6 +297,19 @@ fn blit_map(frame: &Frame, dst: &mut [u32], dw: usize, dh: usize, map: impl Fn(u
 mod tests {
     use super::*;
     use crate::libretro::PIXEL_0RGB1555;
+
+    #[test]
+    fn a_tight_xrgb_picture_goes_out_as_it_is_and_others_through_the_copy() {
+        let data: Vec<u8> = (0..2 * 2 * 4 + 8).map(|i| i as u8).collect();
+        let tight = Frame { width: 2, height: 2, pitch: 8, format: PIXEL_XRGB8888, data: data.clone() };
+        let mut copied = Vec::new();
+        crate::brick_picture::to_xrgb(&tight, &mut copied);
+        assert_eq!(as_is(&tight), Some(&copied[..]), "the same bytes the copy would give");
+        let padded = Frame { width: 2, height: 2, pitch: 12, format: PIXEL_XRGB8888, data: data.clone() };
+        assert_eq!(as_is(&padded), None);
+        assert_eq!(as_is(&Frame { width: 2, height: 2, pitch: 8, format: PIXEL_XRGB8888, data: data[..12].to_vec() }), None, "a short frame");
+        assert_eq!(as_is(&two_pixels(PIXEL_RGB565, 0xffff, 0xf800)), None);
+    }
 
     #[test]
     fn a_gba_picture_fills_the_brick_four_times_over() {

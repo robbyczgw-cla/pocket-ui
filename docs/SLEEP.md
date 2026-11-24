@@ -54,6 +54,10 @@ then does what ROCKNIX's wake hook did). Deep sleep and its wake were then measu
 | Screen off, the game on | Power, short press, with "Short press: Screen off" (`Sleep::screen_off_now`) | backlight 0; the game goes on with its sound: pocket-core gets `screen off` (it draws nothing and gives the game no buttons), other emulators keep drawing; no deep sleep by the timers; any button but Vol± wakes it ([below](#screen-off-with-the-game-running-2026-10-26)) |
 | Switch off after sleeping | Settings → System → Sleep & power "Switch off after sleeping" (**Off by default** since 2026-10-26, 1, 3, 8 h) in deep sleep, on battery | the RTC alarm wakes it with the screen dark, then the Power off path (`src/auto_off.rs`, [below](#l3-switch-off-after-sleeping-2026-10-25)) |
 
+- On ROCKNIX's RK3326 boards, including the R36S, the idle timer gives a foreground RetroArch game two minutes to load.
+  RetroArch has no reliable first-frame signal on this route. After the window, the configured idle time counts from its
+  end or from the latest pad input, whichever came later. RetroArch receives the game controls throughout. The shelf
+  and pocket-ui's pause menu use the usual timer, and the Power button and Power menu can sleep the handheld at any time.
 - **What counts as input** (waking a dark screen, the idle timers, the UI's own quiet spells; one rule,
   `pad::counts_as_input`, 2026-11-14): a button pressed, a stick pushed past 0.35, an analog trigger past half its
   travel. Not: releases, a stick resting off centre or jittering (the Mini V2's left stick rests at +0.12), a

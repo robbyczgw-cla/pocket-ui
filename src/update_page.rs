@@ -29,22 +29,33 @@ pub fn actions(available: bool, confirming: bool) -> Vec<Action> {
     rows
 }
 
-/// The handhelds' page (not Android's): "Look on the card" last, under the switch, for an update file copied onto the card
-/// (`update::card`); the rows above keep their places.
-pub fn actions_with_card(available: bool, confirming: bool) -> Vec<Action> {
+/// A handheld without Wi-Fi leads with the card. Keep the same confirmation on every handheld.
+pub fn actions_with_card(available: bool, confirming: bool, has_wifi: bool) -> Vec<Action> {
+    if !has_wifi && !(available && confirming) {
+        let mut rows = vec![Action::Card];
+        if available { rows.push(Action::InstallApp); }
+        return rows;
+    }
     let mut rows = actions(available, confirming);
     if !(available && confirming) { rows.push(Action::Card); }
     rows
 }
 
-pub const CONFIRM: &str = "Update pocket-ui now? Your games and settings stay.";
+pub const CONFIRM: &str = "Update now? Your games and settings stay safe.";
 pub const UP_TO_DATE: &str = "Everything is up to date.";
 /// Android's question before the install (the Mobile view's and the handheld view's page): its installer ends the app.
-pub const ANDROID_CONFIRM: &str = "After updating, pocket-ui closes. Open it again; your games and settings stay.";
+pub const ANDROID_CONFIRM: &str = "pocket-ui will close after updating. Reopen it; games and settings stay safe.";
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn r36s_fix_a_without_wifi_the_card_is_the_first_and_only_check() {
+        assert_eq!(actions_with_card(false, false, false), vec![Action::Card]);
+        assert_eq!(actions_with_card(true, false, false), vec![Action::Card, Action::InstallApp]);
+        assert_eq!(actions_with_card(true, true, false), vec![Action::InstallNow, Action::Later]);
+    }
+
     #[test]
     fn android_build_counters_offer_only_a_later_version_and_ask_first() {
         let manifest = Manifest { format: 1, app: Some(Release {version: "0.4.0-android.2".into(),url: "app.apk".into(),size: 1,sha256: String::new(),mirrors: vec![],preferred_sources: vec![],notes: String::new()}), ..Default::default() };
@@ -54,8 +65,8 @@ mod tests {
         assert_eq!(actions(true, false), vec![Action::InstallApp, Action::Check, Action::Auto]);
         assert_eq!(actions(true, true), vec![Action::InstallNow, Action::Later]);
         assert_eq!(actions(false, true), vec![Action::Check, Action::Auto]);
-        assert_eq!(actions_with_card(true, false), vec![Action::InstallApp, Action::Check, Action::Auto, Action::Card]);
-        assert_eq!(actions_with_card(false, false), vec![Action::Check, Action::Auto, Action::Card]);
-        assert_eq!(actions_with_card(true, true), vec![Action::InstallNow, Action::Later], "the question stays two rows");
+        assert_eq!(actions_with_card(true, false, true), vec![Action::InstallApp, Action::Check, Action::Auto, Action::Card]);
+        assert_eq!(actions_with_card(false, false, true), vec![Action::Check, Action::Auto, Action::Card]);
+        assert_eq!(actions_with_card(true, true, true), vec![Action::InstallNow, Action::Later], "the question stays two rows");
     }
 }

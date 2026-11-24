@@ -21,6 +21,9 @@ The 3D cores (`mupen64plus_next`, `ppsspp`, `flycast`; GLES 3, no Vulkan) are bu
 `libGLESv2.so.2` / `libEGL.so.1` (link time only, never shipped) and the pinned Khronos API headers; they run through the GLES context of
 `src/brick_gles.rs`. mupen64plus_next uses its `arm64_cortex_a53_gles3` target (aarch64 dynarec), PPSSPP its libretro CMake target (`USING_GLES2`, ARM64
 JIT, bundled ffmpeg for linux/aarch64), Flycast `-DLIBRETRO=ON -DUSE_GLES=ON`. Their licences are mixed (GPL-2.0-only parts, GPL-3.0 xBRZ), see `NOTICE.md`.
+On the Brick card (Brick and Smart Pro) PPSSPP starts with Frameskip 1 (number of frames, auto frameskip off), the PSP's own
+480x272, the JIT and fast memory (`BRICK_PPSSPP` in `src/core_options.rs`): at full rate it is too slow there, and Chinatown Wars
+plays acceptably with one skipped frame. These are defaults only; a value chosen in Options › Emulator for the game or the console wins.
 melonDS DS has a software renderer, but full-speed A53 performance has not been
 established and the Brick has neither a touchscreen nor sticks for the current pointer mapping.
 DraStic performance is not evidence for melonDS performance.

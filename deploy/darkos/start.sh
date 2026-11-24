@@ -196,9 +196,11 @@ mkdir -p "$VIEW/storage"
 mount --bind "$DATA/storage" "$VIEW/storage" || die "Could not set up the games folder view." "Details are in logs/start.log."
 # Read the installed ES inventory (including a user's override), retaining its host launch commands.
 if [ -f "$ROOT/bin/cores/dsperate_libretro.so" ]; then
-  # A private, temporary view: the installed system cores remain untouched.
+  # A private, temporary view: the installed system cores remain untouched. Each core's .info comes along: pocket-core
+  # finds the core's name there, and with it dArkOS's RetroArch options (hw_render::retroarch_options); without them
+  # dArkOS's flycast ran on its bare defaults and crashed on every save state (0.6.0).
   mkdir -p "$RUN/cores"
-  for f in "$CORES"/*_libretro.so; do
+  for f in "$CORES"/*_libretro.so "$CORES"/*_libretro.info; do
     [ -f "$f" ] && ln -sf "$f" "$RUN/cores/$(basename "$f")"
   done
   ln -sf "$ROOT/bin/cores/dsperate_libretro.so" "$RUN/cores/dsperate_libretro.so"
@@ -235,6 +237,12 @@ if grep -q "^psp	" "$RUN/systems.mounts" 2>/dev/null; then
   fi
 fi
 [ -d /opt/ppsspp/assets ] && export POCKETUI_PPSSPP_ASSETS=/opt/ppsspp/assets
+# ScummVM: the core reads and writes scummvm.ini in its system directory, the BIOS folder, which is read only here and whose
+# scummvm.ini is dArkOS's RetroArch's. pocket-core gives it a folder of our own instead (a copy of that ini to start from,
+# hostsys::scummvm_place) and dArkOS's standalone ScummVM's engine data and themes.
+mkdir -p "$DATA/storage/.config/scummvm" && export POCKETUI_SCUMMVM_SYSTEM=/storage/.config/scummvm
+[ -d /opt/scummvm/extra ] && export POCKETUI_SCUMMVM_EXTRA=/opt/scummvm/extra
+[ -d /opt/scummvm/themes ] && export POCKETUI_SCUMMVM_THEMES=/opt/scummvm/themes
 # Dreamcast: dArkOS's flycast core (a 2024 build with the older reicast_* option names) crashes saving a state while it
 # renders on its own thread (container, 14.11.2026: SIGSEGV on every slot save; without it save, load and Continue work).
 # pocket-core reads /storage/.config/retroarch/retroarch-core-options.cfg beneath the player's own choices (hw_render);

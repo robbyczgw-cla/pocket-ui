@@ -48,22 +48,35 @@ impl Loader {
                     waiting.retain(|old| old != &key);
                     waiting.push(key);
                 }
-                let key = match waiting.pop() {
-                    Some(key) => key,
-                    // Nothing asked for: the next picture of the window, unless a game runs.
-                    None => match (!crate::covers::game_on()).then(|| next_soon.lock().unwrap().pop_front()).flatten() {
-                        Some(key) => key,
-                        None => match rx.recv() {
-                            Ok(key) => {
-                                waiting.extend(key);
-                                continue;
-                            }
-                            Err(_) => break,
-                        },
-                    },
+                if crate::background_io::paused() {
+                    match rx.recv_timeout(std::time::Duration::from_millis(150)) {
+                        Ok(key) => waiting.extend(key),
+                        Err(mpsc::RecvTimeoutError::Timeout) => {}
+                        Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                    }
+                    continue;
+                }
+                let (key, requested) = match waiting.pop() {
+                    Some(key) => (key, true),
+                    None => {
+                        let ahead = next_soon.lock().unwrap().pop_front();
+                        match ahead {
+                            Some(key) => (key, false),
+                            None => match rx.recv() {
+                                Ok(key) => {
+                                    waiting.extend(key);
+                                    continue;
+                                }
+                                Err(_) => break,
+                            },
+                        }
+                    }
                 };
-                let img = load_fitted(&key);
-                done(key, img);
+                if let Some(img) = crate::background_io::job(|| load_fitted(&key)) {
+                    done(key, img);
+                } else if requested {
+                    waiting.insert(0, key);
+                }
             }
         });
         Loader { tx, soon }
@@ -85,6 +98,21 @@ impl Loader {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn r36s_secondary_picture_loader_keeps_the_request_until_the_game_ends() {
+        let _lock = crate::covers::READER_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let (tx, rx) = mpsc::channel();
+        let loader = Loader::start(move |key, _| { let _ = tx.send(key); });
+        let key = ("queued.png".into(), 8, 8);
+        crate::covers::set_game_on(true);
+        loader.request(key.clone());
+        let early = rx.recv_timeout(Duration::from_millis(300));
+        crate::covers::set_game_on(false);
+        assert!(matches!(early, Err(mpsc::RecvTimeoutError::Timeout)));
+        let resumed = rx.recv_timeout(crate::testutil::timeout(Duration::from_secs(3))).unwrap();
+        assert_eq!(resumed, key);
+    }
 
     #[test]
     fn the_worker_returns_fitted_pixels_with_the_same_alpha_and_box_filter() {

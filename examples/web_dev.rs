@@ -132,6 +132,9 @@ fn setup(dir: &Path, empty: bool) -> (PathBuf, PathBuf, PathBuf) {
             }
         }
     }
+    if !empty {
+        demo_saves(&roms, &data, now);
+    }
     meta.save_sessions();
     recents.save();
     std::fs::create_dir_all(roms.join("bios")).unwrap();
@@ -162,13 +165,86 @@ fn setup(dir: &Path, empty: bool) -> (PathBuf, PathBuf, PathBuf) {
         t += 60;
     }
     h.save(&data.join(pocket_ui::battery_history::FILE)).unwrap();
+    if !empty {
+        // Sample album photos (JPEG + album.tsv), game screenshots, and a shelf picture for visual checks.
+        let sample_jpeg = |rgb: [u8; 3]| -> Vec<u8> {
+            let (w, h) = (240u32, 160u32);
+            let mut px = Vec::with_capacity((w * h * 3) as usize);
+            for y in 0..h {
+                for x in 0..w {
+                    let stripe = ((x / 16 + y / 16) % 2) as u8 * 25;
+                    px.extend([rgb[0].saturating_add(stripe), rgb[1].saturating_add(stripe), rgb[2].saturating_add(stripe)]);
+                }
+            }
+            pocket_ui::album::encode(w, h, &px).unwrap().0
+        };
+        let gs = roms.join("gba/Golden Sun (USA, Europe).gba");
+        let mf = roms.join("gba/Metroid Fusion (USA).gba");
+        let ct = roms.join("snes/Chrono Trigger (USA).sfc");
+        let _ = pocket_ui::album::add(&pocket_ui::album::dir(&data, "gba", &gs), now as i64 - 7200, &["Badge 3".into(), "4 h 12 min".into()], (240, 160), &sample_jpeg([42, 74, 140]));
+        let _ = pocket_ui::album::add(&pocket_ui::album::dir(&data, "gba", &gs), now as i64 - 1800, &["Badge 4".into(), "6 h 05 min".into()], (240, 160), &sample_jpeg([160, 92, 48]));
+        let _ = pocket_ui::album::add(&pocket_ui::album::dir(&data, "gba", &mf), now as i64 - 3600, &["40% items".into(), "2 h 18 min".into()], (240, 160), &sample_jpeg([35, 120, 95]));
+        std::fs::write(data.join("settings.json"), r#"{"moment_photos":true}"#).unwrap();
+
+        let shots = roms.join("screenshots");
+        let shot_png = |rgb: [u8; 3]| -> Vec<u8> {
+            let (w, h) = (240u32, 160u32);
+            let mut px = Vec::with_capacity((w * h * 3) as usize);
+            for y in 0..h {
+                for x in 0..w {
+                    let frame = x < 6 || y < 6 || x >= w - 6 || y >= h - 6;
+                    let c = if frame { [236, 233, 225] } else { [rgb[0], rgb[1].saturating_add((y / 3) as u8), rgb[2]] };
+                    px.extend(c);
+                }
+            }
+            pocket_ui::screenshot::encode_rgb(w, h, &px).unwrap()
+        };
+        let s1 = pocket_ui::screenshot::Stamp { year: 2026, month: 11, day: 18, hour: 21, min: 14, sec: 5 };
+        let s2 = pocket_ui::screenshot::Stamp { year: 2026, month: 11, day: 19, hour: 19, min: 42, sec: 11 };
+        let _ = pocket_ui::screenshot::save_png(&shots, "gba", "Golden Sun (USA, Europe)", &s1, &shot_png([60, 45, 130]));
+        let _ = pocket_ui::screenshot::save_png(&shots, "snes", "Chrono Trigger (USA)", &s2, &shot_png([120, 50, 70]));
+        let _ = pocket_ui::screenshot::save_png(&shots, pocket_ui::share_shelf::FOLDER, pocket_ui::share_shelf::NAME, &s2, &shot_png([80, 95, 70]));
+        let _ = ct;
+    }
     (roms, data, es)
 }
 
+/// Saves and states of two games, and Pocket Sync with two paired Pockets, a few saves that came and went and one open
+/// question (the Saves tab and a game's saves).
+fn demo_saves(roms: &Path, data: &Path, now: u64) {
+    let gs = "Golden Sun (USA, Europe)";
+    std::fs::write(roms.join(format!("gba/{gs}.srm")), vec![0u8; 64 << 10]).unwrap();
+    std::fs::write(roms.join(format!("gba/{gs}.rtc")), [0u8; 16]).unwrap();
+    let states = roms.join("savestates/gba");
+    std::fs::create_dir_all(&states).unwrap();
+    for (ending, kb) in [(".pstate.auto", 310), (".pstate", 296), (".pstate2", 301)] {
+        std::fs::write(states.join(format!("{gs}{ending}")), vec![1u8; kb << 10]).unwrap();
+    }
+    let dir = data.join("pocket-sync");
+    std::fs::create_dir_all(&dir).unwrap();
+    pocket_ui::pocket_sync_page::Prefs { enabled: true }.save(&dir).unwrap();
+    let peer = |id: &str, name: &str| pocket_ui::pocket_sync::net::Peer { id: id.into(), name: name.into(), addr: String::new(), key: [7u8; 32] };
+    pocket_ui::pocket_sync::net::Peers(vec![peer("BRICK1", "TrimUI Brick"), peer("PLUS1", "RG35XX Plus")]).save(&dir).unwrap();
+    use pocket_ui::pocket_sync::log::{Dir, Event, Last, Log, State};
+    let mut log = Log::default();
+    log.peers.insert("BRICK1".into(), State { last: Last::Synced, ok_at: Some(now - 180), down_since: None });
+    log.peers.insert("PLUS1".into(), State { last: Last::Unreachable, ok_at: Some(now - 2 * 86_400), down_since: Some(now - 86_400 - 3600) });
+    log.events = vec![
+        Event { at: now - 180, peer: "BRICK1".into(), dir: Dir::From, rel: format!("gba/{gs}.srm") },
+        Event { at: now - 7200, peer: "BRICK1".into(), dir: Dir::To, rel: "gba/Metroid Fusion (USA).srm".into() },
+        Event { at: now - 2 * 86_400, peer: "PLUS1".into(), dir: Dir::From, rel: "gb/Tetris (World) (Rev 1).srm".into() },
+    ];
+    log.save(&dir).unwrap();
+    let mut v = pocket_ui::pocket_sync::Versions::default();
+    let vv: pocket_ui::pocket_sync::Vv = [("BRICK1".to_string(), 3u64)].into_iter().collect();
+    v.0.insert("gba/Metroid Fusion (USA).srm".into(), pocket_ui::pocket_sync::Rec { sha: "c".repeat(64), vv: vv.clone(), asking: Some(vv), ..Default::default() });
+    v.save(&dir.join("versions.json")).unwrap();
+}
+
 /// Writes what the browser asks for into the made-up data folder, as the App would.
-fn apply(data: &Path, e: Edit) -> Result<(), String> {
+fn apply(data: &Path, shots: &Path, shared: &Arc<Shared>, e: Edit) -> Result<(), String> {
     let mut meta = LibraryMeta::load(data);
-    let r = match e {
+    match e {
         Edit::Favorite { system, name, path, on } => {
             let mut f = pocket_ui::favorites::Favorites::load(data);
             if f.contains(&path) != on {
@@ -176,16 +252,40 @@ fn apply(data: &Path, e: Edit) -> Result<(), String> {
             }
             Ok(())
         }
-        Edit::Status { path, status } => meta.set_status(&path, status),
-        Edit::Note { path, note } => meta.set_note(&path, &note),
-        Edit::Rating { path, rating } => meta.set_rating(&path, rating),
-        Edit::Preferred { work, path } => meta.set_preferred(&work, &path),
+        Edit::Status { path, status } => meta.set_status(&path, status).map_err(|e| e.to_string()),
+        Edit::Note { path, note } => meta.set_note(&path, &note).map_err(|e| e.to_string()),
+        Edit::Rating { path, rating } => meta.set_rating(&path, rating).map_err(|e| e.to_string()),
+        Edit::Cover { system, rom, png } => pocket_ui::covers::custom::apply(data, &system, &rom, png.as_deref()).map_err(|e| e.to_string()),
+        Edit::Preferred { work, path } => meta.set_preferred(&work, &path).map_err(|e| e.to_string()),
         Edit::RenameShelf { .. } | Edit::DeleteShelf { .. } | Edit::LibraryChanged(_) => Ok(()),
-    };
-    r.map_err(|e| e.to_string())
+        Edit::DeleteAlbumPhoto { system, rom, file } => pocket_ui::web::media::apply_delete_photo(data, &system, &rom, &file).map(|_| ()),
+        Edit::DeleteScreenshot { system, game, at } => pocket_ui::web::media::apply_delete_shot(shots, &system, &game, &at),
+        // The made-up card's game goes as on the Pocket (files, pictures, gamelist entry); no states folder here.
+        Edit::DeleteGame { system, path, with_saves } => {
+            let places = pocket_ui::game_files::Places { states: &data.join("states"), data, protected: &[], shared: false, saves_dir: None };
+            let plan = pocket_ui::game_files::plan(&system, &path, &places)?;
+            pocket_ui::game_files::delete(&plan, with_saves, &[]).map(|_| shared.library_changed())
+        }
+        Edit::CheckUpdate => {
+            let mut u = shared.update.lock().unwrap();
+            u.checked = true;
+            u.state = pocket_ui::web::updates::UpdateState::Idle;
+            Ok(())
+        }
+        Edit::InstallUpdate { version } => {
+            let mut u = shared.update.lock().unwrap();
+            u.state = pocket_ui::web::updates::UpdateState::Downloading;
+            u.step = Some(1);
+            u.percent = Some(42);
+            u.message = Some(format!("Installing pocket-ui {version}"));
+            Ok(())
+        }
+    }
 }
 
 fn main() {
+    // The page's texts in POCKETUI_LANG's language (`/api/texts`), as the App sets the language at its start.
+    pocket_ui::i18n::set(pocket_ui::i18n::Lang::En);
     let args: Vec<String> = std::env::args().skip(1).collect();
     let arg = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
     let port: u16 = arg("--port").and_then(|p| p.parse().ok()).unwrap_or(8737);
@@ -193,7 +293,26 @@ fn main() {
     let (roms, data, es) = setup(&dir, args.iter().any(|a| a == "--empty"));
     let shared = Shared::new(data.clone(), es.clone(), Prefs { enabled: true, ..Prefs::default() });
     let edit_data = data.clone();
-    *shared.edits.lock().unwrap() = Some(Box::new(move |e, tx| tx.send(apply(&edit_data, e)).is_ok()));
+    let edit_shots = roms.join("screenshots");
+    let edit_shared = shared.clone();
+    *shared.edits.lock().unwrap() = Some(Box::new(move |e, tx| tx.send(apply(&edit_data, &edit_shots, &edit_shared, e)).is_ok()));
+    if let Some(ver) = arg("--update") {
+        let mut u = shared.update.lock().unwrap();
+        u.current = arg("--current").unwrap_or_else(|| "0.6.0".into());
+        u.available = Some(ver);
+        u.notes = Some("Photo album, screenshots ZIP and signed updates in the web companion.".into());
+        u.size = Some(18 * 1024 * 1024);
+        u.release_build = true;
+        u.checked = true;
+    } else if args.iter().any(|a| a == "--up-to-date") {
+        let mut u = shared.update.lock().unwrap();
+        u.current = arg("--current").unwrap_or_else(|| "0.6.0".into());
+        u.release_build = true;
+        u.checked = true;
+    }
+    if let Some(lang) = arg("--lang") {
+        pocket_ui::i18n::set(pocket_ui::i18n::Lang::from_locale(&lang));
+    }
     if args.iter().any(|a| a == "--playing") {
         let path = roms.join("gba/Golden Sun (USA, Europe).gba");
         *shared.now_playing.lock().unwrap() = Some(NowPlaying { system: "gba".into(), name: "Golden Sun".into(), path, since: pocket_ui::recents::now_secs() - 1500 });

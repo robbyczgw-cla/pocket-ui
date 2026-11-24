@@ -32,6 +32,13 @@ pub const NOT_SIGNED: &str = "The update file on the card isn't signed by us. No
 pub const OTHER_TARGET: &str = "The update file on the card is for another kind of handheld. Get the one for this handheld at pocketui.xyz/install. Nothing was installed.";
 pub const NOTHING: &str = "No update file on the card. Put the update file from pocketui.xyz/install on the card, then look again.";
 pub const NEEDS_MORE: &str = "This update needs files that aren't in the update file on the card. Get the newest update file, or update over Wi-Fi. Nothing was installed.";
+/// [`NEEDS_MORE`] on a handheld without Wi-Fi (`device::no_wifi_chip`): the card is the only way there.
+pub const NEEDS_MORE_NO_WIFI: &str = "This update needs files that aren't in the update file on the card. Get the newest update file from pocketui.xyz/install. Nothing was installed.";
+
+/// What an update file that lacks a component says, on a handheld with (`no_chip` false) or without Wi-Fi.
+pub fn needs_more(no_chip: bool) -> &'static str {
+    if no_chip { NEEDS_MORE_NO_WIFI } else { NEEDS_MORE }
+}
 
 /// "The update on the card (0.4.2) isn't newer than this pocket-ui."
 pub fn not_newer(version: &str) -> String {
@@ -185,7 +192,7 @@ pub(super) fn from_bundle(rel: &Release, dest: &Path, cancel: &Cancel, progress:
 fn from(bundle: &Bundle, app: &str, rel: &Release, dest: &Path, cancel: &Cancel, progress: &dyn Fn(u64)) -> Result<(), String> {
     let Some(entry) = bundle.find(rel.size, &rel.sha256) else {
         // The app itself changed since the look (copied again, half): the file. A component package: the update needs more.
-        return Err(if rel.sha256.eq_ignore_ascii_case(app) { INCOMPLETE } else { NEEDS_MORE }.into());
+        return Err(if rel.sha256.eq_ignore_ascii_case(app) { INCOMPLETE } else { needs_more(crate::device::no_wifi_chip()) }.into());
     };
     cancel.set_phase(super::WorkerPhase::Downloading);
     let copied = Bundle::copy_to(entry, dest, cancel, progress).and_then(|()| {
@@ -389,19 +396,12 @@ pub fn remove_after_use(file: &Path) -> bool {
         }
         Ok(())
     };
-    let done = match remove(file) {
-        Ok(()) => true,
-        // The first part of a ROCKNIX card is mounted read-only: writable for this moment only.
-        Err(e) if e.raw_os_error() == Some(libc::EROFS) && file.starts_with("/flash") => {
-            let mount = |how: &str| std::process::Command::new("mount").args(["-o", &format!("remount,{how}"), "/flash"]).status().is_ok_and(|s| s.success());
-            let ok = mount("rw") && remove(file).is_ok();
-            if let Some(parent) = file.parent() { crate::fsutil::sync_dir(parent); }
-            mount("ro");
-            ok
-        }
-        Err(_) => false,
+    let delete = || {
+        remove(file)?;
+        if let Some(parent) = file.parent() { crate::fsutil::sync_dir(parent); }
+        Ok(())
     };
-    if let Some(parent) = file.parent() { crate::fsutil::sync_dir(parent); }
+    let done = if file.starts_with("/flash") { crate::fsutil::with_writable_flash(delete) } else { delete() }.is_ok();
     done && !file.exists()
 }
 

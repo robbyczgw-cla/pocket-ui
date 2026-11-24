@@ -45,16 +45,17 @@ pub fn dir(data_dir: &Path) -> std::path::PathBuf {
     data_dir.join("achievements")
 }
 
-/// RetroAchievements' hash of the game in `rom` for `console`: the file itself, or the ROM inside a zip (the first
-/// file; arcade and DOS zips are hashed as they are), patched when a patch is next to it. None when it can't be read
-/// or hashed (`.7z`, a broken zip, a patch that doesn't apply).
+/// RetroAchievements' hash of the game in `rom` for `console`: the file itself, or the ROM inside a zip or 7z (the
+/// game `archive::extract_rom` picks; arcade and DOS zips are hashed as they are), patched when a patch is next to it.
+/// None when it can't be read or hashed (a broken archive, a DOS 7z, a patch that doesn't apply).
 pub fn hash_rom(console: u32, rom: &Path) -> Option<String> {
-    let ext = rom.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
-    if ext == "7z" {
+    let archive = crate::archive::archive_type(rom);
+    // rcheevos reads a DOS game's zip itself, and no 7z.
+    if archive == Some("7z") && consoles::hashes_zip(console) {
         return None;
     }
     let by_content = !consoles::hashes_file_name(console) && !consoles::hashes_zip(console);
-    let unpack = ext == "zip" && by_content;
+    let unpack = archive.is_some() && by_content;
     // A patched game (`softpatch`) is hashed as it is played, as RetroArch hashes it: RetroAchievements knows some
     // translations and hacks by that hash, and the original's hash is never sent for a patched game. A patch that
     // doesn't apply gives no hash (the game doesn't start either).
@@ -157,7 +158,14 @@ mod tests {
         std::fs::write(d.join("Bare.nes"), &rom).unwrap();
         assert_eq!(hash_rom(7, &d.join("Game.nes")), hash_rom(7, &d.join("Bare.nes")));
         assert_eq!(hash_rom(4, &d.join("missing.gb")), None);
-        assert_eq!(hash_rom(4, &d.join("Game.7z")), None);
+        // A 7z: the ROM inside, as a zip (red before 7z support: None).
+        let seven = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/7z/lzma.7z")).unwrap();
+        std::fs::write(d.join("Game.7z"), seven).unwrap();
+        let demo: Vec<u8> = (0..4096u32).map(|i| ((i * 31 + i / 7) & 255) as u8).collect();
+        std::fs::write(d.join("Demo.zip"), zip_of("Demo.gba", &demo)).unwrap();
+        assert!(hash_rom(4, &d.join("Game.7z")).is_some());
+        assert_eq!(hash_rom(4, &d.join("Game.7z")), hash_rom(4, &d.join("Demo.zip")), "the 7z's ROM, as the zip's");
+        assert_eq!(hash_rom(26, &d.join("Game.7z")), None, "a DOS 7z: rcheevos reads only zips");
     }
 
     /// A patched game (`softpatch`) is hashed as it is played, as RetroArch hashes it; never as the original.

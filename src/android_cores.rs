@@ -26,14 +26,14 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::InvalidPackage => "Invalid Android core package",
-            Self::Damaged => "The download is damaged or was changed. Nothing was installed.",
+            Self::Damaged => "Download failed verification. Nothing was installed.",
             Self::UnsafeArchive => "Invalid Android core archive",
             Self::WrongLibrary => "Core checksum does not match",
             Self::WrongSource => "Core source reference does not match",
             Self::MissingPspFiles => "Missing PSP system files",
             Self::InvalidPspFile => "Invalid PSP system file",
             Self::PspHash => "PSP system file checksum does not match",
-            Self::Signature(_) => "The store list's signature doesn't match, so it wasn't used. Nothing was changed.",
+            Self::Signature(_) => "Store catalogue failed signature check, so it was skipped. Nothing changed.",
             Self::Catalog(message) | Self::Archive(message) | Self::Store(message) => message,
             Self::Io(error) => return error.fmt(f),
             Self::Json(error) => return error.fmt(f),
@@ -54,7 +54,7 @@ pub fn download_failure(reason: &str) -> String {
         }.to_string();
     }
     let sentence = reason.ends_with('.') && reason.len() < 120 && reason.starts_with(|c: char| c.is_uppercase()) && !reason.contains(['"', '/', ':']);
-    if sentence { reason.to_string() } else { "The download didn't finish. Check Wi-Fi and try again.".to_string() }
+    if sentence { reason.to_string() } else { "Download didn't finish. Check Wi-Fi and try again.".to_string() }
 }
 
 fn destination(data: &Path, core: &str) -> PathBuf { data.join("android-cores").join(core) }
@@ -178,8 +178,8 @@ mod tests {
         let cases = [
             ("HTTP 404", "The extra systems can't be downloaded yet. Try again later; every system already in the app works as it is."),
             ("HTTP 503", "The download server isn't answering right now. Try again later."),
-            ("Unable to resolve host \"pocketui.xyz\": No address associated with hostname", "The download didn't finish. Check Wi-Fi and try again."),
-            ("HTTPS required", "The download didn't finish. Check Wi-Fi and try again."),
+            ("Unable to resolve host \"pocketui.xyz\": No address associated with hostname", "Download didn't finish. Check Wi-Fi and try again."),
+            ("HTTPS required", "Download didn't finish. Check Wi-Fi and try again."),
             ("Downloads wait for unmetered Wi-Fi.", "Downloads wait for unmetered Wi-Fi."),
             ("Download cancelled. Choose it again to continue.", "Download cancelled. Choose it again to continue."),
         ];
@@ -187,7 +187,7 @@ mod tests {
             let shown = download_failure(raw);
             assert_eq!(shown, said, "{raw}");
             assert!(!shown.contains("HTTP") && !shown.contains("404") && !shown.contains("pocketui.xyz"), "{raw}: {shown}");
-            for lang in [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It] { assert_ne!(tr_in(lang, &shown), shown, "{lang:?}: {shown}"); }
+            for lang in [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko] { assert_ne!(tr_in(lang, &shown), shown, "{lang:?}: {shown}"); }
         }
     }
     #[test]

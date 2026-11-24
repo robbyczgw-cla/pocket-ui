@@ -101,6 +101,7 @@ pub mod setup;
 pub mod features;
 pub mod feature_previews;
 pub mod covers;
+pub mod dir_index;
 /// RomM as a source of games: pairing, the server's list on the shelf, a game's download at its first start (docs/ROMM.md).
 pub mod romm;
 pub mod romm_net;
@@ -110,6 +111,7 @@ pub mod game_pictures;
 pub mod picture_cycle;
 pub mod picture_loader;
 pub mod ports;
+pub mod ports_card;
 pub mod port_files;
 pub mod port_perf;
 pub mod port_perf_page;
@@ -152,6 +154,8 @@ pub mod heap_trim;
 pub mod hostsys;
 pub mod notice;
 pub mod archive;
+/// The game inside a .7z (`archive` hands it over). The browser demo has no 7z games and no 7z reader.
+#[cfg_attr(target_os = "emscripten", path = "platform/seven_zip_none.rs")] pub mod seven_zip;
 pub mod softpatch;
 pub mod dsv;
 pub mod vfs;
@@ -179,6 +183,11 @@ pub mod save_writer;
 pub mod rewind;
 pub mod play_speed;
 pub mod hotkeys;
+/// RetroArch's HOME shortcuts on ROCKNIX: pocket-core's keys and switches, written before each RetroArch start.
+pub mod ra_hotkeys;
+pub mod ra_state;
+/// The pause menu's list of a RetroArch game's HOME shortcuts.
+pub mod shortcut_list;
 pub mod power;
 pub mod extras;
 pub mod run_ahead;

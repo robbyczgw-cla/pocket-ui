@@ -386,16 +386,16 @@ mod tests {
         assert_eq!(pads.player(1).0, 1 << 8);
         // It is switched off while a button is down: that player has nothing, and a button stays up when it returns.
         let notes = pads.roster(vec![odin(3)]);
-        assert_eq!(notes, vec!["8BitDo Pro 2 disconnected — Player 2".to_string()]);
+        assert_eq!(notes, vec!["8BitDo Pro 2 disconnected (Player 2)".to_string()]);
         pads.release_all();
         assert_eq!(pads.player(1), (0, [0; 4]));
         // A second pad appears meanwhile: it takes the seat nobody had in this game, not the absent pad's.
         let notes = pads.roster(vec![odin(3), blue_b(12)]);
-        assert_eq!(notes, vec!["DualSense connected — Player 3".to_string()]);
+        assert_eq!(notes, vec!["DualSense connected (Player 3)".to_string()]);
         assert_eq!(pads.player_of(12), Some(2));
         // The first one comes back with another device id: Player 2 again.
         let notes = pads.roster(vec![odin(3), blue_b(12), blue(15)]);
-        assert_eq!(notes, vec!["8BitDo Pro 2 connected — Player 2".to_string()]);
+        assert_eq!(notes, vec!["8BitDo Pro 2 connected (Player 2)".to_string()]);
         assert_eq!(pads.player_of(15), Some(1));
         assert_eq!(pads.player_of(12), Some(2));
     }

@@ -41,11 +41,13 @@ impl App {
             return;
         }
         let proxy = self.proxy.clone();
+        let pause = pocket_ui::background_io::pause_for_update();
         std::thread::spawn(move || {
             let look = mock.unwrap_or_else(update::card::look);
             if !matches!(look, Look::Nothing) {
                 println!("update from the card: {}", look.message());
             }
+            drop(pause);
             let _ = proxy.send_event(UserEvent::Update(UpdateEvent::CardLooked { at_start: true, look }));
         });
     }
@@ -115,6 +117,9 @@ impl App {
                 UpdateOutcome::Checked
             }
             other => {
+                if self.updates.card.take().is_some() {
+                    self.updates.manifest = None;
+                }
                 self.updates.message = Some(other.message());
                 UpdateOutcome::Checked
             }

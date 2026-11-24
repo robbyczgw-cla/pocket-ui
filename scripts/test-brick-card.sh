@@ -773,6 +773,53 @@ for SH in dash "busybox ash"; do
   check "restarts asked for are no crashes: 2 stays" "grep -q '^v2 run 4' $WORK/log && [ \"\$(cat $C/pocket-ui/app/RELEASE)\" = 2 ] && [ ! -e $C/pocket-ui/storage/pocket-ui/rolled-back ]"
 done
 
+echo "== the crash window is longer than the known-good timer"
+# Source the real starter with a fake clock. This works even when ash resolves date as an applet before PATH.
+cat >"$WORK/fake-clock.sh" <<'X'
+#!/bin/sh
+date() {
+  if [ "$1" = +%s ]; then cat "$BRICK_TEST_CLOCK"; else command date "$@"; fi
+}
+. "$(dirname "$0")/start.sh"
+X
+CRASH_UI='
+  n=$(($(cat "$BRICK_DATA/runs" 2>/dev/null || echo 0) + 1))
+  echo "$n" >"$BRICK_DATA/runs"
+  echo "ui run $n $*" >>"$BRICK_TEST_LOG"
+  [ "${1:-}" = --safe ] && exit "$BRICK_TEST_SAFE_EXIT"
+  for elapsed in $BRICK_TEST_RUNS; do
+    if [ "$n" = 1 ]; then
+      echo "$(($(cat "$BRICK_TEST_CLOCK") + elapsed))" >"$BRICK_TEST_CLOCK"
+      exit 139
+    fi
+    n=$((n - 1))
+  done
+  exit 75
+'
+crash_window() { # shell, runtimes of crashes, safe exit code [, crash reset override]
+  make_card "$C"
+  echo 1000 >"$WORK/clock"
+  fake_pocket_ui "$C" "$CRASH_UI"
+  cp "$WORK/fake-clock.sh" "$C/pocket-ui/app/fake-clock.sh"
+  BRICK_TEST_CLOCK="$WORK/clock" BRICK_TEST_RUNS="$2" BRICK_TEST_SAFE_EXIT="$3" \
+    POCKETUI_CRASH_RESET_SECS="${4:-}" POCKET_BRICK_GL=0 ENTRY=pocket-ui/app/fake-clock.sh run_updater "$1" "$C" 15
+}
+for SH in dash "busybox ash"; do
+  C=$WORK/crash
+  rc=$(crash_window "$SH" "180 240 300" 0)
+  check "$SH: three crashes after the known-good window start Safe mode, which can restart normally" \
+    '[ "$rc" = 75 ] && grep -qxF "ui run 4 --safe" "$WORK/log" && grep -qxF "ui run 5 " "$WORK/log"'
+  rc=$(crash_window "$SH" "180 180 600 180" 0)
+  check "$SH: a 600 s run clears earlier crashes" \
+    '[ "$rc" = 75 ] && ! grep -q -- --safe "$WORK/log"'
+  rc=$(crash_window "$SH" "180 180 180" 0 180)
+  check "$SH: the crash window is configurable" \
+    '[ "$rc" = 75 ] && ! grep -q -- --safe "$WORK/log"'
+  rc=$(crash_window "$SH" "180 240 300" 139)
+  check "$SH: if Safe mode crashes too, show the failure picture" \
+    '[ "$rc" = 1 ] && grep -qxF "ui run 4 --safe" "$WORK/log" && grep -q "picture .*/msg/crashed.png" "$WORK/log"'
+done
+
 echo "== publishing to the private channel (scripts/brick-publish.sh, a throwaway key, file:// instead of the tailnet)"
 ST=${STORE_TOOL:-}
 for c in "$ROOT/target/debug/store-tool" "$ROOT/target/gate/store-tool" "${CARGO_TARGET_DIR:-$ROOT/target}/gate/store-tool" "${CARGO_TARGET_DIR:-$ROOT/target}/debug/store-tool"; do

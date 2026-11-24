@@ -410,7 +410,7 @@ mod tests {
         let mut live = Live::default();
         assert!(!live.update(&r).alert);
         r.run_ahead.frames = 0;
-        r.run_ahead.off = "Run-ahead is off: too slow for this game".into();
+        r.run_ahead.off = "Run-ahead off: too heavy for this game".into();
         let shown: Vec<bool> = (0..HOLD_TICKS + 3).map(|_| live.update(&r).alert).collect();
         assert_eq!(shown.iter().filter(|a| **a).count(), HOLD_TICKS as usize, "{shown:?}");
         assert!(shown[0] && !shown[HOLD_TICKS as usize]);

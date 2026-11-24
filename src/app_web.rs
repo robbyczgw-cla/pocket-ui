@@ -25,18 +25,22 @@ pub(crate) const SETTINGS_NAME: &str = "Web companion";
 
 /// What the page says while the companion is off: what switching it on gives and where it works (the home Wi-Fi, or
 /// Tailscale; since 0.5 it no longer needs Tailscale).
-const OFF_NOTE: &str = "Switch it on to open your library in a browser on the same Wi-Fi, or over Tailscale. The address to open shows here.";
+const OFF_NOTE: &str = "Turn on to browse your library in any browser on your Wi-Fi or Tailscale. The URL appears here.";
 /// On, but neither the Wi-Fi nor Tailscale is connected.
 const WAITING: &str = "Waiting for Wi-Fi";
 const WAITING_NOTE: &str = "It listens on your Wi-Fi and on Tailscale. Connect to Wi-Fi (Settings › Connections › Wi-Fi) or switch Tailscale on.";
 /// The note under the address, by "Your Tailscale devices".
-const NOTE_OPEN: &str = "On the Wi-Fi every browser needs a code; your own Tailscale devices get in without one. Not encrypted on the Wi-Fi: use it at home. Pauses while a game runs.";
-const NOTE_CODE: &str = "Every browser needs a code, yours too. Not encrypted on the Wi-Fi: use it at home. Pauses while a game runs.";
+const NOTE_OPEN: &str = "Wi-Fi browsers need a code; your Tailscale devices skip it. Unencrypted on Wi-Fi (home use only). Pauses while gaming.";
+const NOTE_CODE: &str = "Every browser needs a code. Unencrypted on Wi-Fi (home use only). Pauses while gaming.";
+/// [`OFF_NOTE`] in the dArkOS port, which has no Tailscale.
+const OFF_NOTE_DARKOS: &str = "Turn on to browse your library in any browser on your Wi-Fi. The URL appears here.";
+/// [`WAITING_NOTE`] in the dArkOS port: no Tailscale there (`darkos::LEAVES_OUT`); Wi-Fi's row shows dArkOS's connection.
+const WAITING_NOTE_DARKOS: &str = "It listens on your Wi-Fi. Set up Wi-Fi in dArkOS; Settings › Connections › Wi-Fi shows the connection.";
 /// The same on a handheld without Wi-Fi (`device::no_wifi_chip`): no Wi-Fi to wait for or to warn about; it needs a
 /// network all the same (`device::NEEDS_NETWORK`, for the Off and Waiting notes).
 const WAITING_NO_WIFI: &str = "Waiting for a network";
-const NOTE_OPEN_NO_WIFI: &str = "Other browsers need a code; your own Tailscale devices get in without one. Pauses while a game runs.";
-const NOTE_CODE_NO_WIFI: &str = "Every browser needs a code, yours too. Pauses while a game runs.";
+const NOTE_OPEN_NO_WIFI: &str = "Other browsers need a code; your Tailscale devices skip it. Pauses while gaming.";
+const NOTE_CODE_NO_WIFI: &str = "Every browser needs a code. Pauses while gaming.";
 
 /// The server starts this long after pocket-ui did, when it is on: never in the way of the first frame.
 const START_AFTER: Duration = Duration::from_secs(3);
@@ -63,6 +67,7 @@ pub(crate) struct WebUi {
     seen_game: Option<PathBuf>,
     seen_index: usize,
     seen_private: bool,
+    seen_update: Option<web::updates::UpdateSnapshot>,
     /// When a start failed: the next try waits [`RETRY_AFTER`] (never one per frame).
     failed_at: Option<Instant>,
     /// An upload added games: the library as the server read it, taken over at the next quiet moment.
@@ -96,6 +101,7 @@ impl WebUi {
             seen_game: None,
             seen_index: 0,
             seen_private: false,
+            seen_update: None,
             failed_at: None,
             library_pending: None,
             roots: web::files::Roots::default(),
@@ -125,6 +131,7 @@ impl WebUi {
         self.seen_game = None;
         self.seen_index = 0;
         self.seen_private = false;
+        self.seen_update = None;
         *shared.problem.lock().unwrap() = None;
         let ctx = web::api::Ctx::new(shared.clone(), self.roots.clone(), Box::new(web::net::LocalApi::default()));
         match web::server::Server::start(ctx, self.listen.clone()) {
@@ -192,6 +199,15 @@ impl WebUi {
         }
     }
 
+    /// Publishes the current software update snapshot to `Shared::update` only when something changed.
+    fn publish_update(&mut self, snap: web::updates::UpdateSnapshot) {
+        let Some(shared) = self.shared.clone().filter(|_| self.server.is_some()) else { return };
+        if self.seen_update.as_ref() != Some(&snap) {
+            *shared.update.lock().unwrap() = snap.clone();
+            self.seen_update = Some(snap);
+        }
+    }
+
     /// Makes a pairing code. The screen counts as private before the code is there: no screenshot ever shows it
     /// (review F4; `publish` says so every loop turn too).
     fn start_pairing(&mut self) {
@@ -248,12 +264,60 @@ impl App {
         format!("{} >", web_page::on_off(self.web.prefs.enabled))
     }
 
+    /// Builds a read-only update snapshot from `App.updates` for `GET /api/update`.
+    fn web_update_snapshot(&self) -> web::updates::UpdateSnapshot {
+        use super::{UpdateOutcome, UpdatePhase, UpdateTask};
+        use web::updates::{UpdateSnapshot, UpdateState};
+        let avail = self.updates.app_available();
+        let (state, step, percent) = match &self.updates.phase {
+            UpdatePhase::Running(job) => match &job.task {
+                UpdateTask::Check => (UpdateState::Checking, None, None),
+                UpdateTask::App { .. } => match self.updates.app_step() {
+                    Some((s, frac)) => {
+                        let st = match s {
+                            pocket_ui::update::Step::Downloading => UpdateState::Downloading,
+                            pocket_ui::update::Step::Unpacking => UpdateState::Unpacking,
+                            pocket_ui::update::Step::Installing => UpdateState::Installing,
+                            pocket_ui::update::Step::Restarting => UpdateState::Restarting,
+                        };
+                        (st, Some(s.number() as u8), Some((frac * 100.0).round().clamp(0.0, 100.0) as u8))
+                    }
+                    None => (UpdateState::Downloading, Some(1), Some(0)),
+                },
+                UpdateTask::System { .. } => (UpdateState::Installing, None, None),
+            },
+            UpdatePhase::Finished(r) => match r.outcome {
+                UpdateOutcome::Installed => (UpdateState::Restarting, Some(4), Some(100)),
+                UpdateOutcome::Failed => (UpdateState::Failed, None, None),
+                UpdateOutcome::Checked | UpdateOutcome::OsStaged => (UpdateState::Idle, None, None),
+            },
+            UpdatePhase::Idle | UpdatePhase::Confirming => (UpdateState::Idle, None, None),
+        };
+        let checked = self.updates.manifest.is_some() || matches!(self.updates.phase, UpdatePhase::Finished(_));
+        UpdateSnapshot {
+            current: pocket_ui::update::shown_version().to_string(),
+            available: avail.map(|r| r.version.clone()),
+            notes: avail.and_then(|r| (!r.notes.trim().is_empty()).then(|| r.notes.clone())),
+            size: avail.map(|r| r.size),
+            release_build: self.updates.release_build(),
+            android: super::app_update_hint::ANDROID_APK,
+            state,
+            step,
+            percent,
+            message: self.updates.message.clone(),
+            low_battery: pocket_ui::update_hint::battery_warning(pocket_ui::status_corner::status().battery),
+            checked,
+        }
+    }
+
     /// Stores the game, Curator's index and whether the screen is private (any Settings page: the pairing code,
     /// passwords, keys; the first-start steps: Wi-Fi passwords; review F4) for the server.
     fn web_publish(&mut self) {
         let game = self.running.as_ref().map(|r| Playing { system: &r.system, name: &r.name, path: &r.path, started: r.started });
         let private = self.settings_page.is_some() || self.setup.is_some();
         self.web.publish(game, self.curator.index.as_ref(), private);
+        let update = self.web_update_snapshot();
+        self.web.publish_update(update);
     }
 
     /// Called every loop turn (`about_to_wait`): starts the server once the Pocket is up, and stores what changed
@@ -271,20 +335,19 @@ impl App {
         if self.web.server.is_none() {
             return;
         }
+        let update = self.web_update_snapshot();
+        self.web.publish_update(update);
         // New games from an upload: the list the server read (on its thread) goes in on Home or the Settings list,
         // never in a game; nothing is read from the card here.
-        if self.web.library_pending.is_some() && self.running.is_none() && self.card.is_none() && (self.screen == super::Screen::Home && self.settings_page.is_none() || matches!(self.settings_page, Some(SettingsPage::List(_) | SettingsPage::Web))) {
+        if self.web.library_pending.is_some() && self.library_swap_allowed() && (self.screen == super::Screen::Home && self.settings_page.is_none() || matches!(self.settings_page, Some(SettingsPage::List(_) | SettingsPage::Web))) {
             if let Some(web::Systems(systems)) = self.web.library_pending.take() {
                 println!("web: new games from an upload");
                 // The same game stays selected: the new list's numbers may mean another one (as `library_apply_pending`).
                 let was = super::app_library::KeepSelection::note(&self.items, self.sel, &self.systems);
                 let in_front = self.big_in_front();
-                self.systems = Arc::unwrap_or_clone(systems);
+                self.library_replace_systems(Arc::unwrap_or_clone(systems));
                 // The next start shows them from the cache (`library_cache`), written on a thread.
                 pocket_ui::library_cache::store_soon(&self.data_dir, &self.es_systems, self.systems.clone());
-                self.recents.follow_library(&self.systems);
-                self.curator.library_changed();
-                self.find_library_changed();
                 self.covers.clear();
                 self.rebuild();
                 was.restore(&self.items, &self.systems, &mut self.sel, &mut self.prev_sel);
@@ -334,6 +397,24 @@ impl App {
                 self.curator.touch();
                 Ok(())
             }
+            Edit::Cover { system, rom, png } => {
+                if self.running.is_some() || pocket_ui::covers::game_on() {
+                    return Err("A game is running. Change the cover once it ends.".into());
+                }
+                if !self.systems.iter().any(|s| s.name == system && s.games.iter().any(|g| g.path == rom)) || !rom.exists() {
+                    return Err("That game is not on the Pocket any more.".into());
+                }
+                io(pocket_ui::covers::custom::apply(&self.data_dir, &system, &rom, png.as_deref()))?;
+                self.covers.clear();
+                self.pictures_changed();
+                self.cabinet.cover_replaced(&rom);
+                self.search_covers_changed();
+                self.look_previews = None;
+                if png.is_none() {
+                    self.auto_covers("cover reset");
+                }
+                Ok(())
+            }
             Edit::RenameShelf { index, was, name } => {
                 let name: String = name.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(pocket_ui::curator::prefs::SHELF_NAME_MAX).collect();
                 if name.is_empty() {
@@ -359,6 +440,57 @@ impl App {
             }
             Edit::LibraryChanged(systems) => {
                 self.web.library_pending = Some(systems);
+                Ok(())
+            }
+            // --- Photo album, screenshots, and updates (web07-album-update) ---
+            Edit::DeleteAlbumPhoto { system, rom, file } => {
+                if self.running.is_some() || self.pending_launch.is_some() || self.launch_at.is_some() {
+                    return Err("A game is running. Quit the game before deleting photos.".into());
+                }
+                let (dir, deleted) = web::media::apply_delete_photo(&self.data_dir, &system, &rom, &file)?;
+                if let Some(open) = self.card.as_mut() {
+                    if let Some(data) = open.card.data.album.as_mut().filter(|a| a.dir == dir) {
+                        data.photos.retain(|p| p.file != deleted);
+                        if let Some(bx) = open.card.boxed.as_mut() {
+                            bx.album_pics.remove(&deleted);
+                        }
+                    }
+                }
+                Ok(())
+            }
+            Edit::DeleteScreenshot { system, game, at } => {
+                if self.running.is_some() || self.pending_launch.is_some() || self.launch_at.is_some() {
+                    return Err("A game is running. Quit the game before deleting screenshots.".into());
+                }
+                web::media::apply_delete_shot(&self.web.roots.screenshots, &system, &game, &at)
+            }
+            Edit::DeleteGame { system, path, with_saves } => self.delete_game(system, path, with_saves),
+            Edit::CheckUpdate => {
+                if self.running.is_some() || self.pending_launch.is_some() || self.launch_at.is_some() {
+                    return Err("A game is running. Quit the game before checking for updates.".into());
+                }
+                if self.updates.is_busy() {
+                    return Err("An update check or install is already running.".into());
+                }
+                self.update_action(super::UpdateAction::Check);
+                self.web_publish();
+                Ok(())
+            }
+            Edit::InstallUpdate { version } => {
+                if self.running.is_some() || self.pending_launch.is_some() || self.launch_at.is_some() {
+                    return Err("A game is running. Quit the game before updating.".into());
+                }
+                if self.updates.is_busy() {
+                    return Err("An update is already running.".into());
+                }
+                if !self.updates.release_build() {
+                    return Err(pocket_ui::update::DEVELOPMENT_BUILD.into());
+                }
+                if !self.updates.app_available().is_some_and(|r| r.version == version) {
+                    return Err("That update is not available any more. Check again.".into());
+                }
+                self.update_action(super::UpdateAction::InstallNow);
+                self.web_publish();
                 Ok(())
             }
         }
@@ -598,7 +730,7 @@ impl App {
             (None, true) => {
                 self.text.draw(c, Face::Title, 44, left, y, pal().dust, pocket_ui::device::wifi_or(WAITING, WAITING_NO_WIFI));
                 y += 44;
-                for l in self.text.wrap_prose(Face::Body, 26, pocket_ui::device::wifi_or(WAITING_NOTE, pocket_ui::device::NEEDS_NETWORK), width) {
+                for l in self.text.wrap_prose(Face::Body, 26, if pocket_ui::device::darkos_port() && !pocket_ui::device::no_wifi_chip() { WAITING_NOTE_DARKOS } else { pocket_ui::device::wifi_or(WAITING_NOTE, pocket_ui::device::NEEDS_NETWORK) }, width) {
                     self.text.draw(c, Face::Body, 26, left, y, pal().dust, &l);
                     y += pocket_ui::type_scale::line(26, 8);
                 }
@@ -606,7 +738,7 @@ impl App {
             (None, false) => {
                 self.text.draw(c, Face::Title, 44, left, y, pal().dust, "Off");
                 y += 44;
-                for l in self.text.wrap_prose(Face::Body, 26, pocket_ui::device::wifi_or(OFF_NOTE, pocket_ui::device::NEEDS_NETWORK), width) {
+                for l in self.text.wrap_prose(Face::Body, 26, if pocket_ui::device::darkos_port() && !pocket_ui::device::no_wifi_chip() { OFF_NOTE_DARKOS } else { pocket_ui::device::wifi_or(OFF_NOTE, pocket_ui::device::NEEDS_NETWORK) }, width) {
                     self.text.draw(c, Face::Body, 26, left, y, pal().dust, &l);
                     y += pocket_ui::type_scale::line(26, 8);
                 }
@@ -676,7 +808,7 @@ impl App {
             self.text.draw(c, Face::Body, 24, tx, y, pal().dust, l);
         }
         y += 34;
-        for l in self.text.wrap_prose(Face::Body, 24, "Five wrong tries and the code is gone.", width) {
+        for l in self.text.wrap_prose(Face::Body, 24, "Five wrong tries expire the code.", width) {
             self.text.draw(c, Face::Body, 24, tx, y, pal().dust, &l);
             y += pocket_ui::type_scale::line(24, 8);
         }
@@ -921,5 +1053,29 @@ mod tests {
         assert!(shared.pairing.lock().unwrap().is_some());
         ui.stop();
         assert!(shared.pairing.lock().unwrap().is_none(), "switching off ends the code");
+    }
+
+    #[test]
+    fn publishing_update_snapshot_reaches_shared_state() {
+        let (mut ui, _root_dir) = web_ui("update-pub", true);
+        ui.start(|_| {});
+        let shared = ui.shared.clone().unwrap();
+        let snap = web::updates::UpdateSnapshot {
+            current: "0.6.0".into(),
+            available: Some("0.6.1".into()),
+            notes: Some("Fixes".into()),
+            size: Some(12 << 20),
+            release_build: true,
+            android: false,
+            state: web::updates::UpdateState::Idle,
+            step: None,
+            percent: None,
+            message: None,
+            low_battery: None,
+            checked: true,
+        };
+        ui.publish_update(snap.clone());
+        assert_eq!(*shared.update.lock().unwrap(), snap);
+        ui.stop();
     }
 }

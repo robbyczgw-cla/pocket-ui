@@ -44,7 +44,7 @@ pub fn set_quiet(quiet: bool) {
 }
 
 pub fn quiet() -> bool {
-    QUIET.load(Ordering::Relaxed)
+    QUIET.load(Ordering::Relaxed) || crate::background_io::paused()
 }
 
 /// Whether a warm-up was started in this process (tests: never before the first frame).
@@ -75,7 +75,7 @@ pub fn choose(front: Option<&Front>, size: impl Fn(&Path) -> Option<u64>) -> Opt
 
 /// The length of a regular file (following a symlink), None otherwise.
 pub fn file_size(path: &Path) -> Option<u64> {
-    std::fs::metadata(path).ok().filter(|m| m.is_file()).map(|m| m.len())
+    crate::background_io::metadata(path).ok().filter(|m| m.is_file()).map(|m| m.len())
 }
 
 /// What [`start`] did.
@@ -114,28 +114,30 @@ pub fn start(shelf_frame: bool, resolve: impl FnOnce() -> Option<Front> + Send +
     }
     let _ = std::thread::Builder::new().name("core-prewarm".into()).spawn(move || {
         lower_priority();
-        let front = resolve();
-        let Some(path) = choose(front.as_ref(), file_size) else {
-            println!("core prewarm: nothing to read ({})", why_not(front.as_ref()));
-            return;
-        };
-        let paths = if crate::device::current().model.is_some_and(|m| m.is_h700()) {
-            let host = std::env::var_os("POCKETUI_HOST_BIN").filter(|s| !s.is_empty())
-                .map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/storage/pocket-ui/pocket-core"));
-            runtime_paths(path, host, Path::new("/usr/lib"))
-        } else { vec![path] };
-        for path in bounded_paths(paths, file_size) {
-            if quiet() { break; }
-            let t0 = std::time::Instant::now();
-            match read_ahead(&path, quiet) {
-                Ok((bytes, true)) => println!("core prewarm: {} read ({} KB) in {:?}", path.display(), bytes / 1024, t0.elapsed()),
-                Ok((bytes, false)) => {
-                    println!("core prewarm: {} stopped after {} KB, a game or sleep came first", path.display(), bytes / 1024);
-                    break;
+        let _ = crate::background_io::job(|| {
+            let front = resolve();
+            let Some(path) = choose(front.as_ref(), file_size) else {
+                println!("core prewarm: nothing to read ({})", why_not(front.as_ref()));
+                return;
+            };
+            let paths = if crate::device::current().model.is_some_and(|m| m.is_h700()) {
+                let host = std::env::var_os("POCKETUI_HOST_BIN").filter(|s| !s.is_empty())
+                    .map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/storage/pocket-ui/pocket-core"));
+                runtime_paths(path, host, Path::new("/usr/lib"))
+            } else { vec![path] };
+            for path in bounded_paths(paths, file_size) {
+                if quiet() { break; }
+                let t0 = std::time::Instant::now();
+                match read_ahead(&path, quiet) {
+                    Ok((bytes, true)) => println!("core prewarm: {} read ({} KB) in {:?}", path.display(), bytes / 1024, t0.elapsed()),
+                    Ok((bytes, false)) => {
+                        println!("core prewarm: {} stopped after {} KB, a game or sleep came first", path.display(), bytes / 1024);
+                        break;
+                    }
+                    Err(e) => println!("core prewarm: {}: {e}", path.display()),
                 }
-                Err(e) => println!("core prewarm: {}: {e}", path.display()),
             }
-        }
+        });
     });
     outcome
 }
@@ -154,7 +156,7 @@ fn runtime_paths(core: PathBuf, host: PathBuf, libs: &Path) -> Vec<PathBuf> {
         "libgbm.so.1", "libdrm.so.2", "libexpat.so.1", "libglapi.so.0", "dri/panfrost_dri.so", "libwayland-egl.so.1"] {
         paths.push(libs.join(name));
     }
-    let mut gallium: Vec<_> = std::fs::read_dir(libs).into_iter().flatten().flatten()
+    let mut gallium: Vec<_> = crate::background_io::read_dir(libs).into_iter().flatten().flatten()
         .filter_map(|e| {
             let n = e.file_name();
             let n = n.to_str()?;
@@ -179,14 +181,14 @@ fn runtime_paths(core: PathBuf, host: PathBuf, libs: &Path) -> Vec<PathBuf> {
     }
     if let Some(usr) = libs.parent() {
         for (dir, ext) in [("share/glvnd/egl_vendor.d", "json"), ("share/drirc.d", "conf")] {
-            let mut found: Vec<_> = std::fs::read_dir(usr.join(dir)).into_iter().flatten().flatten().map(|e| e.path())
+            let mut found: Vec<_> = crate::background_io::read_dir(usr.join(dir)).into_iter().flatten().flatten().map(|e| e.path())
                 .filter(|p| p.extension().is_some_and(|e| e == ext)).collect();
             found.sort();
             paths.extend(found);
         }
     }
     let mut unique = std::collections::HashSet::new();
-    paths.into_iter().filter_map(|p| std::fs::canonicalize(p).ok())
+    paths.into_iter().filter_map(|p| crate::background_io::canonicalize(p).ok())
         .filter(|p| unique.insert(p.clone())).collect()
 }
 
@@ -197,7 +199,7 @@ fn needed(path: &Path) -> Vec<String> {
     fn at<const N: usize>(b: &[u8], off: usize) -> Option<[u8; N]> { b.get(off..off + N)?.try_into().ok() }
     fn u64_at(b: &[u8], off: usize) -> Option<u64> { at::<8>(b, off).map(u64::from_le_bytes) }
     fn u16_at(b: &[u8], off: usize) -> Option<u16> { at::<2>(b, off).map(u16::from_le_bytes) }
-    let read = |file: &mut std::fs::File, off: u64, len: u64| -> Option<Vec<u8>> {
+    let read = |file: &mut crate::background_io::File, off: u64, len: u64| -> Option<Vec<u8>> {
         if len > 1 << 20 { return None; }
         file.seek(SeekFrom::Start(off)).ok()?;
         let mut buf = vec![0u8; len as usize];
@@ -205,7 +207,7 @@ fn needed(path: &Path) -> Vec<String> {
         Some(buf)
     };
     let parse = || -> Option<Vec<String>> {
-        let mut file = std::fs::File::open(path).ok()?;
+        let mut file = crate::background_io::open(path).ok()?;
         let head = read(&mut file, 0, 64)?;
         if head[..4] != *b"\x7fELF" || head[4] != 2 || head[5] != 1 { return None; }
         let (phoff, phsize, phnum) = (u64_at(&head, 0x20)?, u16_at(&head, 0x36)? as u64, u16_at(&head, 0x38)? as u64);
@@ -263,11 +265,12 @@ fn why_not(front: Option<&Front>) -> String {
 /// bytes read and whether the whole file was.
 pub fn read_ahead(path: &Path, stop: impl Fn() -> bool) -> std::io::Result<(u64, bool)> {
     use std::io::Read;
+    if crate::background_io::check().is_err() { return Ok((0, false)); }
     let mut file = std::fs::File::open(path)?;
     let mut buf = vec![0u8; PIECE];
     let mut total = 0u64;
     loop {
-        if stop() {
+        if crate::background_io::check().is_err() || stop() {
             return Ok((total, false));
         }
         let n = file.read(&mut buf)?;
@@ -463,6 +466,14 @@ mod tests {
         assert_eq!(needed(&d.join("cut")), Vec::<String>::new(), "a cut-off file reads as nothing, no panic");
         std::fs::write(d.join("ok"), elf(&["libz.so.1", "libm.so.6"])).unwrap();
         assert_eq!(needed(&d.join("ok")), ["libz.so.1", "libm.so.6"]);
+    }
+
+    #[test]
+    fn r36s_secondary_core_prewarm_does_not_open_the_next_file_after_a_launch() {
+        let d = crate::testutil::TestDir::new("core-prewarm-paused");
+        let next = d.join("missing_libretro.so");
+        let result = crate::background_io::after_launch_request(|| read_ahead(&next, || false));
+        assert_eq!(result.unwrap(), (0, false));
     }
 
     #[test]

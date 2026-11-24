@@ -117,7 +117,7 @@ fn cover_box((w, h, rgb): &(i32, i32, Vec<u8>)) -> Option<(i32, i32, i32, i32)> 
 
 #[test]
 fn the_panel_shows_the_console_and_a_big_cover_in_the_plus_share_of_every_screen() {
-    let tmp = tempfile::Builder::new().prefix("pui-split-").tempdir_in("/tmp").unwrap();
+    let tmp = tempfile::Builder::new().prefix("pui-split-").tempdir().unwrap();
     let stub = wayland(tmp.path());
     let lib = split_library(&tmp.path().join("lib"));
     // Per screen: the panel's and the console's share of the canvas' height, the cover's of the picture's.

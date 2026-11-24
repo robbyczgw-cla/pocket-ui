@@ -56,6 +56,8 @@ them on (below, "SYSTEM without a few files"); every other file in it is ROCKNIX
    container, which fails on an x86_64 machine without qemu ("exec format error"). Built both ways, x86_64 and arm64
    give the device's `BOOTAA64.EFI` (md5 `3e6c69bc…`). [V] The GRUB version is recorded in
    `boot/grub/grub-efi-arm64-bin.version` for the source offer.
+   The two packages are pinned by version and sha256 (`scripts/image/pins.sh` `GRUB_DEB_*`) and cached in
+   `GRUB_DEB_CACHE` (default `~/.cache/pocket-ui/grub-<version>`).
 4. pocket-ui and pocket-core are built with `POCKETUI_VERSION=<version>`, as `scripts/release-app.sh` does.
 5. The container half (`scripts/image/build.sh`, tools in `scripts/image/Dockerfile`) adds the files with
    `mtools` (FAT) and `debugfs` (STORAGE ext4), without loop mounts, as root, with the commit's time stamp.
@@ -165,8 +167,8 @@ own mount of `/storage` (`mount_flash`, `mount_sysroot`, `mount_storage`). [V]
   the root of their games partition (stock R36S: BOOT FAT, rootfs ext4, EASYROMS exFAT; dArkOS's games card: one exFAT
   partition), so that hid every game and littered the card. The seed's drop-in
   `rocknix-automount.service.d/20-pocket-games-card.conf` (`deploy/image/rocknix-automount-games-card.conf`) replaces the
-  unit's `ExecStart` with `deploy/image/games-card.sh` (`/storage/pocket-ui/games-card.sh`; without it, automount as
-  before). The script takes the partitions automount would (mmcblk/sd/nvme, a device over 8 GiB, not mounted, not an
+  unit's `ExecStart` with `deploy/image/games-card.sh` (`/storage/pocket-ui/games-card.sh`). The script checks the
+  partitions automount would consider (mmcblk/sd/nvme, a device over 8 GiB, not mounted, not an
   Android `boot0` device, not the card `/storage` or `/flash` are on), FAT/exFAT/NTFS only, and mounts each read-only on
   `/run/pocket-ui/probe`. An ArkOS card has no entry `roms` at its root in any case (Anbernic's stock card with `Roms/`
   goes ROCKNIX's way) and at least two known system folders there. Found: mounted read-write on `/storage/games-external`
@@ -176,13 +178,26 @@ own mount of `/storage` (`mount_flash`, `mount_sysroot`, `mount_storage`). [V]
   `/storage/roms/bios/` where missing (never over a file, at most 512 MiB each, through a `.pocket-part` name); and
   `/run/pocket-ui/games-card-root` holds `/storage/games-external`: pocket-ui reads the game folders at that root.
   Anything else (no such card, a card with `roms/`, a blank card, a probe that fails, `system.automount=0`, a
-  `system.gamesdevice` set, the first start) execs ROCKNIX's automount unchanged and removes the marker. A failure on the
+  `system.gamesdevice` set, the first start) hands off to ROCKNIX's automount and removes the marker. A failure on the
   ArkOS way (the read-write mount, the probe's unmount) ends with the internal folder only; automount never gets an
   ArkOS card. Log: `/var/log/pocket-ui-games-card.log`. `deploy/image/test-games-card.sh` (run by
   `test-mount-storage.sh`, in the gate) covers a stock R36S card, a dArkOS card, NTFS, the card byte for byte unchanged,
   the BIOS copy, the restart by udev, the cards that go to automount and each failure, with stand-ins for mount and
   blkid. [I] on a device: never run on a real one yet. Cards flashed before this have no drop-in (the seed is only read at
   the first start).
+
+  **0.6 cards.** The delegate runs ROCKNIX's automount as shipped. When a boot path exposes internal UFS, a partition
+  that passes its filesystem and size checks can be mounted read-write. If the pocket-ui hook is missing, the service
+  also falls back to the stock automount.
+
+  **Cards built from 0.7 onward.** The Qualcomm hook (SM8250, SM8550 and SM4450) checks the transport before probing
+  a candidate and before ROCKNIX mounts it. An MMC device must report type `SD`. A SCSI disk such as
+  `/dev/sda` must have a USB bus ancestor in sysfs. That allows the second SD card, a GAMES partition on the boot
+  SD card and USB storage while excluding internal UFS and eMMC. The same check applies to an explicitly configured
+  `system.gamesdevice`. If the hook is missing, the service skips the scan on those images. If the ROCKNIX script lacks
+  either of the guarded entry points, the hook uses the games folder on STORAGE. H700 and RK keep the stock delegate.
+  This filter applies to games storage. Selection of `/flash` and `/storage` by the initramfs still uses the boot
+  arguments, so an internal ROCKNIX installation with matching labels can take precedence when its storage is visible.
 - `deploy/image/post-flash.sh` replaces `init`'s `load_splash` with the same function minus the call to
   `/usr/bin/rocknix-splash`, which draws the ROCKNIX logo. It prints "pocket-ui, based on ROCKNIX" and ROCKNIX's
   version line instead. It stays on the card and runs at every boot.
@@ -245,7 +260,7 @@ sh scripts/upload-images.sh vVERSION IMAGE_DIR --repo OWNER/REPO --dry-run
 ```
 
 The first command verifies every image, note and checked receipt and writes `image-release.receipt.json` at stage
-`releasable`, binding the exact `SHA256SUMS-images`, `SHA256SUMS-images-more` and/or `SHA256SUMS-images-sm8550` files.
+`releasable`, binding the exact `SHA256SUMS-images`, `SHA256SUMS-images-more`, `SHA256SUMS-images-sm8550` and/or `SHA256SUMS-images-r36s` (the R36S beta card, in its own folder) files.
 The second fully rehashes the files and shows the upload plan. An upload uses that same command without `--dry-run`;
 it refuses the whole set before calling `gh` if any image, note, checksum list or receipt differs. It uploads only
 the enumerated images, notes and image checksum lists; the unrelated installer `SHA256SUMS`, local logs and receipts
@@ -406,8 +421,9 @@ member of `KERNEL`, md5 `SM8550_IMAGE_MD5`), `boot/pocket/<model>-noufs.dtb` (th
 GRUB or a BLS entry on a shared card would start an Odin with a Retroid tree. GRUB cannot tell the models apart before the
 kernel runs, and the Pocket 6's two factory layouts (left stick on top: `Retroid Pocket 6`; D-pad on top:
 `Retroid Pocket 6 TOP-DPAD`) differ only in the stick axes of the tree (`invert-x`, `invert-y`). The Odin cards are byte for
-byte what they were (`notes_blocks` drops the `#if EFI` blocks; `scripts/image/test-h700-pins.sh` proves it). Through UEFI or
-OpenABL the internal UFS is off, so an internal ROCKNIX install no longer wins over the card there.
+byte what they were at the time of that boot change. The bundled GRUB and BLS entries disable internal UFS. If
+OpenABL v1.2 starts `/KERNEL`, the device tree inside it leaves UFS enabled and the internal ROCKNIX install may
+take precedence over the card.
 
 **Open on hardware: sound under UEFI.** ASoC names a card from DMI when the firmware gives SMBIOS tables
 (`snd_soc_set_dmi_name`, vendor-product-version-board), and UCM looks for `conf.d/sm8550/<that long name>.conf` before
@@ -559,8 +575,10 @@ Open points:
 - That builds on other machines give the same bytes. Two builds of the same commit here did (identical
   sha256 of the `.img.xz`); a build on x86_64 Linux gives the same GRUB, kernel and device tree as the Mac
   (byte for byte, 2026-10-26), the whole image was not compared across the two: added files carry the commit's time stamp, and mtools and e2fsprogs take their clock
-  from `SOURCE_DATE_EPOCH` and `E2FSPROGS_FAKE_TIME`. GRUB comes from Debian's current package, so a newer
-  Debian GRUB changes `BOOTAA64.EFI` (the check then warns).
+  from `SOURCE_DATE_EPOCH` and `E2FSPROGS_FAKE_TIME`. GRUB comes from the Debian packages pinned in
+  `scripts/image/pins.sh` (`GRUB_DEB_VERSION`, sha256 of each `.deb`, from snapshot.debian.org), not from Debian's
+  current one: on 2026-11-22 that was 2.12-9+deb13u4 and gave another `BOOTAA64.EFI`. The check fails a GRUB that is not
+  the device's.
 
 ## Test on a real card (needs a spare microSD and the owner's go)
 
@@ -654,7 +672,7 @@ bootloader a Retroid may have (2026-11-12, after a Pocket 5 tester found no "Boo
 | Bootloader in the handheld | What it starts from the card |
 |---|---|
 | Retroid's stock ABL, "Boot mode: Loader" (Retroid u-boot 2024.10 in `loader`) | `EFI/BOOT/BOOTAA64.EFI` (GRUB, `grub.cfg`). U-Boot has no BLS reader; it would prefer `extlinux/` or `boot.scr`, which the card must not have |
-| OpenABL (OpenHandheldCollective, ROCKNIX 20261101), "Boot mode: Linux" | `loader/entries/pocket-ui.conf` first (its `devicetree` wins over the menu's device model), else GRUB |
+| OpenABL (OpenHandheldCollective, ROCKNIX 20261101), "Boot mode: Linux" | `loader/entries/pocket-ui.conf` first (its `devicetree` wins over the menu's device model), then GRUB. Version 1.2 can also start `/KERNEL`, whose device trees leave UFS enabled |
 | ROCKNIX ABL (`ROCKNIX/abl` up to v1.2), "Boot mode: Linux" | `EFI/BOOT/BOOTAA64.EFI` first (strings of the v1.2 SM8250 binary: no BLS reader), else ROCKNIX's `/KERNEL` with the menu's model |
 | Retroid's newer "UEFI" next to Android in the Volume Down menu | Nothing: it does not start SD cards (no report of any card starting that way; two Pocket 5s fall back to the fastboot menu, 2026-11-13). Those devices get OpenABL once (row above, ROCKNIX's guide: the `openabl` folder of ROCKNIX's SM8250 image, 20261101 or newer, since our cards leave it off; copied to `/sdcard/openabl`, Run Script as Root, `backup_abl.sh`, the backup copied to a computer, `flash_abl.sh`), then Boot mode: Linux, Boot source: SD card. It overwrites `abl_a` and `abl_b`; [INSTALL-DUAL-BOOT.md](INSTALL-DUAL-BOOT.md#installing-openabl-once) has the steps users get. Other UEFI firmware (EDK2, QEMU) starts `EFI/BOOT/BOOTAA64.EFI` (GRUB), also from a basic-data partition |
 

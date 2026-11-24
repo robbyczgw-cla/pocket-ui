@@ -92,8 +92,10 @@ impl Shot {
 }
 
 fn shot(lib: &Path, stub: Option<&Stub>, state: &str, lang: &str, size: &str) -> Shot {
-    let png = lib.join("shot.png");
-    let (boxes, nav, misses) = (lib.join("text.box"), lib.join("shot.nav"), lib.join("misses.tsv"));
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let png = lib.join(format!("shot-{id}.png"));
+    let (boxes, nav, misses) = (lib.join(format!("text-{id}.box")), lib.join(format!("shot-{id}.nav")), lib.join(format!("misses-{id}.tsv")));
     for f in [&boxes, &nav, &misses] {
         let _ = std::fs::remove_file(f);
     }
@@ -140,37 +142,52 @@ fn the_case_opens_its_photos_are_reached_and_every_word_is_translated() {
     photos(tmp.path());
     photos_on(tmp.path(), true);
     let stub = wayland(tmp.path());
+    let mut combos = Vec::new();
     for size in ["640x480", "1240x1080"] {
         for lang in LANGS {
-            let name = format!("{lang} {size}");
-            // The box's front: Down is named while the case holds photos.
-            let front = shot(tmp.path(), stub.as_ref(), "box:gba:Golden Sun", lang, size);
-            assert!(front.hints().iter().any(|k| k == "DOWN"), "{name}: the front's bar doesn't name Down: {:?}", front.hints());
-            // Down: the case lies open, every photo a row the D-pad reaches, the newest on top with the focus.
-            let case = shot(tmp.path(), stub.as_ref(), "box:gba:Golden Sun:d", lang, size);
-            let (rows, focus) = (case.marks("‹nav:row›"), case.marks("‹nav:focus›"));
-            assert_eq!(rows.len(), 3, "{name}: three photos, three rows");
-            assert_eq!(focus.len(), 1, "{name}: one photo has the focus");
-            let mut hints = case.hints();
-            hints.sort();
-            assert_eq!(hints, ["A", "B", "LEFT RIGHT", "X"], "{name}: the case's bar names its keys");
-            assert!(case.problems.trim().is_empty(), "{name}: {}", case.problems);
-            assert!(album_words(&case.misses).is_empty(), "{name}: painted untranslated: {:?}", album_words(&case.misses));
-            // Left: the photo before it comes on top (the one on top always lies in the middle): the fan moves.
-            let left = shot(tmp.path(), stub.as_ref(), "box:gba:Golden Sun:dl", lang, size);
-            assert_eq!(left.marks("‹nav:focus›").len(), 1, "{name}: after Left");
-            assert_ne!(left.marks("‹nav:row›"), rows, "{name}: Left didn't bring another photo on top");
-            // A: the photo up close; its bar has no A (A does nothing more there).
-            let close = shot(tmp.path(), stub.as_ref(), "box:gba:Golden Sun:da", lang, size);
-            let mut h = close.hints();
-            h.sort();
-            assert_eq!(h, ["B", "LEFT RIGHT", "X"], "{name}: up close");
-            assert!(album_words(&close.misses).is_empty(), "{name}: up close, untranslated: {:?}", album_words(&close.misses));
-            // B, B: back to the case, then the case shuts: the box's front again.
-            let shut = shot(tmp.path(), stub.as_ref(), "box:gba:Golden Sun:dabb", lang, size);
-            assert!(shut.hints().iter().any(|k| k == "DOWN") && shut.marks("‹nav:row›").is_empty(), "{name}: B B didn't come back to the box's front: {:?}", shut.hints());
+            combos.push((size, lang));
         }
     }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get().min(4));
+    let root = tmp.path();
+    let stub_ref = stub.as_ref();
+    std::thread::scope(|s| {
+        for _ in 0..threads {
+            let (combos, next) = (&combos, &next);
+            s.spawn(move || loop {
+                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some(&(size, lang)) = combos.get(i) else { break };
+                let name = format!("{lang} {size}");
+                // The box's front: Down is named while the case holds photos.
+                let front = shot(root, stub_ref, "box:gba:Golden Sun", lang, size);
+                assert!(front.hints().iter().any(|k| k == "DOWN"), "{name}: the front's bar doesn't name Down: {:?}", front.hints());
+                // Down: the case lies open, every photo a row the D-pad reaches, the newest on top with the focus.
+                let case = shot(root, stub_ref, "box:gba:Golden Sun:d", lang, size);
+                let (rows, focus) = (case.marks("‹nav:row›"), case.marks("‹nav:focus›"));
+                assert_eq!(rows.len(), 3, "{name}: three photos, three rows");
+                assert_eq!(focus.len(), 1, "{name}: one photo has the focus");
+                let mut hints = case.hints();
+                hints.sort();
+                assert_eq!(hints, ["A", "B", "LEFT RIGHT", "X"], "{name}: the case's bar names its keys");
+                assert!(case.problems.trim().is_empty(), "{name}: {}", case.problems);
+                assert!(album_words(&case.misses).is_empty(), "{name}: painted untranslated: {:?}", album_words(&case.misses));
+                // Left: the photo before it comes on top (the one on top always lies in the middle): the fan moves.
+                let left = shot(root, stub_ref, "box:gba:Golden Sun:dl", lang, size);
+                assert_eq!(left.marks("‹nav:focus›").len(), 1, "{name}: after Left");
+                assert_ne!(left.marks("‹nav:row›"), rows, "{name}: Left didn't bring another photo on top");
+                // A: the photo up close; its bar has no A (A does nothing more there).
+                let close = shot(root, stub_ref, "box:gba:Golden Sun:da", lang, size);
+                let mut h = close.hints();
+                h.sort();
+                assert_eq!(h, ["B", "LEFT RIGHT", "X"], "{name}: up close");
+                assert!(album_words(&close.misses).is_empty(), "{name}: up close, untranslated: {:?}", album_words(&close.misses));
+                // B, B: back to the case, then the case shuts: the box's front again.
+                let shut = shot(root, stub_ref, "box:gba:Golden Sun:dabb", lang, size);
+                assert!(shut.hints().iter().any(|k| k == "DOWN") && shut.marks("‹nav:row›").is_empty(), "{name}: B B didn't come back to the box's front: {:?}", shut.hints());
+            });
+        }
+    });
 }
 
 #[test]

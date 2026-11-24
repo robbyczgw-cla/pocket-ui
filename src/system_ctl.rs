@@ -281,6 +281,23 @@ pub fn parse_ntp(out: &str) -> NtpState {
 }
 
 /// Whether the `reboot_modes` file of a reboot-mode class device lists `bootloader`.
+/// Bluetooth is there: the board has its radio chip (Wi-Fi and Bluetooth come together on every handheld we know; not the
+/// boards of `device::Device::needs_wifi_adapter`, whose USB Wi-Fi stick says nothing about Bluetooth), or, on a board without one (the R36S, the RG28XX), a controller showed up (a USB stick
+/// plugged in before the start). Boards with a chip keep the old rule: their adapter may come up only with the service.
+pub fn radio_or_stick(board_has_radio: bool, controller: bool) -> bool {
+    board_has_radio || controller
+}
+
+/// No Bluetooth on this handheld: a board without a radio chip and no controller at the start (read once; `POCKETUI_MOCK`
+/// reads none). Settings and the quick settings leave the Bluetooth row out then (R36S hand test 20.11.2026 #13/#15e).
+pub fn no_bluetooth() -> bool {
+    static NONE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *NONE.get_or_init(|| {
+        let mocked = std::env::var_os("POCKETUI_MOCK").is_some() || cfg!(not(target_os = "linux"));
+        !radio_or_stick(!crate::device::current().needs_wifi_adapter(), !mocked && RealHw::system().bluetooth_controller())
+    })
+}
+
 pub fn reboot_modes_have_bootloader(text: &str) -> bool {
     text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
         .any(|word| word == "bootloader" || word == "mode-bootloader")
@@ -486,7 +503,15 @@ impl RealHw {
         if self.brick_root() && crate::brick_profile::standalone() {
             return self.root.join("usr/bin/brick-bluetooth").exists() && self.root.join("usr/bin/brick-bluetoothctl").exists();
         }
-        self.systemd() && self.root.join("usr/bin/rocknix-bluetooth").exists()
+        self.systemd() && self.root.join("usr/bin/rocknix-bluetooth").exists() && radio_or_stick(!crate::device::current().needs_wifi_adapter(), self.bluetooth_controller())
+    }
+    /// A Bluetooth controller the kernel knows: an adapter in `/sys/class/bluetooth` (`hci0`, also a USB stick's) or a
+    /// Bluetooth rfkill switch. Every ROCKNIX card has `rocknix-bluetooth`, also the R36S's, which has no chip (R36S hand test
+    /// 20.11.2026 #13: a Bluetooth row that did nothing).
+    pub fn bluetooth_controller(&self) -> bool {
+        let adapter = std::fs::read_dir(self.root.join("sys/class/bluetooth"))
+            .is_ok_and(|d| d.flatten().any(|e| e.file_name().to_str().is_some_and(|n| n.starts_with("hci") && !n.contains(':'))));
+        adapter || self.rfkill_blocks("bluetooth").is_some()
     }
     pub fn has_battery(&self) -> bool {
         self.battery().is_some()
@@ -1132,7 +1157,7 @@ impl AutoHw {
             Caps {
                 backlight: real.has_backlight(),
                 volume: real.has_volume(),
-                wifi: real.has_wifi(),
+                wifi: !crate::device::current().wifi_adapter_missing_at_start() && real.has_wifi(),
                 bluetooth: real.has_bluetooth(),
                 battery: real.has_battery(),
                 time: real.has_time(),
@@ -1207,16 +1232,18 @@ impl AutoHw {
         &self.mock
     }
 
-    /// The Wi-Fi radio is the system's: it was there at the start, or it has appeared since (the chip's driver can come
-    /// up after pocket-ui, and the Wi-Fi row must not stay a mock for the whole run because of that).
+    /// Built-in radios can finish starting after pocket-ui. On boards that need an adapter the session's initial
+    /// interface check decides whether to use the hardware.
     fn wifi_is_real(&self) -> bool {
-        self.caps.wifi || (!self.forced_mock && self.real.has_wifi())
+        !crate::device::current().wifi_adapter_missing_at_start()
+            && (self.caps.wifi || (!self.forced_mock && self.real.has_wifi()))
     }
 
     /// A device without a Wi-Fi chip (the RG28XX, `device::Device::has_wifi`) and none showing up: not the mock's
     /// pretend radio and networks, but "no radio" (`Radio::Absent`), which the Wi-Fi pages say in words.
     fn wifi_absent(&self) -> bool {
-        !self.wifi_is_real() && !crate::device::current().has_wifi()
+        let d = crate::device::current();
+        !self.wifi_is_real() && (!d.has_wifi() || d.needs_wifi_adapter() && !self.forced_mock)
     }
 }
 
@@ -1343,6 +1370,9 @@ impl Hw for AutoHw {
     fn bluetooth(&self) -> Option<bool> {
         if self.caps.bluetooth {
             self.real.bluetooth()
+        } else if no_bluetooth() {
+            // No chip and no stick: no pretend radio (the quick settings leave the row out on None).
+            None
         } else {
             self.mock.bluetooth()
         }
@@ -1350,7 +1380,7 @@ impl Hw for AutoHw {
     fn set_bluetooth(&self, on: bool) {
         if self.caps.bluetooth {
             self.real.set_bluetooth(on)
-        } else {
+        } else if !no_bluetooth() {
             self.mock.set_bluetooth(on)
         }
     }
@@ -1623,6 +1653,30 @@ mod tests {
         let p = root.join(file);
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
         std::fs::write(p, content).unwrap();
+    }
+
+    /// R36S hand test 20.11.2026 #13/#15e: every ROCKNIX card has `rocknix-bluetooth`, so Bluetooth counted as there on
+    /// the R36S (no chip) and Settings and the quick settings showed a row that did nothing. A controller (an adapter in
+    /// /sys/class/bluetooth or a Bluetooth rfkill switch) is what says it is there; a board with a chip keeps the old rule.
+    #[test]
+    fn bluetooth_needs_a_controller_on_a_board_without_a_chip() {
+        let t = fake_root("bt-none");
+        let hw = RealHw::with_root(t.to_path_buf());
+        assert!(!hw.bluetooth_controller(), "nothing in /sys/class/bluetooth");
+        put(&t, "sys/class/bluetooth/hci0:12/x", "");
+        assert!(!hw.bluetooth_controller(), "a link alone is no adapter");
+        put(&t, "sys/class/bluetooth/hci0/name", "stick");
+        assert!(hw.bluetooth_controller(), "an adapter (a USB stick too)");
+        let r = fake_root("bt-rfkill");
+        put(&r, "sys/class/rfkill/rfkill1/type", "bluetooth");
+        assert!(RealHw::with_root(r.to_path_buf()).bluetooth_controller(), "a Bluetooth rfkill switch");
+        let w = fake_root("bt-wlan-only");
+        put(&w, "sys/class/rfkill/rfkill0/type", "wlan");
+        assert!(!RealHw::with_root(w.to_path_buf()).bluetooth_controller(), "a Wi-Fi switch is no Bluetooth");
+
+        assert!(!radio_or_stick(false, false), "R36S without a stick: no Bluetooth");
+        assert!(radio_or_stick(false, true), "R36S with a USB stick plugged in before the start");
+        assert!(radio_or_stick(true, false), "a board with its chip keeps the old rule");
     }
 
     #[test]

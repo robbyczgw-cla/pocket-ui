@@ -266,7 +266,7 @@ impl App {
                 };
                 self.text.draw(c, Face::Title, 50, MARGIN, 110, pal().chalk, heading);
                 let note = match typing {
-                    pocket_ui::tailscale_page::Typing::AuthKey => "A key made in the Tailscale admin console (under Keys). It is not kept on the Pocket.",
+                    pocket_ui::tailscale_page::Typing::AuthKey => "An auth key from Tailscale's admin console (Keys). Not saved on the Pocket.",
                     pocket_ui::tailscale_page::Typing::Hostname => "Letters, digits and hyphens. The Pocket will answer to this name on your other devices.",
                 };
                 pocket_ui::setup::paint_keyboard_noted(c, &mut self.text, kb, "Done", note);
@@ -416,11 +416,11 @@ impl App {
             State::WaitingForApproval => &["Approve this Pocket in the Tailscale admin console, then it connects by itself."],
             // No Wi-Fi chip: a USB network adapter can still bring it online, but nothing here promises Wi-Fi.
             _ if pocket_ui::device::no_wifi_chip() => &[
-                "Tailscale links the Pocket with your phone, computer and other devices in one private network.",
+                "Tailscale connects this Pocket, your phone and PC in one private network.",
                 pocket_ui::device::NEEDS_NETWORK,
             ],
             _ => &[
-                "Tailscale links the Pocket with your phone, computer and other devices in one private network, over Wi-Fi or a hotspot, wherever you are.",
+                "Tailscale connects this Pocket, your phone and PC in one private network over Wi-Fi or hotspot, anywhere.",
                 "Switch it on, then sign in with a QR code. It stays on after a restart.",
             ],
         };

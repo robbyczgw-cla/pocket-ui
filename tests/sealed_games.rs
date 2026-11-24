@@ -6,6 +6,9 @@
 //! otherwise. `SEALED_SHOTS=<folder>` keeps the pictures. Needs python3 (and, on Linux without a compositor,
 //! scripts/wayland-stub.py), as tests/cozy_extras.rs.
 
+#[path = "common/executable.rs"]
+mod fixture_executable;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -55,6 +58,10 @@ fn library(tmp: &Path) -> PathBuf {
         }).collect();
         e.write_header().unwrap().write_image_data(&data).unwrap();
     }
+    // No network: the box's back must not fetch Wikipedia descriptions into `data/` between two runs.
+    let bin = lib.join("offline-bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    fixture_executable::publish(&bin.join("curl"), "#!/bin/sh\nexit 7\n").unwrap();
     lib
 }
 
@@ -146,8 +153,10 @@ impl Run<'_> {
         if let Some(s) = self.stub {
             cmd.env("WAYLAND_DISPLAY", &s.1);
         }
+        let path = format!("{}:{}", self.lib.join("offline-bin").display(), std::env::var("PATH").unwrap_or_default());
         let out = cmd
             .args(["--snapshot", state, png.to_str().unwrap()])
+            .env("PATH", path)
             .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", "en")
             .env("POCKETUI_ROOM_TIME", "12:00")

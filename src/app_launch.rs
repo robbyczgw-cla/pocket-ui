@@ -27,6 +27,9 @@ impl App {
     pub(crate) fn queue_launch(&mut self, system: String, name: String, path: PathBuf) {
         if self.pending_launch.is_some() { return; }
         let asked = pocket_ui::startup::clock_ms();
+        if pocket_ui::startup::is_r36s_n64(&system) {
+            println!("n64 launch: requested at uptime_ms={asked:.0}");
+        }
         // PortMaster's missing-files page uses its own cached installation state and no insertion scene.
         if matches!(system.as_str(), "ports") && !pocket_ui::device::darkos_port() && self.port_needs_files(&path) { return; }
         let Some(sys) = self.systems.iter().find(|s| s.name == system) else { return };
@@ -41,6 +44,8 @@ impl App {
             println!("kids mode: stopped, {} would start on {emulator}", path.display());
             return self.kids_stuck();
         }
+        pocket_ui::covers::set_game_on(true);
+        self.cover_prefetch_stop();
         let player = Player::of(&system, &emulator, &core);
         let hosted = player == Player::Hosted;
         let port = system == "ports";
@@ -104,7 +109,16 @@ impl App {
         self.pending_launch = Some(Pending { run, name: name.clone(), asked, animation, painted: false, skipped: false, rx });
         pocket_ui::trace::step("launch preparation queued");
         let fan = self.perf_fan_prepare_launch();
+        let discard = self.large_game_library_on_rk3326().then(|| {
+            self.infos_warm = (0, 0);
+            self.gamedb.clear_loaded();
+            (std::mem::take(&mut self.game_infos), self.curator.release_for_game(self.screen, &self.items))
+        });
         std::thread::spawn(move || {
+            if let Some(discard) = discard {
+                drop(discard);
+                pocket_ui::heap_trim::trim_now();
+            }
             let prepared = prepare(&name, &game, &data, kids, pixel, shared(), shown, drains, java.as_deref(), romm.as_deref(), fan);
             let _ = tx.send(prepared);
             let _ = proxy.send_event(UserEvent::LaunchPrepared);
@@ -139,6 +153,7 @@ impl App {
         match outcome {
             Outcome::Ready { at, wait, resumable, preview, env } => self.launch_prepared(p, at, wait, resumable, preview, env),
             outcome => {
+                pocket_ui::covers::set_game_on(self.running.is_some());
                 // A start that never began: how far its animation had got, for the way back out (`begin_failed_start`).
                 let ran = self.launch_at.map_or(Duration::ZERO, |t| t.elapsed());
                 self.launch_at = None;
@@ -159,6 +174,12 @@ impl App {
                         self.begin_failed_start(&path, &system, &p.name, ran);
                     }
                     Outcome::Ready { .. } => unreachable!(),
+                }
+                if self.identify.due() || self.cover_run.resume_due() {
+                    self.auto_covers("after a cancelled start");
+                }
+                if self.text_run.resume_due() {
+                    self.auto_texts("after a cancelled start");
                 }
                 self.request_redraw();
             }

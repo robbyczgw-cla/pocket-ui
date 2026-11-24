@@ -191,7 +191,7 @@ fn launch_command(helper: &Path, launcher: &Path) -> Command {
     command
 }
 
-fn pm_dir() -> PathBuf {
+pub fn pm_dir() -> PathBuf {
     if trimui_standalone() {
         if let Some(home) = std::env::var_os("BRICK_PORTMASTER_HOME") { return home.into(); }
     }
@@ -768,6 +768,16 @@ pub fn install_with_cancel(port: &Port, report: &DownloadReporter, cancel: &Down
     forget();
     result?;
     if installed(port) { Ok(()) } else { Err("PortMaster finished, but the game is missing.".into()) }
+}
+
+/// Installs a game's zip from the card (`ports_card`): harbourmaster takes a file by its full path and needs no network
+/// for it. It answers 0 also when it put nothing in place: the caller looks for the port's script afterwards.
+pub fn install_file(zip: &Path) -> Result<(), String> {
+    let zip = std::fs::canonicalize(zip).map_err(|e| e.to_string())?;
+    forget();
+    let result = harbourmaster_report(&["install", &zip.to_string_lossy()], None, &DownloadCancel::new());
+    forget();
+    result
 }
 
 pub fn uninstall(port: &Port) -> Result<(), String> {

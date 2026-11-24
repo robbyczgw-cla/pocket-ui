@@ -1736,3 +1736,394 @@ fn the_manual_names_no_renamed_row_by_its_old_name() {
     }
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }
+
+/// Public language rules in `docs/user/*`: no vetoed terms ("home screen", "lived-in ... default"), no foreign frontend
+/// comparisons/names (NextUI, MinUI, Daijishō, ES-DE, KNULLI, Batocera, standalone ArkOS), and no prose mentions of
+/// EmulationStation outside the literal in-app menu row labels (and none at all in Brick-only manual pages).
+#[test]
+fn the_user_guide_has_no_vetoed_terms_or_other_frontends() {
+    let user_dir = root().join("docs/user");
+    let mut files: Vec<PathBuf> = std::fs::read_dir(&user_dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|e| e == "md" || e == "inc"))
+        .collect();
+    files.sort();
+    let mut bad = Vec::new();
+    const OTHER_FRONTENDS: [&str; 6] = ["nextui", "minui", "daijish", "es-de", "knulli", "batocera"];
+    const UI_ES_ROWS: [&str; 3] = ["from emulationstation", "back to emulationstation", "open emulationstation"];
+    for file in files {
+        let name = file.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let is_brick = name.starts_with("brick-");
+        let text = std::fs::read_to_string(&file).unwrap();
+        for (idx, line) in text.lines().enumerate() {
+            let low = line.to_lowercase();
+            let ln = idx + 1;
+            if low.contains("home screen") {
+                bad.push(format!("docs/user/{name}:{ln}: vetoed \"home screen\": {line}"));
+            }
+            if low.contains("lived-in") && (low.contains("default") || low.contains("from the start")) {
+                bad.push(format!("docs/user/{name}:{ln}: vetoed lived-in+default wording: {line}"));
+            }
+            for fw in OTHER_FRONTENDS {
+                if low.contains(fw) {
+                    bad.push(format!("docs/user/{name}:{ln}: foreign frontend {fw:?}: {line}"));
+                }
+            }
+            // Standalone "ArkOS" (not "dArkOS", which is pocket-ui's supported port).
+            for (pos, _) in low.match_indices("arkos") {
+                let prev = pos.checked_sub(1).and_then(|i| low.as_bytes().get(i)).copied();
+                if prev != Some(b'd') && prev.is_none_or(|b| !b.is_ascii_alphanumeric()) {
+                    bad.push(format!("docs/user/{name}:{ln}: foreign OS \"ArkOS\": {line}"));
+                    break;
+                }
+            }
+            if low.contains("emulationstation") {
+                if is_brick {
+                    bad.push(format!("docs/user/{name}:{ln}: EmulationStation in Brick manual: {line}"));
+                } else {
+                    // Strip the literal in-app menu row labels; any remaining EmulationStation is prose to neutralize.
+                    let mut stripped = low.clone();
+                    for row in UI_ES_ROWS {
+                        stripped = stripped.replace(row, "");
+                    }
+                    if stripped.contains("emulationstation") {
+                        bad.push(format!("docs/user/{name}:{ln}: prose EmulationStation: {line}"));
+                    }
+                }
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{} user-guide language issues:\n{}", bad.len(), bad.join("\n"));
+}
+
+/// `docs/user/*` stays current with DSperate (default DS core on H700, Brick, RK3566, dArkOS) and native `.7z` support in
+/// pocket-core.
+#[test]
+fn the_user_guide_documents_dsperate_and_native_7z() {
+    let systems = read("docs/user/systems.md");
+    let brick_copy = read("docs/user/brick-copy-games.md.inc");
+    let troubleshooting = read("docs/user/troubleshooting.md");
+    let coming_from = read("docs/user/coming-from.md");
+    assert!(systems.contains("DSperate"), "docs/user/systems.md should document DSperate");
+    assert!(!systems.contains("DraStic for DS"), "docs/user/systems.md still claims DraStic for DS on H700");
+    assert!(!systems.contains("`.7z` start with RetroArch") && !systems.contains("So do `.7z` games"),
+        "docs/user/systems.md still sends .7z games to RetroArch");
+    assert!(brick_copy.contains("DSperate"), "docs/user/brick-copy-games.md.inc should document DSperate");
+    assert!(!troubleshooting.contains("`.7z` games\nalways go to RetroArch") && !troubleshooting.contains("`.7z` games always go to RetroArch"),
+        "docs/user/troubleshooting.md still says .7z games always go to RetroArch");
+    assert!(!coming_from.contains("Every other system, `.7z` games"),
+        "docs/user/coming-from.md still sends .7z games to RetroArch");
+}
+
+// ---- no dashes as punctuation in public texts -----------------------------------------------------------------------
+
+/// Returns `(1-based line, line)` for every line in `text` that contains an em-dash (`—`) or a non-numeric en-dash
+/// (`–` not immediately between two ASCII digits, such as `2–5 min` or `48–54 fps`).
+fn lines_with_disallowed_dashes(text: &str) -> Vec<(usize, String)> {
+    let mut bad = Vec::new();
+    for (idx, line) in text.lines().enumerate() {
+        let mut chars = line.char_indices().peekable();
+        let mut prev: Option<char> = None;
+        let mut hit = false;
+        while let Some((_, c)) = chars.next() {
+            let next = chars.peek().map(|&(_, nc)| nc);
+            if c == '\u{2014}' {
+                hit = true;
+                break;
+            }
+            if c == '\u{2013}' {
+                let numeric_range = (prev.is_some_and(|p| p.is_ascii_digit()) && next.is_some_and(|n| n.is_ascii_digit()))
+                    || (prev == Some('}') && next == Some('{'));
+                if !numeric_range {
+                    hit = true;
+                    break;
+                }
+            }
+            prev = Some(c);
+        }
+        if hit {
+            bad.push((idx + 1, line.to_string()));
+        }
+    }
+    bad
+}
+
+/// Paths excluded from the public export (`scripts/public-exclude.txt`), when that file is present (private repo).
+fn public_exclude_rules() -> Vec<String> {
+    let Ok(text) = std::fs::read_to_string(root().join("scripts/public-exclude.txt")) else {
+        return Vec::new();
+    };
+    text.lines()
+        .map(|l| l.split('#').next().unwrap_or("").trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect()
+}
+
+fn is_public_excluded(rel: &str, rules: &[String]) -> bool {
+    rules.iter().any(|rule| {
+        if rule.ends_with('/') {
+            rel.starts_with(rule)
+        } else if let Some((pre, suf)) = rule.split_once('*') {
+            rel.starts_with(pre) && rel.ends_with(suf)
+        } else {
+            rel == rule
+        }
+    })
+}
+
+/// Public texts (README, `docs/user/*`, public `docs/**`, `CHANGELOG.md` `[Unreleased]`, `NOTICE.md`, `assets/**/*.md`)
+/// must never use em-dashes (`—`) or en-dashes (`–`) as punctuation. En-dashes are only allowed in numeric ranges
+/// (`2–5 min`, `48–54 fps`). Published sections of `CHANGELOG.md` stay untouched so they remain byte-equal to their tags.
+#[test]
+fn public_texts_have_no_dashes() {
+    let excludes = public_exclude_rules();
+    let mut files = markdown_files();
+    // Include Brick/Android `.md.inc` user guide fragments bundled into the manual.
+    if let Ok(entries) = std::fs::read_dir(root().join("docs/user")) {
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.extension().is_some_and(|x| x == "inc") {
+                files.push(p);
+            }
+        }
+    }
+    files.sort();
+    files.dedup();
+
+    let mut bad = Vec::new();
+    for file in files {
+        let rel = file.strip_prefix(root()).unwrap().to_string_lossy().replace('\\', "/");
+        if is_public_excluded(&rel, &excludes) {
+            continue;
+        }
+        let text = std::fs::read_to_string(&file).unwrap();
+        if rel == "CHANGELOG.md" {
+            // Check only [Unreleased]; published sections must stay byte-identical to their release tags.
+            let mut in_unreleased = false;
+            let mut buf = String::new();
+            let mut offset = 0usize;
+            for (idx, line) in text.lines().enumerate() {
+                if line.starts_with("## [") {
+                    if line.starts_with("## [Unreleased]") {
+                        in_unreleased = true;
+                        offset = idx;
+                    } else if in_unreleased {
+                        break;
+                    }
+                }
+                if in_unreleased {
+                    buf.push_str(line);
+                    buf.push('\n');
+                }
+            }
+            for (n, line) in lines_with_disallowed_dashes(&buf) {
+                bad.push(format!("{rel}:{}: {line}", offset + n));
+            }
+            continue;
+        }
+        for (n, line) in lines_with_disallowed_dashes(&text) {
+            bad.push(format!("{rel}:{n}: {line}"));
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "{} line(s) in public docs contain em-dashes or non-numeric en-dashes (only digit–digit ranges are allowed):\n{}",
+        bad.len(),
+        bad.join("\n")
+    );
+}
+
+#[test]
+fn disallowed_dash_detector_allows_numeric_ranges_only() {
+    assert!(lines_with_disallowed_dashes("Takes 2–5 min at 48–54 fps (1–3 players).").is_empty());
+    assert_eq!(lines_with_disallowed_dashes("A sentence — with an em-dash.").len(), 1);
+    assert_eq!(lines_with_disallowed_dashes("A sentence – with an en-dash.").len(), 1);
+    assert_eq!(lines_with_disallowed_dashes("Wrong range 2—5 min.").len(), 1);
+    assert_eq!(lines_with_disallowed_dashes("| Cell | — |").len(), 1);
+    assert_eq!(lines_with_disallowed_dashes("| Cell | – |").len(), 1);
+    assert!(lines_with_disallowed_dashes("| Cell | - |").is_empty());
+}
+
+/// Translation tables (`assets/i18n/*.tsv`) must also be free of em-dashes and non-numeric en-dashes.
+#[test]
+fn i18n_tables_have_no_dashes() {
+    let mut files: Vec<PathBuf> = std::fs::read_dir(root().join("assets/i18n"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "tsv"))
+        .collect();
+    files.sort();
+    let mut bad = Vec::new();
+    for file in files {
+        let rel = file.strip_prefix(root()).unwrap().to_string_lossy().replace('\\', "/");
+        let text = std::fs::read_to_string(&file).unwrap();
+        for (idx, line) in text.lines().enumerate() {
+            if line.starts_with('#') {
+                continue;
+            }
+            if !lines_with_disallowed_dashes(line).is_empty() {
+                bad.push(format!("{rel}:{}: {line}", idx + 1));
+            }
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "{} line(s) in assets/i18n/*.tsv contain em-dashes or non-numeric en-dashes:\n{}",
+        bad.len(),
+        bad.join("\n")
+    );
+}
+
+// ---- OpenABL instructions ---------------------------------------------------------------------------------------
+
+/// The blocks of a text: paragraphs, and each list item or table row on its own. (1-based first line, text.)
+fn text_blocks(text: &str) -> Vec<(usize, String)> {
+    let mut out: Vec<(usize, String)> = Vec::new();
+    let mut open = false;
+    for (i, line) in text.lines().enumerate() {
+        let t = line.trim_start();
+        let item = t.starts_with("- ")
+            || t.starts_with("* ")
+            || t.starts_with('|')
+            || t.split_once(". ").is_some_and(|(n, _)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()));
+        if t.is_empty() {
+            open = false;
+            continue;
+        }
+        if !open || item {
+            out.push((i + 1, String::new()));
+            open = true;
+        }
+        let last = out.last_mut().unwrap();
+        last.1.push_str(t);
+        last.1.push(' ');
+    }
+    out
+}
+
+/// `phrase` in `lower` as whole words (`_` counts as a letter: `safe_backup_abl.sh` is not `backup_abl.sh`).
+fn has_words(lower: &str, phrase: &str) -> bool {
+    lower.match_indices(phrase).any(|(at, _)| {
+        let word = |c: char| c.is_alphanumeric() || c == '_';
+        let before = lower[..at].chars().next_back().is_none_or(|c| !word(c));
+        let after = lower[at + phrase.len()..].chars().next().is_none_or(|c| !word(c));
+        before && after
+    })
+}
+
+/// Problems of one text with OpenABL instructions. 2026-11-22: the install texts said "run backup_abl.sh, then
+/// flash_abl.sh" without saying where the scripts come from (our images leave ROCKNIX's `openabl` folder off, and
+/// OpenABL's own release has no scripts), said "no PC needed" (the cards and the backup need a computer) and "Android
+/// stays untouched" (OpenABL overwrites `abl_a` and `abl_b`). A Pocket 5 owner found no script to run.
+fn openabl_problems(text: &str) -> Vec<String> {
+    const WRONG: [&str; 5] = ["untouched", "no pc", "no computer", "without a computer", "without a pc"];
+    let mut out = Vec::new();
+    let blocks = text_blocks(text);
+    for (line, block) in &blocks {
+        let lower = block.to_lowercase();
+        if !lower.contains("openabl") && !lower.contains("_abl.sh") {
+            continue;
+        }
+        for w in WRONG.iter().filter(|w| has_words(&lower, w)) {
+            out.push(format!("{line}: says \"{w}\" next to OpenABL (it needs a computer and overwrites the bootloader)"));
+        }
+    }
+    // The source goes with the steps: in the block that names a script or in one of the six before it.
+    let source = |b: &str| {
+        let l = b.to_lowercase();
+        l.contains("rocknix")
+            && ["openabl` folder", "openabl folder", "folder `openabl`", "folder openabl", "rocknix_abl"].iter().any(|k| l.contains(k))
+    };
+    for (i, (line, block)) in blocks.iter().enumerate() {
+        if (has_words(block, "backup_abl.sh") || has_words(block, "flash_abl.sh"))
+            && !blocks[i.saturating_sub(6)..=i].iter().any(|(_, b)| source(b))
+        {
+            out.push(format!("{line}: names backup_abl.sh/flash_abl.sh but not where they come from (the ROCKNIX image's openabl folder)"));
+        }
+    }
+    out
+}
+
+/// Every public text that tells a player to set up OpenABL says where the scripts come from and never calls it
+/// computer-free or Android-untouched: the README and docs (public ones), the notes beside the images
+/// (`deploy/image/*.txt.in`) and the Pocket 5 / Flip 2 notes `scripts/make-image.sh` writes.
+#[test]
+fn openabl_instructions_name_the_scripts_source_and_the_risk() {
+    let excludes = public_exclude_rules();
+    let mut files: Vec<String> = markdown_files()
+        .iter()
+        .map(|f| f.strip_prefix(root()).unwrap().to_string_lossy().replace('\\', "/"))
+        .filter(|rel| !is_public_excluded(rel, &excludes) && rel != "CHANGELOG.md")
+        .collect();
+    for e in std::fs::read_dir(root().join("deploy/image")).unwrap().flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if name.ends_with(".txt.in") {
+            files.push(format!("deploy/image/{name}"));
+        }
+    }
+    files.push("scripts/make-image.sh".into());
+    files.sort();
+    let mut bad = Vec::new();
+    for rel in &files {
+        let text = read(rel);
+        for p in openabl_problems(&text) {
+            bad.push(format!("{rel}:{p}"));
+        }
+        if matches!(rel.as_str(), "README.md" | "docs/user/index.md" | "docs/INSTALL-DUAL-BOOT.md" | "deploy/image/README-sm8550.txt.in") {
+            for claim in [
+                "Linux cannot see Android's internal storage",
+                "the card never touches Android",
+                "Ready-made SD card images write nothing",
+                "Started through \"UEFI\" or OpenABL, the card hides",
+            ] {
+                if text.contains(claim) {
+                    bad.push(format!("{rel}: storage isolation depends on the boot path: {claim}"));
+                }
+            }
+        }
+        let player_heading = match rel.as_str() {
+            "README.md" => Some("Quick answers"),
+            "docs/user/index.md" => Some("What it does not touch"),
+            _ => None,
+        };
+        if let Some(heading) = player_heading {
+            let answer = section(&text, heading);
+            if !answer.contains("INSTALL-DUAL-BOOT.md") || ["GRUB", "/KERNEL", "UFS"].iter().any(|detail| answer.contains(detail)) {
+                bad.push(format!("{rel}: {heading} should link to the boot details in the install guide"));
+            }
+            if rel == "README.md" && !answer.trim_start().starts_with("- **Do I lose my stock system?** No.") {
+                bad.push(format!("{rel}: Quick answers should start with how to return to the stock system"));
+            }
+        }
+        if matches!(rel.as_str(), "docs/INSTALL-DUAL-BOOT.md" | "deploy/image/README-sm8550.txt.in")
+            && !["GRUB", "/KERNEL", "UFS"].iter().all(|detail| text.contains(detail))
+        {
+            bad.push(format!("{rel}: explain when the boot path leaves internal UFS enabled"));
+        }
+        if matches!(rel.as_str(), "docs/INSTALL-DUAL-BOOT.md" | "scripts/make-image.sh" | "deploy/image/README-sm8550.txt.in") {
+            let backup = text.split_once("backup_abl.sh").and_then(|(_, rest)| rest.split_once("flash_abl.sh")).map_or("", |(before, _)| before);
+            for detail in ["exactly once before flashing", "overwrites the original backup", "computer"] {
+                if !backup.contains(detail) {
+                    bad.push(format!("{rel}: backup instructions before flashing are missing: {detail}"));
+                }
+            }
+        }
+    }
+    assert!(bad.is_empty(), "OpenABL instructions in public texts:\n{}", bad.join("\n"));
+}
+
+#[test]
+fn openabl_check_catches_the_old_wording() {
+    let old = "Set up OpenABL once. No computer needed: Run Script as Root runs `backup_abl.sh` first, then `flash_abl.sh`.";
+    assert_eq!(openabl_problems(old).len(), 2);
+    assert_eq!(openabl_problems("If it shows UEFI, install OpenABL once (back up first, Android stays untouched).").len(), 1);
+    assert!(openabl_problems("Boot mode: Loader. Nothing is flashed, Android stays untouched.\n\nOpenABL: see below.").is_empty());
+    let good = "1. Write the ROCKNIX SM8250 image, copy its `openabl` folder to internal storage.\n2. Run `backup_abl.sh`.";
+    assert!(openabl_problems(good).is_empty());
+    assert!(!has_words("no pcm output", "no pc"));
+    assert!(openabl_problems("Back up abl_a/b with `scripts/android/safe_backup_abl.sh`.").is_empty());
+    let far = "Write the ROCKNIX SM8250 image; copy its `openabl` folder.\n\na\n\nb\n\nc\n\nd\n\ne\n\nf\n\nRun `flash_abl.sh`.";
+    assert_eq!(openabl_problems(far).len(), 1);
+}

@@ -21,7 +21,10 @@ check() { # description, command...
 }
 uid=$(id -u ark); gid=$(id -g ark); arkhome=$(getent passwd ark | cut -d: -f6)
 status() { { tr '\t' '\n' </tmp/pocket-ui.status | sed -n "s/^$1=//p" | head -1; } 2>/dev/null; }
-key() { echo "$1" >/tmp/pocket-ui.in; sleep "${2:-2}"; }
+# The UI's command FIFO, never waiting for ever: with pocket-ui gone a plain echo blocks until something reads (0.6.0
+# release run: the systems layout hung 6 h after the Dreamcast ended the UI). A missed command fails the next check.
+ui_cmd() { timeout 5 sh -c 'echo "$1" >/tmp/pocket-ui.in' _ "$1" || echo "  (nobody reads '$1': pocket-ui is gone, place=$(status place))"; }
+key() { ui_cmd "$1"; sleep "${2:-2}"; }
 waitfor() { # what, value, seconds
   n=0; while [ $n -lt $(($3 * 2)) ]; do case "$(status "$1")" in "$2"*) return 0 ;; esac; sleep 0.5; n=$((n + 1)); done; return 1
 }
@@ -43,12 +46,23 @@ es_start() { # card: as EmulationStation: user ark, the port's entry, sudo
 }
 wait_end() { n=0; while [ $n -lt 80 ] && [ ! -e /tmp/es-rc ]; do sleep 0.5; n=$((n + 1)); done; }
 
+# The first start, A on each page until the shelf: no fixed count of presses, the pages change between versions (0.6 added
+# "How cozy should it be?" after the look; four presses left it there and START then ended the setup instead of opening
+# Settings). Each press waits for its page to change, so a slow page never takes the next press for the shelf.
+finish_setup() {
+  n=0
+  while [ $n -lt 8 ]; do
+    p=$(status place); case "$p" in setup:*) ;; *) break ;; esac
+    key a 0.3; m=0; while [ $m -lt 16 ] && [ "$(status place)" = "$p" ]; do sleep 0.5; m=$((m + 1)); done; sleep 1; n=$((n + 1))
+  done
+  sleep 1.5; echo "  (first start: $n presses, at $(status place))"
+}
 run_card() { # card
   C=$1; P=$C/ports/pocket-ui; echo "=== port and games on $C (exFAT)"
   install_port "$C"
   es_start "$C"
   waitfor place setup:welcome 15 && ok "$C: welcome screen" || bad "$C: no welcome screen (place=$(status place))"
-  key a; key a; key a; key a 2.5
+  finish_setup
   key a; key a 3
   waitfor game playing 20 && ok "$C: a game from $C starts" || bad "$C: game did not start (place=$(status place))"
   check "$C: pocket-core runs the game with a dArkOS core" grep -q "launch gba $C\|launch gba /storage/roms/gba" "$P/logs/pocket-ui.log"
@@ -128,7 +142,7 @@ gone() { # card: nothing of the port is left, no failure screen, a clean end
   check "$2: no failure screen" test ! -s /tmp/tty.out
   check "$2: the log says it was on purpose" grep -q "left on purpose" "$P/logs/start.log"
 }
-to_shelf() { waitfor place setup:welcome 15 && ok "$1: welcome screen" || bad "$1: no welcome screen"; key a; key a; key a; key a 2.5; }
+to_shelf() { waitfor place setup:welcome 15 && ok "$1: welcome screen" || bad "$1: no welcome screen"; finish_setup; }
 # Settings at the category NAME (START opens Settings; R1 goes to the next category): no fixed count of presses, the tree of
 # categories changes between versions. Logs the places it passed for a failing run.
 open_category() {
@@ -152,7 +166,7 @@ run_ui() {
   key home 1.5; key down 0.4; key down 0.4; key down 0.4; key down 0.4; key down 0.4; key a 4; wait_end
   gone "$C" "$C: quick settings > Back to EmulationStation"
   install_port "$C"; rm -f /tmp/systemctl.calls; es_start "$C"; to_shelf "$C (power off)"
-  echo poweroff >/tmp/pocket-ui.in
+  ui_cmd poweroff
   n=0; while [ $n -lt 60 ] && ! grep -q poweroff /tmp/systemctl.calls 2>/dev/null; do sleep 0.5; n=$((n + 1)); done
   check "$C: Power off reaches systemctl poweroff" grep -qx poweroff /tmp/systemctl.calls
   check "$C: the log says who asked" grep -q "power: systemctl poweroff" "$P/logs/start.log"
@@ -284,7 +298,7 @@ PYCFG
   es_start "$C"; to_shelf "$C (extra systems)"
   check "NGP/NGPC, PSP, Dreamcast and GameCube enter the shelf inventory" python3 -I -c 'import json;d=json.load(open("/tmp/pocket-ui-darkos/systems.json"));assert all(s in d for s in ["ngp","ngpc","psp","dreamcast","gamecube"])'
   for sys in ngp ngpc; do
-    echo "play $sys /storage/roms/$sys/.pocket-ui-test/NgpAsteroids.ngp" >/tmp/pocket-ui.in
+    ui_cmd "play $sys /storage/roms/$sys/.pocket-ui-test/NgpAsteroids.ngp"
     waitfor game playing 20 && ok "$sys starts through pocket-core" || bad "$sys did not start"
     check "$sys selected the original mednafen_ngp core" grep -q "launch $sys .*emulator pocket-core, core mednafen_ngp" "$P/logs/pocket-ui.log"
     key home; key up; key a 3
@@ -340,7 +354,7 @@ core_cmd() { timeout 5 sh -c 'echo "$1" >/tmp/pocket-core.cmd' _ "$1"; }  # neve
 play_3d() { # card, system, folder, file, core
   C=$1; P=$C/ports/pocket-ui; sys=$2; folder=$3; file=$4; core=$5
   cp /tmp/fb.raw /tmp/fb.shelf
-  echo "play $sys /storage/roms/$sys/.pocket-ui-test/$file" >/tmp/pocket-ui.in
+  ui_cmd "play $sys /storage/roms/$sys/.pocket-ui-test/$file"
   waitfor game playing 60 && ok "$sys starts through pocket-core" || bad "$sys did not start (place=$(status place) game=$(status game))"
   check "$sys selected dArkOS's 64-bit $core core" grep -q "launch $sys .*emulator pocket-core, core $core" "$P/logs/pocket-ui.log"
   check "$sys got a GLES context, read back to the CPU" grep -q "for the core on the vendor's EGL" "$P/logs/pocket-ui.log"
@@ -374,7 +388,7 @@ play_3d() { # card, system, folder, file, core
 native_case() { # card, system, folder, file: dArkOS's own command, as ark, outside the chroot, then the shelf again
   C=$1; sys=$2; folder=$3; file=$4; record=$C/$folder/.pocket-ui-test/$file.native-launched
   rm -f "$record"
-  echo "play $sys /storage/roms/$sys/.pocket-ui-test/$file" >/tmp/pocket-ui.in
+  ui_cmd "play $sys /storage/roms/$sys/.pocket-ui-test/$file"
   n=0; while [ $n -lt 60 ] && [ ! -s "$record" ]; do sleep 0.5; n=$((n+1)); done
   check "$sys runs dArkOS's command as ark outside the chroot" test "$(head -1 "$record" 2>/dev/null)" = "$uid"
   check "$sys uses ark's original home" test "$(sed -n '2p' "$record" 2>/dev/null)" = "$arkhome"
@@ -479,7 +493,7 @@ run_update56() {
   check "only changed packages were needed (the list holds $(ls /tmp/darkos-test6-update | grep -c darkos-asset) of the app's)" test "$(ls /tmp/darkos-test6-update | grep -c darkos-asset)" -lt 22
   cp "$P/logs/boot.log" /out/test6-update56-boot.log 2>/dev/null; grep -iE 'update|asset|component|reus' "$P/logs/pocket-ui.log" >/out/test6-update56-ui.log 2>/dev/null
   # The updated build plays PSP on pocket-core and comes back.
-  sleep 3; echo "play psp /storage/roms/psp/.pocket-ui-test/Psp2048.pbp" >/tmp/pocket-ui.in
+  sleep 3; ui_cmd "play psp /storage/roms/psp/.pocket-ui-test/Psp2048.pbp"
   if waitfor game playing 60; then
     ok "$new: PSP starts"
     check "$new: PSP runs on pocket-core" grep -q "launch psp .*emulator pocket-core, core ppsspp" "$P/logs/pocket-ui.log"

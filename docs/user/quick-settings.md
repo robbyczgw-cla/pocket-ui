@@ -75,7 +75,8 @@ Sleep works in two stages, both configurable under Settings → System → **Sle
 ([below](#sleep--power-settings); dev details in [SLEEP.md](../SLEEP.md)):
 
 - **Light sleep (screen off):** kicks in after 2 minutes idle by default: the screen turns dark and your game pauses. Any
-  button (except volume keys) wakes it right back up.
+  button (except volume keys) wakes it right back up. On the R36S, RetroArch gets two minutes to load before the idle
+  timer starts. The shelf and pause menu use the same timer as usual.
 - **Deep sleep:** starts 2 minutes into light sleep, or immediately on a short Power press or via **Power… → Sleep**.
   pocket-ui saves your game first, then suspends the hardware. Press Power to wake, and the game appears immediately with
   sound following a beat later. Menus ignore presses for ~0.5 s after wake to prevent pocket triggers, while running

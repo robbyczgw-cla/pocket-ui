@@ -9,7 +9,7 @@
 //!   prefetch only when nothing visible is waiting, and the next move's window replaces the last one's.
 //! * The caches stay bounded as before: a prefetched picture never pushes out one in view (`App::picture_arrived`,
 //!   `App::prune_labels`).
-//! * Nothing while a game runs or the device sleeps; a move while a game starts can't queue any (`covers::game_on`).
+//! * Prefetch waits while a game or update needs the card, or while the device sleeps.
 
 use std::path::PathBuf;
 
@@ -45,7 +45,7 @@ impl App {
     /// After a frame on Home or a list: asks for the window's covers when the selection moved (once per move; a
     /// still selection costs one comparison). Called at the end of `paint`.
     pub(crate) fn cover_prefetch(&mut self) {
-        if !enabled() || self.running.is_some() || self.sleep.state() != pocket_ui::sleep::State::Awake || pocket_ui::covers::game_on() {
+        if !enabled() || self.running.is_some() || self.sleep.state() != pocket_ui::sleep::State::Awake || pocket_ui::background_io::paused() {
             self.cover_prefetch_stop();
             return;
         }

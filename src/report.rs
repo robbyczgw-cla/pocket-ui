@@ -3,6 +3,7 @@
 //!
 //! - **Where**: `/storage/roms/reports/report-<date>-<time>.zip` (`POCKETUI_REPORTS` moves it), next to the
 //!   screenshots in the games share, so it is reachable over the file sharing, USB or the card in a computer.
+//!   On a single ROCKNIX card with the games on STORAGE, a copy also goes in `/flash/reports` on the FAT drive.
 //! - **What**: `README.txt` (what is inside, what was left out, where to attach it), `system.txt` (pocket-ui and
 //!   pocket-core version and commit, ROCKNIX version, device, kernel, uptime, memory, battery and temperatures, free
 //!   space per partition, the last crash), `emulators.txt` (pocket-core's systems, the libretro cores with their
@@ -32,6 +33,9 @@ pub use crate::report_redact::{game_code, GameName, Redactor};
 pub const DEFAULT_DIR: &str = "/storage/roms/reports";
 /// The folder as the player finds it in the games share.
 pub const SHARE_FOLDER: &str = "reports";
+/// Where ROCKNIX (and `games-card.sh`) mounts the games card in the second slot. A report also goes in its `reports`
+/// folder: with an ArkOS card read in place `/storage/roms` is the internal storage, which a computer can't read.
+pub const GAMES_CARD: &str = "/storage/games-external";
 
 /// pocket-ui's settings files that go in as they are (after cleaning). Not the library, recents, history,
 /// favorites, Curator or sync files (game names and play habits), not the accounts (`retroachievements.json`,
@@ -78,6 +82,10 @@ pub const SAVED_TITLE: &str = "Report saved";
 pub const FAILED_TITLE: &str = "Report not saved";
 /// Where the file is, under its name.
 pub const WHERE: &str = "In the reports folder of the games share (roms/reports on the SD card).";
+/// The same with a copy on the games card in the second slot ([`Saved::on_card`]): the place a computer can read.
+pub const WHERE_CARD: &str = "On the games card in the second slot, in its reports folder: put that card in a computer to copy it. A copy stays in roms/reports.";
+/// Where to find a copy on the PC-readable partition of the system card.
+pub const WHERE_FLASH: &str = "In the reports folder on the ROCKNIX drive. Power off and plug the system card into your computer.";
 pub const ATTACH: &str = concat!("Attach this file to a GitHub issue or mail it to ", contact_address!(), ".");
 /// What [`Redactor`] takes out, in the player's words.
 pub const LEFT_OUT: &str = "Left out: Wi-Fi names and passwords, network addresses, Tailscale, RetroAchievements and sync details, passwords and tokens. Game names are replaced by a short code, so name the game in your report if it matters.";
@@ -118,6 +126,17 @@ pub struct Saved {
     /// `report-2026-10-26-140507.zip`.
     pub name: String,
     pub bytes: u64,
+    /// A copy went into the games card's `reports` folder ([`Sources::card_dir`]).
+    pub on_card: bool,
+    /// A copy went into the ROCKNIX drive's `reports` folder.
+    pub on_flash: bool,
+}
+
+impl Saved {
+    /// The line under the name: where to find the file.
+    pub fn where_text(&self) -> &'static str {
+        if self.on_card { WHERE_CARD } else if self.on_flash { WHERE_FLASH } else { WHERE }
+    }
 }
 
 // ---- where things are -----------------------------------------------------------------------------------------
@@ -136,10 +155,29 @@ pub struct Sources {
     pub battery: PathBuf,
     pub pocket_core: PathBuf,
     pub out_dir: PathBuf,
+    /// The games card's `reports` folder when a second card is mounted on another file system than `out_dir`
+    /// ([`games_card_reports`]); the zip goes there too.
+    pub card_dir: Option<PathBuf>,
+}
+
+/// `<card>/reports` when `card` is a mount point in `mounts` (the text of `/proc/mounts`) and not the file system
+/// `out_dir` is on (with ROCKNIX's own automount the games share already is the card).
+pub fn games_card_reports(mounts: &str, card: &Path, out_dir: &Path) -> Option<PathBuf> {
+    use std::os::unix::fs::MetadataExt;
+    let want = card.to_string_lossy();
+    let mounted = mounts.lines().any(|l| l.split_whitespace().nth(1).is_some_and(|mp| mp.replace("\\040", " ") == want));
+    if !mounted {
+        return None;
+    }
+    let card_dev = std::fs::metadata(card).ok()?.dev();
+    // The nearest folder of out_dir that exists (reports/ may not be made yet).
+    let out_dev = out_dir.ancestors().find_map(|a| std::fs::metadata(a).ok()).map(|m| m.dev());
+    (out_dev != Some(card_dev)).then(|| card.join(SHARE_FOLDER))
 }
 
 impl Sources {
     pub fn system(data_dir: &Path, pocket_core: &Path) -> Sources {
+        let out_dir: PathBuf = std::env::var_os("POCKETUI_REPORTS").map_or_else(|| DEFAULT_DIR.into(), PathBuf::from);
         Sources {
             data_dir: data_dir.to_path_buf(),
             live_log: std::env::var_os("POCKETUI_LOG").map_or_else(|| "/var/log/pocket-ui.log".into(), PathBuf::from),
@@ -147,12 +185,37 @@ impl Sources {
             storage: "/storage".into(),
             battery: crate::battery::dir(),
             pocket_core: pocket_core.to_path_buf(),
-            out_dir: std::env::var_os("POCKETUI_REPORTS").map_or_else(|| DEFAULT_DIR.into(), PathBuf::from),
+            out_dir: out_dir.clone(),
+            card_dir: games_card_reports(&std::fs::read_to_string("/proc/mounts").unwrap_or_default(), Path::new(GAMES_CARD), &out_dir),
         }
     }
 
     fn sys(&self, path: &str) -> PathBuf {
         self.root.join(path.trim_start_matches('/'))
+    }
+
+    fn flash_reports(&self) -> Option<PathBuf> {
+        if !cfg!(target_os = "linux") || self.card_dir.is_some() || self.out_dir != self.storage.join("roms/reports") {
+            return None;
+        }
+        let os = std::fs::read_to_string(self.sys("/etc/os-release")).ok()?;
+        let name = crate::update::os_release_field(&os, "OS_NAME").or_else(|| crate::update::os_release_field(&os, "NAME"));
+        if name.as_deref() != Some("ROCKNIX") {
+            return None;
+        }
+        let mounts = std::fs::read_to_string(self.sys("/proc/mounts")).ok()?;
+        let mount_at = |point: &str| mounts.lines().rev().find_map(|line| {
+            let mut fields = line.split_whitespace();
+            let (dev, dir, fs) = (fields.next()?, fields.next()?, fields.next()?);
+            (dir == point).then_some((dev, fs))
+        });
+        let (_, boot_fs) = mount_at("/flash")?;
+        let storage = mount_at("/storage")?;
+        if boot_fs != "vfat" || storage.1 != "ext4" || mount_at("/storage/roms").is_some_and(|roms| roms != storage) {
+            return None;
+        }
+        let card = crate::games_card::card_of(&mounts, |dev| self.root.join(dev.strip_prefix("/").unwrap_or(dev)).exists());
+        (!matches!(card, crate::games_card::Card::In(_))).then(|| self.sys("/flash/reports"))
     }
 
     fn system_cfg(&self) -> PathBuf {
@@ -183,20 +246,35 @@ pub fn write(src: &Sources, games: &[GameName], now: u64, local: &Stamp) -> Resu
     let entries = entries(src, games, now, local);
     let bytes = zip(&entries, local);
     let name = file_name(local);
-    std::fs::create_dir_all(&src.out_dir).map_err(|e| Failure::from_io(&e))?;
-    let path = src.out_dir.join(&name);
-    let part = src.out_dir.join(format!(".{name}.part"));
-    let written = (|| -> std::io::Result<()> {
-        let mut f = std::fs::File::create(&part)?;
-        f.write_all(&bytes)?;
-        f.sync_all()?;
-        std::fs::rename(&part, &path)
-    })();
-    if let Err(e) = written {
-        let _ = std::fs::remove_file(&part);
-        return Err(Failure::from_io(&e));
-    }
-    Ok(Saved { path, name, bytes: bytes.len() as u64 })
+    let path = save_into(&src.out_dir, &name, &bytes).map_err(|e| Failure::from_io(&e))?;
+    // The copy on the games card is a help, not the report: a card that can't take it leaves the saved one as it is.
+    let on_card = src.card_dir.as_ref().is_some_and(|dir| match save_into(dir, &name, &bytes) {
+        Ok(_) => true,
+        Err(e) => {
+            eprintln!("report: no copy on the games card ({}): {e}", dir.display());
+            false
+        }
+    });
+    let on_flash = src.flash_reports().is_some_and(|dir| {
+        let save = || save_into(&dir, &name, &bytes);
+        let result = if src.root == Path::new("/") { crate::fsutil::with_writable_flash(save) } else { save() };
+        match result {
+            Ok(_) => true,
+            Err(e) => {
+                eprintln!("report: no copy on the ROCKNIX drive: {e}");
+                false
+            }
+        }
+    });
+    Ok(Saved { path, name, bytes: bytes.len() as u64, on_card, on_flash })
+}
+
+/// Writes `bytes` as `dir/name` through a temporary file, so a full card leaves no half zip behind.
+fn save_into(dir: &Path, name: &str, bytes: &[u8]) -> std::io::Result<PathBuf> {
+    std::fs::create_dir_all(dir)?;
+    let path = dir.join(name);
+    crate::fsutil::write_atomic(&path, bytes)?;
+    Ok(path)
 }
 
 /// The zip's files, cleaned, in order: README.txt first.
@@ -325,7 +403,7 @@ fn previous_boots(logs: &Path) -> Vec<PathBuf> {
 }
 
 /// The last `cap` bytes of a file, from the start of a line; None when it is missing or empty.
-fn tail(path: &Path, cap: u64) -> Option<String> {
+pub(crate) fn tail(path: &Path, cap: u64) -> Option<String> {
     let mut f = std::fs::File::open(path).ok()?;
     let len = f.metadata().ok()?.len();
     let from = len.saturating_sub(cap);
@@ -700,12 +778,15 @@ fn dos_time(t: &Stamp) -> (u16, u16) {
 }
 
 #[cfg(test)]
+pub(crate) use tests::unzip;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
 
     /// The entries of a zip of [`zip`], unpacked.
-    fn unzip(z: &[u8]) -> Vec<(String, Vec<u8>)> {
+    pub(crate) fn unzip(z: &[u8]) -> Vec<(String, Vec<u8>)> {
         let le16 = |at: usize| u16::from_le_bytes([z[at], z[at + 1]]) as usize;
         let le32 = |at: usize| u32::from_le_bytes([z[at], z[at + 1], z[at + 2], z[at + 3]]) as usize;
         let eocd = (0..z.len() - 21).rev().find(|&i| z[i..].starts_with(b"PK\x05\x06")).expect("end record");
@@ -915,7 +996,7 @@ mod tests {
             std::fs::write(p, text).unwrap();
         };
         put("root/etc/hostname", "SM8250\n");
-        put("root/proc/device-tree/compatible", "retroid,rpocketv2\0qcom,sm8250\0");
+        put("root/proc/device-tree/compatible", "retroid,rpminiv2\0qcom,sm8250\0");
         put("storage/.config/system/configs/system.cfg", "system.hostname=SM8250\nroot.password=rocknix\nglobal.retroachievements.username=\nwifi.ssid=Heimnetz Müller 5G\nwifi.key=hunter2-secret-psk\n");
         put("storage/.config/NetworkManager/system-connections/wifi.nmconnection", "[connection]\nid=wifi\ntype=wifi\ninterface-name=wlan0\n[wifi]\nmode=infrastructure\nssid=Heimnetz Müller 5G\n[wifi-security]\nkey-mgmt=wpa-psk\npsk=hunter2-secret-psk\n");
         put("data/tailscale.json", "{}");
@@ -1064,6 +1145,7 @@ mod tests {
             battery: d.join("battery"),
             pocket_core: d.join("no-pocket-core"),
             out_dir: d.join("roms/reports"),
+            card_dir: None,
         }
     }
 
@@ -1106,6 +1188,88 @@ mod tests {
         assert!(!std::fs::read_dir(&src.out_dir).unwrap().flatten().any(|e| e.file_name().to_string_lossy().ends_with(".part")));
     }
 
+    /// R36S, 22.11.2026: with an ArkOS card read in place in TF2, `/storage/roms` is the internal storage (ext4 on the system
+    /// card), so the saved report was where a computer can't read it. With a games card in the second slot a copy goes
+    /// into its `reports` folder and the sheet names that place; a card that can't take it leaves the report as it was.
+    #[test]
+    fn a_report_also_goes_onto_the_games_card_in_the_second_slot() {
+        let d = tmp("games-card");
+        let mut src = pocket(&d);
+        src.card_dir = Some(d.join("card/reports"));
+        let saved = write(&src, &games(), NOW, &LOCAL).unwrap();
+        let copy = d.join("card/reports").join(&saved.name);
+        assert!(saved.on_card, "no copy on the card");
+        assert_eq!(std::fs::read(&copy).unwrap(), std::fs::read(&saved.path).unwrap());
+        assert_eq!(saved.where_text(), WHERE_CARD);
+        assert!(WHERE_CARD.contains("second slot") && WHERE_CARD.contains("computer"), "{WHERE_CARD}");
+        assert!(!std::fs::read_dir(d.join("card/reports")).unwrap().flatten().any(|e| e.file_name().to_string_lossy().ends_with(".part")));
+
+        // A card that can't take it (a file where its folder should be): the report is saved, the sheet says roms/reports.
+        let e = tmp("games-card-blocked");
+        let mut src = pocket(&e);
+        std::fs::create_dir_all(e.join("card")).unwrap();
+        std::fs::write(e.join("card/reports"), "in the way").unwrap();
+        src.card_dir = Some(e.join("card/reports"));
+        let saved = write(&src, &games(), NOW, &LOCAL).unwrap();
+        assert!(!saved.on_card && saved.path.exists());
+        assert_eq!(saved.where_text(), WHERE);
+
+        // No second card: as before.
+        let f = tmp("games-card-none");
+        let saved = write(&pocket(&f), &games(), NOW, &LOCAL).unwrap();
+        assert!(!saved.on_card);
+        assert_eq!(saved.where_text(), WHERE);
+    }
+
+    #[test]
+    fn r36s_test7_a_one_card_rocknix_report_is_available_on_flash() {
+        let d = tmp("one-card");
+        let mut src = pocket(&d);
+        src.out_dir = src.storage.join("roms/reports");
+        let mounts = src.root.join("proc/mounts");
+        let one_card = "/dev/mmcblk0p1 /flash vfat rw 0 0\n/dev/mmcblk0p2 /storage ext4 rw 0 0\n";
+        std::fs::write(&mounts, one_card).unwrap();
+        let flash = src.root.join("flash/reports");
+        let saved = write(&src, &games(), NOW, &LOCAL).unwrap();
+        let copy = flash.join(&saved.name);
+        assert!(copy.is_file(), "the copy must be on the PC-readable boot partition");
+        assert_eq!(std::fs::read(copy).unwrap(), std::fs::read(&saved.path).unwrap());
+        assert!(saved.where_text().contains("ROCKNIX"), "{}", saved.where_text());
+        assert_eq!(std::fs::read_dir(flash).unwrap().count(), 1, "no partial file remains");
+
+        let elsewhere = src.root.join("elsewhere/reports");
+        src.card_dir = Some(elsewhere.clone());
+        std::fs::write(&mounts, format!("{one_card}/dev/mmcblk1p1 /storage/games-external exfat rw 0 0\n")).unwrap();
+        let next = Stamp { sec: LOCAL.sec + 1, ..LOCAL };
+        let saved = write(&src, &games(), NOW, &next).unwrap();
+        assert_eq!(saved.where_text(), WHERE_CARD);
+        assert!(elsewhere.join(&saved.name).is_file());
+        assert!(!src.root.join("flash/reports").join(&saved.name).exists());
+    }
+
+    /// Which second card counts: one mounted on the games card's place, on another file system than the reports folder
+    /// (with ROCKNIX's own automount the games share is already the card, nothing is copied).
+    #[test]
+    fn the_games_card_counts_only_when_mounted_apart_from_the_reports_folder() {
+        let d = tmp("games-card-mounts");
+        let out = d.join("roms/reports");
+        let card = d.join("card");
+        std::fs::create_dir_all(&card).unwrap();
+        let line = |mp: &Path| format!("/dev/mmcblk1p1 {} exfat rw 0 0\n", mp.display());
+        assert_eq!(games_card_reports("", &card, &out), None, "not mounted");
+        assert_eq!(games_card_reports(&line(&card), &card, &out), None, "the same file system as the reports folder");
+        // /proc is its own file system everywhere: a card mounted apart.
+        let proc_card = Path::new("/proc");
+        assert_eq!(games_card_reports(&line(proc_card), proc_card, &out), Some(proc_card.join(SHARE_FOLDER)));
+        assert_eq!(games_card_reports(&line(proc_card), &card, &out), None, "another mount point");
+        // Missing or empty: a card listed but gone (taken out), an empty or unreadable /proc/mounts.
+        let gone = d.join("taken-out");
+        assert_eq!(games_card_reports(&line(&gone), &gone, &out), None, "a card that isn't there");
+        assert_eq!(games_card_reports("\n\n garbage", &card, &out), None);
+        assert!(games_card_reports(&line(proc_card), proc_card, &d.join("nowhere/at/all")).is_some(), "a reports folder not made yet");
+        assert_eq!(GAMES_CARD, "/storage/games-external", "where games-card.sh and ROCKNIX's automount put TF2");
+    }
+
     #[test]
     fn report_carries_the_shutdown_log_of_this_boot_and_the_one_before_cleaned() {
         let d = tmp("shutdown-log");
@@ -1141,7 +1305,7 @@ mod tests {
     #[test]
     fn report_on_a_bare_pocket_still_says_what_is_missing() {
         let d = &tmp("bare");
-        let src = Sources { data_dir: d.join("data"), live_log: d.join("x"), root: d.join("root"), storage: d.join("s"), battery: d.join("b"), pocket_core: d.join("pc"), out_dir: d.join("out") };
+        let src = Sources { data_dir: d.join("data"), live_log: d.join("x"), root: d.join("root"), storage: d.join("s"), battery: d.join("b"), pocket_core: d.join("pc"), out_dir: d.join("out"), card_dir: None };
         let files = entries(&src, &[], NOW, &LOCAL);
         let readme = String::from_utf8_lossy(&files[0].1).into_owned();
         assert!(readme.contains("pocket-ui.log") && readme.contains("no crash recorded"), "{readme}");

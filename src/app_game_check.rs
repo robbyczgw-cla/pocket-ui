@@ -231,7 +231,7 @@ impl App {
     fn paint_game_check_offer(&mut self, c: &mut Canvas, n: usize) {
         self.sheet_header(c, SETTINGS_NAME);
         let head = if n == 1 { "1 new game".to_string() } else { format!("{n} new games") };
-        self.game_check_words(c, Some(pocket_ui::ui_art::Art::Search), &head, "Want to see if they will start? This takes a moment and changes nothing.");
+        self.game_check_words(c, Some(pocket_ui::ui_art::Art::Search), &head, "Check if your games can launch? Takes a moment, changes nothing.");
         self.nu_hints(c, &[("B", "Not now"), ("A", "Check")]);
     }
 

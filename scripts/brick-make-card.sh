@@ -239,6 +239,8 @@ TXT
 # BRICK_SOURCES_APART=1 (the public release): the cores' and pocket-ui's source go into their own zip next to the card zip, on the same
 # release page, instead of into the card zip (half its size; every player downloads the card, few the source).
 # BRICK_POCKETUI_SOURCE: pocket-ui's own source tarball (scripts/source-archive.sh), put into that zip.
+# Every core on the card has its system files where its system folder is filled from (docs/dev/tests.md, "Package completeness").
+python3 -I "$ROOT/scripts/package-complete.py" brick "$CARD" || die "the card is incomplete (scripts/package-complete.py above)"
 ZIP=$OUT/pocket-ui-trimui-card-$VERSION.zip
 SRCZIP=$OUT/pocket-ui-trimui-sources-$VERSION.zip
 rm -f "$ZIP" "$SRCZIP"

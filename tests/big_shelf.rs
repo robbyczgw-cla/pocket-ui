@@ -28,7 +28,7 @@ struct Shown {
 impl Card {
     fn new() -> Card {
         // A short path: the stub's socket has to fit.
-        let dir = tempfile::Builder::new().prefix("pui-big-").tempdir_in("/tmp").unwrap();
+        let dir = tempfile::Builder::new().prefix("pui-big-").tempdir().unwrap();
         let script = format!("{ROOT}/scripts/curator-fake-library.py");
         let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &script, dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
         assert!(status.success());
@@ -323,11 +323,11 @@ fn the_look_step_has_just_play_second_and_says_when_a_card_is_big() {
     let many = Card::new();
     set(&many);
     let w = many.show("setup:look").words;
-    assert!(w.contains("Easy") && w.contains("Best with a handful of games"), "{w}");
+    assert!(w.contains("Easy") && w.contains("Great for smaller libraries"), "{w}");
     let few = Card::with_games(30, &["gba"]);
     set(&few);
     let w = few.show("setup:look").words;
-    assert!(w.contains("One big game at a time, simple menus.") && !w.contains("Best with"), "{w}");
+    assert!(w.contains("One big case at a time, zero clutter.") && !w.contains("Great for smaller"), "{w}");
 }
 
 /// Seen on the Odin: coming back from the card the shelf flashed the neighbour case's colour.

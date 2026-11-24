@@ -927,6 +927,22 @@ mod tests {
     use super::*;
     use crate::testutil::TestDir;
 
+    /// pocket-core's notes over the game (`paint_pill_on`, the GL overlay's pieces): a Korean line is hangul from the
+    /// shipped fonts in every style, its syllables wrapped inside the screen as any note's words.
+    #[test]
+    fn a_korean_note_over_the_game_is_hangul_in_every_style() {
+        for (style, letters) in crate::font_style::ROW {
+            let _style = crate::font_style::for_this_thread(style, letters);
+            for w in [640, 1024, 1240] {
+                let mut text = Text::new();
+                let korean = paint_pill_on(&mut text, "저장했습니다. 게임을 계속하려면 A를 누르세요", w);
+                let latin = paint_pill_on(&mut text, "Jeojanghaetseumnida. Geimeul gyesokharyeomyeon Areul nureuseyo", w);
+                assert!(korean.2 != latin.2, "{style:?} {letters:?} {w}: hangul, not its Latin letters");
+                assert!(korean.0 > 0 && korean.0 <= w as i32 - 2 * MARGIN, "{style:?} {w}: inside the screen, {}", korean.0);
+            }
+        }
+    }
+
     #[test]
     fn the_start_note_reflows_when_fullscreen_replaces_the_initial_window() {
         let msg = "Zurück in den Moment ging nicht: neu gestartet. Der Moment liegt in Slot 2";

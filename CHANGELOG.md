@@ -5,6 +5,64 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-26
+
+### Added
+
+- **Korean menus:** pocket-ui now speaks Korean (한국어), drawn with its own Korean fonts. Pick it under Settings → System → Language or on the Welcome page; a Korean system or phone starts in it. On every handheld, TrimUI Brick and pocket-ui for Android included.
+- **Korean game names stay Korean:** hangul is now drawn with pocket-ui's own Korean fonts (the pixel font Galmuri in Retro, Noto Sans KR in Barlow) on every handheld, TrimUI Brick and the Android app included, instead of being spelled out in Latin letters ("Jeldaui Jeonseol").
+- **RetroArch games now share pocket-ui's HOME shortcuts** (pocket-ui OS): HOME + R1 saves, HOME + L1 loads, HOME + R2 toggles fast-forward, hold HOME + L2 to rewind, HOME + A saves a screenshot straight into Screenshots, and HOME + Y toggles the FPS counter. Any shortcut you switch off under Options → Shortcuts stays off in RetroArch too, and HOME + A no longer pauses RetroArch on RG35XX and Retroid handhelds.
+- **In-game shortcut list for RetroArch:** Pause menu → Options → **Shortcuts** now shows every active HOME combo right inside a RetroArch game, in all six languages.
+- **One-time Dolphin setup card** (pocket-ui for Android, Handheld view): because Dolphin doesn't read settings from pocket-ui, a quick card before your first GameCube or Wii game walks you through mapping your built-in pad as GameCube Controller 1, hiding touch buttons, locking landscape and returning to your shelf. Stays handy on the game card afterwards.
+- **`.7z` games now play directly in pocket-core:** unpacks LZMA, LZMA2 and PPMd archives on launch, matches covers and titles by checksum, and clearly explains if an archive has multiple games, a password or corruption (instead of falling back to RetroArch). Available on ROCKNIX, TrimUI Brick, dArkOS and Android.
+
+- **PortMaster games without Wi-Fi** (pocket-ui OS): on the RG28XX, RG35XX 2024, R36S or with Wi-Fi off, download games and their runtimes from portmaster.games on a computer, copy them into `ports/autoinstall` on the SD card, and install them from Settings › Games › Box art & downloads › PortMaster games (**From the card**). They show up under Ports with controls and the pause menu; files that need a missing runtime or are built for another handheld stay on the card with the reason.
+
+### Changed
+
+- **The pause menu shows your game:** on Continue, Options and Save & quit the right side of the pause menu now shows the paused game in the same window Save and Load use, with how long you played it today ("Paused here · played 42 min today"). It used to stay dark there. On every handheld and in pocket-ui for Android's Handheld view.
+- **A calmer, cleaner update bar:** software updates now show one steady progress bar and status line across the whole download, with percentage and estimated time left ("Downloading the update… 42% · About 2 min left"). No more flashing "Connecting to the update server" between chunks, no backwards jumps, and dropped connections clearly show "Connection lost, trying again (2/3)". Available on ROCKNIX, TrimUI Brick and dArkOS.
+- **Delete a single game right from its card:** games now have a dedicated **Delete from the card** row right after Stickers and Screenshots (with **Hide from the shelf** right beside it) instead of tucking both at the bottom under "Hide or delete". It names the game and space freed, asks twice, keeps saves and states unless you opt in, and cleans up every disc, cover, gamelist entry, scraped media, Shelf space slot, Recent games, Continue and Favourites. Also available on the web companion; disabled mid-game, in Kids mode, and on dArkOS and Android where pocket-ui can't delete games.
+- **Smoother PSP out of the box on TrimUI Brick and Smart Pro:** PPSSPP now defaults to Frameskip 1 at native PSP resolution on its fastest CPU mode. Any override you set in Options › Emulator still wins.
+- **Nintendo DS: tap to swap screens.** A quick tap on the layout button (R2 on stickless handhelds) flips top and bottom screens (or toggles top-only / bottom-only), while holding it cycles layouts as before. Works with DSperate and melonDS on Linux and Android.
+
+### Fixed
+
+- **PortMaster no longer stands on the Ports shelf as a game:** its own menu (which needs a network) was listed beside your ports once PortMaster was set up. pocket-ui installs and starts ports itself, so it is left out on every handheld.
+- **R36S game starts get more memory and card time:** very large libraries use less RAM, and shelf readers pause when you start a game. RetroArch gets two minutes to load before the idle timer starts. The Power button still puts the handheld to sleep.
+- **SD cards for the Retroids keep the GRUB checked on a real device:** the cards are built from that GRUB version (Debian 2.12-9+deb13u2), pinned by its checksum, instead of whatever Debian has newest that day.
+- **Pocket 5 and Flip 2 cards name their own handheld:** the source code offer (SOURCE-OFFER.txt) and the GRUB settings file on these SD cards named the Retroid Pocket Mini V2 and its image. Every card now names its own model and image, and the image check refuses a card that names another model.
+- **Report a problem with a second card:** the report now also goes into the `reports` folder of the games card in the second slot, so a computer can read it (with a card read in place, `roms/reports` was on the internal storage), and the message says where to find it.
+- **Handhelds without Wi-Fi (R36S, RG28XX, RG35XX 2024) no longer show a Bluetooth row** in Settings and Quick settings unless a Bluetooth adapter is really there (a USB stick plugged in before switching on counts).
+- **Cleaner power menu:** the selected entry has one highlight instead of two, and Anbernic and R36S handhelds no longer offer "Restart to boot menu" or Android hints they don't have.
+- **Readable button letters in the hint bar:** the B and A keys have darker caps, so their letters stay clear on 640×480 screens.
+- **Holding the power button opens the power menu even when a second input device echoes the key**, instead of going to sleep.
+- **The R36S first start calls it a beta** instead of saying pocket-ui hasn't been tested on it.
+- **RetroArch pause-menu Save and Load now work reliably on ROCKNIX:** pocket-ui enables RetroArch's command listener before launch and warns clearly if a save file or load request isn't confirmed.
+- **Web companion mobile polish:** the top tab bar wraps cleanly onto two rows on narrow phones instead of clipping tabs or hiding Stats and More; the update pill shows once instead of repeating; German download buttons now read "Herunterladen" instead of "Laden"; Stats weekly charts show clear seven-day labels, single-line play-time tiles and full console names.
+- **Snappier huge game libraries:** Settings › Games › Shelf space no longer freezes on 60,000-game cards (picking "My favourites" previously stalled for minutes), and Crate, Home, game titles and cover lookups are much faster too.
+- **Smooth shelf switches on huge cards:** opening a system with tens of thousands of games no longer stalls while its shelf is laid out, the Cabinet prepares the shelves above and below while you look at one, and covers are found without asking the card again for every game that has none. Biggest gain on large exFAT cards such as the R36S's second card.
+- **Reliable safe-mode recovery:** pocket-ui now reaches safe mode even if a crash loop lasts several minutes per boot: only a clean 10-minute run resets the crash counter (previously 2 minutes).
+- **Lighter software rendering on dArkOS and TrimUI Brick (without GPU):** reuses frame buffers instead of reallocating them on every frame.
+- **Pocket Sync wording on TrimUI Brick and Smart Pro:** now says "Pocket" instead of "Brick" across pairing and device rows, since Pocket Sync pairs any pocket-ui handheld or phone.
+- **TrimUI Brick & Smart Pro first-start text:** restored the full layout description line and the subtitles beneath choices explaining MENU in-game and where to change layouts later.
+- **Test buttons on digital triggers:** L2 and R2 now light up properly on handhelds with digital trigger buttons like the RG353M and other dArkOS devices.
+- **Feelable menu haptics on pocket-ui beta for dArkOS:** handhelds with a rumble motor (like the RG353M) now fire a crisp full-power tick you can actually feel, while motorless handhelds (R36S family) hide the Haptics row altogether.
+- **Clearer emulator crash messages (pocket-ui OS):** when a core crashes while loading a game, the card now says the emulator crashed and suggests next steps instead of blaming a missing core.
+- **Neo Geo `neogeo.zip` detection:** games missing `neogeo.zip` now name that exact file, and pocket-ui checks beside the game, in `roms/neogeo` and in `roms/bios`.
+- **ScummVM on pocket-ui beta for dArkOS:** bundled engine files, themes and a writable save folder now work cleanly, keeping pocket-ui's own ScummVM config separate without touching the read-only BIOS `scummvm.ini`.
+- **Pocket Sync live game-card status:** saves arriving from another Pocket now update the game's box immediately with your progress and "Not here yet" (instead of "Not played yet"), including on pocket-ui for Android.
+- **Wi-Fi no longer gets stuck on "Connecting" after a crash:** if a previous session crashed mid-save, pocket-ui now clears the stale lock instead of blocking Wi-Fi and settings changes until reboot.
+- **TrimUI Brick layout & overlap fixes:** flipping 3D boxes (including GBA and PSP on 640×480 screens) no longer overlaps titles or hints; tall Cabinet cases keep their shelf boards and nameplates; PC Engine HuCards stay clear of the hint bar; first-start layout names fit cleanly in Large text and cozy-level descriptions display in full.
+- **Cleaner DS return animation:** when quitting a Nintendo DS game, the case slides cleanly behind the console without clipping through it.
+- **Shelf space fixes:** Easy layout now shows only shelved games instead of the full card, and Home's Crate appears as a real cardboard box on the shelf in Shelf layout.
+- **pocket-ui for Android phone polish:** Handheld view and the pause menu stay clear of camera cutouts; QHD+ phones and tablets (>1200 lines) scale sharply from a 1080-line layout so text isn't tiny; bottom Home toasts temporarily step aside from hint keys instead of cutting them in half.
+- **Faster evening Cabinet browsing:** with Evening TV glow enabled after dark, scrolling on RG35XX Plus drops from 13 ms to 10.6 ms per move.
+- **pocket-ui beta for dArkOS 3D & Dreamcast fixes:** Dreamcast save states and Save & quit work again instead of closing without saving (regression in 0.6.0), and PSP, N64 and Dreamcast games once again honour dArkOS's RetroArch settings (like Dreamcast 640×480 output and memory cards).
+- **Zero-stutter Cabinet scrolling between handhelds:** handheld shadows are now cached instead of redrawn on every step (slowest moves on RG35XX Plus dropped from 38 ms to 11 ms).
+- Handheld cartridges use the handheld clicks, Jaguar and Neo Geo AES use cartridge sounds, and the PSP door plays its own sound once when it opens and once when it closes.
+- A front loading NES now has separate recorded sounds for sliding in the game, pressing it down and closing the door. Motorized trays and the two kinds of plastic disc case have their own opening and closing recordings.
+
 ## [0.6.0] - 2026-11-20
 
 ### Added

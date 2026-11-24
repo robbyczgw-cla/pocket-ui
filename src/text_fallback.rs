@@ -1,4 +1,5 @@
-//! The second font of the text painter (`text.rs`): the system's Noto Sans CJK, for the Japanese, Chinese and Korean
+//! The second fonts of the text painter (`text.rs`): the Korean fonts pocket-ui ships (`korean`, for hangul on every
+//! handheld), and the system's Noto Sans CJK, for the Japanese, Chinese and Korean
 //! letters Barlow has no picture for ("ファイナルファンタジーVI", "スーパーマリオワールド"). Not ours and not shipped:
 //! ROCKNIX installs it (`packages/fonts/noto-sans-cjk`, one 16 MB OpenType file with 65 535 glyphs). The virtual device has
 //! it too (its root is the ROCKNIX image's), Android has its own (`OTHER_SYSTEM_CJK`). Without one the painter writes
@@ -76,14 +77,49 @@ pub fn open(path: &Path) -> Option<Arc<Fallback>> {
     font
 }
 
+/// Galmuri11 (the Retro style's) and Noto Sans KR Regular (Barlow's), cut to the 2,350 hangul syllables of KS X 1001, the
+/// compatibility jamo and a few marks (`scripts/korean-fonts.py`, 474 and 265 KB): the Korean letters every handheld
+/// paints, with a system CJK font or without (the Brick, the Android app). Read like the system's font (`raster`, from
+/// the binary's own pages), never through fontdue.
+const KOREAN_PIXEL: &[u8] = include_bytes!("../assets/fonts/Galmuri11-KSX1001.ttf");
+const KOREAN_SANS: &[u8] = include_bytes!("../assets/fonts/NotoSansKR-Regular-KSX1001.otf");
+/// Galmuri11's pixel in its units: 1200 to the em, a syllable 11 pixels high on the baseline.
+pub const KOREAN_PIXEL_UNITS: f32 = 100.0;
+/// How many of Galmuri11's pixels a syllable stands high.
+pub const KOREAN_PIXEL_ROWS: i32 = 11;
+
+/// Whether `ch` is Korean (a syllable, a jamo of any of the blocks): the letters the shipped Korean fonts paint before the
+/// system's CJK font is asked (`Text::glyph`), so that hangul looks the same on every handheld and in every style.
+/// Later Japanese and Chinese fonts of our own go the same way, by block.
+pub fn is_korean(ch: char) -> bool {
+    matches!(ch as u32, 0xAC00..=0xD7A3 | 0x1100..=0x11FF | 0x3130..=0x318F | 0xA960..=0xA97F | 0xD7B0..=0xD7FF)
+}
+
+/// The shipped Korean font for a pixel face (`pixel`: Galmuri11) or any other (Noto Sans KR), parsed once per process.
+pub fn korean(pixel: bool) -> &'static Fallback {
+    static PIXEL: std::sync::OnceLock<Fallback> = std::sync::OnceLock::new();
+    static SANS: std::sync::OnceLock<Fallback> = std::sync::OnceLock::new();
+    let (slot, bytes) = if pixel { (&PIXEL, KOREAN_PIXEL) } else { (&SANS, KOREAN_SANS) };
+    slot.get_or_init(|| parse(bytes).expect("embedded Korean font"))
+}
+
+/// Whether the shipped Korean fonts paint `ch` (both have the same letters).
+pub fn korean_has(ch: char) -> bool {
+    is_korean(ch) && korean(false).has(ch)
+}
+
+fn parse(data: &'static [u8]) -> Result<Fallback, String> {
+    let face = Face::parse(data, 0).map_err(|e| e.to_string())?;
+    Ok(Fallback { unit: 1.0 / face.units_per_em() as f32, face })
+}
+
 fn load(path: &Path) -> Result<Fallback, String> {
     let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
     // SAFETY: the file is a read-only system font (squashfs on the device); nothing writes to it while it is mapped.
     // The mapping lives as long as the process (once per file, `open`), so the parsed face may borrow it forever.
     let map = unsafe { memmap2::Mmap::map(&file) }.map_err(|e| e.to_string())?;
     let data: &'static [u8] = Box::leak(Box::new(map));
-    let face = Face::parse(data, 0).map_err(|e| e.to_string())?;
-    Ok(Fallback { unit: 1.0 / face.units_per_em() as f32, face })
+    parse(data)
 }
 
 /// How a fallback glyph is fitted to the face it stands in for (`Fit::to`): its size, its height on the line, and
@@ -142,6 +178,28 @@ impl Fallback {
             return Some((Metrics { advance_width: advance, ..Metrics::default() }, Vec::new()));
         }
         Some(coverage(&path.lines, advance, bold))
+    }
+
+    /// `ch` of a pixel font (Galmuri11, `KOREAN_PIXEL_UNITS` units to its pixel) with each of its pixels `n` canvas
+    /// pixels and its bottom `rise` canvas pixels over the baseline: whole pixels, in or out, no grey edge (as
+    /// `text::raster` paints Departure Mono and Pixelify).
+    pub fn raster_pixels(&self, ch: char, n: u32, rise: i32) -> Option<(Metrics, Vec<u8>)> {
+        let id = self.face.glyph_index(ch).filter(|g| g.0 != 0)?;
+        let k = n as f32 / KOREAN_PIXEL_UNITS;
+        let advance = self.face.glyph_hor_advance(id).unwrap_or(0) as f32 * k;
+        let mut path = Flatten { k, rise: rise as f32, tol: 0.2, lines: Vec::new(), start: (0.0, 0.0), at: (0.0, 0.0) };
+        if self.face.outline_glyph(id, &mut path).is_none() || path.lines.is_empty() {
+            return Some((Metrics { advance_width: advance, ..Metrics::default() }, Vec::new()));
+        }
+        // Galmuri's outlines run along its pixels: on whole canvas pixels, without the float's 99.000001 that made a
+        // syllable of 99 rows a bitmap of 100.
+        let snap = |(x, y): (f32, f32)| (x.round(), y.round());
+        let lines: Vec<Line> = path.lines.iter().map(|&(a, b)| (snap(a), snap(b))).collect();
+        let (metrics, mut bitmap) = coverage(&lines, advance.round(), 0.0);
+        for v in &mut bitmap {
+            *v = if *v >= 128 { 255 } else { 0 };
+        }
+        Some((metrics, bitmap))
     }
 }
 

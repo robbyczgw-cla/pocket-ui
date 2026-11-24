@@ -850,8 +850,8 @@ pub struct Core {
     _game_path: CString,
     /// The patches applied to the game, by file name (`softpatch`), for Pixel Path; empty for an unpatched game.
     pub patches: Vec<String>,
-    /// The patched copy for a core that opens the file itself, removed after the core unloaded (`Drop` runs first).
-    _patched_copy: Option<crate::softpatch::TempDir>,
+    /// The unpacked or patched copy for a core that opens the file itself, removed after the core unloaded (`Drop` runs first).
+    _prepared_copy: Option<crate::softpatch::TempDir>,
     /// Save states switched off for this system (`disable_states`).
     no_states: bool,
     /// What `resume` made of the auto-resume state and where it put it (`slots::taken_auto_path` or
@@ -959,6 +959,9 @@ impl Core {
             s.content_dir = CString::new(rom.parent().unwrap_or(Path::new("/")).as_os_str().as_encoded_bytes()).unwrap_or_default();
         });
         let lib = unsafe { Library::new(core_path) }.map_err(|e| format!("load {}: {e}", core_path.display()))?;
+        // The start's steps, in the first frame's log line (`startup::report`): a slow start says where its time went
+        // (R36S hand test 20.11.2026 #7/#12: SNES and PS1 from a slow card took 10-15 s).
+        start_mark("core library");
         unsafe {
             let sym = |name: &[u8]| -> Result<Symbol<VoidFn>, String> {
                 lib.get::<VoidFn>(name).map_err(|e| format!("{}: {e}", String::from_utf8_lossy(name)))
@@ -982,6 +985,7 @@ impl Core {
                 lib.get(b"retro_set_input_state").map_err(|e| e.to_string())?;
             set_state(input_state);
             sym(b"retro_init")?();
+            start_mark("core init");
 
             let get_info: Symbol<unsafe extern "C" fn(*mut SystemInfo)> = lib.get(b"retro_get_system_info").map_err(|e| e.to_string())?;
             let mut info: SystemInfo = std::mem::zeroed();
@@ -989,35 +993,54 @@ impl Core {
             let name = if info.library_name.is_null() { "core".into() } else { CStr::from_ptr(info.library_name).to_string_lossy().into_owned() };
             let version = if info.library_version.is_null() { String::new() } else { CStr::from_ptr(info.library_version).to_string_lossy().into_owned() };
 
-            // Cores that take ROM data and don't open zip files themselves get the ROM unpacked (as RetroArch does);
-            // the path then names the file inside the zip, so the core sees the real extension.
+            // Libretro's system info decides which archives to unpack and how to deliver the ROM.
             let exts = if info.valid_extensions.is_null() { String::new() } else { CStr::from_ptr(info.valid_extensions).to_string_lossy().to_ascii_lowercase() };
             if SHARED.with_borrow(|s| s.trace) {
                 eprintln!("[core] {name}: extensions {exts}, need_fullpath {}, block_extract {}", info.need_fullpath, info.block_extract);
             }
             let exts: Vec<&str> = exts.split('|').collect();
-            let is_zip = rom.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"));
+            let archive = crate::archive::archive_type(rom);
+            let unpack = !info.block_extract && archive.is_some_and(|kind| !exts.contains(&kind));
             // An empty ROM path starts the core without a game (a console's BIOS menu), for cores
             // that support it.
             let no_game = rom.as_os_str().is_empty();
             // Soft-patching (`softpatch`): an .ips/.bps/.ups with the game's name next to it is applied before the core
             // sees the game; one that doesn't apply stops the start with its reason, never a silent unpatched start.
             let patches = if no_game { Vec::new() } else { crate::softpatch::find(rom) };
-            let mut patched = None;
+            let mut prepared_copy = None;
+            let mut patch_names = Vec::new();
+            let temp = || {
+                // The Android player can always write to the app's own files directory.
+                #[cfg(target_os = "android")]
+                return crate::platform::data_dir();
+                #[cfg(not(target_os = "android"))]
+                std::env::temp_dir()
+            };
             let (shown_path, game_data) = if !patches.is_empty() {
-                let p = crate::softpatch::for_core(rom, &patches, &exts, info.need_fullpath, &std::env::temp_dir())?;
+                let p = crate::softpatch::for_core(rom, &patches, &exts, info.need_fullpath, &temp())?;
                 println!("softpatch: {} applied", p.names.join(", "));
-                patched = Some((p.names, p.temp));
+                patch_names = p.names;
+                prepared_copy = p.temp;
                 (p.path, p.data)
+            } else if unpack {
+                let (name, data) = crate::archive::extract_rom(rom, &exts)?;
+                if info.need_fullpath {
+                    let (copy, staged_dir) = crate::softpatch::TempDir::stage(&temp(), Path::new(&name), &data)?;
+                    prepared_copy = Some(staged_dir);
+                    (copy, Vec::new())
+                } else {
+                    (rom.parent().unwrap_or(Path::new("")).join(name), data)
+                }
             } else if info.need_fullpath || no_game {
                 (rom.to_path_buf(), Vec::new())
-            } else if is_zip && !exts.contains(&"zip") {
-                let (name, data) = crate::archive::extract_rom(rom, &exts)?;
-                (rom.parent().unwrap_or(Path::new("")).join(name), data)
             } else {
                 // Bounded before reading (security review M5): a file far larger than any cartridge is not read whole.
                 (rom.to_path_buf(), crate::archive::read_bounded(rom, crate::archive::MAX_IN_MEMORY)?)
             };
+            if !game_data.is_empty() {
+                println!("game read: {} KB", game_data.len() / 1024);
+            }
+            start_mark("game read");
             let game_path = CString::new(shown_path.as_os_str().as_encoded_bytes()).map_err(|e| e.to_string())?;
             let game = GameInfo {
                 path: game_path.as_ptr(),
@@ -1030,6 +1053,7 @@ impl Core {
                 let why = SHARED.with_borrow(|s| s.last_error.clone());
                 return Err(if why.is_empty() { format!("{name} could not load {}", rom.display()) } else { format!("{name}: {why}") });
             }
+            start_mark("game loaded");
             // The core has read its options while loading: the first GET_VARIABLE_UPDATE has nothing new, as in
             // RetroArch. ScummVM rereads them on an update and on its first frame that crashes (docs/HOST.md).
             SHARED.with_borrow_mut(|s| s.opts.take_changed());
@@ -1039,7 +1063,6 @@ impl Core {
 
             // Saves keep the ROM file's name, patched or not (as RetroArch: a hack shares its base game's save).
             let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or("game");
-            let (patches, patched_copy) = patched.unwrap_or_default();
             let mut core = Core {
                 lib,
                 av,
@@ -1055,8 +1078,8 @@ impl Core {
                 saver: crate::save_writer::SaveWriter::new(),
                 _game_data: game_data,
                 _game_path: game_path,
-                patches,
-                _patched_copy: patched_copy,
+                patches: patch_names,
+                _prepared_copy: prepared_copy,
                 no_states: false,
                 taken: None,
                 size_queries: Default::default(),
@@ -2044,6 +2067,7 @@ mod resume_tests {
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdio.h>
 struct info { const char *name, *version, *exts; bool need_fullpath, block_extract; };
 struct av { unsigned bw, bh, mw, mh; float aspect; double fps, rate; };
 static unsigned char sram[64];
@@ -2062,9 +2086,30 @@ void retro_set_input_poll(void *f) {}
 void retro_set_input_state(void *f) {}
 void retro_init(void) { memset(sram, 0, sizeof sram); memset(pos, 0, sizeof pos); }
 void retro_deinit(void) {}
-void retro_get_system_info(struct info *i) { memset(i, 0, sizeof *i); i->name = "stub"; i->exts = "gb"; i->need_fullpath = true; }
+void retro_get_system_info(struct info *i) {
+    memset(i, 0, sizeof *i); i->name = "stub"; i->need_fullpath = true;
+#ifdef CONTENT_EXTENSIONS
+    i->exts = CONTENT_EXTENSIONS;
+    i->need_fullpath = CONTENT_NEED_PATH;
+    i->block_extract = CONTENT_BLOCK_EXTRACT;
+#else
+    i->exts = "gb";
+#endif
+}
 void retro_get_system_av_info(struct av *a) { memset(a, 0, sizeof *a); a->bw = a->mw = 160; a->bh = a->mh = 144; a->fps = 60; a->rate = 48000; }
-bool retro_load_game(const void *g) { return true; }
+struct game_info { const char *path; const void *data; size_t size; const char *meta; };
+bool retro_load_game(const struct game_info *g) {
+#if defined(CONTENT_EXTENSIONS) && CONTENT_NEED_PATH
+    if (!g || g->data || g->size) return false;
+    FILE *f = fopen(g->path, "rb");
+    if (!f) return false;
+    int first = fgetc(f);
+    fclose(f);
+    return first != EOF;
+#else
+    return true;
+#endif
+}
 void retro_unload_game(void) {}
 void retro_reset(void) {
     memset(pos, 0, sizeof pos);
@@ -2179,6 +2224,129 @@ bool retro_unserialize(const void *d, size_t n) {
         }
     }
 
+
+    #[test]
+    fn archive_delivery_follows_the_core_system_info() {
+        use ArchiveDelivery::*;
+        #[derive(Clone, Copy)]
+        enum ArchiveDelivery {
+            Staged,
+            RomBytes,
+            ArchivePath,
+            ArchiveBytes,
+        }
+
+        let _lock = globals();
+        let profiles = [
+            // The system list and alternate cores, with the system info from the shipped libraries.
+            ("beetle_ngp", "ngp", "ngp|ngc|ngpc|npc", 1, 0, Staged),
+            ("beetle_pce_fast", "pce", "pce|cue|ccd|chd|toc|m3u", 1, 0, Staged),
+            ("beetle_supergrafx", "sgx", "pce|sgx|cue|ccd|chd|toc|m3u", 1, 0, Staged),
+            ("beetle_vb", "vb", "vb|vboy|bin", 0, 0, RomBytes),
+            ("beetle_wswan", "ws", "ws|wsc|pc2", 0, 0, RomBytes),
+            ("bsnes", "sfc", "smc|sfc|gb|gbc|bs", 1, 0, Staged),
+            ("bsnes_hd_beta", "sfc", "smc|sfc|gb|gbc|bs", 1, 0, Staged),
+            ("clownmdemu", "md", "bin|md|gen|cue|iso|chd", 1, 0, Staged),
+            ("dosbox_pure", "exe", "zip|dosz|exe|com|bat|iso|chd|cue|ins|img|ima|vhd|jrc|m3u|m3u8|conf|/", 1, 1, ArchivePath),
+            ("dsperate", "nds", "nds|zip", 1, 1, ArchivePath),
+            ("fake08", "p8", "p8|png", 0, 0, RomBytes),
+            ("fbneo", "chd", "zip|7z|cue|ccd|chd", 1, 1, ArchivePath),
+            ("fceumm", "nes", "fds|nes|unf|unif", 1, 0, Staged),
+            ("flycast", "chd", "chd|cdi|elf|cue|gdi|lst|bin|dat|zip|7z|m3u", 1, 1, ArchivePath),
+            ("gambatte", "gb", "gb|gbc|dmg", 0, 0, RomBytes),
+            ("gearsystem", "sms", "sms|gg|sg|mv|bin|rom", 0, 0, RomBytes),
+            ("genesis_plus_gx", "md", "m3u|mdx|md|smd|gen|bin|cue|iso|chd|bms|sms|gg|sg|68k|sgd", 1, 0, Staged),
+            ("gpsp", "gba", "gba|bin|agb|gbz|u1", 1, 0, Staged),
+            ("handy", "lnx", "lnx|lyx|o", 0, 0, RomBytes),
+            ("mednafen_ngp", "ngp", "ngp|ngc|ngpc|npc", 1, 0, Staged),
+            ("mednafen_pce_fast", "pce", "pce|cue|ccd|chd|toc|m3u", 1, 0, Staged),
+            ("mednafen_supergrafx", "sgx", "pce|sgx|cue|ccd|chd", 1, 0, Staged),
+            ("mednafen_vb", "vb", "vb|vboy|bin", 0, 0, RomBytes),
+            ("mednafen_wswan", "ws", "ws|wsc|pc2", 0, 0, RomBytes),
+            ("melondsds", "nds", "nds|ids|dsi", 0, 0, RomBytes),
+            ("mgba", "gba", "gba|gb|gbc|sgb", 0, 0, RomBytes),
+            ("mupen64plus_next", "z64", "n64|v64|z64|bin|u1", 0, 0, RomBytes),
+            ("nestopia", "nes", "nes|fds|unf|unif|nsf", 0, 0, RomBytes),
+            ("pcsx_rearmed", "pbp", "bin|cue|img|mdf|pbp|toc|cbn|m3u|chd|iso|exe", 1, 0, Staged),
+            ("picodrive", "32x", "bin|gen|smd|md|32x|cue|iso|chd|m3u|sms|gg|sg|sc|68k|sgd|pco|vgm|vgz", 1, 0, Staged),
+            ("pokemini", "min", "min", 0, 0, RomBytes),
+            ("ppsspp", "cso", "elf|iso|cso|prx|pbp|chd", 1, 0, Staged),
+            ("prosystem", "a78", "a78|bin|cdf", 0, 0, RomBytes),
+            ("race", "ngp", "ngp|ngc|ngpc|npc", 1, 0, Staged),
+            ("scummvm", "scummvm", "scummvm", 1, 0, Staged),
+            ("snes9x", "sfc", "smc|sfc|swc|fig|bs|st", 0, 0, RomBytes),
+            ("stella", "a26", "a26|bin", 0, 0, RomBytes),
+            ("stella2014", "a26", "a26|bin|mvc", 0, 0, RomBytes),
+            ("tic80", "tic", "tic|png", 0, 0, RomBytes),
+            ("yabause", "chd", "cue|iso|mds|ccd|zip|chd|m3u", 1, 1, ArchivePath),
+            ("yabasanshiro", "chd", "cue|iso|mds|ccd|chd", 1, 1, ArchivePath),
+            ("zip_only", "gba", "gba|zip", 1, 0, ArchivePath),
+            ("block_in_memory", "gba", "gba", 0, 1, ArchiveBytes),
+        ];
+        for (id, ext, extensions, need_path, block_extract, delivery) in profiles {
+            let flags = [
+                format!("-DCONTENT_EXTENSIONS=\"{extensions}\""),
+                format!("-DCONTENT_NEED_PATH={need_path}"),
+                format!("-DCONTENT_BLOCK_EXTRACT={block_extract}"),
+            ];
+            let g = Game::built(id, "srm", &flags.each_ref().map(String::as_str));
+            let core_path = g.dir.join(format!("{id}_libretro.so"));
+            std::fs::rename(&g.core, &core_path).unwrap();
+            let check = |rom: &Path, member: &str, payload: &[u8], delivery| {
+                let original = std::fs::read(rom).unwrap();
+                let core = Core::load(&core_path, rom, &g.dir, &g.dir, &[])
+                    .unwrap_or_else(|error| panic!("{id} for {}: {error}", rom.display()));
+                let path = PathBuf::from(core._game_path.to_str().unwrap());
+                match delivery {
+                    Staged => {
+                        assert_ne!(path, g.dir.join(member), "{id}: a private path for the ROM");
+                        assert_eq!(path.file_name().unwrap(), member, "{id}: the file-based core opens the member");
+                        assert!(core._game_data.is_empty(), "{id}: path only");
+                        assert_eq!(std::fs::read(&path).unwrap(), payload, "{id}: unpacked ROM bytes");
+                    }
+                    RomBytes => {
+                        assert_eq!(path, g.dir.join(member), "{id}: the path describes the member");
+                        assert_eq!(core._game_data, payload, "{id}: unpacked ROM bytes");
+                    }
+                    ArchivePath => {
+                        assert_eq!(path, rom, "{id}: original archive path");
+                        assert!(core._game_data.is_empty(), "{id}: path only");
+                    }
+                    ArchiveBytes => {
+                        assert_eq!(path, rom, "{id}: original archive path");
+                        assert_eq!(core._game_data, original, "{id}: original archive bytes");
+                    }
+                }
+                assert_eq!(core.sram_path, rom.with_extension("srm"), "{id}: saves use the original archive name");
+                drop(core);
+                if matches!(delivery, Staged) {
+                    assert!(!path.exists(), "{id}: staged ROM removed on unload");
+                }
+                assert_eq!(std::fs::read(rom).unwrap(), original, "{id}: original archive unchanged");
+            };
+
+            let rom = g.dir.join("Archive title.ZIP");
+            let member = format!("Game.{ext}");
+            let output = std::process::Command::new("python3").args(["-I", "-c", r#"
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED) as z:
+    z.writestr('readme.txt', 'Test archive')
+    z.writestr(sys.argv[2], b'Synthetic cartridge')
+"#]).arg(&rom).arg(&member).output().expect("python3 to make a test archive");
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+            check(&rom, &member, b"Synthetic cartridge", delivery);
+
+            // gpSP and a core that supports ZIP alone still need .7z unpacked. The two
+            // cores below either advertise .7z or explicitly require the original file.
+            if matches!(id, "gpsp" | "zip_only" | "flycast" | "dsperate") {
+                let archive = g.dir.join("Other archive.7z");
+                std::fs::write(&archive, include_bytes!("../testdata/7z/game.7z")).unwrap();
+                let (name, payload) = crate::archive::extract_rom(&archive, &["gba"]).unwrap();
+                let expected = if matches!(id, "gpsp" | "zip_only") { Staged } else { ArchivePath };
+                check(&archive, &name, &payload, expected);
+            }
+        }
+    }
 
     /// Moves a file's time `secs` into the past (the time that passes between sessions).
     fn age(path: &Path, secs: u64) {
@@ -3650,16 +3818,29 @@ void stub_frame(unsigned w, unsigned h, size_t pitch, unsigned bpp) {
             assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R2 as c_uint), 1, "touch held");
             assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::A as c_uint), 0, "touch does not also press DS A");
             assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::RIGHT as c_uint), 0, "pointer does not move the player");
-            // A 120 Hz display tick can have no due DS frame. The next core
+            // A tap swaps the screens in the player (`ds_pad::swap_options`): the core never sees R3 for it.
+            let t = std::time::Instant::now();
+            let hold = crate::ds_pad::LAYOUT_HOLD;
+            let f = ds.apply_at("nds", &mapping, 1 << 9, [0; 4], t);
+            core.run(mapping.translate(f.raw) | f.buttons);
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R3 as c_uint), 0, "a fresh press is not yet the next layout");
+            let f = ds.apply_at("nds", &mapping, 0, [0; 4], t + hold / 4);
+            assert!(f.swap, "a tap swaps");
+            core.run(mapping.translate(f.raw) | f.buttons);
+            assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R3 as c_uint), 0, "a tap never cycles");
+            // Held: R3 from LAYOUT_HOLD on. A 120 Hz display tick can have no due DS frame. The next core
             // frame must still see the held layout button; melonDS detects its edge.
-            ds.apply("nds", &mapping, 1 << 9, [0; 4]);
-            let f = ds.apply("nds", &mapping, 1 << 9, [0; 4]);
+            let t = t + hold;
+            ds.apply_at("nds", &mapping, 1 << 9, [0; 4], t);
+            ds.apply_at("nds", &mapping, 1 << 9, [0; 4], t + hold);
+            let f = ds.apply_at("nds", &mapping, 1 << 9, [0; 4], t + hold);
             core.set_analog(f.axes); core.run(mapping.translate(f.raw) | f.buttons);
             assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R3 as c_uint), 1, "layout reaches the next emulated frame");
-            let f = ds.apply("nds", &mapping, 1 << 9, [0; 4]);
+            let f = ds.apply_at("nds", &mapping, 1 << 9, [0; 4], t + 2 * hold);
             core.run(mapping.translate(f.raw) | f.buttons);
             assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R3 as c_uint), 1, "native held-button contract");
-            let f = ds.apply("nds", &mapping, 0, [0; 4]);
+            let f = ds.apply_at("nds", &mapping, 0, [0; 4], t + 2 * hold);
+            assert!(!f.swap, "a hold does not also swap");
             core.run(mapping.translate(f.raw) | f.buttons);
             assert_eq!(read(0, DEVICE_JOYPAD, 0, joypad::R3 as c_uint), 0, "release reaches the core");
         }
@@ -4141,4 +4322,13 @@ void stub_frame(unsigned w, unsigned h, size_t pitch, unsigned bpp) {
             assert_eq!(last(), "x".repeat(511), "info lines are no errors");
         }
     }
+}
+
+/// A step of pocket-core's start for its first-frame log line (`startup::mark`); the Android player's library has no
+/// `startup` module and keeps no such line.
+fn start_mark(label: &'static str) {
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+    crate::startup::mark(label);
+    #[cfg(all(target_os = "android", not(feature = "handheld")))]
+    let _ = label;
 }

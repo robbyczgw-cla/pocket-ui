@@ -86,7 +86,7 @@ fn all_five_default_card_looks_show_the_problem_and_keep_their_connection_facts_
     for look in ["split", "shelf", "cabinet"] {
         let boxed = matches!(look, "shelf" | "cabinet");
         for (lang, size, cause, remedy) in [
-            ("en", "normal", "file is empty (0 bytes)", "Copy the game to the card again."),
+            ("en", "normal", "File is empty (0 bytes)", "Recopy the ROM to your SD card."),
             ("de", "large", "Datei ist leer (0 Byte)", "Kopiere das Spiel noch einmal auf die Karte."),
         ] {
             // The box's unopened front must explain the problem too; turning over keeps the explanation.
@@ -110,7 +110,7 @@ fn a_game_without_codes_explains_the_empty_cheats_page() {
     let tmp = tempfile::tempdir().unwrap();
     let (_stub, display) = fixture(tmp.path());
     for (lang, title, note) in [
-        ("en", "No cheats found for this game", "You can keep playing normally."),
+        ("en", "No cheats found for this game", "Play on as normal."),
         ("de", "Keine Cheats für dieses Spiel gefunden", "Du kannst normal weiterspielen."),
     ] {
         let seen = shot(tmp.path(), display.as_deref(), "cheats-empty", lang, "normal");

@@ -1339,6 +1339,8 @@ impl DeepSteps for DeepWorker {
     }
 }
 
+const RETROARCH_LOAD_WINDOW: Duration = Duration::from_secs(120);
+
 pub struct Sleep {
     pub config: Config,
     screen_only: bool,
@@ -1348,6 +1350,9 @@ pub struct Sleep {
     state: State,
     timers: Timers,
     game: Option<Game>,
+    /// The RK3326's RetroArch route has no reliable first game frame signal.
+    rk3326: bool,
+    retroarch_load_until: Option<Instant>,
     /// We stopped the game's processes (not the pause menu).
     stopped_game: bool,
     /// The pause menu was open when sleep began.
@@ -1522,6 +1527,8 @@ impl Sleep {
             sys,
             state: State::Awake,
             game: None,
+            rk3326: crate::device::current().model.is_some_and(|m| m.is_rk3326()),
+            retroarch_load_until: None,
             stopped_game: false,
             menu_open: false,
             brightness: None,
@@ -1668,17 +1675,33 @@ impl Sleep {
     }
 
     pub fn game_started(&mut self, game: Game) {
+        let now = Instant::now();
+        self.retroarch_load_until = (self.rk3326 && game.kind == GameKind::RetroArch).then_some(now + RETROARCH_LOAD_WINDOW);
         self.game = Some(game);
-        self.timers.last_input = Instant::now();
+        self.timers.last_input = now;
     }
 
     pub fn game_ended(&mut self) {
+        if self.retroarch_load_until.take().is_some() {
+            self.timers.last_input = Instant::now();
+        }
         self.game = None;
         self.stopped_game = false;
         // A game that ended by itself behind the dark screen: from now on it is light sleep, Sleep after counting.
         if std::mem::take(&mut self.dark_game) && self.state == State::Light {
             self.timers.light_since = Some(Instant::now());
         }
+    }
+
+    /// The RK3326 route has no reliable signal for the first frame. Allow loading time,
+    /// then count idle time from the end of that window or the last pad input, whichever is later.
+    fn retroarch_loading(&mut self, ctx: Ctx, now: Instant) -> Option<Instant> {
+        if self.state != State::Awake || ctx.menu_open { return None; }
+        let until = self.retroarch_load_until?;
+        if now < until { return Some(until); }
+        self.retroarch_load_until = None;
+        self.timers.last_input = self.timers.last_input.max(until);
+        None
     }
 
     /// Whether idle goes on from light sleep to a suspend. Failed suspends no longer stop it (they are retried with
@@ -1736,21 +1759,27 @@ impl Sleep {
                     PadEvent::Button {
                         button: Button::Power,
                         pressed: true,
-                        ..
+                        source,
                     } => {
                         let gate = Gate {
                             ours: self.power_key_ours(),
                             guarded,
                             menu_open: ctx.power_menu,
                         };
-                        self.power_key.press(now, gate)
+                        // For the hand test (R36S 20.11.2026 #16, held power key slept): which device, and whose key it is.
+                        println!("sleep: power key down (input {source}, {})", if gate.ours { "ours" } else { "left to logind" });
+                        self.power_key.press(*source, now, gate)
                     }
                     PadEvent::Button {
                         button: Button::Power,
                         pressed: false,
-                        ..
+                        source,
                     } => {
-                        let step = self.power_key.release(now);
+                        let held = self.power_key.held_for(now);
+                        let step = self.power_key.release(*source, now);
+                        if let Some(held) = held {
+                            println!("sleep: power key up (input {source}) after {} ms: {step:?}", held.as_millis());
+                        }
                         return self.power_step(step, true, ctx);
                     }
                     _ => Step::Pass,
@@ -1947,6 +1976,9 @@ impl Sleep {
             }
             _ => None,
         };
+        if let Some(until) = self.retroarch_loading(ctx, Instant::now()) {
+            return Some(until);
+        }
         if ctx.busy && self.state == State::Awake {
             self.timers.last_input = Instant::now();
         }
@@ -2068,6 +2100,9 @@ impl Sleep {
             }
             _ => None,
         };
+        if let Some(until) = self.retroarch_loading(ctx, Instant::now()) {
+            return Some(until);
+        }
         if ctx.busy && self.state == State::Awake {
             self.timers.last_input = Instant::now();
         }
@@ -2874,6 +2909,41 @@ mod tests {
         assert!(matches!(sleep.state, State::Awake), "an hour without input: still awake");
         let a = PadEvent::Button { button: Button::South, pressed: true, source: 0 };
         assert!(!sleep.on_pad(&a, Ctx::default()), "the press reaches the page");
+    }
+
+    #[test]
+    fn r36s_fix_a_a_loading_game_schedules_the_return_of_idle_sleep() {
+        let dir = TestDir::new("sleep-during-load");
+        let sys = System::new(None, "false".into(), false);
+        let mut sleep = Sleep::build_on(false, dir.to_path_buf(), sys, Arc::new(|| {}), InhibitorSlot::Have(None));
+        sleep.rk3326 = true;
+        sleep.game_started(Game::new("n64", "Loading", Path::new("/test/game.n64"), "retroarch", None));
+        sleep.timers = timers(Instant::now() - Duration::from_secs(600));
+        assert!(sleep.tick(Ctx::default()).is_some(), "the event loop must wake again when loading protection ends");
+        assert!(matches!(sleep.state, State::Awake), "RetroArch can still be loading");
+        sleep.light(Ctx::default());
+        assert!(matches!(sleep.state, State::Light), "explicit standby works with a game open");
+        sleep.wake_light("test");
+        sleep.timers = timers(Instant::now() - Duration::from_secs(600));
+        sleep.tick(Ctx { menu_open: true, ..Ctx::default() });
+        assert!(matches!(sleep.state, State::Light), "the pause menu still follows the idle timer");
+        sleep.wake_light("test");
+        sleep.woke_at = None;
+        let window_ended = Instant::now() - Duration::from_secs(10);
+        sleep.retroarch_load_until = Some(window_ended);
+        sleep.timers = timers(window_ended - Duration::from_secs(600));
+        assert_eq!(sleep.tick(Ctx::default()), Some(window_ended + Duration::from_secs(180)));
+        let a = PadEvent::Button { button: Button::South, pressed: true, source: 0 };
+        assert!(!sleep.on_pad(&a, Ctx::default()), "the emulator still gets the input");
+        assert!(sleep.tick(Ctx::default()).unwrap() > window_ended + Duration::from_secs(180));
+        sleep.timers = timers(window_ended - Duration::from_secs(600));
+        sleep.tick(Ctx::default());
+        assert!(matches!(sleep.state, State::Light), "after loading, a running game follows the idle timer too");
+        sleep.wake_light("test");
+        sleep.game_ended();
+        sleep.timers = timers(Instant::now() - Duration::from_secs(600));
+        sleep.tick(Ctx::default());
+        assert!(matches!(sleep.state, State::Light), "the shelf still follows the idle timer");
     }
 
     #[test]

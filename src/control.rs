@@ -1,14 +1,21 @@
 //! Talking to the running game: RetroArch network commands and sway window focus.
 
-use std::net::UdpSocket;
+use std::net::{Ipv4Addr, UdpSocket};
 use std::process::Command;
 use std::time::Duration;
 
 pub const RETROARCH_APP_ID: &str = "com.libretro.RetroArch";
 pub const OWN_APP_ID: &str = "pocket-ui";
-/// Sends one RetroArch network command (e.g. "SAVE_STATE", "LOAD_STATE", "QUIT") to localhost:55355.
+pub(crate) const RETROARCH_CMD_PORT: u16 = 55355;
+/// Sends one RetroArch network command (e.g. "SAVE_STATE" or "LOAD_STATE") to localhost.
 pub fn retroarch(cmd: &str) -> bool {
-    UdpSocket::bind("127.0.0.1:0").and_then(|s| s.send_to(cmd.as_bytes(), "127.0.0.1:55355")).is_ok()
+    retroarch_socket(RETROARCH_CMD_PORT).and_then(|s| s.send(cmd.as_bytes())).is_ok()
+}
+
+pub(crate) fn retroarch_socket(port: u16) -> std::io::Result<UdpSocket> {
+    let socket = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))?;
+    socket.connect((Ipv4Addr::LOCALHOST, port))?;
+    Ok(socket)
 }
 
 /// Ends RetroArch with SIGTERM: it quits cleanly and writes the auto state (BusyBox `pkill -x` does not

@@ -69,8 +69,10 @@ pub fn trouble_line(c: &mut Canvas, text: &mut Text, line: &str) -> i32 {
     // At the size painted (Settings → Text size, `type_scale`).
     let px = type_scale::px(SMALL) as i32;
     let line_h = px * 4 / 3;
-    // Close under the title (it has no pill since 0.2), so the rows keep nearly their normal pitch below.
-    let first = kit::header_bottom(c.h) + px * 2 / 3;
+    // Close under the title (it has no pill since 0.2), so the rows keep nearly their normal pitch below; Korean letters
+    // stand taller than Latin ones and go down by the difference (`Text::korean_rise`).
+    let rise = lines.first().map_or(0, |l| text.korean_rise(Face::Body, SMALL, l));
+    let first = kit::header_bottom(c.h) + px * 2 / 3 + rise;
     c.disc(x + 8, first - px * 3 / 10, 8, crate::palette::ALERT);
     for (i, l) in lines.iter().enumerate() {
         text.draw(c, Face::Body, SMALL, x + 28, first + i as i32 * line_h, 0xffffff, l);
@@ -96,6 +98,33 @@ fn centered(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i32),
 }
 
 // ---- The main page ----
+
+/// Continue, Options and Save & quit show the paused game in the window at the right, as Save and Load show their
+/// save there: the right two thirds of the page stood empty (dark) on them (Neon polish 21.11.2026, the lead's choice A).
+/// The window stands where Save's does, so nothing moves between the rows. Only where there is a picture of the game.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RowKind {
+    Continue,
+    Options,
+    Quit,
+    /// Save, Load, Earlier: their own window. Disc, Zoom, Pixel Path, Players, Achievements: their line beside the rows.
+    Other,
+}
+
+/// Whether the row shows the paused game in the window (`RowKind`), not while quitting, with a picture of the game.
+pub fn shows_game(row: RowKind, quitting: bool, picture: bool) -> bool {
+    picture && !quitting && row != RowKind::Other
+}
+
+/// The line under the paused game: how long it was played today ("Paused here · played 42 min today"), or, where the
+/// day's earlier games are not known (Android's player, Play history off), this time ("… played 12 min so far").
+pub fn paused_here(today: Option<u64>, session: u64) -> String {
+    match today {
+        Some(t) => format!("Paused here · played {} today", crate::play_time::duration(t)),
+        None => format!("Paused here · played {} so far", crate::play_time::duration(session)),
+    }
+}
+
 
 /// A row of the main page as it is painted.
 #[derive(Clone, Debug, PartialEq)]
@@ -445,6 +474,8 @@ pub struct OptionsPage<'a> {
     pub sel: usize,
     /// A confirmation or note in place of the selected row's explanation.
     pub footer: Option<&'a str>,
+    /// Core option descriptions may be long. Give them the width above the button hints.
+    pub description_above_hints: bool,
     /// The selected row only explains (a cheat's heading): B is its only hint.
     pub explanation: bool,
     /// The game's system stripe at the selected row's start.
@@ -506,6 +537,9 @@ pub fn paint_options(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, v: &Opt
     let desc = v.footer.map(str::to_string).unwrap_or_else(|| rows.get(sel).map(|r| r.desc.clone()).unwrap_or_default());
     let hints = hints_for(rows.get(sel), v.explanation);
     let pill_x = c.w - PAD - kit::pill_width(text, (c.w, c.h), hints);
+    let full_width = c.w - 2 * (PAD + BTN_PAD);
+    let last_line = if v.description_above_hints { kit::content_bottom(c.h) - type_scale::px(SMALL) as i32 / 3 }
+        else { kit::footer_baseline(c.h) };
     // Long lists (a core's options) scroll; the explanation below keeps the room the page's tallest explanation takes
     // (`list_bottom`), up to eight lines: the list shows fewer rows rather than cut one (a long emulator line with its
     // restart note in Large text, 17.11.2026), and no more room than that: five lines kept under every list left a
@@ -514,7 +548,7 @@ pub fn paint_options(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, v: &Opt
     let (bottom, need) = if v.picture.is_some() {
         (c.h - (c.h - kit::footer_baseline(c.h) + 5 * type_scale::line(SMALL, 10)), 5)
     } else {
-        list_bottom(text, c.w, c.h, rows, (&desc, hints))
+        list_bottom(text, c.w, c.h, rows, (&desc, hints), v.description_above_hints.then_some(last_line))
     };
     // Three rows at least (the selected one and its neighbours): where an explanation needs more room than that leaves
     // (eight lines in Large text on the Brick), it is cut with "…" at the room there is, never painted over the rows.
@@ -560,15 +594,26 @@ pub fn paint_options(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, v: &Opt
     // Five lines, more when the list leaves room above them: a long explanation (German, Spanish) ends in "…" only
     // when it must.
     let step = type_scale::line(SMALL, 10);
-    let spare = (kit::footer_baseline(c.h) - (top + visible as i32 * row) - SMALL as i32 - 12) / step + 1;
+    let spare = (last_line - (top + visible as i32 * row) - SMALL as i32 - 12) / step + 1;
     let desc_lines = if v.picture.is_some() {
         if preview::small_screen(c.h) { preview::SMALL_SCREEN_LINES } else { 5 }
     } else {
         let spare = spare.max(1) as usize;
         if squeezed { spare.min(MOST_DESC_LINES) } else { spare.max(5).max(need).min(MOST_DESC_LINES) }
     };
-    out.desc = kit::footer_lines(text, &desc, c.w, pill_x, desc_lines);
-    kit::footer(c, text, hits, hints, &desc, desc_lines, pal().text);
+    if v.description_above_hints {
+        out.desc = text.wrap_prose_at_most(Face::Body, SMALL, &desc, full_width, desc_lines);
+        let translating = text.translating();
+        text.set_translate(false);
+        for (i, line) in out.desc.iter().rev().enumerate() {
+            text.draw(c, Face::Body, SMALL, pad + BTN_PAD, last_line - i as i32 * step, pal().text, line);
+        }
+        text.set_translate(translating);
+        kit::pill_hints(c, text, hits, hints);
+    } else {
+        out.desc = kit::footer_lines(text, &desc, c.w, pill_x, desc_lines);
+        kit::footer(c, text, hits, hints, &desc, desc_lines, pal().text);
+    }
     out
 }
 
@@ -578,13 +623,16 @@ pub fn paint_options(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, v: &Opt
 /// `MOST_DESC_LINES`; the list shows fewer rows rather than cut it); each as `kit::footer` paints it beside its row's
 /// hints, up to the top of its first line's capitals (`type_scale::mid` is half their height) and a 10 px gap. Over
 /// the hint pill when every line stands beside it.
-fn list_bottom(text: &mut Text, w: i32, h: i32, rows: &[OptRow], shown: (&str, &[(&str, &str)])) -> (i32, usize) {
+fn list_bottom(text: &mut Text, w: i32, h: i32, rows: &[OptRow], shown: (&str, &[(&str, &str)]), full_width_baseline: Option<i32>) -> (i32, usize) {
     // The top of `d`'s capitals painted in at most `most` lines beside `hints`, and how many lines it takes.
     let mut top_of = |d: &str, hints: &[(&str, &str)], most: usize| {
-        let pill_x = w - PAD - kit::pill_width(text, (w, h), hints);
-        let lines = kit::footer_lines(text, d, w, pill_x, most).len();
-        let px = kit::footer_px(text, d, pill_x);
-        (kit::footer_baseline(h) - (lines as i32 - 1) * type_scale::line(px, 10) - 2 * type_scale::mid(px), lines)
+        if let Some(last) = full_width_baseline {
+            let lines = text.wrap_prose_at_most(Face::Body, SMALL, d, w - 2 * (PAD + BTN_PAD), most).len();
+            (last - (lines as i32 - 1).max(0) * type_scale::line(SMALL, 10) - 2 * type_scale::mid(SMALL), lines)
+        } else {
+            let pill_x = w - PAD - kit::pill_width(text, (w, h), hints);
+            kit::footer_top(text, d, w, h, pill_x, most)
+        }
     };
     let (mut bottom, mut need) = (kit::content_bottom(h), 0);
     let all = rows.iter().map(|r| (r.desc.as_str(), hints_for(Some(r), false), STABLE_DESC_LINES)).chain(std::iter::once((shown.0, shown.1, MOST_DESC_LINES)));
@@ -682,6 +730,45 @@ pub const ZOOM_HINTS: &[(&str, &str)] = &[("D-pad", "Move"), ("A", "2x / 3x"), (
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn r36s_test7_the_gpsp_bios_explanation_stays_above_the_hints() {
+        let (w, h) = crate::scaled_layout::logical_size((640, 480));
+        let mut pixels = vec![0u32; (w * h) as usize];
+        let mut c = Canvas::new(&mut pixels, w, h);
+        let mut text = Text::builtin();
+        text.set_translate(false);
+        let mut hits = HitMap::default();
+        let description = "Choose the BIOS image to use. The official BIOS must be provided by the user. Using a non-official (or builtin) BIOS might result in incompatibility problems with some games. Best results are to be achieved with the official Nintendo BIOS.";
+        let mut rows = vec![OptRow::new("BIOS", "Auto select", description)];
+        for name in ["Boot mode", "Dynamic Recompiler", "No Sprite Limit", "RTC support", "RTC Time Source", "Link Cable Connectivity", "Rumble support", "Sound Output Rate (Hz)"] {
+            rows.push(OptRow::new(name, "Auto", ""));
+        }
+        let corner = Corner::battery_only("32%");
+        let page = OptionsPage { heading: Some("Emulator"), counts: None, rows: &rows, sel: 0, footer: None,
+            description_above_hints: true, explanation: false, accent: 0xa0a0a0, corner: &corner, picture: None };
+        let painted = paint_options(&mut c, &mut text, &mut hits, &page);
+        assert_eq!(painted.desc.join(" "), description);
+        let top = kit::hint_bar_top(h as i32) as usize;
+        assert!((top..h as usize).all(|y| pixels[y * w as usize..y * w as usize + w as usize / 2].iter().all(|&px| px == 0)),
+            "the BIOS explanation entered the hint band");
+    }
+
+    /// Neon polish 21.11.2026 (choice A): the rows that show the paused game, and the line under it.
+    #[test]
+    fn continue_options_and_quit_show_the_game_with_how_long_it_was_played() {
+        for row in [RowKind::Continue, RowKind::Options, RowKind::Quit] {
+            assert!(shows_game(row, false, true), "{row:?}");
+            assert!(!shows_game(row, true, true), "{row:?} while quitting");
+            assert!(!shows_game(row, false, false), "{row:?} without a picture");
+        }
+        assert!(!shows_game(RowKind::Other, false, true));
+        assert_eq!(paused_here(Some(42 * 60), 300), "Paused here · played 42 min today");
+        assert_eq!(paused_here(Some(30), 30), "Paused here · played under a minute today");
+        assert_eq!(paused_here(None, 3900), "Paused here · played 1 h 05 min so far");
+    }
+
     /// Both menus paint every page through this file, so no part of a page can drift again: Android's player's list menu
     /// (main page, the Options pages with the Picture preview, Zoom) calls the painters here and draws no text, pill or
     /// frame of its own; Linux's menu calls the same; the copy Android had (`pause_list`) paints nothing any more. Until

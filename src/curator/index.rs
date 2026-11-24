@@ -105,7 +105,7 @@ fn fixed_order(facet: Facet) -> &'static [&'static str] {
 
 impl Catalog {
     /// Builds the catalog from the games' features (in the library's order) and the library's systems.
-    pub fn build(games: Vec<Features>, systems: Vec<SystemName>) -> Catalog {
+    pub fn build(mut games: Vec<Features>, systems: Vec<SystemName>) -> Catalog {
         let n = games.len();
         // Terms and their document frequency.
         let mut term_ids: HashMap<String, u32> = HashMap::new();
@@ -113,12 +113,12 @@ impl Catalog {
         let mut term_axes = Vec::new();
         let mut term_plain = Vec::new();
         let mut df: Vec<u32> = Vec::new();
-        let mut raw: Vec<Vec<(u32, f32)>> = Vec::with_capacity(n);
-        for g in &games {
+        let mut vectors: Vec<Vec<(u32, f32)>> = Vec::with_capacity(n);
+        for g in &mut games {
             let mut v = Vec::with_capacity(g.terms.len());
-            for t in &g.terms {
-                let id = *term_ids.entry(t.key.clone()).or_insert_with(|| {
-                    term_labels.push(t.label.clone());
+            for t in std::mem::take(&mut g.terms) {
+                let id = *term_ids.entry(t.key).or_insert_with(|| {
+                    term_labels.push(t.label);
                     term_axes.push(t.axis);
                     // Only says what kind of game it is: a family.
                     term_plain.push(t.axis == Some(Axis::Family));
@@ -129,11 +129,13 @@ impl Catalog {
                 v.push((id, t.weight));
             }
             v.sort_by_key(|x| x.0);
-            raw.push(v);
+            vectors.push(v);
         }
         // IDF: a term every game has says little, a rare one a lot.
         let idf: Vec<f32> = df.iter().map(|&d| (1.0 + n as f32 / d.max(1) as f32).ln()).collect();
-        let vectors: Vec<Vec<(u32, f32)>> = raw.into_iter().map(|v| v.into_iter().map(|(t, w)| (t, w * idf[t as usize])).collect()).collect();
+        for (t, w) in vectors.iter_mut().flatten() {
+            *w *= idf[*t as usize];
+        }
         let norms = vectors.iter().map(|v| v.iter().map(|(_, w)| w * w).sum::<f32>().sqrt()).collect();
 
         // Works: the same work key on several files is one game.

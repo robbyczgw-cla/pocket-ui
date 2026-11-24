@@ -27,8 +27,8 @@ pub enum Row {
 
 const NOT_INSTALLED: &str = "Tailscale is not in this system image";
 /// Said (calmly, not as an error) when a press needs the network and there is none.
-const SIGN_IN_NEEDS_NETWORK: &str = "Signing in needs a network. Connect to Wi-Fi first.";
-const LOG_OUT_NEEDS_NETWORK: &str = "Logging out needs a network. Connect to Wi-Fi first.";
+const SIGN_IN_NEEDS_NETWORK: &str = "Connect to Wi-Fi first to sign in.";
+const LOG_OUT_NEEDS_NETWORK: &str = "Connect to Wi-Fi first to log out.";
 
 pub const ROWS: [Row; 4] = [Row::Switch, Row::Account, Row::AuthKey, Row::Hostname];
 
@@ -344,12 +344,12 @@ impl TailscalePage {
     pub fn describe(&self, row: Row) -> &'static str {
         match row {
             Row::Account | Row::AuthKey if self.offline() => "Needs a network first.",
-            Row::Switch => "Reach the Pocket from your other devices.",
+            Row::Switch => "Access this Pocket from other devices.",
             Row::Account if self.confirm_logout => "Press A again to log out. B keeps you signed in.",
-            Row::Account if self.signed_in() => "Leaves your tailnet. Sign in again any time.",
+            Row::Account if self.signed_in() => "Leaves your tailnet. Rejoin any time.",
             Row::Account => "Scan a QR code with your phone.",
             Row::AuthKey => "For a key from the admin console.",
-            Row::Hostname => "How the Pocket is named on your tailnet.",
+            Row::Hostname => "Device name shown on your tailnet.",
         }
     }
 
@@ -586,19 +586,19 @@ mod tests {
         assert_eq!(p.describe(Row::Account), "Needs a network first.");
         assert_eq!(press(&mut p, CONFIRM), Action::Nothing, "no `tailscale up` that can only time out");
         assert!(matches!(p.view, View::List), "no QR code of a login that cannot finish");
-        assert_eq!(p.note, Some("Signing in needs a network. Connect to Wi-Fi first."));
+        assert_eq!(p.note, Some("Connect to Wi-Fi first to sign in."));
         assert_eq!(p.error, None);
         go_to(&mut p, Row::AuthKey);
         assert_eq!(press(&mut p, CONFIRM), Action::Nothing);
         assert!(matches!(p.view, View::List), "no keyboard for a key that cannot be used yet");
-        assert_eq!(p.note, Some("Signing in needs a network. Connect to Wi-Fi first."));
+        assert_eq!(p.note, Some("Connect to Wi-Fi first to sign in."));
         // Signed in: no log out either, and it does not even start asking twice.
         let mut p = page_with(snap_offline(true, Some(RUNNING)));
         go_to(&mut p, Row::Account);
         assert_eq!(press(&mut p, CONFIRM), Action::Nothing);
         assert_eq!(press(&mut p, CONFIRM), Action::Nothing);
         assert!(!p.confirm_logout);
-        assert_eq!(p.note, Some("Logging out needs a network. Connect to Wi-Fi first."));
+        assert_eq!(p.note, Some("Connect to Wi-Fi first to log out."));
         // The switch and the name need no server: they work.
         go_to(&mut p, Row::Switch);
         assert_eq!(press(&mut p, CONFIRM), Action::SetEnabled(false));
@@ -651,7 +651,7 @@ mod tests {
         // An error that arrives while it is gone (the login ran until the network went) is not shown either.
         p.event(Event::LoginDone(Err("Timed out".into())));
         assert_eq!(p.error, None);
-        assert_eq!(p.note, Some("Signing in needs a network. Connect to Wi-Fi first."), "said calmly instead");
+        assert_eq!(p.note, Some("Connect to Wi-Fi first to sign in."), "said calmly instead");
         // A note from a press while offline is gone when the network is back.
         go_to(&mut p, Row::Account);
         press(&mut p, CONFIRM);
@@ -691,10 +691,10 @@ mod tests {
         press(&mut p, CONFIRM);
         p.event(Event::LoginDone(Err(NO_NETWORK.into())));
         assert_eq!(p.error, None);
-        assert_eq!(p.note, Some("Signing in needs a network. Connect to Wi-Fi first."));
+        assert_eq!(p.note, Some("Connect to Wi-Fi first to sign in."));
         let mut p = page_with(snap(true, Some(RUNNING)));
         p.event(Event::LoggedOut(Err(NO_NETWORK.into())));
-        assert_eq!((p.error.as_deref(), p.note), (None, Some("Logging out needs a network. Connect to Wi-Fi first.")));
+        assert_eq!((p.error.as_deref(), p.note), (None, Some("Connect to Wi-Fi first to log out.")));
         assert!(p.signed_in());
         // The poll that follows knows it, and the status line says so.
         p.event(Event::Poll(snap_offline(true, Some(RUNNING))));
@@ -706,7 +706,7 @@ mod tests {
         let mut p = page_with(snap_offline(true, Some(RUNNING)));
         p.event(Event::LoggedOut(Err("Timed out".into())));
         assert_eq!(p.error, None);
-        assert_eq!(p.note, Some("Logging out needs a network. Connect to Wi-Fi first."));
+        assert_eq!(p.note, Some("Connect to Wi-Fi first to log out."));
         assert!(p.signed_in(), "not pretended to be logged out");
         assert_eq!(p.snap.as_ref().unwrap().backend_state(), State::Connected);
     }

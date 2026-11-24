@@ -367,12 +367,12 @@ const NOT_PATCHABLE: [&str; 16] = ["cue", "m3u", "chd", "gdi", "cdi", "ccd", "to
 /// Whether pocket-core can patch the game in `content` (with a core of extensions `exts`).
 fn patchable(content: &Path, exts: &[&str]) -> bool {
     let ext = content.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
-    !content.is_dir() && !NOT_PATCHABLE.contains(&ext.as_str()) && !(ext == "zip" && exts.contains(&"zip"))
+    !content.is_dir() && !NOT_PATCHABLE.contains(&ext.as_str()) && !crate::archive::archive_type(content).is_some_and(|t| exts.contains(&t))
 }
 
-/// The game's own bytes: the file, or the game inside a zip (`archive::extract_rom`), with the path the core sees.
+/// The game's own bytes: the file, or the game inside a zip or 7z (`archive::extract_rom`), with the path the core sees.
 fn source(rom: &Path, exts: &[&str], first: &str) -> Result<(PathBuf, Vec<u8>), String> {
-    if rom.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) {
+    if crate::archive::archive_type(rom).is_some() {
         let (name, data) = crate::archive::extract_rom(rom, exts)?;
         return Ok((rom.parent().unwrap_or(Path::new("")).join(name), data));
     }
@@ -416,7 +416,7 @@ pub fn patched_content(rom: &Path) -> Option<Result<(PathBuf, Vec<u8>), String>>
     })())
 }
 
-/// The folder in /tmp (RAM on ROCKNIX) with a patched copy for a core that opens the game itself; removed with
+/// The folder in /tmp (RAM on ROCKNIX) with a prepared copy for a core that opens the game itself; removed with
 /// everything in it when dropped (the game ended, or it didn't load).
 #[derive(Debug)]
 pub struct TempDir(PathBuf);
@@ -427,8 +427,17 @@ impl TempDir {
     fn new(base: &Path) -> std::io::Result<TempDir> {
         let dir = base.join(format!("{TEMP_PREFIX}{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir)?;
+        use std::os::unix::fs::DirBuilderExt;
+        std::fs::DirBuilder::new().mode(0o700).create(&dir)?;
         Ok(TempDir(dir))
+    }
+
+    pub(crate) fn stage(base: &Path, name: &Path, data: &[u8]) -> Result<(PathBuf, Self), String> {
+        clean_stale(base);
+        let temp = Self::new(base).map_err(|e| format!("{}: {e}", base.display()))?;
+        let copy = temp.path().join(name.file_name().unwrap_or_else(|| std::ffi::OsStr::new("game")));
+        std::fs::write(&copy, data).map_err(|e| format!("{}: {e}", copy.display()))?;
+        Ok((copy, temp))
     }
 
     pub fn path(&self) -> &Path {
@@ -442,7 +451,7 @@ impl Drop for TempDir {
     }
 }
 
-/// Removes the patched copies in `base` of pocket-core runs that no longer run (killed, or ended through `exit`):
+/// Removes the prepared copies in `base` of pocket-core runs that no longer run (killed, or ended through `exit`):
 /// pocket-core's `--restore-system` after every game, and before a new copy is written.
 pub fn clean_stale(base: &Path) {
     let Ok(list) = std::fs::read_dir(base) else { return };
@@ -485,11 +494,7 @@ pub fn for_core(rom: &Path, patches: &[PathBuf], exts: &[&str], need_fullpath: b
     if !need_fullpath {
         return Ok(Patched { path, data, temp: None, names });
     }
-    clean_stale(temp_base);
-    let file_name = path.file_name().map(|n| n.to_os_string()).unwrap_or_else(|| "game".into());
-    let temp = TempDir::new(temp_base).map_err(|e| format!("{}: {e}", temp_base.display()))?;
-    let copy = temp.path().join(file_name);
-    std::fs::write(&copy, &data).map_err(|e| format!("{}: {e}", copy.display()))?;
+    let (copy, temp) = TempDir::stage(temp_base, &path, &data)?;
     Ok(Patched { path: copy, data: Vec::new(), temp: Some(temp), names })
 }
 

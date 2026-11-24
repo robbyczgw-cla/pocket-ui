@@ -211,6 +211,24 @@ mod tests {
         assert!(x >= overlay::MARGIN && x + w <= 640 - overlay::MARGIN, "{x}+{w}");
     }
 
+    /// The Brick without its GPU (and dArkOS's pocket-fb) puts pocket-core's notes on the picture by the CPU: a Korean
+    /// note there is hangul from the shipped fonts in every style, never the Latin letters a font without hangul made of it.
+    #[test]
+    fn a_korean_note_is_hangul_on_the_cpu_path_in_every_style() {
+        for (style, letters) in crate::font_style::ROW {
+            let _style = crate::font_style::for_this_thread(style, letters);
+            let paint = |msg: &str| {
+                let mut hud = SoftHud::new();
+                let mut buf = vec![0; 1024 * 768];
+                hud.paint(&texts("", "", msg, ""), &mut buf, 1024, 768);
+                buf
+            };
+            let (korean, latin) = (paint("저장했습니다. 게임을 계속하세요"), paint("Jeojanghaetseumnida. Geimeul gyesokhaseyo"));
+            assert!(korean != latin, "{style:?} {letters:?}: hangul, not its Latin letters");
+            assert!(korean.iter().filter(|&&p| p != 0).count() > 2000, "{style:?}: the note has ink");
+        }
+    }
+
     #[test]
     fn junk_bar_text_draws_nothing() {
         let mut hud = SoftHud::new();

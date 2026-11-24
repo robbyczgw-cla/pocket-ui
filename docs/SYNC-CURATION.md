@@ -83,7 +83,7 @@ while the old device's folder stays and is read like any other.
 2. Read the own folder's `library.json`, the state written after the last pass. **Every field whose value differs is a
    change made here since**: it gets the value, the time its file was last written (its mtime, never later than now)
    and this device's folder. That is how edits are found without touching every place in pocket-ui that edits: the
-   card, the web companion, Curator, Hide or delete all keep writing the files they always wrote.
+   card, the web companion, Curator, Hide and Delete on the card all keep writing the files they always wrote.
 3. Read every other device's `library.json` and take, **field by field, the newest value** (last writer wins; on the
    same millisecond the larger device folder, then the larger value, so every device picks the same).
 4. What differs from this device's files are the **changes** to apply here.

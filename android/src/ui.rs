@@ -387,6 +387,7 @@ pub struct Ui {
     pub regions: Vec<Region>,
     pub hits: HitMap,
     pub message: String,
+    card_refusals: pocket_ui::save_trouble::CardRefusals,
     pub system_font_scale: f32,
     /// The status corner's facts (`phone_corner`), as the Activity last said them; unknown until the first look.
     pub corner: pocket_ui::phone_corner::Reading,
@@ -520,6 +521,7 @@ impl Ui {
             regions: vec![],
             hits: HitMap::default(),
             message: String::new(),
+            card_refusals: Default::default(),
             system_font_scale: 1.0,
             corner: Default::default(),
             system_bar: false,
@@ -600,6 +602,20 @@ impl Ui {
             apps: Default::default(),
         }
     }
+    pub fn save_preferences(&self, data_dir: &std::path::Path, background: bool) {
+        let path = data_dir.join("launcher.json");
+        if background {
+            pocket_ui::fsutil::write_json_soon(&path, &self.prefs);
+        } else {
+            let _ = pocket_ui::fsutil::write_json(&path, &self.prefs);
+        }
+    }
+
+    /// A failed write of our settings or lists, with the same words and once-per-kind limit as on the handheld shelf.
+    pub fn take_storage_notice(&mut self, data_dir: &std::path::Path) -> Option<String> {
+        self.card_refusals.next_notice(data_dir).map(tr)
+    }
+
     pub fn is_frozen(&self, key: &str) -> bool {
         self.frozen.contains(key)
     }

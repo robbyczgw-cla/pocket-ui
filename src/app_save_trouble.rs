@@ -31,6 +31,23 @@ impl App {
         save_trouble::read_from(std::path::Path::new(save_trouble::FILE))
     }
 
+    /// On the shelf, once a run for each kind: settings or lists the card refused to save (full, read-only), so a
+    /// change that is gone at the next start doesn't go without a word (`save_trouble::CardRefusals`). Not while a game
+    /// runs or starts, nor over another notice: then it waits.
+    pub(crate) fn card_refusal_notice(&mut self) {
+        if self.running.is_some() || self.launch_at.is_some() || self.notice.is_some() {
+            return;
+        }
+        let data_dir = self.data_dir.as_path();
+        // Android keeps the shared launcher.json beside handheld/, the shelf's own data folder.
+        #[cfg(all(target_os = "android", feature = "handheld"))]
+        let data_dir = data_dir.parent().unwrap_or(data_dir);
+        if let Some(text) = self.card_refusals.next_notice(data_dir) {
+            eprintln!("fsutil: the SD card refused a save of pocket-ui's own files, told on the shelf");
+            self.notice = Some(pocket_ui::notice::Notice::new(text));
+        }
+    }
+
     /// Input on the question before Quit.
     pub(crate) fn quit_question_input(&mut self, b: Button) {
         let Some(menu) = self.menu.as_mut() else { return };
@@ -55,7 +72,7 @@ impl App {
 
     /// The question's rows with their explanation, for `paint_options` (the heading is the question).
     pub(crate) fn quit_question_rows(trouble: Trouble) -> Vec<(String, String, String)> {
-        let keep = "Back to the game. It keeps trying to save; the line goes away once a save gets through.";
+        let keep = "Return to the game. It keeps retrying; this banner clears once a save succeeds.";
         ROWS.iter().zip([keep, trouble.risk()]).map(|(name, desc)| (name.to_string(), String::new(), desc.to_string())).collect()
     }
 

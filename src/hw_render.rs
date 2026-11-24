@@ -442,6 +442,34 @@ pub fn is_3d_core(core_so: &std::path::Path) -> bool {
 mod tests {
     use super::*;
 
+    /// dArkOS: start.sh's private core folder (made when the port brings DSperate) must keep what pocket-core reads beside a
+    /// core. It linked only the `.so` files (0.6.0): without `flycast_libretro.info` next to the link `retroarch_options` found
+    /// no core name, the Dreamcast ran on flycast's bare defaults instead of dArkOS's RetroArch options, and dArkOS's flycast
+    /// ended pocket-core with SIGSEGV on every save state, Save & quit's included (container test, 21.11.2026).
+    #[test]
+    fn darkos_core_folder_keeps_the_systems_retroarch_options() {
+        let sh = include_str!("../deploy/darkos/start.sh");
+        let at = sh.find("if [ -f \"$ROOT/bin/cores/dsperate_libretro.so\" ]; then").expect("start.sh makes its core folder");
+        let block = &sh[at..at + sh[at..].find("\nfi\n").expect("the block's fi") + 4];
+        let d = crate::testutil::TestDir::new("darkos-core-folder");
+        let (root, cores, run, ra) = (d.join("app"), d.join("ark-cores"), d.join("run"), d.join("retroarch"));
+        for dir in [root.join("bin/cores"), cores.clone(), run.clone(), ra.clone()] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        std::fs::write(root.join("bin/cores/dsperate_libretro.so"), b"").unwrap();
+        std::fs::write(cores.join("flycast_libretro.so"), b"").unwrap();
+        std::fs::write(cores.join("flycast_libretro.info"), b"corename = \"Flycast\"\n").unwrap();
+        std::fs::write(ra.join("retroarch-core-options.cfg"), b"reicast_per_content_vmus = \"VMU A1\"\nreicast_enable_purupuru = \"disabled\"\n").unwrap();
+        let out = std::process::Command::new("sh").arg("-c").arg(format!("{block}printf '%s' \"$CORES\""))
+            .env("ROOT", &root).env("CORES", &cores).env("RUN", &run).output().expect("sh");
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        let folder = std::path::PathBuf::from(String::from_utf8(out.stdout).unwrap());
+        assert_eq!(folder, run.join("cores"), "with DSperate the port uses its own core folder");
+        let own = retroarch_options_in(&cores.join("flycast_libretro.so"), &ra);
+        assert_eq!(own.len(), 2, "{own:?}");
+        assert_eq!(retroarch_options_in(&folder.join("flycast_libretro.so"), &ra), own, "the same options through the port's folder");
+    }
+
     #[test]
     fn file_source_rule_retroarch_option_files() {
         let d = crate::testutil::TestDir::new("retroarch-file-rule");

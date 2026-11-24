@@ -33,7 +33,7 @@ struct Card {
 
 impl Card {
     fn new() -> Card {
-        let dir = tempfile::Builder::new().prefix("pui-prop-").tempdir_in("/tmp").unwrap();
+        let dir = tempfile::Builder::new().prefix("pui-prop-").tempdir().unwrap();
         let script = format!("{ROOT}/scripts/curator-fake-library.py");
         let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &script, dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
         assert!(status.success());
@@ -46,7 +46,12 @@ impl Card {
     }
 
     /// The fields of the line `what` prints in `state` on `screen`, and its canvas (w, h).
-    fn line(&self, state: &str, (size, device): (&str, &str), what: &str) -> (HashMap<String, String>, (f32, f32)) {
+    fn line(&self, state: &str, screen: (&str, &str), what: &str) -> (HashMap<String, String>, (f32, f32)) {
+        self.line_with(state, screen, what, &[])
+    }
+
+    /// `line` with more of the environment (`envs`).
+    fn line_with(&self, state: &str, (size, device): (&str, &str), what: &str, envs: &[(&str, &str)]) -> (HashMap<String, String>, (f32, f32)) {
         let tmp = self.dir.path();
         let png = tmp.join(format!("{size}-{}.png", state.replace(':', "_")));
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
@@ -64,6 +69,7 @@ impl Card {
             .env("POCKETUI_SNAPSHOT_SIZE", size)
             .env("POCKETUI_DATA", tmp.join("data"))
             .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
+            .envs(envs.iter().copied())
             .output()
             .unwrap();
         assert!(out.status.success(), "{state} at {size}: {}", String::from_utf8_lossy(&out.stderr));
@@ -187,6 +193,37 @@ fn the_brick_shows_the_looks_in_the_plus_proportions() {
         if gap > 16.0 {
             bad.push(format!("the game card at {}: its body ends {gap} lines over the hints", screen.0));
         }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
+
+/// Brick review 20.11.2026: in the Cabinet a shelf of DVD cases (Curator's, the Continue shelf with a PlayStation 2 game) was
+/// taller than the room under the showcase on the Brick, so it faded out under the hints with no board and no name plate
+/// ("Curator" missing; the Plus shows every plate); and the console of the way into a game stood 8 lines over the hint bar
+/// (the Plus: 18 of 960), so a HuCard going into a PC Engine's front was cut by the bar. The selected shelf keeps its plate
+/// on both, and the stage keeps the Plus's share of room over the hints.
+#[test]
+fn the_cabinet_keeps_each_shelfs_plate_and_its_stage_over_the_hints() {
+    let card = Card::new();
+    let mut bad = Vec::new();
+    for keys in ["", "d", "dd", "ddd", "dddd"] {
+        for screen in [PLUS, BRICK] {
+            let (f, _) = card.line(&format!("cabinet:{keys}"), screen, "cabinet-outcome");
+            if f.get("plate").map(String::as_str) != Some("true") {
+                bad.push(format!("cabinet:{keys} at {}: the selected shelf has no name plate: {f:?}", screen.0));
+            }
+        }
+    }
+    let launch = [("POCKETUI_SNAPSHOT_LAUNCH_MS", "900"), ("POCKETUI_SHARES", "1")];
+    let stage = |screen| {
+        let (f, (_, h)) = card.line_with("shelf:snes:cabinet:games:2", screen, "share insert-stage", &launch);
+        num(&f, "h") / h
+    };
+    let plus = stage(PLUS);
+    let brick = stage(BRICK);
+    println!("the stage's room over the hints: Brick {brick:.4}, Plus {plus:.4}");
+    if brick < plus - 0.002 {
+        bad.push(format!("the way into the console at {}: the stage stands {brick:.4} of the screen over the hints, the Plus's {plus:.4}", BRICK.0));
     }
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }

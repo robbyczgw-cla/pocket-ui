@@ -66,27 +66,27 @@ pub struct AchievementsPage {
 }
 
 /// The Hardcore row's line beside the hints, off and on.
-pub const HARDCORE_OFF: &str = "Off: save states, rewind and cheats work. Unlocks count as softcore.";
-pub const HARDCORE_ON: &str = "On: no save states, rewind or cheats. Continue starts from the in-game save.";
+pub const HARDCORE_OFF: &str = "Off: save states, rewind and cheats work (softcore unlocks).";
+pub const HARDCORE_ON: &str = "On: no save states, rewind or cheats. Launches from in-game saves.";
 
 /// Sign in pressed without Wi-Fi.
 pub const OFFLINE: &str = "Connect to Wi-Fi first to sign in (Settings › Connections › Wi-Fi).";
 /// The same on a handheld without Wi-Fi (`device::no_wifi_chip`): RetroAchievements needs the internet, said plainly
 /// (also as the status before anything is pressed, while there is no network).
-pub const OFFLINE_NO_WIFI: &str = "RetroAchievements needs the internet, and this handheld has no Wi-Fi.";
+pub const OFFLINE_NO_WIFI: &str = "RetroAchievements needs the internet; this handheld has no Wi-Fi.";
 
 /// What the page says about RetroAchievements, under the status.
 pub const ABOUT: [&str; 3] = if crate::achievements::hardcore::OFFERED {
     [
-    "Earn achievements in the games pocket-core plays: unlocks are checked as you play and count on retroachievements.org.",
-    "With Hardcore off, save states, rewind and cheats stay usable. With it on they are off, a game starts from its in-game save, and the site counts your unlocks as hardcore. Without Wi-Fi, unlocks are kept and sent the next time a game starts online.",
-    "You need a free account from retroachievements.org. Your password is sent once to sign in and is not kept; the Pocket keeps only the sign-in key the site gives back.",
+    "Unlock achievements live in pocket-core games and track progress on retroachievements.org.",
+    "Hardcore off: states, rewind and cheats work. Hardcore on: all three are disabled, games boot from in-game saves, and unlocks count as hardcore. Offline unlocks sync next time you launch online.",
+    "Needs a free retroachievements.org account. Your password is used once and never stored; the Pocket only saves your login token.",
     ]
 } else {
     [
-    "Earn achievements in the games pocket-core plays: unlocks are checked as you play and count on retroachievements.org.",
-    "Save states, rewind and cheats stay usable. Without Wi-Fi, unlocks are kept and sent the next time a game starts online.",
-    "You need a free account from retroachievements.org. Your password is sent once to sign in and is not kept; the Pocket keeps only the sign-in key the site gives back.",
+    "Unlock achievements live in pocket-core games and track progress on retroachievements.org.",
+    "Save states, rewind and cheats work. Offline unlocks queue up and sync next time you play online.",
+    "Needs a free retroachievements.org account. Your password is used once and never stored; the Pocket only saves your login token.",
     ]
 };
 
@@ -94,15 +94,15 @@ pub const ABOUT: [&str; 3] = if crate::achievements::hardcore::OFFERED {
 /// states (no rewind or cheats there), and no "Pocket" (the Odin 2 Mini's page named all three, 13.11.).
 pub const ANDROID_ABOUT: [&str; 3] = if crate::achievements::hardcore::OFFERED {
     [
-    "Earn achievements in the games pocket-ui's own player plays: unlocks are checked as you play and count on retroachievements.org.",
-    "With Hardcore off, save states stay usable. With it on they are off, a game starts from its in-game save, and the site counts your unlocks as hardcore. Without a connection, unlocks are kept and sent the next time a game starts online.",
-    "You need a free account from retroachievements.org. Your password is sent once to sign in and is not kept; pocket-ui keeps only the sign-in key the site gives back.",
+    "Unlock achievements live in pocket-ui's player and track progress on retroachievements.org.",
+    "Hardcore off: save states work. Hardcore on: states are disabled, games boot from in-game saves, and unlocks count as hardcore. Offline unlocks sync next time you launch online.",
+    "Needs a free retroachievements.org account. Your password is used once and never stored; pocket-ui only saves your login token.",
     ]
 } else {
     [
-    "Earn achievements in the games pocket-ui's own player plays: unlocks are checked as you play and count on retroachievements.org.",
-    "Save states stay usable. Without a connection, unlocks are kept and sent the next time a game starts online.",
-    "You need a free account from retroachievements.org. Your password is sent once to sign in and is not kept; pocket-ui keeps only the sign-in key the site gives back.",
+    "Unlock achievements live in pocket-ui's player and track progress on retroachievements.org.",
+    "Save states work normally. Offline unlocks queue up and sync next time you play online.",
+    "Needs a free retroachievements.org account. Your password is used once and never stored; pocket-ui only saves your login token.",
     ]
 };
 
@@ -123,14 +123,14 @@ pub fn about_on(android: bool, no_chip: bool) -> [&'static str; 3] {
 
 /// [`ABOUT`]'s middle paragraph on a handheld without Wi-Fi ([`about_on`]).
 const NO_WIFI_ABOUT: &str = if crate::achievements::hardcore::OFFERED {
-    "With Hardcore off, save states, rewind and cheats stay usable. With it on they are off, a game starts from its in-game save, and the site counts your unlocks as hardcore."
+    "Hardcore off: states, rewind and cheats work. Hardcore on: all three are disabled, games boot from in-game saves, and unlocks count as hardcore."
 } else {
     "Save states, rewind and cheats stay usable."
 };
 
 /// The line under the password on the pad keyboard.
 pub fn password_note_in(android: bool) -> &'static str {
-    if android { "Sent once to sign in, never kept. pocket-ui keeps only the sign-in key." } else { "Sent once to sign in, never kept. The Pocket keeps only the sign-in key." }
+    if android { "Used once to sign in, never stored. Only your login token is saved." } else { "Used once to sign in, never stored. The Pocket saves only a token." }
 }
 
 /// A typed password as it shows: dots, with the last character readable (it was just typed on a pad).
@@ -324,7 +324,7 @@ impl AchievementsPage {
         }
         match (self.signed_in(), self.confirm_logout) {
             (true, true) => "Press A again to log out. B keeps you signed in.",
-            (true, false) => "Removes the sign-in key from the Pocket.",
+            (true, false) => "Removes your saved login token.",
             (false, _) => "With your retroachievements.org account.",
         }
     }
@@ -423,14 +423,14 @@ mod tests {
     use super::*;
 
     /// A handheld without Wi-Fi (15.11.): the page said "Without Wi-Fi, unlocks are kept and sent the next time a game
-    /// starts online" under "RetroAchievements needs the internet, and this handheld has no Wi-Fi." It says what it
+    /// starts online" under "RetroAchievements needs the internet; this handheld has no Wi-Fi." It says what it
     /// needs, once.
     #[test]
     fn without_a_wifi_chip_the_page_does_not_promise_unlocks_sent_later_over_wifi() {
         for p in about_on(false, true) {
             assert!(!p.contains("Wi-Fi"), "{p}");
         }
-        assert!(about_on(false, false)[1].contains("Without Wi-Fi"), "with a chip the usual words");
+        assert!(about_on(false, false)[1].contains("Offline unlocks"), "with a chip the usual words");
         assert!(about_on(false, true)[1].contains("Save states"), "the rest of the paragraph stays");
     }
     use crate::achievements::snapshot::Entry;

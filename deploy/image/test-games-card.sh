@@ -81,7 +81,7 @@ EOF
 
 # A device the way the handheld boots: the system card in slot 1 (mmcblk0), 32 GB.
 reset() {
-  rm -rf "$S" "$RUN" "$T/cards" "$T/sys" "$T/calls" "$T/settings" "$T/fail-"* "$T/stuck" "$T/log"
+  rm -rf "$S" "$RUN" "$T/cards" "$T/sys" "$T/calls" "$T/settings" "$T/os-release" "$T/fail-"* "$T/stuck" "$T/log"
   mkdir -p "$S/roms" "$INT/roms" "$RUN" "$T/cards" "$T/sys"
   : >"$T/calls"
   : >"$T/dirs.conf"
@@ -99,7 +99,8 @@ f() { mkdir -p "$(dirname "$T/cards/$1")"; printf '%s\n' "${2:-$1}" >"$T/cards/$
 run() {
   env -i PATH="$T/bin:/usr/bin:/bin" T="$T" PU_MOUNTS="$T/mounts" PU_PARTITIONS="$T/partitions" PU_SYSBLOCK="$T/sys" \
     PU_STORAGE="$S" PU_EXTERNAL="$EXT" PU_ROMS="$ROMS" PU_INTERNAL="$INT" PU_RUN="$RUN" PU_LOG="$T/log" \
-    PU_AUTOMOUNT="$T/bin/automount" PU_PROFILE="$T/profile" PU_BUSYBOX="$T/bin/busybox" PU_DIRS_CONF="$T/dirs.conf" \
+    PU_AUTOMOUNT="$T/bin/${AUTOMOUNT_TEST:-automount}" PU_PROFILE="$T/profile" PU_BUSYBOX="$T/bin/busybox" PU_DIRS_CONF="$T/dirs.conf" \
+    PU_OS_RELEASE="$T/os-release" \
     PU_BIOS_MAX="${BIOS_MAX:-1000}" bash "$HERE/games-card.sh"
   echo $? >"$T/rc"
 }
@@ -242,6 +243,109 @@ reset; stock_r36s; f mmcblk1p3/bios/huge.bin "$(head -c 2000 /dev/zero | tr '\0'
 before=$(sum)
 run
 check "a BIOS file over the size limit stays on the card only" '[ ! -e $INT/roms/bios/huge.bin ] && grep -q "bios: huge.bin left on the card" $T/log && [ -e $INT/roms/bios/gba_bios.bin ] && [ "$(sum)" = "$before" ]'
+
+echo "== Qualcomm SD images: only SD and USB games partitions"
+# Minimal ROCKNIX delegate with the same configured-device and scan entry points.
+# A successful fake mount writes the probe a real mount_games would write.
+tool stock-automount <<'EOF'
+. "$T/profile"
+GAMES_DEVICE=$(get_setting system.gamesdevice)
+function mount_games() {
+  echo "stock mount $1" >>"$T/calls"
+  touch "$T/cards/${1##*/}/.tmp-rocknix"
+  exit 0
+}
+if [ -n "$GAMES_DEVICE" ]; then
+  mount_games "$GAMES_DEVICE"
+else
+  while IFS=: read -r part details; do
+    grep -q "^$part " "$T/mounts" && continue
+    mount_games "$part"
+  done < <(blkid)
+fi
+EOF
+run_stock() { AUTOMOUNT_TEST=stock-automount run; }
+family() { printf 'HW_DEVICE="%s"\n' "$1" >"$T/os-release"; }
+mmc_type() { mkdir -p "$T/sys/$1/device"; printf '%s\n' "$2" >"$T/sys/$1/device/type"; }
+scsi() {
+  local node="$T/sys/devices/$2/host0/target0/block/$1"
+  mkdir -p "$node" "$T/sys/bus/usb"
+  ln -s "$node" "$T/sys/$1"
+  if [ "$2" = usb-controller/usb1/1-1 ]; then ln -s "$T/sys/bus/usb" "$T/sys/devices/$2/subsystem"; fi
+}
+qualcomm_disks() {
+  card sda 64000000; scsi sda soc/ufs-controller; part sda1 "$1" INTERNAL_UFS
+  card mmcblk2 32000000; mmc_type mmcblk2 MMC; part mmcblk2p1 "$1" INTERNAL_EMMC
+}
+no_internal_mount() {
+  ! grep -Eq '^(mount|stock mount).* /dev/(sda1|mmcblk2p1)( |$)' "$T/calls" &&
+    [ ! -e "$T/cards/sda1/.tmp-rocknix" ] && [ ! -e "$T/cards/mmcblk2p1/.tmp-rocknix" ]
+}
+
+for soc in SM8250 SM8550 SM4450; do
+  reset; family "$soc"; qualcomm_disks exfat
+  f sda1/gba/game.gba; f sda1/snes/game.sfc
+  f mmcblk2p1/gba/game.gba; f mmcblk2p1/snes/game.sfc
+  run_stock
+  check "$soc: neither the ArkOS probe nor the ROCKNIX delegate mounts internal UFS or eMMC" 'no_internal_mount && [ ! -e "$RUN/games-card-root" ]'
+done
+
+reset; family SM8250; qualcomm_disks ext4
+card sdb 64000000; scsi sdb usb-controller/usb1/1-1; part sdb1 ext4 USB
+run_stock
+check "ROCKNIX skips UFS and eMMC and still takes an ext4 USB drive with an sd name" 'no_internal_mount && grep -qx "stock mount /dev/sdb1" "$T/calls"'
+
+reset; family SM8550; qualcomm_disks ext4
+card sdb 64000000; scsi sdb usb-controller/usb1/1-1; part sdb1 ext4 USB
+echo system.gamesdevice=/dev/sda1 >"$T/settings"
+run_stock
+check "configured internal UFS is ignored and the USB drive is still available" 'no_internal_mount && grep -qx "stock mount /dev/sdb1" "$T/calls"'
+
+reset; family SM4450; qualcomm_disks ext4
+card mmcblk1 64000000; mmc_type mmcblk1 SD; part mmcblk1p1 exfat EASYROMS
+f mmcblk1p1/gba/game.gba; f mmcblk1p1/snes/game.sfc
+run_stock
+check "the second SD card still takes the ArkOS path" 'no_internal_mount && arkos_used /dev/mmcblk1p1'
+
+reset; family SM8250; qualcomm_disks ext4
+card sdb 64000000; scsi sdb usb-controller/usb1/1-1; part sdb1 exfat EASYROMS
+f sdb1/gba/game.gba; f sdb1/snes/game.sfc
+run_stock
+check "a USB stick can still take the ArkOS path" 'no_internal_mount && arkos_used /dev/sdb1'
+
+reset; family SM8550; qualcomm_disks ext4
+mmc_type mmcblk0 SD; part mmcblk0p3 exfat GAMES
+run_stock
+check "the GAMES partition on the boot SD card is still found automatically" 'no_internal_mount && grep -qx "stock mount /dev/mmcblk0p3" "$T/calls"'
+
+reset; family SM8550; qualcomm_disks ext4
+mmc_type mmcblk0 SD; part mmcblk0p3 exfat GAMES
+echo system.gamesdevice=/dev/mmcblk0p3 >"$T/settings"
+run_stock
+check "an explicitly selected SD partition still works" 'no_internal_mount && grep -qx "stock mount /dev/mmcblk0p3" "$T/calls"'
+
+reset; family SM4450; qualcomm_disks ext4
+run
+check "unrecognized delegate uses STORAGE without running the unguarded script" '! automounted && no_internal_mount && [ "$(readlink "$ROMS")" = "$INT/roms" ]'
+
+run_unit_fallback() {
+  # Expand systemd's literal dollar escape and redirect the unit's three paths to the fixture.
+  local command
+  command=$(sed -n "s|^ExecStart=/bin/sh -c '\(.*\)'\$|\1|p" "$HERE/rocknix-automount-games-card.conf" |
+    sed -e 's/\$\$/\$/g' -e "s|/storage/pocket-ui/games-card.sh|$S/pocket-ui/games-card.sh|g" \
+      -e "s|/etc/os-release|$T/os-release|g" -e "s|/usr/bin/automount|$T/bin/automount|g")
+  sh -c "$command"
+}
+reset; family SM8250; run_unit_fallback
+check "missing hook on a Qualcomm image does not start the unguarded ROCKNIX service" '! automounted'
+reset; family H700; run_unit_fallback
+check "missing hook on H700 still starts the regular ROCKNIX service" 'automounted'
+
+for soc in H700 RK3326 RK3566; do
+  reset; family "$soc"; qualcomm_disks ext4
+  run_stock
+  check "$soc: delegated ROCKNIX policy stays the same" 'grep -qx "stock mount /dev/sda1" "$T/calls"'
+done
 
 echo
 if [ $fails -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

@@ -66,6 +66,7 @@ struct Bench {
     glyphs: usize,
     patterns: usize,
     sealed: usize,
+    shadows_made: usize,
     line: String,
 }
 
@@ -108,6 +109,7 @@ fn run_case(tmp: &Path, wayland: &Option<Stub>, look: &str, lang: &str, size: &s
         glyphs: field("glyphs") as usize,
         patterns: field("patterns") as usize,
         sealed: field("sealed") as usize,
+        shadows_made: field("shadows_made") as usize,
         line,
     }
 }
@@ -126,6 +128,11 @@ fn check(look: &str, lang: &str, b: &Bench) -> Result<(), String> {
         if b.patterns * 10 >= b.moves {
             return Err(format!("{look} {lang}: frames ran strings through the German patterns ({b:?})"));
         }
+    }
+    // Browsed twice, every console's and handheld's shadow is kept: the Cabinet made a handheld's again whenever the
+    // handheld changed (one kept), a blur over its whole area in the frame (RG35XX Plus, 0.6.0: p95 37.9 ms).
+    if b.shadows_made > 0 {
+        return Err(format!("{look} {lang}: {} shape shadows made again while browsing ({b:?})", b.shadows_made));
     }
     // About 1-2 ms on the build computer and 1.4 ms on the Mini V2 (cards, 2026-10-26); a frame is 16 ms.
     if !(b.p50_us < 6000.0 && b.p95_us < 8000.0) {

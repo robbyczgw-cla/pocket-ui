@@ -126,6 +126,39 @@ The stand-ins in `deploy/darkos/hwroot/usr/bin` keep pocket-ui away from dArkOS'
 reboot and suspend; `nmcli`, `wifictl`, Bluetooth, the clock and `swaymsg` are "not available"; `volume`/`pactl` use the
 control ogage moves (`Master`, else `Playback`); `grim` is the Brick's (asks pocket-fb).
 
+### Settings in the port
+
+A row that does nothing is worse than none, so the port leaves out what dArkOS keeps for itself or the port can't do
+(`darkos::LEAVES_OUT` and `NEEDS_GPU`, through `device::hides_in`: the Settings rows and the Tour's cards alike;
+`tests/brick_settings_walk.rs` walks every category as the port shows it):
+
+| Left out | Why |
+|---|---|
+| Bluetooth, Remote access (SSH), Time | dArkOS's own: the stand-ins answer "not available" (set them in dArkOS) |
+| Tailscale, Sync (Syncthing) | not in the port, and `systemctl` starts no service |
+| RomM | each system's games folder is shown read only, so a download has nowhere to go |
+| Screen frames, a game's Picture rows, Pixel Path's live strip (Tour) | need the bridge's GPU path; pocket-fb runs without `--gl` here (`brick_profile::picture_rows_out`) |
+
+Kept: Wi-Fi with a page of its own ("Set up Wi-Fi in dArkOS", connected or not and wlan0's address, `setup::DARKOS_WIFI`;
+nothing is scanned or switched), Pocket Sync, the web companion, Updates (the port's own channel), Back to EmulationStation, and
+everything of the look and the games. The texts that name a Settings row name one that is there: the offline notes lead to
+Wi-Fi, the clock notices say "Set it in dArkOS", Test buttons says to pair in dArkOS, the web companion's notes leave Tailscale
+out (`tests/brick_settings_walk.rs`, `the_darkos_port_points_only_at_rows_it_has`). The starter pack's page says it doesn't work in the port (`starter::NOT_IN_DARKOS`: the games folders are read
+only), and RomM games never stand on the shelf there (`romm::shelf_games`).
+
+**Wi-Fi.** The board rows say `wifi: false`: pocket-ui offers no Wi-Fi page, phone page or file sharing in the port
+(`device::no_own_wifi`). dArkOS's own Wi-Fi still counts for the pages that need a network (`device::no_wifi_chip`): when the
+kernel shows `wlan0` or another wireless interface (`darkos::wifi_here`, read once at the start), Pocket Sync, the web
+companion, the box art and the rest speak of a network, not of "this handheld has no Wi-Fi". Whether it is online is wlan0's
+address, as everywhere (`wifi::ip`).
+
+**Haptics.** dArkOS's pad drivers own the motor: on the RK3566 boards `singleadcjoy.c` (kernel_5_10_226) gives `retrogame_joypad`
+FF_RUMBLE and sets the PWM (`pwm5` on the RG353M) from the strong channel alone; the RK3326 `odroidgo3_joypad` has its rumble too
+(`rumble_boost_*`). The menu tick there is a full-power pulse of 30 ms (`rumble::tick_default`): the Mini V2's 22 ms at 55 % did
+not spin the motor up (an RG353M player, 21.11.2026). At the start `rumble::look_for_motor` looks once, on a thread, for a
+force-feedback device; when there is none (a board whose tree has no motor, the R36S family) the Haptics row and its Tour card go
+(`darkos::no_motor`). Never written by hand: the motor's PWM sysfs (the backlight is a PWM too).
+
 In pocket-ui (`brick` feature only): `src/darkos.rs` (the boards as rows of the H700 profile, the RK3326 pad's Select, Start,
 L3 and HOME, ogage, the leave dialog's text), one line each in `device.rs`, `pad.rs`, `rescue.rs`, `quick.rs`, `sleep.rs`
 and `platform/linux_audio.rs`, and `audio::out_rate`. SELECT + START held and About's EmulationStation row ask "Back to
@@ -168,6 +201,12 @@ game or the console. PSP minis and GameCube stay on dArkOS's emulators.
   own BIOS); NAOMI and Atomiswave need `naomi.zip`/`awbios.zip` there. `bios/dc` is writable in the view: one memory card per
   game, the file dArkOS's standalone Flycast uses there too (`vfs::share_flycast_vmus`). Cards dArkOS's RetroArch made
   next to the game are not read.
+- ScummVM: the core reads and writes `scummvm.ini` in its system directory, which on ROCKNIX is the BIOS folder. Here that
+  folder is read only and its `scummvm.ini` is dArkOS's RetroArch's, so start.sh gives the core pocket-ui's own
+  `storage/.config/scummvm` instead (`POCKETUI_SCUMMVM_SYSTEM`); its ini starts as a copy of `<card>/bios/scummvm.ini`,
+  which stays untouched. Engine data and themes are dArkOS's standalone ScummVM's (`/opt/scummvm/extra`,
+  `/opt/scummvm/themes`). Saves go to pocket-ui's `storage/.local/share/scummvm/saves`, not to `<card>/scummvm`, where
+  standalone ScummVM keeps its own (the games folder is read only in the view).
 - PSP: before a game pocket-core copies the fonts, the atlas and the VFPU tables it lacks from dArkOS's standalone PPSSPP
   (`/opt/ppsspp/assets`, `POCKETUI_PPSSPP_ASSETS`) into `<card>/bios/PPSSPP` (writable), never replacing a file there.
   The memory stick (`PSP/SAVEDATA`) is dArkOS's standalone PPSSPP's `<card>/psp/ppsspp`, bound over `storage/saves/psp`,

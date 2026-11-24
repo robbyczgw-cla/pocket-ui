@@ -817,8 +817,8 @@ pub fn check_system(found: &mut Findings, files: &dyn Files, words: &Words, info
             blocked.insert(path.clone());
             continue;
         }
-        let is_zip = path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("zip"));
-        if is_zip {
+        // A zip or a 7z: the archive's refusal (`archive::refusal_in`, `seven_zip::refusal_in`), from its directory alone.
+        if crate::archive::archive_type(path).is_some() {
             if let Some(why) = files.zip_refusal(path, &wanted, !cartridge) {
                 // The same sentence the shelf would say, with its advice in it.
                 found.add(Finding { group: Group::Zips, name: name_of(path), system, what: why, todo: String::new(), place, fix: None });

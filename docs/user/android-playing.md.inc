@@ -26,7 +26,7 @@ other at the left, the save's picture at the right.
 ## Continue
 
 Your last game stands first on the shelf. **A** on it goes straight back to the moment you left. Save & quit keeps that
-moment, and so does leaving the game any other way: Android's home screen, another app, or the power button. Come back
+moment, and so does leaving the game any other way: Android's launcher, another app, or the power button. Come back
 through the app and the game waits in its pause menu.
 
 ## Which systems play where

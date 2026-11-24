@@ -47,35 +47,37 @@ pub(crate) struct Inputs<'a> {
 }
 
 /// What `resolve_runner` needs besides system.cfg, without the app: also on a thread (`App::core_prewarm_start`).
+/// dArkOS's port: pocket-core plays what es_systems.cfg gives its `pocket-core` emulator, with its first core.
+fn darkos_inputs<'a>(sys: &'a System, path: Option<&Path>, host_bin: bool, fell_back: bool) -> Inputs<'a> {
+    Inputs {
+        pocket_core: host_bin.then(|| sys.emulators.iter().find(|e| e.name == emu_choice::POCKET_CORE)
+            .and_then(|e| e.cores.first()).map(String::as_str)).flatten(),
+        pocket_cores: &[],
+        file_ok: path.is_none_or(|p| hostsys::hosts_file(&sys.name, p)),
+        fell_back,
+        default_override: None,
+    }
+}
+
 #[cfg(not(feature = "brick"))]
 pub(crate) fn inputs_for<'a>(sys: &'a System, path: Option<&Path>, host_bin: bool, fell_back: bool) -> Inputs<'a> {
     if sys.name=="nds" {
         return Inputs {
             pocket_core:host_bin.then(pocket_ui::ds::default_core),
             pocket_cores:pocket_ui::ds::CORES,
-            file_ok:path.is_none_or(|p| !p.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"))),
+            file_ok:true,
             fell_back,default_override:None,
         };
     }
     if pocket_ui::device::darkos_port() {
-        return Inputs {
-            pocket_core: host_bin.then(|| sys.emulators.iter().find(|e| e.name == "pocket-core")
-                .and_then(|e| e.cores.first()).map(String::as_str)).flatten(),
-            pocket_cores: &[],
-            file_ok: path.is_none_or(|p| !p.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"))
-                && hostsys::hosts_file(&sys.name, p)),
-            fell_back,
-            default_override: None,
-        };
+        return darkos_inputs(sys, path, host_bin, fell_back);
     }
     let system = sys.name.as_str();
     let bios = hostsys::bios_dir();
     let bios = bios.as_path();
-    // pocket-core opens zip files itself but not 7z: those games stay with RetroArch.
-    let file_ok = path.is_none_or(|path| {
-        let is_7z = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"));
-        !is_7z && hostsys::hosts_file(system, path)
-    });
+    // pocket-core opens zip and 7z files itself (`archive`, `seven_zip`): only file types its core doesn't take stay
+    // with RetroArch.
+    let file_ok = path.is_none_or(|path| hostsys::hosts_file(system, path));
     let pocket_core = HOST_CORES
         .iter()
         .find(|(s, _)| *s == system)
@@ -99,23 +101,13 @@ pub(crate) fn inputs_for<'a>(sys: &'a System, path: Option<&Path>, host_bin: boo
 #[cfg(feature = "brick")]
 pub(crate) fn inputs_for<'a>(sys: &'a System, path: Option<&Path>, host_bin: bool, fell_back: bool) -> Inputs<'a> {
     if pocket_ui::device::darkos_port() {
-        return Inputs {
-            pocket_core: host_bin.then(|| sys.emulators.iter().find(|e| e.name == "pocket-core")
-                .and_then(|e| e.cores.first()).map(String::as_str)).flatten(),
-            pocket_cores: &[],
-            file_ok: path.is_none_or(|p| !p.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"))
-                && hostsys::hosts_file(&sys.name, p)),
-            fell_back,
-            default_override: None,
-        };
+        return darkos_inputs(sys, path, host_bin, fell_back);
     }
     let system = sys.name.as_str();
     let bios = Path::new(hostsys::BIOS_DIR);
-    // pocket-core opens zip files itself but not 7z: those games stay with RetroArch.
-    let file_ok = path.is_none_or(|path| {
-        let is_7z = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"));
-        !is_7z && hostsys::hosts_file(system, path)
-    });
+    // pocket-core opens zip and 7z files itself (`archive`, `seven_zip`): only file types its core doesn't take stay
+    // with RetroArch.
+    let file_ok = path.is_none_or(|path| hostsys::hosts_file(system, path));
     let pocket_core = HOST_CORES.iter().find(|(s, _)| *s == system).map(|(_, core)| *core).or_else(|| hostsys::route(system, bios));
     // The Brick has other cores than the default ones (`brick_profile::core_for`), for the verified systems (PlayStation, Sega) as well.
     #[cfg(feature = "brick")]
@@ -265,7 +257,12 @@ impl App {
     pub(crate) fn emu_choice_in_menu(&mut self) {
         let Some(run) = self.running.as_ref() else { return };
         let (system, name, path) = (run.system.clone(), run.name.clone(), run.path.clone());
+        let retroarch = run.emulator == "retroarch";
         if self.open_emu_choice(&system, Some((&name, &path)), Opener::Menu) {
+            // A RetroArch game's HOME shortcuts are listed from here: its Options is this page (`app_shortcut_list`).
+            if let Some((page, _)) = self.emu.page.as_mut() {
+                page.shortcuts = retroarch;
+            }
             if let Some(m) = self.menu.as_mut() {
                 m.page = Page::EmuChoice;
             }
@@ -294,6 +291,7 @@ impl App {
                 }
             }
             Action::Download { core } => self.phone_download(&core),
+            Action::Shortcuts => self.open_shortcut_list(),
             Action::Save { edits, clear_fallback } => {
                 println!(
                     "emulator choice: {}",
@@ -515,8 +513,9 @@ impl App {
         if !self.emu_choice_snapshot(&state) {
             return false;
         }
-        if let Some((_, from)) = self.emu.page.as_mut() {
+        if let Some((page, from)) = self.emu.page.as_mut() {
             *from = Opener::Menu;
+            page.shortcuts = true;
         }
         true
     }
@@ -554,7 +553,7 @@ impl App {
             Mode::List => page
                 .rows()
                 .iter()
-                .map(|r| (page.label(*r).to_string(), (*r != Row::Save).then(|| page.value(*r))))
+                .map(|r| (page.label(*r).to_string(), (!matches!(*r, Row::Save | Row::Shortcuts)).then(|| page.value(*r))))
                 .collect(),
             Mode::Save { .. } => page.save_choices().iter().map(|s| (s.label().to_string(), None)).collect(),
         };
@@ -630,7 +629,7 @@ impl App {
             notes.push(("Not saved yet: Save changes keeps it.".to_string(), pal().amber));
         }
         // The Save changes row and its choices say it in their own text.
-        if matches!(page.mode, Mode::List) && page.row() != Row::Save {
+        if matches!(page.mode, Mode::List) && !matches!(page.row(), Row::Save | Row::Shortcuts) {
             notes.push((page.level_line(), pal().quiet));
         }
         if let Some(f) = page.footer() {
@@ -642,7 +641,7 @@ impl App {
         }
 
         let hints: &[(&str, &str)] = match page.mode {
-            Mode::List if page.row() == Row::Save => &[("B", "Back"), ("A", "Open")],
+            Mode::List if matches!(page.row(), Row::Save | Row::Shortcuts) => &[("B", "Back"), ("A", "Open")],
             // Download: A only while the channel is open and no download runs (the navigation explorer's rule: no hint for a key that does nothing).
             Mode::List if page.row() == Row::Download && page.download_ready() => &[("B", "Back"), ("A", "Download now")],
             Mode::List if page.row() == Row::Download => &[("B", "Back")],
@@ -668,3 +667,18 @@ fn save_desc(s: pocket_ui::emu_choice_page::SaveChoice) -> &'static str {
 const SNAPSHOT_CFG: &str =
     "global.ratio=core\nglobal.autosave=1\nglobal.rewind=0\nglobal.runahead=0\ngba.ratio=3/2\ngba.emulator=retroarch\ngba.core=gpsp\nsnes.ratio=4/3\n";
 const SNAPSHOT_SHIPPED: &str = "global.ratio=core\nglobal.autosave=1\nglobal.rewind=0\nglobal.runahead=0\ngba.ratio=3/2\nsnes.ratio=4/3\n";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A 7z game goes to pocket-core as a zip does (`seven_zip`; the R36S's card has every GBA game as a 7z). Red before:
+    /// every 7z stayed with RetroArch.
+    #[test]
+    fn a_7z_game_is_pocket_cores_as_a_zip_is() {
+        let system = |name: &str| System { name: name.into(), fullname: String::new(), emulator: None, core: None, emulators: Vec::new(), games: Vec::new() };
+        for (sys, game) in [("gba", "Pocket Demo (World).7z"), ("gba", "Pocket Demo (World).zip"), ("gba", "Pocket Demo (World).gba"), ("nds", "Pocket Demo.7z"), ("snes", "Pocket Demo.7Z")] {
+            assert!(inputs_for(&system(sys), Some(Path::new(game)), true, false).file_ok, "{sys} {game}");
+        }
+    }
+}

@@ -122,8 +122,10 @@ that failed was shown as "No networks found", and a poll that began before a swi
   waiting behind another is replaced. A switch goes ahead of the scans that wait and stops the one under way (nmcli is
   killed, `proc::run_until`), so it never waits for a list its own result makes useless; connections are not
   interrupted, a switch asked for during one waits for it. A look that finds the radio gone on or off since the last one
-  (an external block) moves the generation too, so a scan under way cannot bring its list back. A job that panics
-  (`catch_unwind` in the worker) leaves the worker running and the snapshot no longer busy.
+  (an external block) moves the generation too, so a scan under way cannot bring its list back. A job that goes wrong
+  says so as a value (a switch: a notice; a scan: `Scan::Failed`; a connect, forget or country: `exclusive`'s `Err`, logged)
+  and leaves the worker running and the snapshot no longer busy. Never a panic for that: the shipped build has
+  `panic = "abort"`, so the tests run these cases as shipped (`net_state::tests::as_shipped`).
 - **Connecting without colliding (hotspot incident, 2026-10-27).** The watchdog uses this same worker for its scan
   and reconnect (`NetState::reconnect`), then checks the device again after scanning. A newer player operation
   discards a queued watchdog job or stops its scan or activation (`run_until`, `-w 30`), so a slow scan cannot hold a radio switch. User connects, saved connects and reconnects all use

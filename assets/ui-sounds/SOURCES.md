@@ -1,10 +1,11 @@
 # Sounds from real recordings
 
-Every sound here that is not generated is a real recording of real hardware, from Freesound, CC0 1.0 (public domain
-dedication; no attribution required, we credit anyway). Each was cut from Freesound's 128 kbit/s preview of the sound, made mono
+The recordings below came from Freesound under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
+or [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/), as listed for each file. Each was cut from Freesound's preview, made mono
 48 kHz, high-passed at 30 Hz, low-passed gently at 10 kHz, faded in and out to exactly zero and levelled like the rest of the
 set by `scripts/ui-sounds/prep_media_sounds.py` (EXACT cut, its loudest 400 ms at -24.5 to -29.7 LUFS, true peak at most
--1.5 dBTP; the TV's static on purpose about 5 dB quieter). Licences read from each Freesound page on 2026-11-19.
+-1.5 dBTP; the TV's static on purpose about 5 dB quieter). Licences read from each Freesound page on
+2026-11-19, and on 2026-11-22 for the NES, motorized tray, jewel case and DVD case below.
 
 | File | What it is | Source | Author | Licence | Cut (ms of the source) |
 |---|---|---|---|---|---|
@@ -18,6 +19,15 @@ set by `scripts/ui-sounds/prep_media_sounds.py` (EXACT cut, its loudest 400 ms a
 | `disc-shut.wav` | GameCube lid shut | ["GameCube Disc Drive Open and Close", Freesound 538507](https://freesound.org/s/538507/) | steeltowngaming | CC0 1.0 | 2100-2950 |
 | `umd-open.wav` | PSP UMD door opens | ["old psp opening and closing", Freesound 708404](https://freesound.org/s/708404/) | KeeganLab | CC0 1.0 | 450-1050 |
 | `umd-shut.wav` | PSP UMD door shuts | ["old psp opening and closing", Freesound 708404](https://freesound.org/s/708404/) | KeeganLab | CC0 1.0 | 3850-4450 |
+| `nes-slide.wav` | cartridge slides into the front-loading NES | ["insertcartridge.wav", Freesound 322320](https://freesound.org/s/322320/) | XenosNS | CC0 1.0 | 200-490 |
+| `nes-press.wav` | cartridge pressed down in the same NES | ["insertcartridge.wav", Freesound 322320](https://freesound.org/s/322320/) | XenosNS | CC0 1.0 | 530-900 |
+| `nes-door-shut.wav` | North American NES door shuts | ["NES door slam.mp3", Freesound 454468](https://freesound.org/s/454468/) | florn | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) | 50-285 |
+| `tray-open.wav` | audio CD player's motorized tray opens, used for consoles with this mechanism | ["cd tray open and close.mp3", Freesound 505383](https://freesound.org/s/505383/) | lartti | CC0 1.0 | 50-560 |
+| `tray-shut.wav` | the same tray shuts | ["cd tray open and close.mp3", Freesound 505383](https://freesound.org/s/505383/) | lartti | CC0 1.0 | 2060-2460 |
+| `jewel-open.wav` | jewel case opens | ["Compact disc handling", Freesound 876485](https://freesound.org/s/876485/) | ottoojala | CC0 1.0 | 1560-1920 |
+| `jewel-shut.wav` | the same case shuts | ["Compact disc handling", Freesound 876485](https://freesound.org/s/876485/) | ottoojala | CC0 1.0 | 6620-6990 |
+| `dvd-open.wav` | DVD case opens | ["Opening a DVD Case.wav", Freesound 272430](https://freesound.org/s/272430/) | ryanharding95 | CC0 1.0 | 290-710 |
+| `dvd-shut.wav` | a PS2 game's DVD case shuts | ["Plastic Disc Case Open and Close", Freesound 792907](https://freesound.org/s/792907/) | ewellis | CC0 1.0 | 6500-6860 |
 | `crt-on.wav` | CRT TV switches on: relay click and degauss | ["CRT TV Switches On", Freesound 693860](https://freesound.org/s/693860/) | Fission9 | CC0 1.0 | 120-1000 |
 | `tv-static.wav` | CRT static on an empty channel | ["TV static", Freesound 765159](https://freesound.org/s/765159/) | MieckevanHoek | CC0 1.0 | 2000-2400 |
 | `tv-off.wav` | CRT TV (Panasonic PV-M2047) switches off | ["CRT TV turn on and off", Freesound 838726](https://freesound.org/s/838726/) | Sanderboah | CC0 1.0 | 9550-10250 |

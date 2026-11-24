@@ -25,10 +25,8 @@ const FONT: u32 = 36;
 const SMALL: u32 = 30;
 /// A row's note (`RowView::note`).
 const NOTE: u32 = 26;
-/// The accent bar of the power menu's selected row: the Settings band of the dark design (the panel is dark in both
+/// The power menu's selected row: the label's paper, as in the pause menu and Settings (the panel is dark in both
 /// appearances).
-const ACCENT: u32 = crate::palette::DARK.band;
-/// The selected row's name pill: the label's paper, as in the pause menu and Settings.
 const NAME_PILL: u32 = crate::palette::DARK.select;
 
 /// A row: 66 px around `FONT`, taller with Settings → Text size (`type_scale`).
@@ -385,12 +383,12 @@ impl Sys {
             Row::Brightness | Row::Volume => (level_line(rows[sel], crate::device::android_profile()).to_string(), pal().text),
             // A switch that did not work says so here, in the alert colour, until the next try or the panel closes.
             Row::Wifi if self.wifi_failed.is_some() => (self.wifi_failed.as_ref().map_or(String::new(), |n| n.line(false).to_string()), pal().alert),
-            Row::Wifi => ("A turns Wi-Fi on or off. While it is off, file sharing and updates don't work.".to_string(), pal().text),
-            Row::Bluetooth => ("A turns Bluetooth on or off, for wireless controllers and headphones.".to_string(), pal().text),
+            Row::Wifi => ("Press A to toggle Wi-Fi. File sharing and updates need Wi-Fi on.".to_string(), pal().text),
+            Row::Bluetooth => ("Press A to toggle Bluetooth for wireless pads and headphones.".to_string(), pal().text),
             Row::Performance => (self.profiles.desc(Which::Performance), pal().text),
             Row::Fan => (self.profiles.desc(Which::Fan), pal().text),
             Row::Power if self.ram_booted() => (
-                "Sleep, Restart, Power off. Careful: this ROCKNIX was started from a computer; restarting returns to Android.".to_string(),
+                "Sleep, Restart, Power off. Note: booted from a PC, so Restart returns to Android.".to_string(),
                 pal().alert,
             ),
             Row::Power => ("Sleep, Restart, Power off and Restart pocket-ui.".to_string(), pal().text),
@@ -435,7 +433,7 @@ impl Sys {
         let inner_w = panel_w - 2 * BTN_PAD;
         // Restart pocket-ui: Kids Mode).
         let brick = { #[cfg(feature = "brick")] { crate::device::brick() } #[cfg(not(feature = "brick"))] { false } };
-        let mut note: Vec<String> = if choices.contains(&Choice::BootMenu) || !choices.contains(&Choice::RestartUi) || brick {
+        let mut note: Vec<String> = if choices.contains(&Choice::BootMenu) || !choices.contains(&Choice::RestartUi) || brick || !crate::device::current().android_beside() {
             Vec::new()
         } else {
             text.wrap_prose(Face::Body, HINT_SIZE, power_menu::NO_BOOT_MENU_HINT, inner_w)
@@ -493,14 +491,14 @@ impl Sys {
             let label = choice.label();
             let label_x = rx + MARK_W + 10;
             let mid = ry + 4 + (top_h - 4) / 2;
+            // One mark for the selected row, over its whole height, as on Settings (`kit::selection`). Clean had a bar
+            // over the row and a pill around the name on it: two marks at once (R36S hand test 20.11.2026 #15c).
             let bg = if selected {
-                let name_w = MARK_W + 10 + text.width(Face::Body, FONT, label) + BTN_PAD;
                 if crate::retro::on() {
                     crate::retro::plain_bar(c, rx, ry + 4, rw, rh - 8, crate::palette::pal().select);
                     crate::palette::pal().select
                 } else {
-                    c.round_rect(rx, ry + 4, rw, rh - 8, 30, ACCENT);
-                    c.round_rect(rx, ry + 4, name_w, top_h - 4, (top_h - 4) / 2, NAME_PILL);
+                    c.round_rect(rx, ry + 4, rw, rh - 8, 30, NAME_PILL);
                     NAME_PILL
                 }
             } else {
@@ -520,7 +518,7 @@ impl Sys {
             // On Retro's selection bar the line is its ink, as the name.
             let hint_fg = match (selected, crate::retro::on()) {
                 (true, true) => crate::palette::pal().ink,
-                (true, false) => 0xffffff,
+                (true, false) => INK,
                 _ => 0xb8b4ac,
             };
             if rh == row_h {
@@ -692,21 +690,21 @@ impl Sys {
         } else if sel == BY_HAND_ROW {
             match ntp {
                 // A handheld without Wi-Fi (`device::no_wifi_chip`): a network, if any, came another way; none to wait for.
-                NtpState::Synced if crate::device::no_wifi_chip() => "Network time has set the clock, so there is nothing to set by hand.",
-                NtpState::Synced => "Network time has set the clock over Wi-Fi, so there is nothing to set by hand.",
-                NtpState::Off => "Set the date and time by hand. Network time is off, so the clock keeps what you set.",
-                _ if crate::device::no_wifi_chip() => "Set the date and time by hand. This handheld has no Wi-Fi, so the clock keeps what you set.",
-                _ if self.clock_by_hand => "Set by hand. Once Wi-Fi reaches a time server, network time sets the clock again.",
-                _ => "Set the date and time by hand. Once Wi-Fi reaches a time server, network time sets it again.",
+                NtpState::Synced if crate::device::no_wifi_chip() => "Synced via network time. No manual setup needed.",
+                NtpState::Synced => "Synced over Wi-Fi via network time. No manual setup needed.",
+                NtpState::Off => "Set date and time manually. Network time is off, so your clock stays as set.",
+                _ if crate::device::no_wifi_chip() => "Set date and time manually. Without Wi-Fi, your clock stays as set.",
+                _ if self.clock_by_hand => "Set manually. Once Wi-Fi connects, network time takes over again.",
+                _ => "Set date and time manually. Once Wi-Fi connects, network time takes over again.",
             }
         } else if crate::device::no_wifi_chip() && ntp == NtpState::Synced {
-            "The clock sets itself from a time server. A asks again now."
+            "Syncs automatically from a time server. Press A to refresh."
         } else if crate::device::no_wifi_chip() {
-            "No Wi-Fi here, so the clock doesn't set itself."
+            "No Wi-Fi here, so set the clock manually."
         } else if ntp == NtpState::Waiting {
-            "The clock is set from a time server over Wi-Fi. No answer yet: check that Wi-Fi is connected. A asks again."
+            "Syncs over Wi-Fi. No reply yet (check Wi-Fi). Press A to retry."
         } else {
-            "The clock sets itself from a time server over Wi-Fi. A asks again now."
+            "Syncs automatically over Wi-Fi. Press A to refresh now."
         };
         (line.to_string(), clock)
     }

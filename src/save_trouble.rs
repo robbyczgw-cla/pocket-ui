@@ -72,28 +72,62 @@ impl Trouble {
     /// The explanation under the pause menu's question before Quit: what is at stake, and what is safe.
     pub fn risk(self) -> &'static str {
         match self {
-            Trouble::Full => "The SD card is full. Quitting now loses what you did since the last save that reached the SD card; that save is kept. Free some space first if you can.",
-            Trouble::Unwritable => "The SD card can't be written to. Quitting now loses what you did since the last save that reached the SD card; that save is kept.",
-            Trouble::Unreadable => "The game's save on the SD card couldn't be read, so the game started without it. Nothing is written over it: what you do now isn't kept, the save on the SD card is.",
+            Trouble::Full => "SD card is full. Quitting now loses progress since your last good save (that save stays safe). Free some space first if you can.",
+            Trouble::Unwritable => "SD card can't be written to. Quitting now loses progress since your last good save (that save stays safe).",
+            Trouble::Unreadable => "Couldn't read this game's save, so it booted fresh. Your card save stays untouched; progress made now isn't kept.",
         }
     }
 
     /// The notice on the shelf when a game ended while its save still couldn't be written.
     pub fn after_quit(self) -> &'static str {
         match self {
-            Trouble::Full => "The game's last progress couldn't be saved: the SD card is full. The save before it is kept.",
-            Trouble::Unwritable => "The game's last progress couldn't be saved: the SD card can't be written to. The save before it is kept.",
-            Trouble::Unreadable => "The game's save couldn't be read from the SD card, so nothing was written over it. It is kept as it was.",
+            Trouble::Full => "Couldn't save latest progress: SD card is full. Your previous save is safe.",
+            Trouble::Unwritable => "Couldn't save latest progress: SD card can't be written to. Your previous save is safe.",
+            Trouble::Unreadable => "Couldn't read your save from the SD card, so nothing overwrote it. It stays intact.",
         }
     }
 }
 
+/// The notice on the shelf when pocket-ui's own settings or lists (Settings, Favourites, Recently played, play time)
+/// couldn't be saved because the card is full ([`CardRefusals`]).
+pub const CHANGES_FULL: &str = "Couldn't save changes: SD card is full. Free some space or they'll be lost on restart.";
+/// The same when the card can't be written to at all (read-only after card errors, failing).
+pub const CHANGES_UNWRITABLE: &str = "Couldn't save changes: SD card can't be written to. They won't survive a restart.";
+
+impl Trouble {
+    /// [`CHANGES_FULL`] or [`CHANGES_UNWRITABLE`].
+    pub fn changes_lost(self) -> &'static str {
+        if self == Trouble::Full { CHANGES_FULL } else { CHANGES_UNWRITABLE }
+    }
+}
+
+/// pocket-ui: its own settings and lists that the card refused (`fsutil::take_write_trouble`), said on the shelf once
+/// a run for each kind. They used to be logged and dropped: the change stayed until the next start and was then gone
+/// without a word. Once is enough: on a read-only card every later change fails the same way.
+#[derive(Default)]
+pub struct CardRefusals {
+    told: Vec<Trouble>,
+}
+
+impl CardRefusals {
+    /// The notice to put up now, if a write under `data_dir` was refused since the last look and its kind wasn't said
+    /// yet this run.
+    pub fn next_notice(&mut self, data_dir: &Path) -> Option<&'static str> {
+        let trouble = crate::fsutil::take_write_trouble(data_dir)?;
+        if self.told.contains(&trouble) {
+            return None;
+        }
+        self.told.push(trouble);
+        Some(trouble.changes_lost())
+    }
+}
+
 /// A moment that couldn't be read or put back: the game goes on as it was.
-pub const LOAD_FAILED: &str = "Couldn't load this moment. Your game is unchanged.";
+pub const LOAD_FAILED: &str = "Couldn't load save state. Your game is untouched.";
 /// The pause menu's Screenshot couldn't be written.
 pub const SCREENSHOT_FAILED: &str = "Couldn't save the screenshot.";
 /// A setting of the pause menu's Options couldn't be kept for the next start.
-pub const SETTING_FAILED: &str = "Couldn't keep this setting for the next start.";
+pub const SETTING_FAILED: &str = "Couldn't save this setting for next launch.";
 /// The player couldn't start the game (its emulator, its folders, its file).
 pub const START_FAILED: &str = "The emulator couldn't start this game.";
 /// Earlier before the first moment it keeps.
@@ -120,9 +154,9 @@ pub fn shown(error: &str, instead: &'static str) -> String {
 }
 
 /// A failed state write leaves older saves alone; shown after exit and over the game.
-pub const MOMENT_FAILED: &str = "Couldn't keep this moment. Your earlier saves are kept.";
+pub const MOMENT_FAILED: &str = "Couldn't save this state. Earlier saves are safe.";
 /// Load is refused before calling the core when its undo point could not be kept.
-pub const UNDO_FAILED: &str = "Couldn't load: Before load couldn't be saved. Your game is unchanged.";
+pub const UNDO_FAILED: &str = "Load cancelled: couldn't back up current state. Game untouched.";
 
 /// The pause menu's question before Quit while saves fail, and its two answers (Keep playing first: B and A on the
 /// first row both leave things as they are).
@@ -181,7 +215,7 @@ pub fn take() -> Option<Trouble> {
 /// A save state that pocket-ui moves aside while a standalone emulator saves or loads through its slot (Azahar's quick
 /// slot, Dolphin's `.s00`, `standalone::azahar::park`) and couldn't put back: it is kept beside the slot
 /// (`<slot>.pocket-ui`) and goes back at the next start of the game (`standalone::azahar::recover`).
-pub const STATE_NOT_BACK: &str = "A save state couldn't be put back in its place on the SD card. It is kept and goes back the next time this game starts.";
+pub const STATE_NOT_BACK: &str = "Couldn't move a save state back to the SD card. It's safe and will restore on next launch.";
 
 // Not on Android: no standalone emulators there (`standalone` is in linux_modules.rs).
 #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]

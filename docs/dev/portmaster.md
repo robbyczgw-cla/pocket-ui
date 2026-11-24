@@ -2,6 +2,20 @@
 
 *Part of [DEVELOPING.md](../DEVELOPING.md). Read this when you work on PortMaster ports.*
 
+## Ports from the card (no Wi-Fi)
+
+`ports_card.rs`: without Wi-Fi (no chip, or offline) the Extras row reads **From the card** and opens `Step::PortsCard`;
+an empty Ports shelf goes there directly. It reads `ports/autoinstall` (also `roms/ports/autoinstall`) in each place of
+`update::card::places`, plus `PortMaster/autoinstall`: PortMaster's own offline folder. Checked from the zip alone
+(`archive::listing`): `port.json`'s `attr.arch` and `attr.runtime` (missing runtime = not installed nor on the card),
+squashfs magic, a runtime package's zip comment. Install: runtimes copied to `PortMaster/libs`, packages via `unzip -j`,
+games via `harbourmaster --no-check install <abs path>` (`ports::install_file`; checked on 2026-11-23 against the
+PortMaster.zip of the H700 20261001 and RK3326 20261101 images, network blocked: rc 0, port.json `source: file`).
+harbourmaster answers 0 even when it placed nothing, and on a missing runtime only logs, hence the checks before and the
+launcher check after. Order (`ports_card::install`): `ports::ensure_ready` first, then runtimes, then games; files leave the card only at the end,
+after the runtimes are checked in `libs`. `portmaster-setup.sh` replaces a `PortMaster` folder without `pugwash`, so a
+runtime copied before the setup was lost (R36S test.7, 23.11.2026). Snapshot states `setup:ports-card-{empty,empty-games,found,installing,done,failed}`.
+
 ## PortMaster ports that need the player's files
 
 TrimUI's optional runtime and native launcher: [TRIMUI-PORTMASTER.md](../TRIMUI-PORTMASTER.md).

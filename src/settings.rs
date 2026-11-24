@@ -42,7 +42,7 @@ impl Animations {
     /// One plain line about the choice, after the row in the look step.
     pub fn blurb(self) -> &'static str {
         match self {
-            Animations::Cozy => "Cozy: watch your game slide into the console.",
+            Animations::Cozy => "Cozy: watch each game slide into the console.",
             Animations::Quick => "Quick: straight into the game.",
         }
     }
@@ -268,8 +268,8 @@ pub struct Settings {
 pub const RETIRED_LOOKS: [&str; 2] = ["minimal", "cards"];
 
 /// The one line said at the first start after a retired look became Split.
-pub const DAMAGED_NOTE: &str = "Your settings file couldn't be read, so pocket-ui started with its standard settings. Your games and saves are not affected.";
-pub const RETIRED_LOOK_NOTE: &str = "Minimal and Cards are gone in this version, so your games are in the Split look now. Settings › Look › Layout changes it.";
+pub const DAMAGED_NOTE: &str = "Couldn't read your settings file, so pocket-ui loaded defaults. Your games and saves are untouched.";
+pub const RETIRED_LOOK_NOTE: &str = "Minimal and Cards were retired, so your shelf switched to Split. Change it in Settings › Look › Layout.";
 
 /// Whether the settings file (or its backup, which `load` falls back to) still names a retired look.
 fn retired_look(path: &Path) -> bool {

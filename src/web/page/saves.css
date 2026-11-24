@@ -1,0 +1,10 @@
+/* Saves and Pocket Sync (saves.js). */
+ul.saves { list-style: none; margin: 8px 0; padding: 0; }
+.save-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+ul.saves > li:first-child .save-row { border-top: 0; }
+.save-row .name { flex: 1 1 14em; min-width: 0; overflow-wrap: anywhere; }
+.save-row .side { white-space: nowrap; }
+.save-row .button { min-height: 34px; padding: 4px 14px; font-size: 15px; }
+details.put-back { margin: 12px 0; }
+details.put-back summary { cursor: pointer; color: var(--chalk); padding: 6px 0; }
+a.button { display: inline-flex; align-items: center; text-decoration: none; }

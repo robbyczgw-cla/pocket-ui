@@ -62,8 +62,18 @@ REGBA_BIOS_MD5=1876f71b0d8c65eef3454547896ffb11
 #   dtb:   the "Retroid Pocket Mini V2" tree from KERNEL, ufshc@1d84000 and phy@1d87000 set to disabled with fdtput
 IMAGE_MD5=1cc770836cf13e915b8b30f9c311d716
 DTB_MD5=1ff6d2a9f7221a3aa3c7c683e1bd5080
-# GRUB on the device. Rebuilt from Debian's current grub-efi-arm64-bin it may differ; the check only warns then.
+# GRUB on the device: BOOTAA64.EFI as scripts/make-sd-efi.sh builds it from the pinned Debian packages below.
 GRUB_EFI_MD5_DEVICE=3e6c69bc4fc03408913aa9f6375b0796
+# The GRUB the cards are built from: Debian trixie's 2.12-9+deb13u2, the version on the author's device and on every card
+# up to 0.6.0. Not "the newest trixie has": on 2026-11-22 that was 2.12-9+deb13u4, whose BOOTAA64.EFI differs, so the image
+# check warned and the release refused every SM8250 and SM8550 Retroid card. grub-efi-arm64-bin gives the arm64-efi modules,
+# grub-common the grub-mkimage of the build machine's architecture (both give the same file). From snapshot.debian.org (the
+# pool keeps only the current version); the sha256 are the ones in trixie's signed Packages index (checked 2026-11-22).
+GRUB_DEB_VERSION=2.12-9+deb13u2
+GRUB_DEB_URL=https://snapshot.debian.org/archive/debian/20260504T084255Z/pool/main/g/grub2
+GRUB_EFI_ARM64_DEB_SHA256=303d92f7c7b02bce7c57efdc2c4f0fb1bf2040133546148a373d5b4eb8b94adc
+GRUB_COMMON_AMD64_DEB_SHA256=a59d34a52e98450165ffc05b75886e139ad77b9d851d25b11eaa973cbdcb3bdd
+GRUB_COMMON_ARM64_DEB_SHA256=648e1f8036a52f885d3d636c06f1ce79e1f87ffef5a36f578e3c80140be79d77
 
 # SM8250 EFI cards. Trees are selected by their exact model in the pinned KERNEL,
 # rather than a filename on FAT (this base carries its trees appended to KERNEL).

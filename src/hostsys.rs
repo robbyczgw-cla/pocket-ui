@@ -36,6 +36,19 @@ pub fn bios_moved() -> bool {
 pub struct Bios {
     pub label: &'static str,
     pub files: &'static [&'static str],
+    /// The core also finds the file beside the games (FBNeo's neogeo.zip in roms/neogeo or the game's own folder).
+    pub beside_games: bool,
+}
+
+impl Bios {
+    /// The first of `files` in `bios_dir`, or beside the games in one of `folders` when the core looks there too.
+    pub fn found(&self, bios_dir: &Path, folders: &[PathBuf]) -> Option<&'static str> {
+        self.files.iter().copied().find(|f| {
+            bios_dir.join(f).is_file()
+                || self.beside_games
+                    && Path::new(f).file_name().is_some_and(|name| folders.iter().any(|d| d.join(name).is_file()))
+        })
+    }
 }
 
 pub struct HostSystem {
@@ -99,15 +112,18 @@ const NO_OPTS: &[(&str, &str)] = &[];
 const SEGA_CD_BIOS: &[Bios] = &[Bios {
     label: "Sega CD",
     files: &["bios_CD_U.bin", "bios_CD_E.bin", "bios_CD_J.bin"],
+    beside_games: false,
 }];
 const PCE_CD_BIOS: &[Bios] = &[Bios {
     label: "PC Engine CD",
     files: &["syscard3.pce", "syscard2.pce", "syscard1.pce", "gexpress.pce"],
+    beside_games: false,
 }];
 
 const SATURN_BIOS: &[Bios] = &[Bios {
     label: "Saturn",
     files: &["saturn_bios.bin", "sega_101.bin", "mpr-17933.bin"],
+    beside_games: false,
 }];
 
 /// Nestopia reads the Disk System's BIOS from roms/bios itself (its info file: `disksys.rom`, md5
@@ -115,6 +131,7 @@ const SATURN_BIOS: &[Bios] = &[Bios {
 const FDS_BIOS: &[Bios] = &[Bios {
     label: "Famicom Disk System",
     files: &["disksys.rom"],
+    beside_games: false,
 }];
 
 /// Flycast reads the arcade BIOS sets (MAME's zips) from `bios/dc`, the folder ROCKNIX's standalone Flycast uses as
@@ -123,10 +140,20 @@ const FDS_BIOS: &[Bios] = &[Bios {
 const NAOMI_BIOS: &[Bios] = &[Bios {
     label: "NAOMI",
     files: &["dc/naomi.zip", "dc/naomi2.zip"],
+    beside_games: false,
+}];
+/// FBNeo's Neo Geo games need the console's BIOS set, which FBNeo looks for in the system directory (also its `fbneo`
+/// folder) and in the game's own folder, so a player's roms/neogeo/neogeo.zip counts (20.11.2026: without it the notice
+/// said "damaged, or needs a BIOS" and named no file).
+const NEOGEO_BIOS: &[Bios] = &[Bios {
+    label: "Neo Geo",
+    files: &["neogeo.zip", "fbneo/neogeo.zip"],
+    beside_games: true,
 }];
 const ATOMISWAVE_BIOS: &[Bios] = &[Bios {
     label: "Atomiswave",
     files: &["dc/awbios.zip"],
+    beside_games: false,
 }];
 
 /// The Saturn pad as yabasanshiro lays it on the RetroPad (RetroArch's layout too): bottom row A B C on
@@ -180,7 +207,8 @@ pub const SYSTEMS: &[HostSystem] = &[
     system(&["pokemini"], "pokemini", NO_BIOS, false, false),
     // Real game (Crash Bandicoot 2, PAL). DualShock pad.
     system(&["psx"], "pcsx_rearmed", NO_BIOS, true, true),
-    system(&["neogeo", "cps1", "cps2", "cps3", "fbn"], "fbneo", NO_BIOS, false, false),
+    system(&["neogeo"], "fbneo", NEOGEO_BIOS, false, false),
+    system(&["cps1", "cps2", "cps3", "fbn"], "fbneo", NO_BIOS, false, false),
     // 3D and dual-screen systems, measured against ROCKNIX's default emulator (docs/HOST.md).
     // N64 (default RetroArch): Mario Kart 64, less CPU and steadier frames than RetroArch.
     system(&["n64"], "mupen64plus_next", NO_BIOS, true, true),
@@ -434,7 +462,49 @@ const SCUMMVM_DATA: &str = "/usr/share/scummvm";
 /// ROCKNIX's copy and `savepath` at standalone ScummVM's saves wherever they are missing or name no folder that
 /// `exists`; None when nothing needs changing. Other keys and the game sections are kept as they are.
 pub fn scummvm_ini(text: &str, exists: impl Fn(&Path) -> bool) -> Option<String> {
-    let wanted = [("extrapath", SCUMMVM_DATA), ("themepath", SCUMMVM_DATA), ("savepath", SCUMMVM_SAVES)];
+    scummvm_ini_with(text, &ScummvmPlace::rocknix(Path::new(BIOS_DIR)), exists)
+}
+
+/// Where the ScummVM core runs from (`scummvm_place`): its system directory (where it reads and writes `scummvm.ini`),
+/// the ini to start from when that has none yet, and the paths `scummvm_ini_with` fills in.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ScummvmPlace {
+    pub system: PathBuf,
+    pub seed: Option<PathBuf>,
+    pub extra: String,
+    pub themes: String,
+    pub saves: String,
+}
+
+impl ScummvmPlace {
+    /// ROCKNIX: the BIOS folder is the core's system directory, the engine data is standalone ScummVM's.
+    fn rocknix(bios_dir: &Path) -> ScummvmPlace {
+        ScummvmPlace { system: bios_dir.to_path_buf(), seed: None, extra: SCUMMVM_DATA.into(), themes: SCUMMVM_DATA.into(), saves: SCUMMVM_SAVES.into() }
+    }
+}
+
+/// The launcher's say on ScummVM (`POCKETUI_SCUMMVM_SYSTEM`, `_EXTRA`, `_THEMES`). dArkOS (deploy/darkos/start.sh) shows
+/// the BIOS folder read only, and its `scummvm.ini` there is dArkOS's RetroArch's: the core gets a folder of pocket-ui's own
+/// as its system directory, which starts as a copy of that ini, and dArkOS's engine data in /opt/scummvm. Unset: ROCKNIX.
+pub fn scummvm_place(bios_dir: &Path, system: Option<&str>, extra: Option<&str>, themes: Option<&str>) -> ScummvmPlace {
+    let set = |v: Option<&str>| v.map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
+    let mut place = ScummvmPlace::rocknix(bios_dir);
+    if let Some(system) = set(system) {
+        place.system = PathBuf::from(system);
+        place.seed = Some(bios_dir.join("scummvm.ini"));
+    }
+    if let Some(extra) = set(extra) {
+        place.extra = extra;
+    }
+    if let Some(themes) = set(themes) {
+        place.themes = themes;
+    }
+    place
+}
+
+/// [`scummvm_ini`] with the paths of `place`.
+pub fn scummvm_ini_with(text: &str, place: &ScummvmPlace, exists: impl Fn(&Path) -> bool) -> Option<String> {
+    let wanted = [("extrapath", place.extra.as_str()), ("themepath", place.themes.as_str()), ("savepath", place.saves.as_str())];
     let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
     let start = match lines.iter().position(|l| l.trim() == "[scummvm]") {
         Some(i) => i,
@@ -474,12 +544,29 @@ pub fn scummvm_ini(text: &str, exists: impl Fn(&Path) -> bool) -> Option<String>
     Some(lines.join("\n") + "\n")
 }
 
-/// `scummvm_ini` on `<bios_dir>/scummvm.ini`, creating standalone ScummVM's save folder when it is missing.
-pub fn prepare_scummvm(bios_dir: &Path) {
-    let _ = std::fs::create_dir_all(SCUMMVM_SAVES);
-    let ini = bios_dir.join("scummvm.ini");
-    let text = std::fs::read_to_string(&ini).unwrap_or_default();
-    if let Some(new) = scummvm_ini(&text, |p| p.is_dir()) {
+/// `scummvm_ini` on `scummvm.ini` in the core's system directory (`scummvm_place` from the launcher's variables), creating
+/// the save folder when it is missing. Returns that system directory, the one the core is to be given.
+pub fn prepare_scummvm(bios_dir: &Path) -> PathBuf {
+    let var = |name: &str| std::env::var(name).ok();
+    let place = scummvm_place(
+        bios_dir,
+        var("POCKETUI_SCUMMVM_SYSTEM").as_deref(),
+        var("POCKETUI_SCUMMVM_EXTRA").as_deref(),
+        var("POCKETUI_SCUMMVM_THEMES").as_deref(),
+    );
+    prepare_scummvm_at(&place);
+    place.system
+}
+
+/// [`prepare_scummvm`] for `place`: writes only in `place.system` (and the saves); `place.seed` is only read.
+pub fn prepare_scummvm_at(place: &ScummvmPlace) {
+    let _ = std::fs::create_dir_all(&place.saves);
+    let _ = std::fs::create_dir_all(&place.system);
+    let ini = place.system.join("scummvm.ini");
+    let text = std::fs::read_to_string(&ini)
+        .or_else(|_| place.seed.as_ref().map_or(Ok(String::new()), std::fs::read_to_string))
+        .unwrap_or_default();
+    if let Some(new) = scummvm_ini_with(&text, place, |p| p.is_dir()) {
         if let Err(e) = crate::fsutil::write_atomic(&ini, new.as_bytes()) {
             eprintln!("{}: {e}", ini.display());
         }
@@ -628,16 +715,30 @@ pub fn display_aspect(system: &str, base_w: u32, base_h: u32, reported: f32) -> 
     reported
 }
 
-/// Files with a listed extension that are no game: DOSBox Pure's own saves (`<game>.pure.zip`, next to the game), and
+/// Files with a listed extension that are no game: DOSBox Pure's own saves (`<game>.pure.zip`, next to the game),
 /// ROCKNIX's own empty "Splore" picture in `pico-8` (written at every boot; start_pico8.sh turns the name into PICO-8's
-/// game browser) while the official PICO-8 program is not there to start.
+/// game browser) while the official PICO-8 program is not there to start, and on dArkOS pocket-ui's own launcher in
+/// `ports` (the port that starts us).
 pub fn not_a_game(system: &str, path: &Path) -> bool {
     let name = path.file_name().and_then(|n| n.to_str());
     match system {
         "pc" => name.is_some_and(|n| n.to_ascii_lowercase().ends_with(".pure.zip")),
+        "scummvm" => name.is_some_and(|n| n.eq_ignore_ascii_case("Scan_for_new_games.scummvm")),
         "pico-8" => is_splore(path) && !path.parent().and_then(Path::parent).is_some_and(pico8_installed),
+        "ports" => is_portmaster_launcher(path) || crate::device::darkos_port() && is_own_port(path),
         _ => false,
     }
+}
+
+/// PortMaster's own launcher (`PortMaster.sh`, in Ports or its `PortMaster` folder): its menu, not a game. pocket-ui
+/// runs PortMaster itself (`ports`, `ports_card`), on every handheld (R36S test.7, 23.11.2026).
+fn is_portmaster_launcher(path: &Path) -> bool {
+    path.file_stem().is_some_and(|n| n.eq_ignore_ascii_case("portmaster"))
+}
+
+/// pocket-ui's own port on dArkOS: its folder in Ports or its `pocket-ui.sh`.
+fn is_own_port(path: &Path) -> bool {
+    path.starts_with("/storage/roms/ports/pocket-ui") || path.file_name().is_some_and(|n| n.eq_ignore_ascii_case("pocket-ui.sh"))
 }
 
 /// ROCKNIX's "Splore" entry of `pico-8`: a picture named Splore, whatever the extension's case.
@@ -663,12 +764,12 @@ pub fn folder_games(system: &str, shelf: &Path, roms: &Path, listed: &[std::path
         Folders::Under(dir) => roms.join(dir),
     };
     let started: Vec<std::path::PathBuf> = listed.iter().map(|f| content_path(system, f)).collect();
-    let mut dirs: Vec<std::path::PathBuf> = std::fs::read_dir(&root)
+    let mut dirs: Vec<std::path::PathBuf> = crate::background_io::read_dir(&root)
         .into_iter()
         .flatten()
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.is_dir() && !p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with('.')))
+        .filter(|p| crate::background_io::is_dir(p) && !p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with('.')))
         .filter(|p| !started.contains(p))
         .collect();
     dirs.sort();
@@ -678,10 +779,27 @@ pub fn folder_games(system: &str, shelf: &Path, roms: &Path, listed: &[std::path
 impl HostSystem {
     /// A message naming the missing BIOS file(s), or None when everything required is in `bios_dir`.
     pub fn missing_bios(&self, bios_dir: &Path) -> Option<String> {
+        self.missing_bios_beside(bios_dir, &self.game_folders(bios_dir))
+    }
+
+    /// [`missing_bios`](Self::missing_bios) for a start of `game`: a BIOS the core finds beside the games counts in the
+    /// game's own folder too.
+    pub fn missing_bios_for(&self, bios_dir: &Path, game: &Path) -> Option<String> {
+        let mut folders: Vec<PathBuf> = game.parent().map(Path::to_path_buf).into_iter().collect();
+        folders.extend(self.game_folders(bios_dir));
+        self.missing_bios_beside(bios_dir, &folders)
+    }
+
+    /// The system's game folders beside the BIOS folder (`/storage/roms/<name>`).
+    pub fn game_folders(&self, bios_dir: &Path) -> Vec<PathBuf> {
+        self.names.iter().map(|n| roms_of(bios_dir).join(n)).collect()
+    }
+
+    fn missing_bios_beside(&self, bios_dir: &Path, folders: &[PathBuf]) -> Option<String> {
         let missing: Vec<String> = self
             .bios
             .iter()
-            .filter(|b| !b.files.iter().any(|f| bios_dir.join(f).is_file()))
+            .filter(|b| b.found(bios_dir, folders).is_none())
             .map(|b| {
                 let (last, rest) = b.files.split_last().unwrap();
                 let names = if rest.is_empty() {
@@ -755,6 +873,42 @@ mod tests {
         std::fs::write(dir.join("bios_CD_E.bin"), b"x").unwrap();
         assert!(cd.missing_bios(&dir).is_none(), "any one region's BIOS is enough");
         assert!(find("megadrive").unwrap().missing_bios(&dir).is_none());
+    }
+
+    /// 20.11.2026: Neo Geo was NO_BIOS, so a start without neogeo.zip said "damaged, or needs a BIOS" and named no file.
+    /// FBNeo also finds it beside the games: there it must not count as missing (a false alarm would block good games).
+    #[test]
+    fn neogeo_names_its_bios_and_finds_it_in_the_bios_or_the_games_folder() {
+        let dir = TestDir::new("bios-neogeo");
+        let bios = dir.join("bios");
+        let games = dir.join("neogeo");
+        let sub = games.join("Shooters");
+        std::fs::create_dir_all(&bios).unwrap();
+        std::fs::create_dir_all(&sub).unwrap();
+        let neogeo = find("neogeo").unwrap();
+        let game = sub.join("mslug.zip");
+        assert_eq!(
+            neogeo.missing_bios_for(&bios, &game).as_deref(),
+            Some("Neo Geo needs a BIOS file in roms/bios: neogeo.zip or fbneo/neogeo.zip")
+        );
+        let missing = neogeo.missing_bios_for(&bios, &game);
+        assert!(
+            crate::fallback::not_started_notice_on("neogeo", "Metal Slug", missing.as_deref()).contains("neogeo.zip"),
+            "the notice names the file"
+        );
+        std::fs::write(sub.join("neogeo.zip"), b"x").unwrap();
+        assert!(neogeo.missing_bios_for(&bios, &game).is_none(), "beside the game");
+        assert!(neogeo.missing_bios(&bios).is_some(), "the system as a whole: not in roms/neogeo or roms/bios");
+        std::fs::remove_file(sub.join("neogeo.zip")).unwrap();
+        std::fs::write(games.join("neogeo.zip"), b"x").unwrap();
+        assert!(neogeo.missing_bios_for(&bios, &game).is_none(), "in roms/neogeo");
+        assert!(neogeo.missing_bios(&bios).is_none());
+        std::fs::remove_file(games.join("neogeo.zip")).unwrap();
+        std::fs::write(bios.join("neogeo.zip"), b"x").unwrap();
+        assert!(neogeo.missing_bios_for(&bios, &game).is_none(), "in roms/bios");
+        // The other arcade folders hold no Neo Geo set of their own: no check there.
+        assert!(find("cps2").unwrap().bios.is_empty());
+        assert_eq!(find("cps2").unwrap().core, "fbneo");
     }
 
     #[test]
@@ -940,6 +1094,40 @@ mod tests {
         assert!(!not_a_game("pc", Path::new("/storage/roms/pc/Game.zip")));
     }
 
+    /// R36S test.7 (23.11.2026): PortMaster's own launcher stood on the Ports shelf as a game ("PortMaster", "Not played
+    /// yet"); A opened PortMaster's menu, which needs a network. pocket-ui runs PortMaster itself, on every handheld.
+    #[test]
+    fn portmasters_own_launcher_is_not_a_game_on_the_ports_shelf() {
+        for launcher in ["/storage/roms/ports/PortMaster/PortMaster.sh", "/storage/roms/ports/PortMaster.sh", "/roms/ports/portmaster/portmaster.sh",
+            "/storage/games-external/ports/PortMaster.sh"] {
+            assert!(not_a_game("ports", Path::new(launcher)), "{launcher}");
+        }
+        for game in ["/storage/roms/ports/Celeste Classic.sh", "/storage/roms/ports/sprout/SPROUT.sh", "/storage/roms/ports/PortMasterQuest.sh"] {
+            assert!(!not_a_game("ports", Path::new(game)), "{game}");
+        }
+        assert!(!not_a_game("snes", Path::new("/storage/roms/snes/PortMaster.sh")), "only in Ports");
+    }
+
+    #[test]
+    fn r36s_fix_b_scummvm_scan_shortcut_is_not_a_game() {
+        for path in ["Scan_for_new_games.scummvm", "scan_for_new_games.SCUMMVM"] {
+            let path = Path::new(path);
+            assert!(not_a_game("scummvm", path));
+            assert!(!not_a_game("pc", path));
+        }
+        assert!(!not_a_game("scummvm", Path::new("Beneath a Steel Sky.scummvm")));
+    }
+
+    /// dArkOS starts pocket-ui as a port: its launcher in Ports is not a game of the shelf (`not_a_game`, every reader).
+    #[test]
+    fn our_own_dark_os_port_is_no_game() {
+        assert!(is_own_port(Path::new("/storage/roms/ports/pocket-ui.sh")));
+        assert!(is_own_port(Path::new("/storage/roms/ports/Pocket-UI.SH")));
+        assert!(is_own_port(Path::new("/storage/roms/ports/pocket-ui/start.sh")));
+        assert!(!is_own_port(Path::new("/storage/roms/ports/Cave Story.sh")));
+        assert!(!is_own_port(Path::new("/storage/roms/ports/pocket-uix/run.sh")));
+    }
+
     #[test]
     fn game_folders_are_games() {
         std::env::remove_var("POCKET_UI_HOST_ALL");
@@ -992,6 +1180,49 @@ mod tests {
             out.contains("savepath=/storage/mysaves\n") && !out.contains("/gone") && out.contains("extrapath=/usr/share/scummvm\n"),
             "{out}"
         );
+    }
+
+    /// 20.11.2026, dArkOS: bios/ is read only (deploy/darkos/start.sh), so writing bios/scummvm.ini failed (EROFS) and the
+    /// core ran with no engine data, no themes and no save folder; and that ini is dArkOS's RetroArch's, not ours to change.
+    #[test]
+    fn scummvm_on_darkos_writes_its_own_ini_not_the_bios_folder() {
+        let dir = TestDir::new("scummvm-darkos");
+        let bios = dir.join("bios");
+        let own = dir.join("storage/.config/scummvm");
+        let extra = dir.join("opt/scummvm/extra");
+        let themes = dir.join("opt/scummvm/themes");
+        for d in [&bios, &extra, &themes] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        let theirs = "[scummvm]\ngui_theme=scummmodern\nextrapath=/opt/scummvm/gone\n";
+        std::fs::write(bios.join("scummvm.ini"), theirs).unwrap();
+        let place = scummvm_place(
+            &bios,
+            Some(own.to_str().unwrap()),
+            Some(extra.to_str().unwrap()),
+            Some(themes.to_str().unwrap()),
+        );
+        let place = ScummvmPlace { saves: dir.join("saves").display().to_string(), ..place };
+        prepare_scummvm_at(&place);
+        assert_eq!(place.system, own, "the core's system directory is pocket-ui's own folder");
+        assert_eq!(std::fs::read_to_string(bios.join("scummvm.ini")).unwrap(), theirs, "dArkOS's ini stays as it was");
+        let ours = std::fs::read_to_string(own.join("scummvm.ini")).unwrap();
+        assert!(ours.contains(&format!("extrapath={}\n", extra.display())), "{ours}");
+        assert!(ours.contains(&format!("themepath={}\n", themes.display())), "{ours}");
+        assert!(ours.contains("gui_theme=scummmodern\n"), "starts from the player's ini: {ours}");
+        assert!(dir.join("saves").is_dir(), "the save folder is there");
+        // No ini anywhere (no seed on the card either), or an empty one of ours: a fresh one with the paths.
+        let fresh = dir.join("fresh");
+        let none = ScummvmPlace { system: fresh.clone(), seed: Some(dir.join("gone/scummvm.ini")), ..scummvm_place(&bios, None, Some(extra.to_str().unwrap()), Some(themes.to_str().unwrap())) };
+        let none = ScummvmPlace { saves: dir.join("saves").display().to_string(), ..none };
+        prepare_scummvm_at(&none);
+        let made = std::fs::read_to_string(fresh.join("scummvm.ini")).unwrap();
+        assert!(made.starts_with("[scummvm]\n") && made.contains(&format!("extrapath={}\n", extra.display())), "{made}");
+        std::fs::write(fresh.join("scummvm.ini"), "").unwrap();
+        prepare_scummvm_at(&none);
+        assert_eq!(std::fs::read_to_string(fresh.join("scummvm.ini")).unwrap(), made, "an empty ini is filled the same way");
+        // Unset: ROCKNIX, the BIOS folder as before.
+        assert_eq!(scummvm_place(&bios, None, Some(" "), None), ScummvmPlace::rocknix(&bios));
     }
 
     #[test]

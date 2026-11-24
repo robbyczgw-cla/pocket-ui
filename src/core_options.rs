@@ -232,6 +232,16 @@ pub unsafe fn parse_v2(raw: *const RawV2) -> (Vec<Category>, Vec<OptionDef>) {
     (cats, out)
 }
 
+/// PSP defaults on the Brick card (`curation`).
+pub const BRICK_PPSSPP: &[(&str, &str)] = &[
+    ("ppsspp_frameskip", "1"),
+    ("ppsspp_frameskiptype", "Number of frames"),
+    ("ppsspp_auto_frameskip", "disabled"),
+    ("ppsspp_internal_resolution", "480x272"),
+    ("ppsspp_cpu_core", "JIT"),
+    ("ppsspp_fast_memory", "enabled"),
+];
+
 /// Our curation of one core: values that suit a handheld better than the core's own defaults, and
 /// options that only confuse there (they keep their default and stay out of the menu). Keys a core
 /// doesn't have, and values it doesn't offer, are ignored, so entries for newer or older versions
@@ -487,6 +497,12 @@ pub fn curation(core: &str) -> Curation {
         // (720x1080, each screen 2.8x); R3 cycles to side by side (the standalone melonDS layout) and to
         // each screen alone. Touch: right stick moves the pointer, R2 touches (or the touch screen).
         // Controls adds remappable DS actions; on a pad without sticks L2 toggles stylus and R2 cycles layouts.
+        // PSP on the TrimUI Brick and Smart Pro (one card, A133P): PPSSPP at full rate is too slow there; Chinatown Wars plays
+        // "okay" with Frameskip 1 (Alex, 20.11.2026). The rest are the speed side of every knob, written out so a RetroArch
+        // file under them can't take them back (`retroarch_options` skips curated keys): the PSP's own 480x272, the JIT, fast
+        // memory. Defaults only: a value chosen in Options › Emulator wins. Auto frameskip stays off: it skips by the wall
+        // clock, and the player paces the core itself.
+        "ppsspp" if cfg!(feature = "brick") => Curation { defaults: BRICK_PPSSPP, ..Curation::default() },
         "dsperate" => Curation {
             defaults:&[("dsperate_frameskip","auto"),("dsperate_slot2","empty"),("dsperate_analog","off")],
             hidden:&["dsperate_jit","dsperate_frameskip"],
@@ -1127,6 +1143,47 @@ mod tests {
         let (_, shown) = o.snapshot();
         assert!(shown.iter().all(|s| s.key != "tech"), "curated away");
         assert_eq!(o.get("tech"), Some("a"), "but still has a value");
+    }
+
+    /// PPSSPP's own lists at the Brick's pin (fa50bb19, libretro/libretro_core_options.h): the curated values must be ones it offers.
+    fn ppsspp_defs() -> Vec<OptionDef> {
+        vec![
+            def("ppsspp_frameskip", &["disabled", "1", "2", "3", "4", "5", "6", "7", "8"]),
+            def("ppsspp_frameskiptype", &["Number of frames", "Percent of FPS"]),
+            def("ppsspp_auto_frameskip", &["disabled", "enabled"]),
+            def("ppsspp_internal_resolution", &["480x272", "960x544", "1440x816"]),
+            def("ppsspp_cpu_core", &["JIT", "IR JIT", "Interpreter"]),
+            def("ppsspp_fast_memory", &["enabled", "disabled"]),
+        ]
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn brick_psp_starts_with_frameskip_one_at_1x_on_the_jit_and_the_players_choice_wins() {
+        let mut o = OptionSet::new(curation("ppsspp"), &[]);
+        o.declare(vec![], ppsspp_defs());
+        for (key, value) in [("ppsspp_frameskip", "1"), ("ppsspp_frameskiptype", "Number of frames"), ("ppsspp_auto_frameskip", "disabled"),
+                             ("ppsspp_internal_resolution", "480x272"), ("ppsspp_cpu_core", "JIT"), ("ppsspp_fast_memory", "enabled")] {
+            assert_eq!(o.get(key), Some(value), "{key}");
+            assert_eq!(o.def(key).unwrap().default, value, "{key}: Restore defaults comes back here");
+            assert!(o.snapshot().1.iter().any(|s| s.key == key), "{key} stays in Options › Emulator");
+        }
+        // Chosen in Options › Emulator (saved for the game or the console): that value, not ours.
+        let saved = [("ppsspp_frameskip".to_string(), "disabled".to_string()), ("ppsspp_cpu_core".to_string(), "IR JIT".to_string())];
+        let mut o = OptionSet::new(curation("ppsspp"), &saved);
+        o.declare(vec![], ppsspp_defs());
+        assert_eq!((o.get("ppsspp_frameskip"), o.get("ppsspp_cpu_core")), (Some("disabled"), Some("IR JIT")));
+        assert_eq!(o.get("ppsspp_internal_resolution"), Some("480x272"));
+    }
+
+    #[cfg(not(feature = "brick"))]
+    #[test]
+    fn psp_elsewhere_keeps_ppsspps_own_defaults() {
+        let mut o = OptionSet::new(curation("ppsspp"), &[]);
+        o.declare(vec![], ppsspp_defs());
+        assert_eq!(o.get("ppsspp_frameskip"), Some("disabled"));
+        assert!(curation("ppsspp").defaults.is_empty());
+        assert!(android_curation("ppsspp").defaults.is_empty());
     }
 
     #[test]

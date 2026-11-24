@@ -2,7 +2,8 @@
 //! draws the picture on the CPU (`soft_screen`) into a window of `pocket-fb`, which has the screen, so the core gets a GLES 3 context of
 //! its own on the vendor's EGL with an off-screen surface: it renders into our framebuffer (`hw_render`'s `get_current_framebuffer`), and
 //! each frame is read back into an ordinary picture. From there everything is as for a 2D core: the window, scaling, the pause menu's
-//! picture, save-state previews. The context is current on pocket-core's main thread, where the core runs. Only behind `brick`.
+//! picture, save-state previews. The context is current on pocket-core's main thread, where the core runs. The log's `[hw] … frames read
+//! back` line splits the time into the read (with the wait for the GPU) and the conversion. Only behind `brick`.
 
 use std::ffi::{c_char, c_uint, c_void};
 use std::time::{Duration, Instant};
@@ -73,9 +74,36 @@ pub struct BrickGles {
     size: (u32, u32),
     rgba: Vec<u8>,
     destroyed: bool,
+    /// The driver reads B,G,R,A without converting (`IMPLEMENTATION_COLOR_READ_FORMAT`), the order XRGB8888 has in memory.
+    bgra: bool,
     frames: u32,
+    cost: Cost,
+}
+
+/// What the read-back took, summed over the frames: `glReadPixels` (with the wait for the GPU to finish the frame: on the Brick most of
+/// it is reading the GPU's memory, which the CPU doesn't cache), turning it into an upright XRGB8888 picture, and the worst frame.
+#[derive(Default)]
+struct Cost {
     read: Duration,
+    convert: Duration,
     worst: Duration,
+}
+
+/// Pixels as read (`src`, `w`×`h`, rows of `w`×4 bytes; B,G,R,A when `bgra`, else R,G,B,A) as XRGB8888 (B,G,R,0) with the top row
+/// first; `flip` when the first row read is the bottom one (a core whose origin is the bottom left).
+pub fn upright_xrgb(src: &[u8], w: usize, h: usize, bgra: bool, flip: bool) -> Vec<u8> {
+    let row = w * 4;
+    let mut data = vec![0u8; row * h];
+    for (y, dst) in data.chunks_exact_mut(row).enumerate() {
+        let sy = if flip { h - 1 - y } else { y };
+        let Some(s) = src.get(sy * row..(sy + 1) * row) else { break };
+        for (d, s) in dst.as_chunks_mut::<4>().0.iter_mut().zip(s.as_chunks::<4>().0) {
+            let v = u32::from_le_bytes(*s);
+            let x = if bgra { v & 0x00ff_ffff } else { (v & 0xff00) | (v >> 16 & 0xff) | (v & 0xff) << 16 };
+            *d = x.to_le_bytes();
+        }
+    }
+    data
 }
 
 impl BrickGles {
@@ -92,9 +120,11 @@ impl BrickGles {
         }
         // SAFETY: the context of `egl` is current on this thread from here on.
         let (fbo, color) = unsafe { (egl.gl.create_framebuffer()?, egl.gl.create_texture()?) };
-        let mut hw = BrickGles { egl, request, fbo, color, depth: None, size: (0, 0), rgba: Vec::new(), destroyed: false, frames: 0, read: Duration::ZERO, worst: Duration::ZERO };
+        let mut hw = BrickGles { egl, request, fbo, color, depth: None, size: (0, 0), rgba: Vec::new(), destroyed: false, bgra: false, frames: 0, cost: Cost::default() };
         hw.resize(max)?;
-        eprintln!("[hw] {:?} for the core on the vendor's EGL, framebuffer {}x{}, read back to the CPU", request.api, hw.size.0, hw.size.1);
+        // SAFETY: the context is current, our framebuffer bound (`resize`): the format is the one its reads have without converting.
+        hw.bgra = unsafe { (hw.egl.gl.get_parameter_i32(glow::IMPLEMENTATION_COLOR_READ_FORMAT) as u32, hw.egl.gl.get_parameter_i32(glow::IMPLEMENTATION_COLOR_READ_TYPE) as u32) == (glow::BGRA, glow::UNSIGNED_BYTE) };
+        eprintln!("[hw] {:?} for the core on the vendor's EGL, framebuffer {}x{}, read back to the CPU ({})", request.api, hw.size.0, hw.size.1, hw.way());
         // SAFETY: the core's context is current; the core binds its framebuffer through `get_current_framebuffer`.
         unsafe {
             hw.egl.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(hw.fbo));
@@ -155,29 +185,36 @@ impl BrickGles {
         }
         let (w, h) = hw_render::take_frame()?;
         let (w, h) = (w.min(self.size.0).max(1), h.min(self.size.1).max(1));
+        Some(self.read_back(w, h))
+    }
+
+    /// The w×h frame in our framebuffer, read now (`glReadPixels` in the order the driver gives) and turned upright.
+    fn read_back(&mut self, w: u32, h: u32) -> Frame {
+        let format = if self.bgra { glow::BGRA } else { glow::RGBA };
         let t = Instant::now();
-        let gl = &self.egl.gl;
         self.rgba.resize(w as usize * h as usize * 4, 0);
-        // SAFETY: the core's context is current; the buffer holds w×h RGBA. The core may have left a pack buffer or an
-        // alignment bound: both are set for the read and the framebuffer bound again for the core after it.
+        // SAFETY: the core's context is current; the buffer holds w×h RGBA. The core may have left a pack buffer or an alignment
+        // bound: both are set for the read and the framebuffer bound again for the core after it.
         unsafe {
+            let gl = &self.egl.gl;
             gl.bind_buffer(glow::PIXEL_PACK_BUFFER, None);
             gl.pixel_store_i32(glow::PACK_ALIGNMENT, 4);
             gl.bind_framebuffer(glow::FRAMEBUFFER, Some(self.fbo));
-            gl.read_pixels(0, 0, w as i32, h as i32, glow::RGBA, glow::UNSIGNED_BYTE, glow::PixelPackData::Slice(&mut self.rgba));
+            gl.read_pixels(0, 0, w as i32, h as i32, format, glow::UNSIGNED_BYTE, glow::PixelPackData::Slice(&mut self.rgba));
         }
-        let mut data = Vec::with_capacity(self.rgba.len());
-        let rows: Box<dyn Iterator<Item = &[u8]>> = if self.request.bottom_left_origin { Box::new(self.rgba.chunks_exact(w as usize * 4).rev()) } else { Box::new(self.rgba.chunks_exact(w as usize * 4)) };
-        for row in rows {
-            for p in row.chunks_exact(4) {
-                data.extend_from_slice(&[p[2], p[1], p[0], 0]);
-            }
-        }
+        let read = t.elapsed();
+        let data = upright_xrgb(&self.rgba, w as usize, h as usize, self.bgra, self.request.bottom_left_origin);
         let took = t.elapsed();
         self.frames += 1;
-        self.read += took;
-        self.worst = self.worst.max(took);
-        Some(Frame { width: w, height: h, pitch: w as usize * 4, format: PIXEL_XRGB8888, data })
+        self.cost.read += read;
+        self.cost.convert += took - read;
+        self.cost.worst = self.cost.worst.max(took);
+        Frame { width: w, height: h, pitch: w as usize * 4, format: PIXEL_XRGB8888, data }
+    }
+
+    /// The order frames are read in, for the log.
+    fn way(&self) -> &'static str {
+        if self.bgra { "bgra" } else { "rgba" }
     }
 
     /// The core's `context_destroy`, once, before `retro_unload_game` (RetroArch's order); the read-back's numbers to the log.
@@ -186,10 +223,48 @@ impl BrickGles {
             return;
         }
         if self.frames > 0 {
-            eprintln!("[hw] {} frames read back, {:.2} ms each, worst {:.2} ms", self.frames, self.read.as_secs_f64() * 1000.0 / f64::from(self.frames), self.worst.as_secs_f64() * 1000.0);
+            let ms = |d: Duration| d.as_secs_f64() * 1000.0 / f64::from(self.frames);
+            let c = &self.cost;
+            eprintln!(
+                "[hw] {} frames read back ({}, {}x{} max), {:.2} ms each: read {:.2}, convert {:.2}; worst {:.2} ms",
+                self.frames,
+                self.way(),
+                self.size.0,
+                self.size.1,
+                ms(c.read + c.convert),
+                ms(c.read),
+                ms(c.convert),
+                c.worst.as_secs_f64() * 1000.0
+            );
         }
         // SAFETY: the core's context is current.
         unsafe { self.request.destroy_context() };
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::upright_xrgb;
+
+    /// Two rows of two pixels, red green / blue white, as the GPU's bottom row first.
+    const RGBA_BOTTOM_FIRST: [u8; 16] = [0, 0, 255, 255, 255, 255, 255, 255, 255, 0, 0, 255, 0, 255, 0, 255];
+
+    #[test]
+    fn rgba_read_from_the_bottom_comes_out_upright_as_xrgb() {
+        let px = upright_xrgb(&RGBA_BOTTOM_FIRST, 2, 2, false, true);
+        assert_eq!(px, [0, 0, 255, 0, 0, 255, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0], "red green on top, blue white below");
+    }
+
+    #[test]
+    fn bgra_is_kept_with_x_zero_and_the_rows_stay_without_flip() {
+        let bgra: Vec<u8> = RGBA_BOTTOM_FIRST.chunks(4).flat_map(|p| [p[2], p[1], p[0], p[3]]).collect();
+        assert_eq!(upright_xrgb(&bgra, 2, 2, true, false), [255, 0, 0, 0, 255, 255, 255, 0, 0, 0, 255, 0, 0, 255, 0, 0]);
+        assert_eq!(upright_xrgb(&bgra, 2, 2, true, true), upright_xrgb(&RGBA_BOTTOM_FIRST, 2, 2, false, true));
+    }
+
+    #[test]
+    fn a_short_read_leaves_the_missing_rows_black() {
+        assert_eq!(upright_xrgb(&RGBA_BOTTOM_FIRST[..8], 2, 2, false, false), [255, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    }
+}

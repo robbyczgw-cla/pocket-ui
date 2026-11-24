@@ -268,7 +268,7 @@ impl App {
         let confirming = page.confirm.is_some() && page.confirm == Some(page.row());
         let (head, lines, color): (String, Vec<String>, u32) = if let (Some(b), Some(p)) = (&page.busy, &page.progress) {
             let (done, total) = (p.done.load(Ordering::Relaxed), p.total.load(Ordering::Relaxed));
-            (format!("{b}{dots}"), vec![format!("{done} of {total} files."), "B stops it. A backup that is stopped leaves nothing behind.".into()], pal().chalk)
+            (format!("{b}{dots}"), vec![format!("{done} of {total} files."), "Press B to cancel. Stopped backups leave no partial files.".into()], pal().chalk)
         } else if let Some(b) = &page.busy {
             (format!("{b}{dots}"), vec!["This takes a moment.".into()], pal().chalk)
         } else if let Some((m, err)) = &page.message {
@@ -290,7 +290,12 @@ impl App {
             lines.push(if plan.second_card {
                 "It goes on your games card, which flashing the system card does not touch.".into()
             } else {
-                "Flashing this card erases the backup too: copy it to a computer over file sharing, in the backup folder.".into()
+                // No Wi-Fi chip (RG28XX, R36S): the card itself goes into a PC (tests/no_wifi_walk.rs).
+                pocket_ui::device::wifi_or(
+                    "Reflashing this card wipes the backup too. Copy the backup folder to a PC over Wi-Fi.",
+                    "Reflashing this card wipes the backup too. Copy the backup folder to a PC with a card reader.",
+                )
+                .into()
             });
             lines.push("Press A again; B keeps things as they are.".into());
             (format!("Back up {}?", size(plan.bytes)), lines, pal().chalk)
@@ -329,7 +334,7 @@ impl App {
                     page.saves.get(k).map(|b| backup::when_text(b.manifest.created)).unwrap_or_default(),
                     vec![
                         page.saves.get(k).map_or(String::new(), |b| format!("Files: {}, {}, made by pocket-ui {}. {}", b.manifest.items.len(), size(b.bytes()), b.manifest.app, shown(&b.dir.display().to_string()))),
-                        "A compares it with the card and says what would change. What is newer on the card stays.".into(),
+                        "Press A to preview changes. Newer files already on the card stay untouched.".into(),
                     ],
                     pal().chalk,
                 ),

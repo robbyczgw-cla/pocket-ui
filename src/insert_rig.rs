@@ -41,7 +41,7 @@ pub const LED_AFTER_MS: u64 = 90;
 /// later, and so do the fade and the game's window (16.11., Alex: the PSP's display lights too, a little longer start).
 pub const TURN_BACK: Duration = Duration::from_millis(SHUT_AFTER.as_millis() as u64 + (TURN_MS.1 - TURN_MS.0) as u64);
 /// A front-loader's cartridge, slid in, is pressed down over this long, ending with the click at `IN_AT_COZY`.
-const PRESS_MS: f32 = 110.0;
+pub(crate) const PRESS_MS: f32 = 110.0;
 
 type V = (f32, f32);
 
@@ -714,7 +714,12 @@ pub fn turns_back(system: &str, game: Game) -> bool {
 /// A game's rig has a lid, tray or door to shut after the medium is in (the launch splits its sound for that, and the way
 /// back starts with it shut).
 pub fn takes_disc(system: &str, game: Game) -> bool {
-    files(system, game).is_some_and(|f| f.rig.kind() != Kind::Cart)
+    moving_kind(system, game).is_some()
+}
+
+/// The moving part of a console's rig, when it has one.
+pub fn moving_kind(system: &str, game: Game) -> Option<Kind> {
+    files(system, game).map(|f| f.rig.kind()).filter(|&kind| kind != Kind::Cart)
 }
 
 /// A game's rig, if its console has one.

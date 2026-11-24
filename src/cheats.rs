@@ -563,9 +563,9 @@ pub fn read_own(system: &str, rom: &Path) -> Option<Own> {
 /// The page's line for a file of the player's that is not on the list. Plain words: what, why, what happens instead.
 fn unusable_row(why: Unusable) -> Row {
     let (name, desc) = match why {
-        Unusable::TooBig => ("Your cheat file is too big", "A cheat file can be up to 256 KB. Yours is larger, so it was left out."),
-        Unusable::Unreadable => ("Your cheat file can't be read", "pocket-ui found a .cht file for this game but could not open it, so it was left out."),
-        Unusable::Empty => ("Your cheat file has no cheats in it", "pocket-ui found a .cht file for this game but no cheat lines in it (cheat0_desc and cheat0_code), so it was left out."),
+        Unusable::TooBig => ("Your cheat file is too big", "Cheat files cap at 256 KB. Yours is larger, so it was skipped."),
+        Unusable::Unreadable => ("Your cheat file can't be read", "Found a .cht file for this game but couldn't read it, so it was skipped."),
+        Unusable::Empty => ("Your cheat file has no cheats in it", "Found a .cht file, but it has no valid cheats (cheat0_desc and cheat0_code), so it was skipped."),
     };
     Row { name: name.into(), value: String::new(), desc: desc.into() }
 }
@@ -873,7 +873,7 @@ impl CheatMenu {
             return vec![Row {
                 name: "No cheats found for this game".into(),
                 value: String::new(),
-                desc: "The cheat database has no matching codes. You can keep playing normally.".into(),
+                desc: "No matching codes in the cheat database. Play on as normal.".into(),
             }];
         }
         let mut rows: Vec<Row> = self.problem.map(unusable_row).into_iter().collect();
@@ -1085,7 +1085,7 @@ cheat1_desc = \"Pok&eacute;mon &amp; Friends\"\ncheat1_code = \"01FF57D8\"\nchea
         let mut empty = CheatMenu::empty();
         assert_eq!(empty.count(), 1);
         assert_eq!(empty.rows()[0].name, "No cheats found for this game");
-        assert!(empty.rows()[0].desc.contains("keep playing"));
+        assert!(empty.rows()[0].desc.contains("Play on as normal"));
         assert!(!empty.actionable(0));
         assert!(!empty.press(0));
         assert_eq!(empty.enabled(), 0);

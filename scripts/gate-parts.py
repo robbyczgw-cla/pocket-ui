@@ -87,7 +87,9 @@ NIGHTLY_TESTS = ["android_eject_tests::the_way_back_hands_over_to_the_still_shel
 SHELL = re.compile(r"^(deploy|scripts)/|(^|/)(LICEN[CS]E[^/]*|COPYING[^/]*|NOTICE\.md|OFL\.txt)$")
 # Scripts no shell suite runs or reads: only their own Rust test calls them (19.11.: the reader inventory, the queue's most
 # touched file that day, started the 4-7 min shell lanes in every gate).
-NOT_SHELL = {"scripts/reader-inventory.py"}
+# 20.11.: the CHANGELOG guard, its tests and its record run in gate.sh's fast checks only.
+NOT_SHELL = {"scripts/reader-inventory.py", "scripts/check-changelog.py", "scripts/test-check-changelog.py",
+             "scripts/changelog-published.txt"}
 # Fixtures only tests/data_sources.rs (through scripts/reader-inventory.py) reads: no layout suite draws from them, so they
 # don't start every slow suite as other fixtures do.
 READER_FIXTURES = re.compile(r"^tests/fixtures/reader-(inventory|coverage|audit)\.tsv$")

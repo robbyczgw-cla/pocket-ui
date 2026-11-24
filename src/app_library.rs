@@ -46,7 +46,8 @@ pub(crate) fn unread_rose(before: usize, n: usize, added: usize) -> bool {
 #[derive(Default)]
 pub(crate) struct LibraryUi {
     pub after_start: AfterStart,
-    /// The key of the cache the list on screen came from (a rescan that finds the same list writes nothing).
+    pub system_list_check_due: bool,
+    /// The cache key most recently read or written.
     pub key: Option<Key>,
     /// A rescan runs (on its thread).
     rescanning: Arc<AtomicBool>,
@@ -163,11 +164,16 @@ impl App {
     }
 
     /// Read-only diagnosis, also used by the headless driver which leaves device startup jobs off.
-    pub(crate) fn library_system_list_check(&self) {
+    pub(crate) fn library_system_list_check(&mut self) {
+        self.library_ui.system_list_check_due = pocket_ui::background_io::paused();
+        if self.library_ui.system_list_check_due { return; }
         // Also for cached lists and for Home with Continue: the empty-page error would be hidden there.
         let (proxy, es_systems) = (self.proxy.clone(), self.es_systems.clone());
         let _ = std::thread::Builder::new().name("system-list-check".into()).spawn(move || {
-            let status = library::system_list_status(&es_systems);
+            let Some(status) = pocket_ui::background_io::job(|| library::system_list_status(&es_systems)) else {
+                let _ = proxy.send_event(UserEvent::SystemListCheckDeferred);
+                return;
+            };
             if !status.is_clean() {
                 let _ = proxy.send_event(UserEvent::SystemListUnread { fallback: status.fallback.is_some() });
             }
@@ -204,8 +210,13 @@ impl App {
                         Err(e) => eprintln!("library: cache not written: {e}"),
                     }
                     if let Some((proxy, es_systems)) = ask {
-                        let n = pocket_ui::library::all_systems(&es_systems).map_or(0, |c| pocket_ui::library::unread_count(&c));
-                        let _ = proxy.send_event(UserEvent::LibraryUnread { count: n, rose: false });
+                        let count = pocket_ui::background_io::job(|| pocket_ui::library::all_systems(&es_systems)
+                            .map_or(0, |c| pocket_ui::library::unread_count(&c)));
+                        if let Some(count) = count {
+                            let _ = proxy.send_event(UserEvent::LibraryUnread { count, rose: false });
+                        } else {
+                            let _ = proxy.send_event(UserEvent::LibraryScanDeferred);
+                        }
                     }
                 });
             }
@@ -215,6 +226,10 @@ impl App {
     /// Reads the folders again on a thread; a different list comes back as `UserEvent::LibraryRescanned`. One at a
     /// time; nothing while the cache is off. Returns whether the worker started, so a deferred request can retry.
     pub(crate) fn library_rescan(&mut self, why: &'static str) -> bool {
+        if pocket_ui::background_io::paused() {
+            self.library_ui_rescan_after_game();
+            return false;
+        }
         if !library_cache::enabled() || self.library_ui.rescanning.swap(true, Ordering::SeqCst) {
             return false;
         }
@@ -229,10 +244,18 @@ impl App {
         let seen = self.library_ui.unread_seen.clone();
         let spawned = std::thread::Builder::new().name("library-scan".into()).spawn(move || {
             let t0 = Instant::now();
-            let result = library_cache::rescan(&data_dir, &es_systems, &shown, key.as_ref());
+            let Some((result, unread)) = pocket_ui::background_io::job(|| {
+                let result = library_cache::rescan(&data_dir, &es_systems, &shown, key.as_ref());
+                let unread = look_for_unread.then(|| library::all_systems(&es_systems).map_or(0, |c| library::unread_count(&c)));
+                (result, unread)
+            }) else {
+                busy.store(false, Ordering::SeqCst);
+                let _ = proxy.send_event(UserEvent::LibraryScanDeferred);
+                return;
+            };
             let took = t0.elapsed();
             match &result {
-                Rescan::Same => println!("library: read again ({why}) in {took:?}, nothing changed"),
+                Rescan::Same | Rescan::KeyChanged(_) => println!("library: read again ({why}) in {took:?}, nothing changed"),
                 Rescan::Changed { systems: fresh, .. } => println!("library: read again ({why}) in {took:?}: {}", library_cache::difference(&shown, fresh)),
                 Rescan::Failed(e) => {
                     eprintln!("library: reading again ({why}) failed after {took:?}: {e}");
@@ -240,9 +263,8 @@ impl App {
                     let _ = proxy.send_event(UserEvent::SystemListUnread { fallback: false });
                 }
             }
-            if look_for_unread {
+            if let Some(n) = unread {
                 let added = if let Rescan::Changed { systems: fresh, .. } = &result { library_cache::games_added(&shown, fresh) } else { 0 };
-                let n = library::all_systems(&es_systems).map_or(0, |c| library::unread_count(&c));
                 // A rise (or the first look finding some) while nothing arrived: the copy that vanished without a word.
                 // The first look of this run compares with the count the last run knew (`UNREAD_KNOWN`): Android starts the
                 // handheld view's process at every launch, and a folder with 56 strays said "can't be read" every time (13.11.).
@@ -257,8 +279,10 @@ impl App {
                 let _ = proxy.send_event(UserEvent::LibraryUnread { count: n, rose });
             }
             busy.store(false, Ordering::SeqCst);
-            if let Rescan::Changed { systems, key } = result {
-                let _ = proxy.send_event(UserEvent::LibraryRescanned(systems, key));
+            match result {
+                Rescan::Changed { systems, key } => { let _ = proxy.send_event(UserEvent::LibraryRescanned(systems, key)); }
+                Rescan::KeyChanged(key) => { let _ = proxy.send_event(UserEvent::LibraryCacheStored(key)); }
+                _ => {}
             }
         });
         if spawned.is_err() {
@@ -285,6 +309,8 @@ impl App {
     /// A rescan found another list: it goes in now or at the next moment it can (`library_apply_pending`).
     pub(crate) fn library_rescanned(&mut self, fresh: Vec<System>, key: Option<Key>) {
         self.library_ui.key = key;
+        // Pictures may have come with the games: the covers' folder lists are checked again (`dir_index`).
+        pocket_ui::dir_index::changed();
         let added = pocket_ui::library_cache::games_added(self.library_ui.pending.as_deref().unwrap_or(&self.systems), &fresh);
         self.game_check_games_added(added);
         self.library_ui.pending = Some(fresh);
@@ -295,7 +321,7 @@ impl App {
     /// Whether the list may be swapped now: nothing on screen keeps a game or a system by its place in the list. A
     /// Settings page does not (`settings_page_holds_games`): a game shown again in Storage is in Games' counts and
     /// From EmulationStation's offers at once, not when Settings is left.
-    fn library_swap_allowed(&self) -> bool {
+    pub(crate) fn library_swap_allowed(&self) -> bool {
         self.running.is_none()
             && self.pending_launch.is_none()
             && self.card.is_none()
@@ -317,25 +343,17 @@ impl App {
         self.library_ui.after_start = AfterStart::Rescan;
     }
 
-    /// Swaps a waiting list in when it may (called after each event, `about_to_wait`). Cheap when nothing waits.
-    pub(crate) fn library_apply_pending(&mut self) {
-        self.identify_names_rescan();
-        if matches!(self.library_ui.after_start, AfterStart::Rescan) && self.after_first_done && self.running.is_none() {
-            self.library_ui.after_start = AfterStart::Nothing;
-            self.library_rescan("after the game the start began");
-        }
-        if self.library_ui.pending.is_none() || !self.library_swap_allowed() {
-            return;
-        }
-        let Some(fresh) = self.library_ui.pending.take() else { return };
-        let was = KeepSelection::note(&self.items, self.sel, &self.systems);
-        let in_front = self.big_in_front();
+    /// The positional state of the old library is reconciled at every live replacement.
+    pub(crate) fn library_replace_systems(&mut self, fresh: Vec<System>) {
         let home_item = self.home_item.map(|i| picked(i, &self.systems));
         let screen_system = match self.screen {
             Screen::Games(s) => Some(self.systems.get(s).map(|s| s.name.clone())),
             _ => None,
         };
+        self.curator_follow_library(&fresh);
         self.connections_follow_library(&fresh);
+        self.cabinet_library_changed();
+        self.held = None;
         self.systems = fresh;
         if let Some(name) = screen_system {
             match name.and_then(|n| self.systems.iter().position(|s| s.name == n)) {
@@ -355,6 +373,27 @@ impl App {
         // A Settings page open under the swap counts from the list: what it worked out is made again (the offers of
         // From EmulationStation for a game shown again in Storage).
         self.gamelist_library_changed();
+    }
+
+    /// Swaps a waiting list in when it may (called after each event, `about_to_wait`). Cheap when nothing waits.
+    pub(crate) fn library_apply_pending(&mut self) {
+        if self.library_ui.system_list_check_due && !pocket_ui::background_io::paused() {
+            self.library_system_list_check();
+        }
+        self.identify_names_rescan();
+        if matches!(self.library_ui.after_start, AfterStart::Rescan) && self.after_first_done
+            && !pocket_ui::background_io::paused() && !self.library_ui.rescanning.load(Ordering::SeqCst)
+        {
+            self.library_ui.after_start = AfterStart::Nothing;
+            self.library_rescan("after the game the start began");
+        }
+        if self.library_ui.pending.is_none() || !self.library_swap_allowed() {
+            return;
+        }
+        let Some(fresh) = self.library_ui.pending.take() else { return };
+        let was = KeepSelection::note(&self.items, self.sel, &self.systems);
+        let in_front = self.big_in_front();
+        self.library_replace_systems(fresh);
         self.rebuild();
         was.restore(&self.items, &self.systems, &mut self.sel, &mut self.prev_sel);
         self.big_keep_part(in_front);

@@ -115,8 +115,8 @@ pub fn probe(source: &str, d: &Path, file: &Path, bytes: Option<&[u8]>, valid: b
                 let mut pixels=vec![0;1240*1080]; let mut canvas=pocket_ui::gfx::Canvas::new(&mut pixels,1240,1080);
                 let mut text=pocket_ui::text::Text::new(); pocket_ui::text::boxes::reset(); got.paint(&mut canvas,&mut text); pocket_ui::text::boxes::finish_canvas(&canvas);
                 let words=std::fs::read_to_string(words).unwrap();
-                if valid { assert!(words.contains("Pick how your games line up"),"{words}"); }
-                else { assert!(words.contains("Get started")||words.contains("Pick how your games line up"),"{words}"); }
+                if valid { assert!(words.contains("Pick how your shelf looks"),"{words}"); }
+                else { assert!(words.contains("Get started")||words.contains("Pick how your shelf looks"),"{words}"); }
             }
         }
         "check-zip" | "check-rom" => {

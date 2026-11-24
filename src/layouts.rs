@@ -270,7 +270,7 @@ enum Folder {
     Mix,
     Shot,
     /// EmulationStation's `images`: the kind is in a suffix of the file name (`-thumb`, `-image`).
-    Suffixed,
+    Suffixed(Kind),
     /// `media/` of Skyscraper and Recalbox: one more level of the folders above.
     Wrapper,
 }
@@ -280,7 +280,7 @@ fn folder_kind(name: &str) -> Option<Folder> {
         ".media" | "imgs" | "covers" | "cover" | "boxart" | "boxarts" | "box2d" | "boxes" | "box" | "3dboxes" | "box3d" => Folder::Box,
         "miximages" | "mixes" | "mix" => Folder::Mix,
         "screenshots" | "screenshot" | "snaps" | "snap" | "titlescreens" | "preview" => Folder::Shot,
-        "images" | "image" | "img" => Folder::Suffixed,
+        "images" | "image" | "img" => Folder::Suffixed(Kind::Mix),
         "media" => Folder::Wrapper,
         _ => return None,
     })
@@ -288,7 +288,7 @@ fn folder_kind(name: &str) -> Option<Folder> {
 
 /// A file of `images/`: the game name and what the picture shows. `None`: a picture that is no cover (marquee, logo, wheel,
 /// fan art, cartridge, video preview).
-fn suffixed(stem: &str) -> Option<(&str, Kind)> {
+fn suffixed(stem: &str, bare: Kind) -> Option<(&str, Kind)> {
     let lower = stem.to_lowercase();
     for (suffix, kind) in [("-thumb", Some(Kind::Box)), ("-boxart", Some(Kind::Box)), ("-box", Some(Kind::Box)), ("-cover", Some(Kind::Box)), ("-mix", Some(Kind::Mix)), ("-image", Some(Kind::Shot)), ("-screenshot", Some(Kind::Shot)), ("-titleshot", Some(Kind::Shot))] {
         if lower.ends_with(suffix) {
@@ -299,20 +299,24 @@ fn suffixed(stem: &str) -> Option<(&str, Kind)> {
         return None;
     }
     // A bare name in `images/` is a picture somebody put there for the game.
-    Some((stem, Kind::Mix))
+    Some((stem, bare))
 }
 
 /// The game stem and kind of a picture in a listed provider folder (no filesystem access).
 pub fn listed_picture(folder: &str, file: &str) -> Option<(String, Kind)> {
     let stem = picture(file)?;
-    let (name, kind) = match folder_kind(folder)? {
+    let (name, kind) = art_stem(folder_kind(folder)?, stem)?;
+    Some((name.to_lowercase(), kind))
+}
+
+fn art_stem(folder: Folder, stem: &str) -> Option<(&str, Kind)> {
+    Some(match folder {
         Folder::Box => (stem, Kind::Box),
         Folder::Mix => (stem, Kind::Mix),
         Folder::Shot => (stem, Kind::Shot),
-        Folder::Suffixed => suffixed(stem)?,
+        Folder::Suffixed(bare) => suffixed(stem, bare)?,
         Folder::Wrapper => return None,
-    };
-    Some((name.to_lowercase(), kind))
+    })
 }
 
 /// One picture folder, listed: lowercase game name → (file name, what it shows).
@@ -325,20 +329,11 @@ pub struct ArtDir {
 impl ArtDir {
     fn read(dir: &Path, folder: Folder) -> ArtDir {
         let mut files: HashMap<String, (String, Kind)> = HashMap::new();
-        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        for entry in crate::background_io::read_dir(dir).into_iter().flatten().flatten() {
             let name = entry.file_name();
             let Some(name) = name.to_str() else { continue };
             let Some(stem) = picture(name) else { continue };
-            let (game, kind) = match folder {
-                Folder::Box => (stem, Kind::Box),
-                Folder::Mix => (stem, Kind::Mix),
-                Folder::Shot => (stem, Kind::Shot),
-                Folder::Suffixed => match suffixed(stem) {
-                    Some(found) => found,
-                    None => continue,
-                },
-                Folder::Wrapper => continue,
-            };
+            let Some((game, kind)) = art_stem(folder, stem) else { continue };
             let key = game.to_lowercase();
             if files.get(&key).is_none_or(|(_, k)| kind < *k) {
                 files.insert(key, (name.to_string(), kind));
@@ -372,12 +367,12 @@ pub fn art_dirs(rom_dir: &Path) -> Vec<ArtDir> {
         }
     };
     let mut wrappers = Vec::new();
-    for entry in std::fs::read_dir(rom_dir).into_iter().flatten().flatten() {
+    for entry in crate::background_io::read_dir(rom_dir).into_iter().flatten().flatten() {
         let Ok(kind) = entry.file_type() else { continue };
         let name = entry.file_name();
         let Some(name) = name.to_str() else { continue };
         // A link to a folder counts (a shared pictures folder); a link to a file does not.
-        let is_dir = kind.is_dir() || (kind.is_symlink() && entry.path().is_dir());
+        let is_dir = kind.is_dir() || (kind.is_symlink() && crate::background_io::is_dir(entry.path()));
         if !is_dir {
             continue;
         }
@@ -388,12 +383,14 @@ pub fn art_dirs(rom_dir: &Path) -> Vec<ArtDir> {
         }
     }
     for wrapper in wrappers {
-        for entry in std::fs::read_dir(&wrapper).into_iter().flatten().flatten() {
+        for entry in crate::background_io::read_dir(&wrapper).into_iter().flatten().flatten() {
             let name = entry.file_name();
             let Some(name) = name.to_str() else { continue };
             if let Some(folder) = folder_kind(name).filter(|f| *f != Folder::Wrapper) {
-                if entry.path().is_dir() {
-                    take(&entry.path(), folder, &mut out);
+                if crate::background_io::is_dir(entry.path()) {
+                    // Stock cards use bare titles in media/images for their existing cover art.
+                    let kind = if name.eq_ignore_ascii_case("images") { Folder::Suffixed(Kind::Likely) } else { folder };
+                    take(&entry.path(), kind, &mut out);
                 }
             }
         }
@@ -407,7 +404,7 @@ pub fn art_dirs(rom_dir: &Path) -> Vec<ArtDir> {
 /// whose name means one of them. `catalogue` is the `catalogue` folder itself.
 pub fn catalogue_dirs(catalogue: &Path, ids: &[&str]) -> Vec<ArtDir> {
     let mut out = Vec::new();
-    for entry in std::fs::read_dir(catalogue).into_iter().flatten().flatten() {
+    for entry in crate::background_io::read_dir(catalogue).into_iter().flatten().flatten() {
         let name = entry.file_name();
         let Some(name) = name.to_str() else { continue };
         if !system_ids(name).iter().any(|id| ids.contains(id)) {
@@ -415,7 +412,7 @@ pub fn catalogue_dirs(catalogue: &Path, ids: &[&str]) -> Vec<ArtDir> {
         }
         for (sub, folder) in [("box", Folder::Box), ("preview", Folder::Shot)] {
             let dir = entry.path().join(sub);
-            if dir.is_dir() {
+            if crate::background_io::is_dir(&dir) {
                 let listed = ArtDir::read(&dir, folder);
                 if !listed.is_empty() {
                     out.push(listed);
@@ -455,10 +452,10 @@ mod tests {
 
     #[test]
     fn images_folders_keep_the_box_apart_from_screenshots_and_logos() {
-        assert_eq!(suffixed("Sonic-thumb"), Some(("Sonic", Kind::Box)));
-        assert_eq!(suffixed("Sonic-image"), Some(("Sonic", Kind::Shot)));
-        assert_eq!(suffixed("Sonic-marquee"), None);
-        assert_eq!(suffixed("Sonic-wheel"), None);
-        assert_eq!(suffixed("Sonic"), Some(("Sonic", Kind::Mix)));
+        assert_eq!(suffixed("Sonic-thumb", Kind::Mix), Some(("Sonic", Kind::Box)));
+        assert_eq!(suffixed("Sonic-image", Kind::Mix), Some(("Sonic", Kind::Shot)));
+        assert_eq!(suffixed("Sonic-marquee", Kind::Mix), None);
+        assert_eq!(suffixed("Sonic-wheel", Kind::Mix), None);
+        assert_eq!(suffixed("Sonic", Kind::Mix), Some(("Sonic", Kind::Mix)));
     }
 }

@@ -104,7 +104,7 @@ struct Card {
 
 impl Card {
     fn new() -> Card {
-        let dir = tempfile::Builder::new().prefix("pui-tabbar-").tempdir_in("/tmp").unwrap();
+        let dir = tempfile::Builder::new().prefix("pui-tabbar-").tempdir().unwrap();
         let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
         assert!(ok.success());
         // The status pill's battery, as the RG28XX had it; and a folder with none.

@@ -13,8 +13,8 @@
 //!
 //! | Device | `compatible` (first) | `model` |
 //! |---|---|---|
-//! | Mini V2 | `retroidpocket,rpocketv2` | `Retroid Pocket Mini V2` |
-//! | Mini (V1) | `retroidpocket,rpocket` | `Retroid Pocket Mini` |
+//! | Mini V2 | `retroidpocket,rpminiv2` | `Retroid Pocket Mini V2` |
+//! | Mini (V1) | `retroidpocket,rpmini` | `Retroid Pocket Mini` |
 //! | Pocket 5 | `retroidpocket,rp5` | `Retroid Pocket 5`, `Retroid Pocket 5 Visionox` |
 //! | Flip 2 | `retroidpocket,rpflip2` | `Retroid Pocket Flip2`, `Retroid Pocket Flip2 Visionox` |
 //!
@@ -55,6 +55,7 @@ pub struct Device {
     pub panel: Panel,
     /// The device tree's `model` as read (empty when there is none), for the log and the report.
     pub reported: String,
+    wifi_adapter: Option<String>,
 }
 
 /// The Mini V2's screen, landscape: every fallback size before this module was this.
@@ -108,6 +109,12 @@ impl Model {
             Model::Brick(b) => b.played_on(),
             _ => false,
         }
+    }
+
+    /// Played on, but a beta (docs/DEVICES.md "beta"): the first start says so instead of "hasn't been tested" (the R36S, Alex's
+    /// hand test 20.11.2026 #9).
+    pub fn beta(self) -> bool {
+        matches!(self, Model::Rk3326(_))
     }
 
     /// The Flip 2's hall sensor: `SW_LID` on a `gpio-keys` device (docs/SLEEP.md "Lid"); the RG DS Plus's too.
@@ -242,16 +249,65 @@ impl Device {
         !self.model.is_some_and(|m| m == Model::PocketClassic) && !{ #[cfg(feature = "brick")] { matches!(self.model, Some(Model::Brick(b)) if !b.sticks()) } #[cfg(not(feature = "brick"))] { false } } && !matches!(self.model, Some(Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b)) if !b.sticks)
     }
 
-    /// A Wi-Fi chip. Not on the RG28XX and RG35XX 2024 (their device trees enable one anyway, the Plus tree they
-    /// come from, so a chip that does answer still wins: `system_ctl::AutoHw` only calls it absent when none shows up).
-    #[cfg(not(feature = "brick"))]
-    pub fn has_wifi(&self) -> bool {
-        !matches!(self.model, Some(Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b)) if !b.wifi)
+    /// Android next to ROCKNIX, reached through the bootloader's Switch boot mode (Retroid, AYN): the power menu's Restart to
+    /// boot menu and its "To start Android" note. Not on the Anbernic H700 and Rockchip boards (R36S hand test 20.11.2026
+    /// #15a: the RK3326's syscon reboot-mode knows "bootloader", and the menu offered Android there), nor on the Brick.
+    pub fn android_beside(&self) -> bool {
+        !matches!(self.model, Some(Model::H700(_) | Model::Rk3566(_) | Model::Rk3326(_)))
+            && !{ #[cfg(feature = "brick")] { matches!(self.model, Some(Model::Brick(_))) } #[cfg(not(feature = "brick"))] { false } }
     }
 
-    #[cfg(feature = "brick")]
+    /// The boards on which pocket-ui can use a USB adapter in place of built-in Wi-Fi.
+    pub(crate) fn needs_wifi_adapter(&self) -> bool {
+        matches!(self.model, Some(Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b)) if !b.wifi)
+            && !darkos_port() && !android_profile()
+    }
+
+    /// Wi-Fi built into this board or an adapter found when pocket-ui started.
     pub fn has_wifi(&self) -> bool {
-        !matches!(self.model, Some(Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b)) if !b.wifi) && !{ #[cfg(feature = "brick")] { matches!(self.model, Some(Model::Brick(_))) && !crate::brick_profile::standalone() } #[cfg(not(feature = "brick"))] { false } }
+        if matches!(self.model, Some(Model::H700(b) | Model::Rk3566(b) | Model::Rk3326(b)) if !b.wifi) {
+            return self.wifi_adapter.is_some();
+        }
+        #[cfg(feature = "brick")]
+        if matches!(self.model, Some(Model::Brick(_))) {
+            return crate::brick_profile::standalone();
+        }
+        true
+    }
+
+    pub(crate) fn wifi_adapter_missing_at_start(&self) -> bool {
+        self.needs_wifi_adapter() && self.wifi_adapter.is_none()
+    }
+
+    pub(crate) fn wifi_adapter(&self) -> Option<&str> {
+        self.wifi_adapter.as_deref()
+    }
+
+    fn with_wifi_adapter(mut self, class: Option<&Path>) -> Self {
+        if self.needs_wifi_adapter() {
+            self.wifi_adapter = class.and_then(crate::wifi::interface_in);
+        }
+        self
+    }
+
+    /// Whether the Wi-Fi page needs to explain a missing adapter or one found after startup.
+    /// An adapter already available for this session uses the ordinary Wi-Fi controls.
+    pub(crate) fn wifi_adapter_notice(&self) -> Option<&'static str> {
+        if !self.needs_wifi_adapter() {
+            return None;
+        }
+        self.wifi_adapter_notice_in(crate::wifi::net_class().as_deref())
+    }
+
+    fn wifi_adapter_notice_in(&self, class: Option<&Path>) -> Option<&'static str> {
+        if self.wifi_adapter().zip(class).is_some_and(|(iface, net)| net.join(iface).exists()) {
+            return None;
+        }
+        if class.and_then(crate::wifi::interface_in).is_some() {
+            Some("Wi-Fi adapter found. Restart to use it.")
+        } else {
+            Some("Plug in a Wi-Fi adapter and restart")
+        }
     }
 
     /// Memory in MB where the device is known to have less than the Mini V2's (1 GB on the H700 and the RG DS Plus, no swap).
@@ -299,7 +355,7 @@ impl Device {
 
     /// An unknown handheld.
     pub fn unknown(reported: &str) -> Device {
-        Device { model: None, panel: Panel::Original, reported: reported.to_string() }
+        Device { model: None, panel: Panel::Original, reported: reported.to_string(), wifi_adapter: None }
     }
 
     /// Experimental: one of the Mini V2's siblings (an unknown device is not called anything).
@@ -353,8 +409,8 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
         .split(|b| *b == 0)
         .filter_map(|c| std::str::from_utf8(c).ok())
         .find_map(|c| match c.trim() {
-            "retroidpocket,rpocketv2" => Some(Model::MiniV2),
-            "retroidpocket,rpocket" => Some(Model::MiniV1),
+            "retroidpocket,rpminiv2" => Some(Model::MiniV2),
+            "retroidpocket,rpmini" => Some(Model::MiniV1),
             "retroidpocket,rp5" => Some(Model::Pocket5),
             "retroid,pocket-classic" => Some(Model::PocketClassic),
             "retroidpocket,rpflip2" => Some(Model::Flip2),
@@ -386,12 +442,12 @@ pub fn identify(model: &str, compatible: &[u8]) -> Device {
         other => h700_board(other, &[]).map(Model::H700).or_else(|| rk3566_board(other, &[]).map(Model::Rk3566)).or_else(|| rk3326_board(other, &[]).map(Model::Rk3326)),
     });
     let panel = if model.ends_with(" Visionox") { Panel::Visionox } else { Panel::Original };
-    Device { model: found, panel, reported: model.to_string() }
+    Device { model: found, panel, reported: model.to_string(), wifi_adapter: None }
 }
 
 /// `POCKETUI_DEVICE`'s value: a short name or a `model` string.
 pub fn from_override(v: &str) -> Device {
-    let v = v.trim(); #[cfg(feature = "brick")] if let Some(b) = crate::brick_profile::Board::by_key(v) { return Device { model: Some(Model::Brick(b)), panel: Panel::Original, reported: format!("{v} (POCKETUI_DEVICE)") }; } #[cfg(feature = "brick")] if let Some(b) = crate::darkos::board_by_key(v) { return Device { model: Some(Model::H700(b)), panel: Panel::Original, reported: format!("{} (dArkOS)", b.name) }; }
+    let v = v.trim(); #[cfg(feature = "brick")] if let Some(b) = crate::brick_profile::Board::by_key(v) { return Device { model: Some(Model::Brick(b)), panel: Panel::Original, reported: format!("{v} (POCKETUI_DEVICE)"), wifi_adapter: None }; } #[cfg(feature = "brick")] if let Some(b) = crate::darkos::board_by_key(v) { return Device { model: Some(Model::H700(b)), panel: Panel::Original, reported: format!("{} (dArkOS)", b.name), wifi_adapter: None }; }
     let lower = v.to_ascii_lowercase();
     let (key, panel) = match lower.strip_suffix("-visionox") {
         Some(k) => (k, Panel::Visionox),
@@ -408,6 +464,7 @@ pub fn from_override(v: &str) -> Device {
             model: Some(m),
             panel,
             reported: format!("{v} (POCKETUI_DEVICE)"),
+            wifi_adapter: None,
         },
         None => identify(v, b""),
     }
@@ -415,7 +472,7 @@ pub fn from_override(v: &str) -> Device {
 
 /// The device tree below `root` (`/` on the device).
 pub fn read(root: &Path) -> Device {
-    let base = root.join("sys/firmware/devicetree/base"); #[cfg(feature = "brick")] if crate::brick_profile::detected(root) { let b = crate::brick_profile::board_at(root); return Device { model: Some(Model::Brick(b)), panel: Panel::Original, reported: b.reported().to_string() }; }
+    let base = root.join("sys/firmware/devicetree/base"); #[cfg(feature = "brick")] if crate::brick_profile::detected(root) { let b = crate::brick_profile::board_at(root); return Device { model: Some(Model::Brick(b)), panel: Panel::Original, reported: b.reported().to_string(), wifi_adapter: None }; }
     let model = std::fs::read_to_string(base.join("model")).unwrap_or_default();
     let compatible = std::fs::read(base.join("compatible")).unwrap_or_default();
     identify(&model, &compatible)
@@ -449,22 +506,33 @@ static DEVICE: OnceLock<Device> = OnceLock::new();
 /// No Wi-Fi chip on this handheld (the RG28XX, the RG35XX 2024, the R36S: `Device::has_wifi`). A page that needs a
 /// network says so (`NEEDS_NETWORK`) or names the way without one, never "Connect to Wi-Fi" (tests/no_wifi_walk.rs).
 pub fn no_wifi_chip() -> bool {
+    // The dArkOS port: dArkOS's own Wi-Fi counts when the kernel shows one (`darkos::wifi_here`).
+    !current().has_wifi() && !{ #[cfg(feature = "brick")] { crate::darkos::wifi_here() } #[cfg(not(feature = "brick"))] { false } }
+}
+
+/// No Wi-Fi ways in of pocket-ui's own (its Wi-Fi page, Send from your phone, file sharing): no chip, or the dArkOS port, whose
+/// Wi-Fi is dArkOS's and whose games folders are read only. What Add games and the Tour say about getting games in follows this,
+/// not `no_wifi_chip`.
+pub fn no_own_wifi() -> bool {
     !current().has_wifi()
 }
 
 /// What a page that needs a network says on a handheld without Wi-Fi.
-pub const NEEDS_NETWORK: &str = "Needs a network, and this handheld has no Wi-Fi.";
+pub const NEEDS_NETWORK: &str = "Needs a network; this handheld has no Wi-Fi.";
 
 /// `wifi` where the handheld has Wi-Fi, `none` where it has none (`no_wifi_chip`).
 pub fn wifi_or<'a>(wifi: &'a str, none: &'a str) -> &'a str {
     if no_wifi_chip() { none } else { wifi }
 }
 
-/// This device, read once (two small sysfs files).
+/// This device and its Wi-Fi capability, read once at startup.
 pub fn current() -> &'static Device {
-    DEVICE.get_or_init(|| match std::env::var("POCKETUI_DEVICE") {
-        Ok(v) if !v.trim().is_empty() => from_override(&v),
-        _ => read(Path::new("/")),
+    DEVICE.get_or_init(|| {
+        let d = match std::env::var("POCKETUI_DEVICE") {
+            Ok(v) if !v.trim().is_empty() => from_override(&v),
+            _ => read(Path::new("/")),
+        };
+        d.with_wifi_adapter(crate::wifi::net_class().as_deref())
     })
 }
 
@@ -520,6 +588,13 @@ pub fn hides(key: &str, sticks: bool, nextui_owned: bool) -> bool {
 
 /// [`hides`] with Android's profile given.
 pub fn hides_in(key: &str, sticks: bool, nextui_owned: bool, android: bool) -> bool {
+    // The dArkOS port leaves out what dArkOS keeps for itself or the port can't do (`darkos::LEAVES_OUT`).
+    #[cfg(feature = "brick")]
+    if crate::darkos::hides(key) {
+        return true;
+    }
+    // Bluetooth and Remote access are radios everywhere else (Wi-Fi's page, the same rule); only dArkOS tells them apart.
+    let key = if matches!(key, "bluetooth" | "remote") { "radios" } else { key };
     if android && ANDROID_HIDES.contains(&key) {
         return true;
     }
@@ -532,11 +607,6 @@ pub fn hides_in(key: &str, sticks: bool, nextui_owned: bool, android: bool) -> b
         #[cfg(feature = "brick")]
         return !crate::darkos::host();
         #[cfg(not(feature = "brick"))]
-        return true;
-    }
-    // dArkOS keeps its own system; the port has a separate signed app-only update channel.
-    #[cfg(feature = "brick")]
-    if crate::darkos::hides(key) {
         return true;
     }
     match key {
@@ -601,13 +671,64 @@ fn brick_standalone_keeps(key: &str, standalone: bool) -> bool {
 
 /// Settles the device before anything has read it (`--snapshot` with a `:device=`). False when it was read already.
 pub fn force(d: Device) -> bool {
-    DEVICE.set(d).is_ok()
+    DEVICE.set(d.with_wifi_adapter(crate::wifi::net_class().as_deref())).is_ok()
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn wifi_adapter_presence_is_fixed_for_the_session_and_checked_again_for_the_page() {
+        let net = crate::testutil::TestDir::new("usb-wifi");
+        for model in ["rg28xx", "rg35xx-2024", "r36s", "rk2023"] {
+            let class = net.join(model);
+            std::fs::create_dir_all(class.join("eth0")).unwrap();
+            let d = from_override(model).with_wifi_adapter(Some(&class));
+            assert!(!d.has_wifi());
+            assert_eq!(d.wifi_adapter_notice_in(Some(&class)), Some("Plug in a Wi-Fi adapter and restart"));
+
+            let adapter = class.join("wlx001122334455");
+            std::fs::create_dir_all(adapter.join("phy80211")).unwrap();
+            assert!(!d.has_wifi(), "{model}: plugging in changes the message, not the session");
+            assert_eq!(d.wifi_adapter_notice_in(Some(&class)), Some("Wi-Fi adapter found. Restart to use it."));
+
+            let started = from_override(model).with_wifi_adapter(Some(&class));
+            assert_eq!(started.wifi_adapter(), Some("wlx001122334455"));
+            assert!(started.has_wifi());
+            assert_eq!(started.wifi_adapter_notice_in(Some(&class)), None);
+            std::fs::remove_dir_all(adapter).unwrap();
+            assert!(started.has_wifi(), "{model}: the session keeps its capabilities");
+            assert_eq!(started.wifi_adapter_notice_in(Some(&class)), Some("Plug in a Wi-Fi adapter and restart"));
+        }
+    }
+
     /// Android's handheld view leaves out what Android owns (Wi-Fi, sleep, the fan ...) and only it has Settings → View; a
     /// Linux handheld keeps every row and has no View row.
+    /// R36S hand test 20.11.2026 #9: the first start told the R36S's owner it "hasn't been tested" on it; it is a beta now.
+    #[test]
+    fn the_r36s_is_a_beta_and_the_others_are_not() {
+        assert!(from_override("r36s").model.unwrap().beta());
+        for k in ["miniv2", "odin2mini", "rg35xx-plus", "rp5"] {
+            assert!(!from_override(k).model.unwrap().beta(), "{k}");
+        }
+    }
+
+    /// R36S hand test 20.11.2026 #15a: the power menu offered "Restart to boot menu › Android" on the R36S (Rockchip's
+    /// reboot-mode knows "bootloader"). Android next to ROCKNIX is the Retroid and AYN boards' alone, every board family here.
+    #[test]
+    fn only_the_retroid_and_ayn_boards_have_android_beside_rocknix() {
+        for b in crate::device_model::H700_BOARDS.iter().map(Model::H700)
+            .chain(crate::device_model::RK3566_BOARDS.iter().map(Model::Rk3566))
+            .chain(crate::device_model::RK3326_BOARDS.iter().map(Model::Rk3326))
+        {
+            assert!(from_override(b.key()).model.is_some() && !from_override(b.key()).android_beside(), "{}", b.key());
+        }
+        assert!(!from_override("r36s").android_beside());
+        for k in ["miniv2", "rp5", "flip2", "odin2", "odin2mini", "odin2portal"] {
+            assert!(from_override(k).model.is_some() && from_override(k).android_beside(), "{k}");
+        }
+        assert!(identify("", b"").android_beside(), "an unknown board keeps what its reboot-mode says");
+    }
+
     #[test]
     fn android_hides_what_android_owns_and_only_android_has_the_view_row() {
         for key in super::ANDROID_HIDES {
@@ -620,6 +741,12 @@ mod tests {
         assert!(!super::hides_in("android_view", true, false, true), "the View row on Android");
         assert!(!super::hides_in("updates", true, false, true), "Updates on Android: a look by hand (17.11.2026)");
         assert!(!super::hides_in("boot_screen", true, false, true), "Console boot screen on Android: the player reads the private BIOS folder");
+        // Bluetooth and Remote access have keys of their own for the dArkOS port; everywhere else they follow the radios.
+        for key in ["bluetooth", "remote"] {
+            assert!(super::hides_in(key, true, false, true), "{key} on Android");
+            assert!(super::hides_in(key, true, true, false), "{key} with NextUI's card");
+            assert!(!super::hides_in(key, true, false, false), "{key} on Linux");
+        }
     }
 
     /// docs/TRIMUI-BRICK-MORE.md: the Tour leaves out the cards whose page the Brick has no row for, and every card it keeps names a real id.
@@ -693,11 +820,11 @@ mod tests {
             ),
             (
                 "Retroid Pocket Mini V2\0",
-                b"retroidpocket,rpocketv2\0qcom,sm8250\0",
+                b"retroidpocket,rpminiv2\0qcom,sm8250\0",
                 Model::MiniV2,
                 Panel::Original,
             ),
-            ("Retroid Pocket Mini\0", b"retroidpocket,rpocket\0qcom,sm8250\0", Model::MiniV1, Panel::Original),
+            ("Retroid Pocket Mini\0", b"retroidpocket,rpmini\0qcom,sm8250\0", Model::MiniV1, Panel::Original),
             ("Retroid Pocket 5\0", b"retroidpocket,rp5\0qcom,sm8250\0", Model::Pocket5, Panel::Original),
             ("Retroid Pocket 5 Visionox\0", b"retroidpocket,rp5\0qcom,sm8250\0", Model::Pocket5, Panel::Visionox),
             ("Retroid Pocket Flip2\0", b"retroidpocket,rpflip2\0qcom,sm8250\0", Model::Flip2, Panel::Original),
@@ -745,7 +872,7 @@ mod tests {
     fn retroids_get_xbox_style_caps_and_an_unknown_device_plain_letters() {
         use crate::button_prompts::PromptStyle;
         for m in [Model::MiniV2, Model::MiniV1, Model::Pocket5, Model::Flip2, Model::Pocket6, Model::Nova] {
-            let d = Device { model: Some(m), panel: Panel::Original, reported: String::new() };
+            let d = Device { model: Some(m), panel: Panel::Original, reported: String::new(), wifi_adapter: None };
             assert_eq!(d.prompt_style(), PromptStyle::Xbox, "{m:?}");
         }
         assert_eq!(Device::unknown("Some Handheld").prompt_style(), PromptStyle::Nintendo);
@@ -796,10 +923,10 @@ mod tests {
         assert_eq!(rp5.about_line().as_deref(), Some("Retroid Pocket 5 (experimental)"));
         assert_eq!(rp5.fan_min_run(), crate::fan_curve::START_PWM);
         assert!(rp5.log_line().ends_with("experimental"), "{}", rp5.log_line());
-        let v2 = identify("Retroid Pocket Mini V2\0", b"retroidpocket,rpocketv2\0");
+        let v2 = identify("Retroid Pocket Mini V2\0", b"retroidpocket,rpminiv2\0");
         assert_eq!(v2.about_line(), None, "the Mini V2's About page stays as it was");
         assert_eq!(v2.fan_min_run(), crate::fan_curve::MIN_RUN_PWM);
-        assert_eq!(identify("Retroid Pocket Mini\0", b"retroidpocket,rpocket\0").about_line().as_deref(), Some("Retroid Pocket Mini V1 (experimental)"));
+        assert_eq!(identify("Retroid Pocket Mini\0", b"retroidpocket,rpmini\0").about_line().as_deref(), Some("Retroid Pocket Mini V1 (experimental)"));
         assert_eq!(identify("Retroid Pocket Flip2\0", b"retroidpocket,rpflip2\0").about_line().as_deref(), Some("Retroid Pocket Flip 2 (experimental)"));
     }
 

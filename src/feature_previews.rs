@@ -710,8 +710,8 @@ pub fn run_ahead(c: &mut Canvas, text: &mut Text) {
         list_page(c, text, "Speed, rumble, fan", &rows, 6, 160);
         let mut y = 160 + rows.len() as i32 * 66 + 60;
         for line in [
-            "The game responds to your buttons 1 or 2 frames sooner.",
-            "It switches itself off where a game can't keep up.",
+            "Cuts 1–2 frames of input lag by predicting ahead.",
+            "Auto-disables if a game can't keep full speed.",
         ] {
             text.draw(c, Face::Body, 30, 66, y, 0xcccccc, line);
             y += 44;

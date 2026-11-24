@@ -33,8 +33,12 @@ impl App {
             self.clock_look = None;
             return None;
         }
+        let Some(notice) = clock_check::shelf_notice() else {
+            self.clock_look = None;
+            return None;
+        };
         if self.shelf_notice_free() {
-            self.notice = Some(Notice::new(clock_check::shelf_notice()));
+            self.notice = Some(Notice::new(notice));
             self.clock_look = None;
             self.request_redraw();
             return None;

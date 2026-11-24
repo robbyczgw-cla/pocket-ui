@@ -20,6 +20,11 @@ Settings → **Screen & sound** covers display output, audio levels, colour warm
 
 Case sounds sits right beneath Menu sounds because it depends on it; if Menu sounds is Off, the footer reminds you.
 
+The NES door sound comes from "NES door slam.mp3" by florn (freesound.org/s/454468/),
+under CC BY 3.0 (creativecommons.org/licenses/by/3.0/). It was trimmed, mixed to mono,
+filtered, faded and levelled. The other new recordings are CC0 1.0, by XenosNS (NES),
+lartti (tray), ottoojala (jewel case), and ryanharding95 and ewellis (DVD cases).
+
 ### Night light
 
 Settings → Screen & sound → **Night light** has its own page: [Night light](night-light.md).

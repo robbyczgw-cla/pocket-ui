@@ -35,6 +35,29 @@ pub const MONTHS: [u32; 3] = [3, 6, 12];
 pub const DEFAULT_MONTHS: u32 = 6;
 /// A month, for the age of a state.
 const MONTH_SECS: u64 = 30 * 24 * 3600;
+/// Leave the custom covers and their backups in place when clearing the picture cache.
+fn clean_downloaded_covers(dir: &Path) -> std::io::Result<()> {
+    // A link at the cache root is itself expendable, but its destination is not.
+    if !fs::symlink_metadata(dir)?.is_dir() {
+        return fs::remove_file(dir);
+    }
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.file_name() == crate::covers::custom::FOLDER {
+            continue;
+        }
+        if entry.file_type()?.is_dir() {
+            fs::remove_dir_all(entry.path())?;
+        } else {
+            fs::remove_file(entry.path())?;
+        }
+    }
+    match fs::remove_dir(dir) {
+        Err(e) if e.kind() == std::io::ErrorKind::DirectoryNotEmpty => Ok(()),
+        result => result,
+    }
+}
+
 /// The low-space warning's memory, in the data folder.
 pub const STATE_FILE: &str = "storage.json";
 /// The page measures again each time it opens, unless what it has is younger than this (a second visit right after
@@ -219,11 +242,17 @@ pub fn measure(roots: &Roots, systems: &[SystemDir]) -> Usage {
             walk(&p, &mut u, &mut |u, f, bytes, _| u.add(if is_save(f) { Kind::Saves } else { Kind::Other }, bytes));
         }
     }
-    // pocket-ui's own: the pictures it downloaded and its logs (settings and lists are a few hundred KB).
-    for folder in ["covers", "snaps", "titles"] {
-        let mut n = 0;
-        walk(&roots.data.join(folder), &mut u, &mut |_, _, bytes, _| n += bytes);
-        u.add(Kind::Pictures, n);
+    // Only downloaded images count towards the picture cache. Custom covers and their backups are kept.
+    let covers = roots.data.join("covers");
+    let custom = covers.join(crate::covers::custom::FOLDER);
+    let cover_backups = custom.join("backups");
+    walk(&covers, &mut u, &mut |u, file, bytes, _| {
+        let kind = if file.starts_with(&cover_backups) { Kind::Backups }
+            else if file.starts_with(&custom) { Kind::Other } else { Kind::Pictures };
+        u.add(kind, bytes);
+    });
+    for folder in ["snaps", "titles"] {
+        walk(&roots.data.join(folder), &mut u, &mut |u, _, bytes, _| u.add(Kind::Pictures, bytes));
     }
     let logs = roots.data.join(crate::logs::DIR_NAME);
     if let Ok(rd) = fs::read_dir(&logs) {
@@ -440,7 +469,13 @@ pub fn clean(cleanup: Cleanup, sel: &Selection, roots: &Roots) -> Result<u64, St
             eprintln!("storage: not deleted, not part of the clean-up: {}", p.display());
             continue;
         }
-        let done = if p.is_dir() { fs::remove_dir_all(p) } else { fs::remove_file(p) };
+        let done = if cleanup == Cleanup::Pictures && name == "covers" {
+            clean_downloaded_covers(p)
+        } else if p.is_dir() {
+            fs::remove_dir_all(p)
+        } else {
+            fs::remove_file(p)
+        };
         match done {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -738,6 +773,21 @@ mod tests {
         clean(Cleanup::Pictures, &pics, &roots).unwrap();
         assert!(!t.has("data/covers") && !t.has("data/snaps") && !t.has("data/titles") && t.has("data/settings.json"));
         assert!(t.has("roms/gba/Alpha.srm") && t.has("roms/ps2/Mcd001.ps2"), "saves are on no list");
+    }
+
+    #[test]
+    fn clearing_downloaded_pictures_keeps_custom_covers_and_backups() {
+        let t = Tree::new("custom-cover-clean");
+        let automatic = t.put("data/covers/gba/Alpha.png", 12);
+        let custom = t.put("data/covers/.custom/123.png", 15);
+        let backup = t.put("data/covers/.custom/backups/123-456-0.png", 10);
+        let roots = t.roots();
+        let usage = measure(&roots, &[]);
+        let selected = selection(&usage, Cleanup::Pictures, &[], now(), &roots);
+        assert_eq!(selected.bytes, 12);
+        clean(Cleanup::Pictures, &selected, &roots).unwrap();
+        assert!(!automatic.exists());
+        assert!(custom.exists() && backup.exists());
     }
 
     #[test]

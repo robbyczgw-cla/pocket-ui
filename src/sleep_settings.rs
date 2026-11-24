@@ -330,12 +330,12 @@ pub enum Row {
 }
 
 /// Kept short enough for the settings page in both languages.
-pub const NO_SLEEP: &str = "ROCKNIX sleep is unavailable here; the screen turns off instead.";
+pub const NO_SLEEP: &str = "System sleep isn't supported here; turns off the screen instead.";
 /// The Brick's own card: the system could sleep, but it has not been proven on this firmware, and a game is never put at risk, so
 /// the screen goes off instead. Said as what happens (under Screen off in the power menu too), in one line on the Sleep & power page:
 /// at two the selected row's explanation was cut to one line with "…" (settings walk 06.11.).
 #[cfg(feature = "brick")]
-const NO_SLEEP_BRICK: &str = "The screen goes off and the game waits; the power button wakes it.";
+const NO_SLEEP_BRICK: &str = "Turns the screen off and pauses the game. Power wakes it.";
 
 /// `NO_SLEEP` for this device.
 #[cfg(feature = "brick")]
@@ -437,30 +437,30 @@ impl Config {
     /// What the selected row does with its value now: the lines under the rows.
     pub fn explain(&self, row: Row) -> &'static str {
         if crate::device::current().screen_off_only() && row == Row::SwitchOff {
-            return "After this long with the screen off on battery, the Pocket saves the game and switches off.";
+            return "Saves your game and powers off after this long with the screen off on battery.";
         }
         match row {
             Row::ScreenOff if self.screen_off.is_none() => {
-                "The screen stays on. A short press of the power button still turns it off or puts the Pocket to sleep."
+                "Screen stays on. A short press of Power still sleeps or turns it off."
             }
-            Row::ScreenOff => "How long without a button press before the screen goes dark. A game pauses then; any button brings it back.",
+            Row::ScreenOff => "Turns the screen off and pauses your game after this idle time. Press any button to wake.",
             Row::SleepAfter if self.sleep_after.is_none() => {
-                "When the screen turns off by itself, the Pocket stays awake until you press a button. That uses the battery."
+                "When the screen turns off by itself, the Pocket stays awake until you press a button (uses battery)."
             }
-            Row::SleepAfter => "How long the screen stays dark before the Pocket sleeps. The game is saved first; the power button wakes it.",
+            Row::SleepAfter => "Wait time after screen-off before deep sleep. Saves your game first; Power wakes it.",
             Row::SwitchOff => crate::auto_off::explain(self.off_after),
             #[cfg(feature = "brick")]
             Row::ShortPress if brick_choice() => match self.short_press {
-                ShortPress::Sleep => "Saves the game and puts the Brick to sleep. The power button wakes it; the game waits in its pause menu.",
-                ShortPress::ScreenOff => "Only the screen goes dark and the game waits. The power button turns it back on.",
+                ShortPress::Sleep => "Saves your game and puts the Brick to sleep. Power wakes it straight to the pause menu.",
+                ShortPress::ScreenOff => "Turns off only the screen while pausing your game. Power turns it back on.",
             },
             Row::ShortPress => match self.short_press {
-                ShortPress::Sleep => "Saves the game and puts the Pocket to sleep. Press the power button again to wake it.",
-                ShortPress::ScreenOff => "Only the screen goes dark: the game and its sound keep running. Any button turns it back on.",
+                ShortPress::Sleep => "Saves your game and sleeps the Pocket. Press Power to wake.",
+                ShortPress::ScreenOff => "Turns off only the screen; game and audio keep running. Press any button to wake.",
             },
             Row::Hold => match self.hold {
-                Hold::Menu => "Hold it for about a second: Sleep, Restart, Power off and Restart pocket-ui.",
-                Hold::Sleep => "Holding it also puts the Pocket to sleep. The power menu is still in the quick settings, under Power….",
+                Hold::Menu => "Hold ~1 s for the power menu: Sleep, Restart, Power off, Restart pocket-ui.",
+                Hold::Sleep => "Holding Power also sleeps the Pocket. The power menu stays in Quick settings › Power…",
             },
         }
     }
@@ -769,7 +769,7 @@ mod tests {
         assert!(never.explain(Row::ScreenOff).contains("stays on"));
         let screen = Config { short_press: ShortPress::ScreenOff, ..Config::default() };
         assert!(screen.explain(Row::ShortPress).contains("keep running"));
-        assert!(Config { hold: Hold::Sleep, ..Config::default() }.explain(Row::Hold).contains("quick settings"));
+        assert!(Config { hold: Hold::Sleep, ..Config::default() }.explain(Row::Hold).contains("Quick settings"));
     }
     /// 0.4: Sleep is the Brick's default (the power key wake was confirmed on a real Brick, 08.11.). A 0.3.x file, whose
     /// "screen_off" was forced on everyone, gets it too; a player's own choice of Screen off stays.

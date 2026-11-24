@@ -127,7 +127,7 @@ fn picture(game: &Game, snaps: bool, download: bool) -> Option<pocket_ui::image:
         }
         let playlist = pocket_ui::covers::playlist(game.system_id)?;
         let stem = std::path::Path::new(&game.relative).file_stem()?.to_str()?;
-        let index = pocket_ui::covers::fetch_index(playlist);
+        let index = pocket_ui::covers::Index::new(pocket_ui::covers::fetch_index(playlist));
         let name = pocket_ui::covers::best_match(stem, &index)?;
         if !pocket_ui::covers::download_from(
             playlist,
@@ -379,12 +379,7 @@ impl App {
         let Ok(json) = serde_json::to_string(&self.ui.prefs) else { return };
         if json != self.last_persist {
             self.last_persist = json;
-            let path = pocket_ui::platform::data_dir().join("launcher.json");
-            if self.ui.prefs.onboarding_done {
-                pocket_ui::fsutil::write_json_soon(&path, &self.ui.prefs);
-            } else {
-                let _ = pocket_ui::fsutil::write_json(&path, &self.ui.prefs);
-            }
+            self.ui.save_preferences(&data_dir(), self.ui.prefs.onboarding_done);
         }
     }
     /// Frozen games: which started games stand open, read on a thread (it looks at their files), newest start first.
@@ -575,7 +570,7 @@ impl App {
             }
             Command::Folder => {
                 if !self.ui.prefs.onboarding_done {
-                    let _ = pocket_ui::fsutil::write_json(&pocket_ui::platform::data_dir().join("launcher.json"), &self.ui.prefs);
+                    self.ui.save_preferences(&data_dir(), false);
                 }
                 bridge("chooseFolder", &[]);
             }
@@ -586,12 +581,12 @@ impl App {
             }
             // A games folder the first start found: the picker opens in it, "Use this folder" takes it.
             Command::FolderAt(uri) => {
-                let _ = pocket_ui::fsutil::write_json(&pocket_ui::platform::data_dir().join("launcher.json"), &self.ui.prefs);
+                self.ui.save_preferences(&data_dir(), false);
                 bridge("chooseFolderAt", &[&uri]);
             }
             Command::PersistSetup => {
                 // A confirmed step survives an immediate force-stop, including a system picker handoff.
-                let _ = pocket_ui::fsutil::write_json(&pocket_ui::platform::data_dir().join("launcher.json"), &self.ui.prefs);
+                self.ui.save_preferences(&data_dir(), false);
                 self.last_persist.clear();
                 self.cover_key.clear();
             }
@@ -1809,6 +1804,12 @@ impl ApplicationHandler<BridgeEvent> for App {
                     self.logical_tap((a.x + a.w / 2) as f32, (a.y + a.h / 2) as f32);
                 }
             }
+            // The card writer may finish after persist() returns. Wait to show its notice until the launcher is visible.
+            if self.insert.is_none() && self.eject.is_none() {
+                if let Some(text) = self.ui.take_storage_notice(&data_dir()) {
+                    bridge("notice", &[&ui::tr("Storage"), &text]);
+                }
+            }
             self.check_at = Instant::now() + Duration::from_millis(150);
         }
         let now = Instant::now();
@@ -1967,7 +1968,7 @@ fn android_main(android: AndroidApp) {
         return;
     }
     let prefs: Preferences = ui::load_preferences(&pocket_ui::platform::data_dir());
-    i18n::set(prefs.chosen_language().unwrap_or_else(|| i18n::Lang::from_locale(&bridge("language", &[]))));
+    i18n::set(prefs.chosen_language().unwrap_or_else(|| i18n::Lang::from_system_locale(&bridge("language", &[]))));
     prefs.apply_look();
     pocket_ui::ui_sound::start();
     let (media, requests) = mpsc::channel::<(Game, bool)>();

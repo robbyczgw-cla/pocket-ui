@@ -147,8 +147,33 @@ impl App {
                 self.request_redraw();
                 true
             }
+            // The Dolphin app takes no start options for its pad or its touch buttons: before the first GameCube or Wii
+            // game, a card says how to set it up there (19.11.2026, the Mini V2), once; the game's card keeps it.
+            Way::App(app) if pocket_ui::rescue::is_dolphin(&app.package) && pocket_ui::first_game::tell_dolphin_once(&self.data_dir) => {
+                self.open_dolphin_card(Some((system.to_string(), name.to_string(), path.to_path_buf())));
+                true
+            }
             Way::Own { .. } | Way::App(_) => false,
         }
+    }
+
+    /// Dolphin's card (`rescue::DialogKind::Dolphin`): before `launch` (Start the game is selected), or from the game's card.
+    pub(crate) fn open_dolphin_card(&mut self, launch: Option<(String, String, PathBuf)>) {
+        let start = launch.is_some();
+        self.dolphin_launch = launch;
+        self.leave = Some(pocket_ui::rescue::Dialog { sel: usize::from(start), ..pocket_ui::rescue::Dialog::new(pocket_ui::rescue::DialogKind::Dolphin { start }) });
+        self.request_redraw();
+    }
+
+    /// The game card's "Setting up Dolphin" row: a game that plays in the Dolphin app here.
+    pub(crate) fn card_dolphin_row(&self, system: &str, path: &Path) -> Option<pocket_ui::game_card_model::CuratorRow> {
+        let sys = self.systems.iter().find(|s| s.name == system)?;
+        let (way, _) = self.phone_way(sys, Some(path))?;
+        matches!(way, Way::App(app) if pocket_ui::rescue::is_dolphin(&app.package)).then(|| pocket_ui::game_card_model::CuratorRow {
+            kind: pocket_ui::game_card_model::RowKind::Dolphin,
+            title: pocket_ui::rescue::DOLPHIN_TITLE.into(),
+            line: pocket_ui::rescue::DOLPHIN_ROW_LINE.into(),
+        })
     }
 
     /// What the page saved goes where Mobile keeps it (launcher.json), and into what the next launch asks.

@@ -74,7 +74,7 @@ struct Layout {
 impl Layout {
     /// The layout of the image, told by where the file system's first volume descriptor stands (`CD001` at sector
     /// 16); None for a file that is no ISO 9660 image at all.
-    fn detect(f: &mut std::fs::File) -> io::Result<Option<Layout>> {
+    fn detect(f: &mut (impl Read + Seek)) -> io::Result<Option<Layout>> {
         // Enough for sector 16 in every layout, with its descriptor a whole sector in.
         let mut buf = vec![0u8; 17 * 2352 + 64];
         let n = read_at(f, 0, &mut buf)?;
@@ -91,7 +91,7 @@ impl Layout {
 
     /// User data from sector `lba` on, `len` bytes at most ([`DIR_MAX`]), sector by sector (the headers of a raw
     /// dump are skipped, so what comes back is the file system as a plain ISO has it).
-    fn read(&self, f: &mut std::fs::File, lba: u64, len: usize) -> io::Result<Vec<u8>> {
+    fn read(&self, f: &mut (impl Read + Seek), lba: u64, len: usize) -> io::Result<Vec<u8>> {
         let len = len.min(DIR_MAX);
         let mut out = Vec::with_capacity(len.min(SECTOR_DATA));
         let mut raw = vec![0u8; self.sector as usize];
@@ -109,7 +109,7 @@ impl Layout {
 }
 
 /// Fills `buf` from `at` on as far as the file goes.
-fn read_at(f: &mut std::fs::File, at: u64, buf: &mut [u8]) -> io::Result<usize> {
+fn read_at(f: &mut (impl Read + Seek), at: u64, buf: &mut [u8]) -> io::Result<usize> {
     f.seek(SeekFrom::Start(at))?;
     let mut n = 0;
     while n < buf.len() {
@@ -128,7 +128,7 @@ fn le32(b: &[u8]) -> u64 {
 
 /// `SYSTEM.CNF`'s text from the image, and the volume identifier of the image as a fallback for a disc whose boot
 /// file is missing; either may be empty. `l` is the layout [`Layout::detect`] found.
-fn boot_text(f: &mut std::fs::File, l: Layout) -> io::Result<(String, String)> {
+fn boot_text(f: &mut (impl Read + Seek), l: Layout) -> io::Result<(String, String)> {
     let pvd = l.read(f, 16, SECTOR_DATA)?;
     if pvd.len() < SECTOR_DATA || pvd[0] != 1 || &pvd[1..6] != b"CD001" {
         return Ok((String::new(), String::new()));
@@ -170,7 +170,7 @@ fn name_is(name: &[u8], wanted: &[u8]) -> bool {
 
 /// The serial on the disc: `SYSTEM.CNF`'s `BOOT`/`BOOT2` line, else the image's volume identifier when that is a
 /// serial. None for a disc without either.
-fn serial_on(f: &mut std::fs::File) -> io::Result<Option<String>> {
+fn serial_on(f: &mut (impl Read + Seek)) -> io::Result<Option<String>> {
     let Some(layout) = Layout::detect(f)? else { return Ok(None) };
     let (cnf, volume) = boot_text(f, layout)?;
     Ok(parse_cnf(&cnf).or_else(|| normalize(&volume)))
@@ -178,19 +178,23 @@ fn serial_on(f: &mut std::fs::File) -> io::Result<Option<String>> {
 
 /// The file the serial is read from: an image itself, or the first file of its `.cue`/`.m3u` (None for what this
 /// reader does not open: a CHD, a CSO, a PBP).
-fn image_of(rom: &Path, depth: u8) -> Option<PathBuf> {
+fn image_of(rom: &Path, depth: u8, stop: &impl Fn() -> bool) -> Option<PathBuf> {
     let ext = rom.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
     match ext.as_str() {
         "iso" | "bin" | "img" => Some(rom.to_path_buf()),
         "cue" | "m3u" if depth < SHEETS_MAX => {
-            let meta = std::fs::metadata(rom).ok()?;
+            let f = crate::background_io::open_until(rom, stop).ok()?;
+            let meta = f.metadata().ok()?;
             if meta.len() > SHEET_MAX_BYTES {
                 return None;
             }
-            let text = String::from_utf8_lossy(&std::fs::read(rom).ok()?).into_owned();
+            let mut bytes = Vec::new();
+            f.take(SHEET_MAX_BYTES + 1).read_to_end(&mut bytes).ok()?;
+            if bytes.len() as u64 > SHEET_MAX_BYTES { return None; }
+            let text = String::from_utf8_lossy(&bytes);
             let first = crate::library::sheet_references(&ext, &text).into_iter().next()?;
             let next = rom.parent().unwrap_or(Path::new(".")).join(first.replace('\\', "/"));
-            image_of(&next, depth + 1)
+            image_of(&next, depth + 1, stop)
         }
         _ => None,
     }
@@ -201,8 +205,12 @@ fn image_of(rom: &Path, depth: u8) -> Option<PathBuf> {
 /// serial, and for a file that is no ISO 9660 image — those keep their file name. An error is a file that could not
 /// be read (tried again next time).
 pub fn serial_of(rom: &Path) -> io::Result<Option<String>> {
-    let Some(image) = image_of(rom, 0) else { return Ok(None) };
-    let mut f = match std::fs::File::open(&image) {
+    let Some(image) = image_of(rom, 0, &|| false) else { return Ok(None) };
+    serial_at(rom, &image, || false)
+}
+
+fn serial_at(rom: &Path, image: &Path, stop: impl Fn() -> bool) -> io::Result<Option<String>> {
+    let mut f = match crate::background_io::open_until(image, stop) {
         Ok(f) => f,
         // The sheet is there but its track file is not (yet): not this game's serial, no error either.
         Err(e) if e.kind() == io::ErrorKind::NotFound && image != rom => return Ok(None),
@@ -354,7 +362,7 @@ fn dir(data_dir: &Path) -> PathBuf {
 
 /// The size and modification time a cache line is valid for.
 fn stamp(rom: &Path) -> io::Result<(u64, u64)> {
-    let m = std::fs::metadata(rom)?;
+    let m = crate::background_io::metadata(rom)?;
     let mtime = m.modified()?.duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
     Ok((m.len(), mtime))
 }
@@ -368,7 +376,7 @@ pub struct Cache {
 
 impl Cache {
     pub fn load(data_dir: &Path) -> Cache {
-        let text = std::fs::read_to_string(dir(data_dir).join("discs.tsv")).unwrap_or_default();
+        let text = crate::background_io::read_to_string(dir(data_dir).join("discs.tsv")).unwrap_or_default();
         let files = text
             .lines()
             .filter_map(|l| {
@@ -412,7 +420,7 @@ fn table_path(data_dir: &Path, dat: &str) -> PathBuf {
 
 /// The serial → name table of `dat` kept on the card, if any.
 pub fn load_table(data_dir: &Path, dat: &str) -> Option<HashMap<String, String>> {
-    let text = std::fs::read_to_string(table_path(data_dir, dat)).ok()?;
+    let text = crate::background_io::read_to_string(table_path(data_dir, dat)).ok()?;
     Some(text.lines().filter_map(|l| l.split_once('\t')).map(|(s, n)| (s.to_string(), n.to_string())).collect())
 }
 
@@ -425,7 +433,7 @@ fn store_table(data_dir: &Path, dat: &str, table: &HashMap<String, String>) -> i
 
 /// Whether the table of `dat` should be fetched (none yet, or older than [`DAT_MAX_AGE`]).
 fn table_due(data_dir: &Path, dat: &str) -> bool {
-    std::fs::metadata(table_path(data_dir, dat))
+    crate::background_io::metadata(table_path(data_dir, dat))
         .and_then(|m| m.modified())
         .ok()
         .and_then(|t| t.elapsed().ok())
@@ -473,7 +481,7 @@ pub struct Named {
 
 /// Reads the serial of every PlayStation image in `games` that the cache doesn't have, gets the Redump lists of
 /// their systems (`fetch`: the DAT's text, None offline; called only for a list missing or old) and names every disc
-/// they know. `stop` is asked before each image. A disc named for the first time is taken off the `.missing` lists
+/// they know. `stop` is checked inside each image as well as between images. A new name is taken off the `.missing` lists
 /// so its pictures are looked up again under its proper name. `prune`: `games` is the whole library, so cache lines
 /// of other files go.
 pub fn run_until(
@@ -483,32 +491,42 @@ pub fn run_until(
     prune: bool,
     stop: impl Fn() -> bool,
 ) -> Named {
+    let stop = || stop() || crate::background_io::check().is_err();
     let wanted: Vec<&(String, PathBuf)> = games.iter().filter(|(sys, _)| dat(sys).is_some()).collect();
     let mut out = Named::default();
     if wanted.is_empty() {
         return out;
     }
+    if stop() {
+        return Named { stopped: true, ..out };
+    }
     let mut cache = Cache::load(data_dir);
     let mut fresh: std::collections::HashSet<PathBuf> = Default::default();
     let mut dirty = false;
     for (sys, rom) in &wanted {
-        // The image the serial comes from (the track a `.cue` or `.m3u` names), so a changed track is read again.
-        let Some(image) = image_of(rom, 0) else { continue };
-        let Ok(at) = stamp(&image) else { continue };
-        if cache.valid(rom, at).is_some() {
-            continue;
-        }
         if stop() {
             out.stopped = true;
             break;
         }
+        // The image the serial comes from (the track a `.cue` or `.m3u` names), so a changed track is read again.
+        let Some(image) = image_of(rom, 0, &stop) else { continue };
+        let Ok(at) = stamp(&image) else { continue };
+        if cache.valid(rom, at).is_some() {
+            continue;
+        }
         // An image that can't be read now (card busy, removed) is tried again next time.
-        let Ok(serial) = serial_of(rom) else { continue };
+        let serial = serial_at(rom, &image, &stop);
+        if stop() {
+            out.stopped = true;
+            break;
+        }
+        let Ok(serial) = serial else { continue };
         cache.files.insert(rom.clone(), Known { system: sys.clone(), size: at.0, mtime: at.1, serial });
         out.read += 1;
         dirty = true;
         fresh.insert(rom.clone());
     }
+    out.stopped |= stop();
     if prune && !out.stopped {
         let all: std::collections::HashSet<&PathBuf> = games.iter().map(|g| &g.1).collect();
         let before = cache.files.len();
@@ -518,6 +536,9 @@ pub fn run_until(
     if dirty {
         let _ = cache.save(data_dir);
     }
+    if out.stopped {
+        return out;
+    }
     // The lists of the systems the discs are on, fetched when missing or old; a list fetched now names its discs for
     // the first time.
     let mut tables: HashMap<&str, HashMap<String, String>> = HashMap::new();
@@ -526,6 +547,10 @@ pub fn run_until(
     dats.sort_unstable();
     dats.dedup();
     for d in dats {
+        if stop() {
+            out.stopped = true;
+            return out;
+        }
         let mut table = load_table(data_dir, d);
         // Not while a game runs: the download waits for the next run.
         if !out.stopped && table_due(data_dir, d) && !stop() {
@@ -545,6 +570,10 @@ pub fn run_until(
         }
     }
     for (sys, rom) in &wanted {
+        if stop() {
+            out.stopped = true;
+            return out;
+        }
         let Some(d) = dat(sys) else { continue };
         let (Some(table), Some(Some(serial))) = (tables.get(d), cache.files.get(rom).map(|k| k.serial.clone())) else { continue };
         if let Some(name) = table.get(&serial) {
@@ -866,6 +895,37 @@ game (
     }
 
     #[test]
+    fn r36s_readers_cancellation_during_the_only_disc_does_not_cache_a_serial() {
+        let d = dir("stop-inside-disc");
+        let rom = d.join("roms/psx/Game.iso");
+        write(&rom, &test_image(PS1_CNF, 2048));
+        let games = [("psx".to_string(), rom)];
+        let checks = std::cell::Cell::new(0);
+        let run = run_until(&d, &games, &|_| None, true, || {
+            checks.set(checks.get() + 1);
+            checks.get() >= 8
+        });
+        assert!(run.stopped);
+        assert_eq!((run.read, Cache::load(&d).len()), (0, 0));
+        assert_eq!(run_until(&d, &games, &|_| None, true, || false).read, 1);
+    }
+
+    #[test]
+    fn a_game_starting_stops_even_when_every_file_is_already_cached() {
+        let d = dir("stop-with-cache");
+        let games: Vec<_> = (0..2).map(|i| {
+            let rom = d.join(format!("roms/psx/{i}.iso"));
+            write(&rom, &test_image(PS1_CNF, 2048));
+            ("psx".to_string(), rom)
+        }).collect();
+        assert_eq!(run_until(&d, &games, &|_| None, true, || false).read, 2);
+        let stopped = run_until(&d, &games[..1], &|_| None, true, || true);
+        assert!(stopped.stopped, "a cached file must still observe cancellation");
+        assert_eq!(stopped.read, 0);
+        assert_eq!(Cache::load(&d).len(), 2, "no pruning from a cancelled pass");
+    }
+
+    #[test]
     fn a_game_starting_stops_the_run_and_keeps_what_it_did() {
         let d = dir("stop");
         let games: Vec<(String, PathBuf)> = ["SLES_556.73", "SCES_003.44", "SLUS_209.46"]
@@ -876,13 +936,10 @@ game (
                 ("psx".to_string(), p)
             })
             .collect();
-        let n = std::cell::Cell::new(0);
-        let run = run_until(&d, &games, &|_| None, true, || {
-            n.set(n.get() + 1);
-            n.get() > 2
-        });
+        assert_eq!(run_until(&d, &games[..2], &|_| None, true, || false).read, 2);
+        let run = run_until(&d, &games, &|_| None, true, || true);
         assert!(run.stopped);
-        assert_eq!((run.read, Cache::load(&d).len()), (2, 2), "two read and kept, none pruned");
+        assert_eq!((run.read, Cache::load(&d).len()), (0, 2), "the two completed reads stay cached");
         assert_eq!(run_until(&d, &games, &|_| None, true, || false).read, 1, "the rest after the game");
     }
 

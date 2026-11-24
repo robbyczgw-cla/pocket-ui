@@ -122,7 +122,7 @@ echo 'test result: ok. 1 passed'
     for suite in ['deploy/test-run-pocket-ui.sh','scripts/test-verify-device.sh','scripts/test-check-core-licences.sh','deploy/package/test-package.sh','deploy/test-grub-quiet.sh','scripts/image/test-grub-checks.sh','scripts/image/test-bios-checks.sh','scripts/test-check-release-tree.sh','scripts/image/test-rocknix-source.sh','scripts/image/test-h700-pins.sh','scripts/image/test-storage-budget.sh','deploy/fat/test-hook.sh','deploy/image/test-mount-storage.sh']:
         kind='launcher' if 'test-run-pocket-ui' in suite else 'small' if 'verify-device' in suite else ''
         put(tree/suite, '#!/bin/sh\n'+(f'exec stage {kind}\n' if kind else 'exit 0\n'))
-    for script in ['scripts/test-device-portability.py','scripts/test-device-transfer.py','scripts/image/test-receipts.py','scripts/android/test-release-check.py']: put(tree/script,'pass\n')
+    for script in ['scripts/test-device-portability.py','scripts/test-device-transfer.py','scripts/image/test-receipts.py','scripts/android/test-release-check.py','scripts/test-package-complete.py']: put(tree/script,'pass\n')
     (tree/"src").mkdir(); (tree/"tests").mkdir()
     (tree/"src/input_corpus_tests.rs").touch()
     (tree/"Cargo.toml").write_text("[features]\nbrick = []\n")

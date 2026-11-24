@@ -1,0 +1,106 @@
+Back to NextUI	NextUI로 돌아가기
+Back to NextUI?	NextUI로 돌아갈까요?
+Back to NextUI. Your games, saves and settings stay as they are.	NextUI로 돌아가요. 게임, 세이브, 설정은 그대로 유지돼요.
+Couldn't reach the update server over Tailscale. Is Tailscale on and connected?	Tailscale로 업데이트 서버에 연결할 수 없어요. Tailscale이 켜져 있고 연결되어 있나요?
+The SD card is too full for this update: it needs {n} MB more. Nothing was changed.	SD 카드 공간이 부족해 업데이트할 수 없어요. {n} MB 더 필요해요. 변경된 내용은 없어요.
+The update list names no usable version. Nothing was changed.	업데이트 목록에 사용할 수 있는 버전이 없어요. 변경된 내용은 없어요.
+The update is missing {s}. Nothing was changed.	업데이트에서 {s} 항목을 찾을 수 없어요. 변경된 내용은 없어요.
+The update is not version {s} inside. Nothing was changed.	업데이트 내부가 {s} 버전이 아니에요. 변경된 내용은 없어요.
+The update's start script is broken. Nothing was changed.	업데이트 시작 스크립트가 손상되었어요. 변경된 내용은 없어요.
+Couldn't switch to the new version: {s}. Nothing was changed.	새 버전으로 전환할 수 없어요: {s}. 변경된 내용은 없어요.
+No space left to unpack the download.	다운로드 파일의 압축을 풀 공간이 없어요.
+Battery & charging	배터리 및 충전
+Like the rest	다른 조명과 같게
+Customised	사용자 지정
+How bright the lights glow.	조명 밝기를 조절해요.
+Colour, effect and brightness of the grips, the middle and the two F keys one by one. A: open.	양쪽 그립, 중앙, F 키 두 곳의 색상, 효과, 밝기를 따로 설정해요. A: 열기.
+Quick save, quick load, screenshot, Recent games, the pause menu, or nothing.	빠른 저장, 빠른 불러오기, 스크린샷, 최근 게임, 일시정지 메뉴 또는 없음.
+The slider on the side mutes the sound, or does nothing.	측면 슬라이더로 소리를 끄거나 동작 없음을 설정해요.
+Which light to set.	설정할 조명을 선택해요.
+Its own colour, or the one above.	개별 색상 또는 위 설정을 따라요.
+Steady, breathing, fading, pulsing or off; "Like the rest" follows the colour above.	고정, 숨쉬기, 페이드, 깜빡임 또는 끄기. "다른 조명과 같게"는 위 색상을 따라요.
+Its own brightness, or the one above.	개별 밝기 또는 위 설정을 따라요.
+Lights & buttons	조명 및 버튼
+F1/F2 are shortcuts, not game buttons.	F1/F2는 게임 버튼이 아니라 단축키예요.
+Set them in Settings › Controls › Lights & buttons.	설정 › 조작 › 조명 및 버튼에서 설정하세요.
+Shortcuts for all games; not game buttons. Choose their action here.	모든 게임 공통 단축키이며 게임 버튼이 아니에요. 여기서 동작을 선택하세요.
+Each light	조명별 설정
+F1 button	F1 버튼
+F2 button	F2 버튼
+Mute slider	음소거 슬라이더
+The Brick's lights, the F1 and F2 keys and the mute slider.	Brick의 조명, F1·F2 키, 음소거 슬라이더 설정.
+Lights off	조명 끄기
+Light tactile clicks as you browse, and their strength. Game rumble is set in Options.	이동할 때 가벼운 진동과 강도를 설정해요. 게임 진동은 별도예요(일시정지 메뉴 › 옵션).
+Left grip	왼쪽 그립
+Right grip	오른쪽 그립
+Middle	중앙
+F1 key	F1 키
+F2 key	F2 키
+Nothing	없음
+Quick save	빠른 저장
+Quick load	빠른 불러오기
+Pause menu	일시정지 메뉴
+Mutes	음소거
+Does nothing	동작 없음
+Steady	고정
+Breathing	숨쉬기
+Fading	페이드
+Pulsing	깜빡임
+{s} (heavy)	{s} (무거움)
+Warm light in the menus. While a game runs, the main colour of its cover.	메뉴에서는 따뜻한 빛, 게임 실행 중에는 표지의 대표 색으로 빛나요.
+The colour of the Brick's lights.	Brick 조명 색상.
+The Brick's lights stay dark.	Brick 조명이 꺼진 상태로 유지돼요.
+The grips, the middle and the F keys glow in the colour you pick.	그립, 중앙, F 키가 선택한 색으로 빛나요.
+Dark while all is well. Orange breathing while it charges, green when it is full, red breathing when it runs low.	평소에는 꺼져 있어요. 충전 중에는 주황 숨쉬기, 완충 시 초록, 배터리 부족 시 빨강 숨쉬기로 빛나요.
+That cover is not a PNG picture.	이 표지는 PNG 이미지가 아니에요.
+No game called {s} is on the card. Send the game first, then its cover with the same name.	SD 카드에 {s} 게임이 없어요. 먼저 게임을 보낸 뒤 같은 이름의 표지를 보내세요.
+Several systems take this cover: more than one has a game with that name.	여러 기기에 같은 이름의 게임이 있어 이 표지를 적용할 수 없어요.
+The time zone could not be kept on the card: {s}	시간대를 SD 카드에 저장할 수 없어요: {s}
+The system didn't take the new time zone: {s}	시스템이 새 시간대를 적용하지 못했어요: {s}
+PC Engine CD needs a BIOS file in Roms/bios: syscard3.pce	PC Engine CD에는 Roms/bios 폴더의 BIOS 파일이 필요해요: syscard3.pce
+Switched off after {n} min asleep to save the battery.	배터리를 아끼기 위해 절전 {n}분 후 전원이 꺼졌어요.
+Switched off after {n} min with the screen off to save the battery.	배터리를 아끼기 위해 화면 꺼짐 {n}분 후 전원이 꺼졌어요.
+
+# Update 5: own colour, speed, colour cycle
+Hue	색조
+Saturation	채도
+Own colour	개별 색상
+Colour cycle	색상 순환
+Slow	느리게
+Its own colour, or the one above. Own colour: pick the hue and the saturation below.	개별 색상 또는 위 설정을 따라요. 개별 색상 선택 시 아래에서 색조와 채도를 고르세요.
+Round the colour wheel: red, yellow, green, blue, violet and back.	색상환을 따라 빨강, 노랑, 초록, 파랑, 보라 순으로 바뀌어요.
+From pale to full colour.	연한 색부터 선명한 색까지.
+Steady, breathing, fading, pulsing, a colour cycle, the battery and charger, or off; "Like the rest" follows the colour above.	고정, 숨쉬기, 페이드, 깜빡임, 색상 순환, 배터리 및 충전 또는 끄기. "다른 조명과 같게"는 위 색상을 따라요.
+How fast it breathes, fades, pulses or cycles.	숨쉬기, 페이드, 깜빡임, 색상 순환 속도를 조절해요.
+
+Not saved.	저장되지 않았어요.
+The emulator choice couldn't be saved on the card. Nothing was changed.	에뮬레이터 선택을 SD 카드에 저장할 수 없어요. 변경된 내용은 없어요.
+Wireless pads and headphones. Connected headphones take all audio and hand it back to the speaker on disconnect.	컨트롤러 및 헤드폰. 헤드폰을 연결하면 게임과 메뉴 소리가 그리로 나가고, 해제하면 스피커로 돌아와요.
+
+# Settings walk 06.11.: the leave dialog on the Brick's own card
+Restart pocket-ui?	pocket-ui를 재시작할까요?
+Restarts pocket-ui in seconds. Your games, saves and settings stay untouched.	pocket-ui만 몇 초 만에 다시 시작돼요. 게임, 세이브, 설정은 그대로 유지돼요.
+New versions of pocket-ui.	pocket-ui 새 버전.
+User	사용자
+(unchanged)	(변경 없음)
+CPU speed limits for games and menus.	게임과 메뉴에서 프로세서 동작 속도를 설정해요.
+Battery saves and save states. No games, no BIOS files.	배터리 세이브와 스테이트. 게임과 BIOS 파일은 제외해요.
+To {s} on the SD card. Copy it to a computer too.	SD 카드의 {s} 경로에 저장해요. PC에도 복사해 두세요.
+Turns the screen off and pauses the game. Power wakes it.	화면이 꺼지고 게임이 대기해요. 전원 버튼을 누르면 깨어나요.
+Saves your game and puts the Brick to sleep. Power wakes it straight to the pause menu.	게임을 저장하고 Brick을 절전 모드로 전환해요. 전원 버튼으로 깨우면 일시정지 메뉴에서 기다려요.
+Turns off only the screen while pausing your game. Power turns it back on.	화면만 꺼지고 게임은 대기해요. 전원 버튼을 누르면 다시 켜져요.
+Saves the game. The power button wakes it.	게임을 저장해요. 전원 버튼을 누르면 깨어나요.
+The power button wakes it.	전원 버튼을 누르면 깨어나요.
+Back to EmulationStation	EmulationStation으로 돌아가기
+Back to EmulationStation?	EmulationStation으로 돌아갈까요?
+pocket-ui closes and EmulationStation comes back. Your games, saves and settings stay as they are.	pocket-ui가 닫히고 EmulationStation으로 돌아가요. 게임, 세이브, 설정은 그대로 유지돼요.
+The starter pack isn't available on dArkOS (pocket-ui only reads dArkOS's folders). Copy games into EASYROMS instead.	dArkOS의 pocket-ui에서는 스타터 팩을 쓸 수 없어요. dArkOS 게임 폴더는 읽기만 가능해요. 대신 dArkOS 폴더(EASYROMS 파티션)에 게임을 복사하세요.
+Set up Wi-Fi in dArkOS. pocket-ui uses the connection dArkOS makes.	dArkOS에서 Wi-Fi를 설정하세요. pocket-ui는 dArkOS의 연결을 그대로 써요.
+Connected · {s}	연결됨 · {s}
+Set up in dArkOS. Shows whether it is connected.	dArkOS에서 설정해요. 연결 상태를 표시해요.
+The clock looks wrong. Play history and the dates on saves will be off until it is set. Set it in dArkOS.	시계가 맞지 않는 것 같아요. 맞추기 전까지 플레이 기록과 세이브 날짜가 어긋나요. dArkOS에서 설정하세요.
+The clock looks wrong, so the update server can't be checked. Set it in dArkOS, or wait for network time over Wi-Fi.	시계가 맞지 않아 업데이트 서버를 확인할 수 없어요. dArkOS에서 맞추거나 Wi-Fi 네트워크 시간을 기다리세요.
+It listens on your Wi-Fi. Set up Wi-Fi in dArkOS; Settings › Connections › Wi-Fi shows the connection.	Wi-Fi로 연결을 기다려요. dArkOS에서 Wi-Fi를 설정하면 설정 › 연결 › Wi-Fi에 표시돼요.
+Turn on to browse your library in any browser on your Wi-Fi. The URL appears here.	켜면 같은 Wi-Fi의 브라우저에서 라이브러리를 열 수 있어요. 접속 주소가 여기에 표시돼요.
+Pair one in dArkOS, or plug one into the USB-C port. This handheld's own buttons show up here too.	dArkOS에서 페어링하거나 USB-C 포트에 연결하세요. 이 기기의 버튼도 여기에 표시돼요.
+Copy games into dArkOS's EASYROMS folders (one per system), then restart pocket-ui.	dArkOS 폴더(EASYROMS 파티션, 기기별 폴더)에 게임을 복사한 뒤 pocket-ui를 다시 시작하세요.

@@ -254,3 +254,97 @@ fn run(jobs: Vec<Job>, bar_everywhere: bool) {
     failed.sort();
     assert!(failed.is_empty(), "{} page(s) with a different or a broken hint bar:\n{}", failed.len(), failed.join("\n"));
 }
+
+/// The shelf's toast stands over the hint bar for its moment (`App::paint`'s toast at the bottom): its pill cut keys in
+/// half ("Open means your moment is waiting" over HOME on Android's Shelf and Curator pages, the crate's "… is on the
+/// shelf now", 19.11.2026). Nothing caught it: the pill marks what is under it as covered (`boxes::covered_since`), so the
+/// record lost the cut keys and the text check let them pass. Here the page is taken twice, without and with the toast:
+/// a key of the bar the pill comes over must not still stand beside it, unchanged. Every look, the crate, English and
+/// German, a small panel, the Mini V2's and a 20:9 phone's.
+#[test]
+fn the_shelf_s_toast_never_cuts_a_hint_key_in_half() {
+    let tmp_guard = tempfile::tempdir().unwrap();
+    let tmp = tmp_guard.path().to_path_buf();
+    let status = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
+        .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.to_str().unwrap(), "dark"])
+        .stdout(std::process::Stdio::null()).status().expect("python3 for scripts/curator-fake-library.py");
+    assert!(status.success());
+    let socket = tmp.join("wayland-stub");
+    let _stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {
+        let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), socket.to_str().unwrap()]).spawn().expect("python3");
+        test_clock::wait_for(|| socket.exists(), std::time::Duration::from_secs(2), "Wayland stub listening");
+        Stub { child }
+    });
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_pocket-ui"));
+    let mut i = 0;
+    let mut shot = |state: &str, look: &str, lang: &str, size: (u32, u32)| -> Result<(Seen, pocket_ui::image::Image), String> {
+        i += 1;
+        let data = tmp.join(format!("data-{i}"));
+        copy_dir(&tmp.join("data"), &data);
+        std::fs::write(data.join("settings.json"), serde_json::json!({"theme": look, "onboarded": true, "motion": "off"}).to_string()).unwrap();
+        let (png, nav, boxes) = (tmp.join(format!("{i}.png")), tmp.join(format!("{i}.nav")), tmp.join(format!("{i}.boxes")));
+        let mut cmd = Command::new(&bin);
+        if socket.exists() {
+            cmd.env("WAYLAND_DISPLAY", &socket);
+        }
+        let out = cmd.args(["--snapshot", state, png.to_str().unwrap()])
+            .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).env("POCKETUI_LANG", lang)
+            .env("POCKETUI_TEXT_SIZE", "normal").env("POCKETUI_SNAPSHOT_SIZE", format!("{}x{}", size.0, size.1))
+            .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg")).env("POCKETUI_DATA", &data)
+            .env("POCKETUI_NAV_PROBE", &nav).env("POCKETUI_TEXT_BOXES", &boxes)
+            .output().expect("run pocket-ui");
+        let _ = std::fs::remove_dir_all(&data);
+        if !out.status.success() {
+            return Err(format!("did not render: {}", String::from_utf8_lossy(&out.stderr)));
+        }
+        let picture = pocket_ui::image::load_image(&png).ok_or("no picture")?;
+        Ok((read_record(&nav, &boxes), picture))
+    };
+    let mut failed = Vec::new();
+    let mut cut_before = 0;
+    for size in [(640u32, 480u32), (1240, 1080), (2400, 1080)] {
+        for (look, state) in [("shelf", "home"), ("split", "home"), ("cabinet", "home"), ("big", "home"), ("shelf", "shelf:gba:shelf"), ("shelf", "crate:0")] {
+            for (lang, said) in [("en", "Open means your moment is waiting"), ("de", "Offen heißt: Dein Moment wartet")] {
+                let name = format!("{state} / {look} / {lang} / {}x{}", size.0, size.1);
+                let (plain, toasted) = match (shot(state, look, lang, size), shot(&format!("{state}:toasted"), look, lang, size)) {
+                    (Ok(a), Ok(b)) => (a, b),
+                    (Err(e), _) | (_, Err(e)) => {
+                        failed.push(format!("{name}: {e}"));
+                        continue;
+                    }
+                };
+                // The pill: the line's box and 24 px of pill on each side, 52 high (`App::paint`), and a few pixels round it.
+                let Some(((tx0, ty0, tx1, ty1), _)) = toasted.0.strings.iter().find(|(_, s)| s.contains(said)) else {
+                    failed.push(format!("{name}: no toast on the page"));
+                    continue;
+                };
+                let mid = (ty0 + ty1) / 2;
+                let pill = (tx0 - 28, mid - 30, tx1 + 28, mid + 30);
+                let (a, b) = (&plain.1, &toasted.1);
+                for ((hx0, hy0, hx1, hy1), key, label) in &plain.0.hints {
+                    if !(*hx0 < pill.2 && *hx1 > pill.0 && *hy0 < pill.3 && *hy1 > pill.1) {
+                        continue;
+                    }
+                    cut_before += 1;
+                    // The part of the key beside the pill: still the same pixels as without the toast = half a key stands there.
+                    let (mut beside, mut same) = (0, 0);
+                    for y in (*hy0).max(0)..(*hy1).min(a.h as i32) {
+                        for x in (*hx0).max(0)..(*hx1).min(a.w as i32) {
+                            if x >= pill.0 && x < pill.2 && y >= pill.1 && y < pill.3 {
+                                continue;
+                            }
+                            beside += 1;
+                            let at = (y as u32 * a.w + x as u32) as usize;
+                            same += usize::from(a.px.get(at) == b.px.get(at));
+                        }
+                    }
+                    if beside >= 40 && same * 10 >= beside * 6 {
+                        failed.push(format!("{name}: the hint {key} {label} ({hx0},{hy0}..{hx1},{hy1}) stands half under the toast's pill {pill:?}: {same} of {beside} pixels beside it unchanged"));
+                    }
+                }
+            }
+        }
+    }
+    assert!(cut_before > 0, "the toast's pill came over no key of the bar on any page: the check would see nothing");
+    assert!(failed.is_empty(), "{} page(s) where the toast cuts the hint bar:\n{}", failed.len(), failed.join("\n"));
+}

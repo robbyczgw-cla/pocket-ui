@@ -25,7 +25,7 @@ TIC-80 accepts Lua `.tic` carts. DOS games go in `pc` (ZIP/DOSZ or individual EX
 ScummVM uses supported game folders or `.scummvm` launch files and the card's bundled engine data;
 copy all original game files, not just the launcher.
 
-**DS, Saturn and Dreamcast are experimental.** DS uses melonDS DS's CPU renderer; Saturn uses Yabause's
+**DS, Saturn and Dreamcast are experimental.** DS uses **DSperate** by default (with pocket-ui's pause menu, L2 for Stylus mode and R2 for screen swap/layout; melonDS DS is also available in Runs on). Saturn uses Yabause's
 software renderer and is expected to be too slow for many games. Dreamcast runs on the GPU, but not at
 full speed: Virtua Tennis 2 measured 37 of 60 frames per second. DS and Saturn speed on the Brick has not
 been measured. The built-in pad has no sticks or touchscreen: games requiring a mouse, DS touch or the

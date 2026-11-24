@@ -190,8 +190,50 @@ fn cards_of_japanese_and_korean_games_paint_no_letter_no_font_has() {
         let card = &shown[state];
         assert!(card.iter().any(|s| s.contains("Fainarufantajii")), "{state}: the name in Latin letters: {card:?}");
     }
-    // The Korean card has its name in Latin letters too, and nothing of the description nobody can read here.
+    // The Korean card is Korean even without a system font: pocket-ui ships hangul (`text_fallback::korean`), so its
+    // name and its description are painted as written, never in Latin letters (until 21.11.2026: "Jeldaui Jeonseol").
     let info = &shown["info:split:snes:젤다"];
-    assert!(info.iter().any(|s| s.contains("Jeldaui")), "{info:?}");
-    assert!(info.iter().all(|s| !s.contains('?') && !s.contains("Ringkeu")), "{info:?}");
+    assert!(info.iter().any(|s| s.contains("젤다의")), "{info:?}");
+    assert!(info.iter().any(|s| s.contains("링크가")), "the description too: {info:?}");
+    assert!(info.iter().all(|s| !s.contains('?') && !s.contains("Jeldaui") && !s.contains("Ringkeu")), "{info:?}");
+}
+
+/// Lead 22.11.2026: a language still being translated (Korean, `Lang::complete` false) is not among the welcome's
+/// language pills (the Settings row walks the same `Lang::row`); a developer sees it with `POCKETUI_LANG_PREVIEW=1`.
+/// Before, "한국어" stood there as the seventh choice and its pages were English.
+#[test]
+fn the_welcome_offers_korean_only_when_it_is_complete_or_previewed() {
+    let tmp_guard = tempfile::tempdir().unwrap();
+    let tmp = tmp_guard.path().to_path_buf();
+    library(&tmp);
+    let stub = wayland(&tmp);
+    let shown = |preview: bool| {
+        let data = tmp.join(format!("data-welcome-{preview}"));
+        std::fs::create_dir_all(&data).unwrap();
+        let (png, text) = (tmp.join(format!("welcome-{preview}.png")), tmp.join(format!("welcome-{preview}.txt")));
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+        if let Some(s) = &stub {
+            cmd.env("WAYLAND_DISPLAY", &s.path);
+        }
+        if preview {
+            cmd.env("POCKETUI_LANG_PREVIEW", "1");
+        }
+        let out = cmd
+            .args(["--snapshot", "setup:first", png.to_str().unwrap()])
+            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_LANG", "en")
+            .env("POCKETUI_VISIBLE_TEXT", &text)
+            .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
+            .env("POCKETUI_DATA", &data)
+            .output()
+            .expect("run pocket-ui");
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        std::fs::read_to_string(&text).unwrap_or_default()
+    };
+    let (plain, preview) = (shown(false), shown(true));
+    drop(stub);
+    assert!(plain.contains("Italiano") && plain.contains("Deutsch"), "the languages are there: {plain}");
+    // Korean is complete (switched on 2026-11): offered to everyone; before, only to a developer's preview.
+    assert_eq!(plain.contains("한국어"), pocket_ui::i18n::Lang::Ko.complete(), "Korean is offered exactly when its translation is complete: {plain}");
+    assert!(preview.contains("한국어"), "a developer's preview shows it: {preview}");
 }

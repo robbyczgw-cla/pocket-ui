@@ -168,7 +168,7 @@ fn paint_page(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, page: &RescueP
     let width = right - left;
     text.draw(c, Face::Title, 50, left, pocket_ui::kit::header_title(c.h), pal().chalk, "Safe mode");
     // On two lines when it is wider than the page (German, larger text); the panel moves down with it.
-    let sub = text.wrap_prose(Face::Body, NU_SMALL, "pocket-ui started with only what this page needs. Games and saves are untouched.", width);
+    let sub = text.wrap_prose(Face::Body, NU_SMALL, "Safe mode: only recovery tools are loaded. Your games and saves are safe.", width);
     let sub_step = pocket_ui::type_scale::line(NU_SMALL, 12);
     for (k, l) in sub.iter().take(2).enumerate() {
         text.draw(c, Face::Body, NU_SMALL, left, pad + 58 + 48 + k as i32 * sub_step, pal().quiet, l);
@@ -320,7 +320,17 @@ impl App {
         let PadEvent::Button { button, pressed: true, .. } = *pe else { return true };
         match d.press(button, CONFIRM, CANCEL) {
             DialogOut::Stay => {}
-            DialogOut::Close => self.leave = None,
+            DialogOut::Close => {
+                self.leave = None;
+                self.dolphin_launch = None;
+            }
+            DialogOut::Chose(rescue::Choice::StartGame) => {
+                // Dolphin's card before the first GameCube or Wii game: now the game (`open_dolphin_card`).
+                self.leave = None;
+                if let Some((system, name, path)) = self.dolphin_launch.take() {
+                    self.queue_launch(system, name, path);
+                }
+            }
             DialogOut::Chose(c @ (rescue::Choice::FillRecent | rescue::Choice::FillFavourites)) => {
                 // Settings → Games → Shelf space switched on: which games go on the shelf (`app_crate`).
                 let n = match d.kind {
@@ -364,6 +374,9 @@ impl App {
         let (name, row) = state.split_once(':').unwrap_or((state, "0"));
         let kind = match name {
             "leave" => DialogKind::Leave,
+            // "dolphin[:<row>]" from a game's card, "dolphin-start[:<row>]" before the first GameCube or Wii game.
+            "dolphin" => DialogKind::Dolphin { start: false },
+            "dolphin-start" => DialogKind::Dolphin { start: true },
             "about-es" => {
                 self.settings_page = Some(super::SettingsPage::About);
                 DialogKind::OpenEs

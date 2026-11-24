@@ -16,6 +16,7 @@ pub mod latinise;
 pub mod type_scale;
 pub mod text_size;
 pub mod covers;
+pub mod dir_index;
 pub mod game_pictures;
 pub mod rom_id;
 /// "The case knows where you are" (`case_knows`, `case_knows_read`): the box's back paints the line here too.
@@ -32,6 +33,7 @@ pub mod disc_serial;
 /// A game of several discs: the pause menu's Disc row (`disc`), Linux's.
 pub mod disc;
 pub mod archive;
+pub mod seven_zip;
 pub mod fsutil;
 
 pub mod gamedb;

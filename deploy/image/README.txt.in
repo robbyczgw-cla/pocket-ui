@@ -1,8 +1,8 @@
 @OS_NAME@ @VERSION@ for the Retroid Pocket Mini V2: SD card image
 ================================================================
 
-pocket-ui is a game launcher with its own libretro frontend. This card (pocket-ui @VERSION@) starts it next
-to Android: Android and its partitions stay as they are, and nothing is flashed to the device.
+pocket-ui is a game launcher with its own libretro frontend. This card (pocket-ui @VERSION@) starts
+pocket-ui OS from the microSD card. Use the boot menu to switch between pocket-ui and Android.
 
 @OS_NAME@ is built on ROCKNIX @ROCKNIX_TAG@ (https://rocknix.org): its kernel, system and emulators are
 ROCKNIX's. pocket-ui is not made or endorsed by the ROCKNIX team; please report problems with this card to
@@ -56,7 +56,7 @@ FAT partition "ROCKNIX" (readable on any computer):
   EFI/BOOT/BOOTAA64.EFI      GRUB, started by Retroid's u-boot in "Boot mode: Loader"
   boot/grub/grub.cfg         no menu, starts boot/pocket/Image
   boot/pocket/Image          the Linux kernel, unpacked unchanged from KERNEL
-  boot/pocket/miniv2-noufs.dtb   the Mini V2 device tree from KERNEL, with the internal storage
+  boot/pocket/miniv2-noufs.dtb   the Retroid Pocket Mini V2's device tree from KERNEL, with the internal storage
                              switched off, so the system never sees Android
   loader/entries/pocket-ui.conf  the same start as grub.cfg, for OpenABL ("Boot mode: Linux")
   post-flash.sh              boot hook: starts without the ROCKNIX logo

@@ -1,89 +1,83 @@
 # Your library: your files, gamelists and discs
 
-The sections of [Your library](library.md) about the files on your card.
+How [Your library](library.md) reads your existing gamelists, PlayStation discs, filenames and cards from other
+handhelds.
 
-## Your EmulationStation gamelists
+## Your gamelists
 
-If you come from EmulationStation (ROCKNIX's own menu, KNULLI, Batocera or ES-DE), your games may have a
-`gamelist.xml` with names, descriptions, ratings, release dates and favourites you or a scraper made. pocket-ui reads
-those files, **never changes them**, and uses them where its own data has nothing:
+If your SD card already has `gamelist.xml` files (from ROCKNIX's own menu or another handheld), they often contain game
+titles, descriptions, ratings, release years and favourites from a scraper. pocket-ui reads them in read-only mode (**it
+never modifies them**) and uses them to fill in any gaps:
 
-- **Where it looks**: `gamelist.xml` in each system's ROM folder (`roms/gba/gamelist.xml`), in ES's own
-  `gamelists` folders, and in ES-DE's `ES-DE/gamelists/<system>/` folder. ES-DE keeps its pictures in
-  `ES-DE/downloaded_media/<system>/`, which is read too. A game that several files list is taken from the first.
-- **Names**: a file name that says little ("sf2ce.zip", "kof98", "1943") shows the name the gamelist gives it
-  ("Street Fighter II' Champion Edition"). A file name that already reads as a name keeps pocket-ui's own, cleaned
-  name ("Tetris", "Super Mario Land"), even when the gamelist spells it with a region or a version.
-- **The card**: when the game's own facts are missing, the card takes the developer, publisher, genre, number of
-  players and year from the gamelist, shows its rating as "4 of 5 in EmulationStation", and shows its description
-  under **Description**, "From your EmulationStation gamelist". Wikipedia's text, once it is on the SD card, comes
-  first, and so do the facts from Wikidata; the card says under the facts where they are from.
-- **Box art**: a game without box art of its own shows the picture the gamelist names (a box, else a screenshot),
-  where it is. Nothing is copied, and a picture of more than 1 MB is passed over, because drawing it while you scroll
-  would make the shelf stutter. A game that has a box on your card is not looked up online at all; one that has only
-  a screenshot still gets the collection's box, which then comes first.
-- **Favourites and ratings**: nothing is taken over by itself. Settings → Games → **From EmulationStation** counts
-  them ("Your EmulationStation favourites: 42 games") and A adds the favourites to Favourites, or gives the games
-  their stars as **My rating** (ES's 0.1 to 1.0 becomes one to five stars). It only adds: games already in Favourites
-  stay, and a game you rated yourself keeps your rating. The page works any time; without a gamelist it says so
-  and where to put one.
+- **Where it looks:** `gamelist.xml` inside each system's ROM folder (`roms/gba/gamelist.xml`), the system's `gamelists`
+  folders, and matching `gamelists/<system>/` or `downloaded_media/<system>/` folders on the card. If a game appears in
+  more than one file, the first match wins.
+- **Names:** cryptic filenames (`sf2ce.zip`, `kof98`, `1943`) pick up the clean title from the gamelist ("Street Fighter
+  II' Champion Edition"). Already-readable filenames keep pocket-ui's own cleaned title ("Tetris", "Super Mario Land")
+  even if the gamelist includes region or version tags.
+- **Game card details:** when pocket-ui's built-in metadata is missing, the card pulls developer, publisher, genre,
+  player count, year, rating and **Description** from your gamelist. Downloaded Wikipedia summaries and Wikidata facts
+  take priority once present, and the footer always credits where the facts came from.
+- **Box art:** if a game has no cover yet, pocket-ui displays the box image (or screenshot) linked in your gamelist
+  right from its original path without copying anything. Images larger than 1 MB are skipped so scrolling stays smooth.
+  Games with a local box image aren't looked up online; games with only a screenshot still fetch a proper box cover
+  automatically, which then takes priority.
+- **Favourites and ratings:** nothing is imported automatically. Open Settings → Games → **From EmulationStation** to
+  see how many gamelist favourites and ratings were found, then press A to add those favourites or import their ratings
+  as **My rating** (0.1–1.0 maps to 1–5 stars). It only adds: existing favourites and your own star ratings are never
+  overwritten. You can run it anytime; if no gamelists exist, it tells you where to place them.
 
-A damaged, cut-off or very large (over 32 MB) gamelist never breaks the library: the games before the damage still
-count, a file in another encoding (Latin-1, UTF-16) is read, and a file that can't be read at all is skipped.
-What pocket-ui read is kept in `/storage/.config/pocket-ui/gamelist-cache.json`, so a start does not read the XML
-again; a changed file is read again, and deleting the cache file does no harm.
+Broken, truncated or huge (over 32 MB) gamelists won't break your library: valid entries before the corruption still
+load, alternate encodings (Latin-1, UTF-16) are handled, and unreadable files are skipped cleanly. Parsed results cache
+to `/storage/.config/pocket-ui/gamelist-cache.json` for fast startups, auto-refresh when a gamelist changes, and can be
+deleted safely anytime.
 
 ## PlayStation 1 and 2 discs
 
-A PlayStation disc is recognised by the **serial on the disc itself**, not by its file name. pocket-ui reads the
-short boot file in the disc's file system (`SYSTEM.CNF`, whose `BOOT` line says "SLES_556.73"; a few kilobytes at
-the start of the image, never the whole image), and looks that serial up in the list of PlayStation 1 and 2 releases
-(Redump, through libretro-database), the same way a cartridge is recognised by its checksum ([Box art & downloads](extras.md#box-art)).
-A file called `SLES_556.73.Something.iso` or `SLUS_209.46.iso` then shows the game's name on the shelf ("Final Fantasy
-VII", "Gran Turismo 4"), gets that game's facts and its box art and pictures. The list is downloaded once for the
-console you have games for, when the Pocket is online (about 4 MB per console), and kept on the SD card.
+PlayStation discs are identified by the **serial number printed inside the disc itself**, not just the filename.
+pocket-ui reads a few kilobytes from the disc's boot file (`SYSTEM.CNF`, such as `BOOT = ... SLES_556.73`), never the
+whole image, and matches it against the Redump PlayStation 1 and 2 database (via libretro-database), just like cartridges
+match by checksum ([Box art & downloads](extras.md#box-art)). A file named `SLES_556.73.Something.iso` or
+`SLUS_209.46.iso` shows its real title ("Final Fantasy VII", "Gran Turismo 4") along with matching facts and box art.
+The serial list downloads once per console you actually have games for (~4 MB each, when online) and stays cached on
+your card.
 
-- A name you gave the game yourself comes first: a name from your
-  [EmulationStation gamelist](#your-emulationstation-gamelists) stays as it is.
-- A serial no list knows keeps the file name, with a serial in front left out when a title follows it
-  ("SLES_556.73.Something" is "Something", "SLUS_209.46" stays as it is).
-- Read are `.iso`, `.bin` and the `.cue` or `.m3u` that names them, including a PlayStation disc's own sector format
-  (MODE2/2352, with a header in front of the data). A `.chd`, `.cso` or `.pbp` is not opened: such a game keeps its
-  file name.
-- The two discs of a multi-disc game show "(Disc 2)" after the name, so they tell apart.
-- Reading a disc takes a few milliseconds and runs in the background, at the lowest priority and never while a game
-  runs; each image is read once, and again only when the file changes.
+- Your own names win: custom titles from your [gamelist](#your-gamelists) stay as you set them.
+- Unknown serials fall back to the filename, stripping a leading serial when a title follows it (`SLES_556.73.Something`
+  becomes `Something`, while `SLUS_209.46` stays as-is).
+- Supported formats: `.iso`, `.bin`, and `.cue`/`.m3u` sheets pointing to them (including PlayStation's MODE2/2352
+  sectors). Compressed `.chd`, `.cso` and `.pbp` images aren't unpacked for serial lookup and keep their filename.
+- Multi-disc games keep "(Disc 2)" after the title so discs stay distinct.
+- Scanning takes just milliseconds per disc in the background at lowest priority (never while a game runs), and only
+  reruns if a file changes.
 
-The same goes for the game card's facts, which then match the release the serial names, and for Curator. The two
-consoles are PlayStation (PS1) and PlayStation 2. Other discs (Saturn, Dreamcast, PSP, GameCube, …) are still matched
-by their file names.
+Serial matching feeds both the game card and Curator for PlayStation (PS1) and PlayStation 2. Other disc consoles
+(Saturn, Dreamcast, PSP, GameCube, …) continue matching by filename.
 
 ## Matching your files
 
-pocket-ui finds the entry for a file by its name, the way it finds box art: region and version tags
-such as "(USA, Europe) (Rev 2)" and dump tags in square brackets are ignored, a scene release number
-("0902 - ") and a version at the end ("Pipes.v1.02") are dropped, "Legend of Zelda, The" reads as "The Legend of
-Zelda", accents and "&"/"and" do
-not matter, and "III" is the same as "3". Names in the No-Intro or Redump style match best. A different
-sequel number never matches: "Crash Bandicoot 3" is not taken for "Crash Bandicoot 2".
+To match games with metadata and box art, pocket-ui cleans up filenames automatically: region/revision tags like
+"(USA, Europe) (Rev 2)", dump tags in square brackets, scene release numbers ("0902 - ") and trailing versions
+("Pipes.v1.02") are ignored; "Legend of Zelda, The" normalises to "The Legend of Zelda"; accents, "&"/"and" and Roman
+numerals ("III" = "3") match interchangeably. No-Intro and Redump naming gives the best results. Sequel numbers stay
+strict: "Crash Bandicoot 3" will never match "Crash Bandicoot 2".
 
-Two games of one system that would show the same name keep what tells them apart ("Tobu Tobu Girl (Europe)" and
-"Tobu Tobu Girl (World)"). That changes only the name in the lists: the card, box art, play time, favourites and
-notes go by the file, as before. Your recent games (Continue and the list on SELECT), the games
-in Play history and the web companion show the same names as the system list.
+If two files for the same console would clean down to the exact same title, pocket-ui keeps the distinguishing tag
+("Tobu Tobu Girl (Europe)" and "Tobu Tobu Girl (World)"). That only affects display names in lists; saves, box art, play
+time, favourites and notes stay tied to each file. Recent games (Continue and SELECT), Play history and the web
+companion all use the same cleaned names.
 
-Curator (Lens, smart shelves, Echoes, Versions, play history and the Year in review) has its own page:
-[Curator](curator.md).
+For Lens, smart shelves, Echoes, Versions, play history and Year in review, see [Curator](curator.md).
 
 ## A card from another handheld
 
-Cards from other systems work as they are; nothing has to be renamed, moved or scraped again. pocket-ui reads the games
-where they lie and never changes your folders.
+Already have a ROM card set up for another handheld? Plug it in as-is, with no renaming, moving or re-scraping required.
+pocket-ui reads your games right where they sit without altering your folders:
 
-- **Folders**: next to `gba`, `snes` and the other folders, it reads a folder whose name means a system: `Game Boy Advance (GBA)`
-  (the word in brackets decides, so `(MGBA)` and `(SFC)` work), `GBA`, `FC`, `MD`, `PS`, `genesis`, `Sega Genesis`,
-  `Nintendo Game Boy Advance`. Two folders of one system are one list. A folder it does not know is named by
-  Settings → Games → Game check.
-- **Box art that is already there** is used before anything is downloaded: `images`, `Imgs`, `.media`, `covers`, ES-DE's
-  `downloaded_media` and the `box` folders of a catalogue. A picture of the box comes first, then a mix, then a screenshot;
-  logos, marquees and fan art never. Only when a game has no box of its own does pocket-ui fetch the collection's.
+- **Flexible folder names:** alongside standard names (`gba`, `snes`, …), pocket-ui understands descriptive folders like
+  `Game Boy Advance (GBA)` (tags in brackets like `(MGBA)` or `(SFC)` work too), `GBA`, `FC`, `MD`, `PS`, `genesis`,
+  `Sega Genesis` and `Nintendo Game Boy Advance`. Multiple folders for the same console merge cleanly into one list, and
+  any unknown folder shows up in Settings → Games → Game check.
+- **Existing artwork comes first:** pocket-ui checks `images`, `Imgs`, `.media`, `covers`, `downloaded_media` and `box`
+  folders before downloading anything. Box art takes priority, followed by mixes and screenshots (logos, marquees and
+  fan art are skipped). Online box art only downloads when no local box cover is found.

@@ -4,8 +4,11 @@
 # `pub fn` is not capped: the test only prints it (a new module may bring up to 5 pub items).
 == "pocket-core"	11
 == "ports"	14
-let _ = fs::	235
-Result<_, String>	443
+# 21.11.2026 (lead's 0.6.1 tooling brief): `let _ = fs::` and `Result<_, String>` raised once, on purpose, to the 0.6.0
+# counts. Over since 18./19.11. (RomM, Pocket Sync, the file-fault rules), unseen because scripts/bookkeeping.sh cut the
+# warning after 5 lines; the new `let _ = fs::` are nearly all `remove_file` cleanups. From here they only go down again.
+let _ = fs::	275
+Result<_, String>	468
 # A canvas's pixels by hand (docs/dev/native-paint.md "Interfaces for packages 2 to 4"; doc_checks::canvas_pixels_by_hand_stay_in_the_listed_files):
 # `.buf[` only in the files listed as `only .buf[`, the design guard (`.design()`, `.design_area(`) only in those listed as
 # `only guard`. Format: only <what><TAB><file>. Remove a file's line when it no longer needs it; never add one.
