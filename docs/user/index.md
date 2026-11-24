@@ -18,11 +18,11 @@ pages cover what works today and clearly flag anything that is still experimenta
 
 ## What you need
 
-- A supported handheld running ROCKNIX, such as a Retroid Pocket Mini V2, AYN Odin 2 Mini or Anbernic H700 model.
+- A supported handheld running ROCKNIX, such as a Retroid Pocket Mini V2, AYN Odin 2 Mini or Anbernic H700 model, or a genuine R36S (beta, with its own card).
 - A microSD card (8 GB or larger; 16 GB+ on the RG28XX and RG35XX 2024) for pocket-ui OS and your games.
   <!-- TODO: recommended SD card size. The test card grew its game partition to about 60 GB. -->
 - Five minutes at a computer to flash the ready-made SD card image with balenaEtcher or Raspberry Pi Imager. Grab images
-  for the Retroid Pocket Mini V2 and Anbernic H700 models on the [install page](https://pocketui.xyz/install.html), or
+  for the Retroid Pocket Mini V2, Anbernic H700 models and the R36S on the [install page](https://pocketui.xyz/install.html), or
   install pocket-ui onto an existing ROCKNIX card ([Getting started](getting-started.md)).
 - Your own ROMs and BIOS files. pocket-ui ships with no games.
 - Wi-Fi is optional. You need it for box art, descriptions, PortMaster, RetroAchievements, online updates and wireless
@@ -78,7 +78,7 @@ pages cover what works today and clearly flag anything that is still experimenta
 
 ## Pages
 
-1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [Other handhelds](other-handhelds.md): other Retroid devices, SM8550 and Anbernic H700; [The GAMES drive](games-drive.md): games from a computer; [Second card](copy-games.md): games without Wi-Fi; [Game check](game-check.md): will your games start?; [games from your phone](phone-upload.md) over the same Wi-Fi; [games from your RomM server](romm.md), downloaded at their first start; [Kids mode](kids-mode.md): a big simple shelf for a child.
+1. [Getting started](getting-started.md): installing, first start, Wi-Fi, adding games; [Other handhelds](other-handhelds.md): other Retroid devices, SM8550, Anbernic H700 and the R36S; [The GAMES drive](games-drive.md): games from a computer; [Second card](copy-games.md): games without Wi-Fi; [Game check](game-check.md): will your games start?; [games from your phone](phone-upload.md) over the same Wi-Fi; [games from your RomM server](romm.md), downloaded at their first start; [Kids mode](kids-mode.md): a big simple shelf for a child.
 2. [How to](how-to.md): update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device.
 3. [Coming from ROCKNIX, dArkOS or Android](coming-from.md): what happens to your saves, states, favourites and settings.
 4. [Playing](playing.md): Home, finding a game, the looks, Recent games; [Console pages](console-pages.md): a console's facts and its Credits & links; [Easy](easy.md): the look with one big game at a time; [Big text, Zoom and Hold to toggle](big-text.md): larger text in one switch, a magnifier for the pause menu, buttons that stay down. [Continue](continue.md): an open case means your moment is waiting, and A goes straight back.

@@ -19,8 +19,8 @@ Start at [user/index.md](user/index.md).
 |---|---|
 | [user/index.md](user/index.md) | The first page: what pocket-ui is and does, what it leaves alone, the list of pages |
 | [user/getting-started.md](user/getting-started.md) | Preparing the card, first start, Wi-Fi, adding games |
-| [user/other-handhelds.md](user/other-handhelds.md) | Other Retroid devices, SM8550 and Anbernic H700 |
-| [user/games-drive.md](user/games-drive.md) | RG28XX card: copying games from a Mac or Windows PC |
+| [user/other-handhelds.md](user/other-handhelds.md) | Other Retroid devices, SM8550, Anbernic H700 and the R36S |
+| [user/games-drive.md](user/games-drive.md) | RG28XX and RG35XX 2024 cards: copying games from a Mac or Windows PC |
 | [user/copy-games.md](user/copy-games.md) | Copying games without Wi-Fi: the second card |
 | [user/how-to.md](user/how-to.md) | Short steps: update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device |
 | [user/game-check.md](user/game-check.md) | Settings → Games → Game check: will your games start? |

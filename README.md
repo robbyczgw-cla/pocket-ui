@@ -115,7 +115,7 @@ Three quick steps:
 
 1. **Download the image for your handheld** from [pocketui.xyz/install](https://pocketui.xyz/install) (about 1.3 GB).
 2. **Flash it to a spare microSD card** with [balenaEtcher](https://etcher.balena.io) or Raspberry Pi Imager (no need to
-   unzip). 8 GB works for most models; use 16 GB+ for the RG28XX and RG35XX 2024.
+   unzip). 8 GB works for most models; use 16 GB+ for the RG28XX and RG35XX 2024. The R36S has its own card, see the table below.
 3. **Slide it into slot 1 and power on.** First boot sets up the card, restarts once, and greets you to pick language,
    Wi-Fi and look.
 
@@ -129,6 +129,7 @@ Add games from your phone or computer over Wi-Fi via Settings → Games → Add 
 | **AYN** | Odin 2, Odin 2 Mini, Odin 2 Portal | [Image](https://pocketui.xyz/install#odin), after installing ROCKNIX's boot helper once (it replaces the bootloader; Android apps and data stay). |
 | **TrimUI** | Brick (incl. Brick Hammer), Smart Pro; Brick Pro experimental | [Unzip the TrimUI package onto an empty FAT32 card](https://pocketui.xyz/install#brick); nothing is flashed. |
 | **Retroid, beta** | Pocket 5, Flip 2, Pocket 6, Pocket Nova | [Beta images](https://pocketui.xyz/install#rp5-uefi), see notes below. Some need OpenABL once, which replaces the bootloader. |
+| **R36S, beta** | Genuine R36S (clones aren't covered yet) | [Own card](https://pocketui.xyz/install#r36s) in TF1; your original card stays in TF2 with your games. No Wi-Fi needed, updates come as a zip, and the first start takes up to 10 minutes. |
 | **Already on dArkOS** | 640×480 dArkOS handhelds, including the R36S | [pocket-ui beta for dArkOS](https://pocketui.xyz/install#darkos): unzip into `ports`; nothing is flashed. |
 | **Already on ROCKNIX** | any of the above | [Install on top in five minutes, remove any time](https://pocketui.xyz/install#way-1) |
 

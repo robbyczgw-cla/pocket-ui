@@ -2,7 +2,7 @@
 
 The quick two-file setup in [Getting started](getting-started.md) targets the Retroid Pocket Mini V2. This page covers
 handhelds supported as **experimental**: other Retroid models, Snapdragon 8 Gen 2 (SM8550) devices, the Anbernic H700
-lineup, TrimUI Brick Pro and Retroid Pocket Classic.
+lineup, the R36S (beta), TrimUI Brick Pro and Retroid Pocket Classic.
 
 ## Other Retroid devices
 
@@ -130,6 +130,20 @@ All H700 models have 1 GB RAM, no touchscreen and no fan. RG40XX RGB rings stay 
 - **Uninstalling:** swap back to your stock card, run `sh /storage/pocket-ui/uninstall.sh`, or launch *Uninstall
   pocket-ui* in Ports to return to ROCKNIX's menu. Skip ROCKNIX online updates until a pocket-ui release confirms
   compatibility.
+
+## R36S (beta)
+
+The R36S has its own pocket-ui card, a beta for genuine R36S handhelds (clones aren't covered yet). Already running dArkOS?
+The [pocket-ui beta for dArkOS](https://pocketui.xyz/install#darkos) needs no extra card.
+
+1. Flash the R36S image from the [install page](https://pocketui.xyz/install#r36s) to a spare microSD card (8 GB or larger)
+   with balenaEtcher or Raspberry Pi Imager.
+2. Power off and put the new card in **TF1**. Your original card (the one your R36S came with, or your dArkOS card) goes in **TF2**, so your games, BIOS
+   files and box art stay where they are.
+3. Power on and wait. The first start takes up to 10 minutes with a restart or two, so don't press anything.
+
+No Wi-Fi is needed. Updates come as one zip on your games card ([updates](updates.md)). To go back to stock, power off and put
+your original card in TF1. Black screen after 10 minutes? Newer R36S screens need one extra file; the install page explains it.
 
 ## TrimUI Brick Pro (experimental)
 

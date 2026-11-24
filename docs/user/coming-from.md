@@ -158,8 +158,7 @@ the games themselves write next to themselves, the same files your previous syst
 **Going back:** switch off, put your old card back in the first slot. Your old system starts as before, with your games and the
 in-game progress you made in pocket-ui.
 
-**Not tried on a real device yet** (2026-11-15): the folder names were checked against dArkOS's own list of systems, and
-the card handling with a made-up card; the first R36S test follows.
+**The R36S's own card:** since 0.7.0 there is a pocket-ui card for genuine R36S handhelds, as a beta, tested on an original R36S. It goes in TF1 and plays from your original card in TF2. Steps and download: [pocketui.xyz/install#r36s](https://pocketui.xyz/install#r36s).
 
 ## Coming from Android
 

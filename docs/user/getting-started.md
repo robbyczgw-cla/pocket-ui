@@ -8,13 +8,13 @@ computer once to set up the card.
 
 > **Not on a Mini V2?** The two-file card install below is for the Mini V2 only. Other Retroid models, SM8550 devices
 > and Anbernic H700 handhelds are covered on [Other handhelds](other-handhelds.md) (marked **experimental** where not
-> yet tested on hardware).
+> yet tested on hardware). The R36S has its own beta card, also described there.
 
 ## 1. Put pocket-ui on the card
 
 Head to the [install page](https://pocketui.xyz/install.html) and pick the method that fits your setup:
 
-- **Ready-made SD card image (easiest):** available for the Mini V2 and Anbernic H700 models. Flash it to a spare card
+- **Ready-made SD card image (easiest):** available for the Mini V2, Anbernic H700 models and the R36S (beta). Flash it to a spare card
   with balenaEtcher or Raspberry Pi Imager. Flashing wipes the card while leaving your handheld untouched. On H700
   handhelds, just pop the card in and power on; on a Mini V2, continue with [section 2](#2-start-pocket-ui).
 - **Ports installer:** for a card already running ROCKNIX (see section 2 below).
@@ -303,9 +303,9 @@ password can add or change files there, so keep it to yourself.
 
 ### With the SD card in a computer: the GAMES drive
 
-The ready-to-flash RG28XX card, 16 GB or bigger, has a **GAMES** drive: put the card in your computer and drag your games
+The ready-to-flash RG28XX and RG35XX 2024 cards, 16 GB or bigger, have a **GAMES** drive: put the card in your computer and drag your games
 in ([The GAMES drive](games-drive.md)). On other cards, use file sharing, or a second card on a handheld with a second
-slot: Windows and macOS can't write to the card's STORAGE part.
+slot: Windows and macOS can't write to the card's STORAGE part. The R36S plays from your original card in TF2, so its games go there.
 
 Without Wi-Fi there's also a second card on a handheld with two slots: [Second card](copy-games.md).
 
