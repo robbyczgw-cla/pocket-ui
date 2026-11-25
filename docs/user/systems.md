@@ -22,13 +22,13 @@ Most consoles also have a [console page](console-pages.md) (press X on the syste
 |---|---|---|
 | Game Boy | `gb`, `gbh` | Gambatte |
 | Game Boy Color | `gbc`, `gbch` | Gambatte |
-| Game Boy Advance | `gba`, `gbah`, `gbav` | mGBA; [gpSP on H700](#game-boy-advance-on-h700) |
+| Game Boy Advance | `gba`, `gbah`, `gbav` | mGBA; gpSP on [H700 and RK3326](#game-boy-advance-on-h700) and TrimUI Brick/Smart Pro |
 | NES / Famicom | `nes`, `famicom`, `nesh` | Nestopia |
 | Famicom Disk System | `fds` | Nestopia (needs a BIOS, see below) |
 | SNES / Super Famicom | `snes`, `sfc`, `snesh` | Snes9x |
-| Mega Drive / Genesis | `megadrive`, `megadrive-japan`, `genesis`, `genh`, `megadriveh` | Genesis Plus GX |
-| Master System | `mastersystem` | Gearsystem |
-| Game Gear | `gamegear`, `ggh` | Gearsystem |
+| Mega Drive / Genesis | `megadrive`, `megadrive-japan`, `genesis`, `genh`, `megadriveh` | Genesis Plus GX; PicoDrive on TrimUI Brick/Smart Pro |
+| Master System | `mastersystem` | Gearsystem; PicoDrive on TrimUI Brick/Smart Pro |
+| Game Gear | `gamegear`, `ggh` | Gearsystem; PicoDrive on TrimUI Brick/Smart Pro |
 | SG-1000 | `sg-1000` | Gearsystem |
 | PC Engine / TurboGrafx-16 | `pcengine`, `tg16` | Beetle PCE Fast |
 | PC Engine SuperGrafx | `supergrafx` (HuCards, see below) | Beetle SuperGrafx |
@@ -36,11 +36,11 @@ Most consoles also have a [console page](console-pages.md) (press X on the syste
 | Atari 2600 | `atari2600` | Stella |
 | Virtual Boy | `virtualboy` | Beetle VB |
 | PlayStation | `psx` | PCSX ReARMed |
-| Nintendo 64 | `n64` | Mupen64Plus-Next |
-| PSP | `psp` | PPSSPP |
-| Dreamcast | `dreamcast` | Flycast |
-| Nintendo DS | `nds` | melonDS DS; **DSperate** on H700, TrimUI Brick/Smart Pro, RK3566 and dArkOS |
-| Sega Saturn | `saturn` | YabaSanshiro (needs a Saturn BIOS, see below) |
+| Nintendo 64 | `n64` | Mupen64Plus-Next; [RetroArch on H700, RK3566 and RK3326](#on-standalone-emulators) |
+| PSP | `psp` | PPSSPP; [standalone PPSSPP on H700, RK3566 and RK3326](#on-standalone-emulators) |
+| Dreamcast | `dreamcast` | Flycast; [RetroArch Flycast 2021 on H700, RK3566 and RK3326](#on-standalone-emulators) |
+| Nintendo DS | `nds` | melonDS DS; **DSperate** on H700, RK3566, RK3326, TrimUI Brick/Smart Pro and dArkOS |
+| Sega Saturn | `saturn` | YabaSanshiro (needs a Saturn BIOS, see below); Yabause on TrimUI Brick/Smart Pro |
 | DOS | `pc` | DOSBox Pure |
 | ScummVM | `scummvm` (see below) | ScummVM |
 | PICO-8 | `pico-8` | FAKE-08 (unless official PICO-8 is installed, see below) |
@@ -88,7 +88,7 @@ need to change it for visual effects).
 in-game before quitting; standalone PPSSPP uses its own states while existing pocket-core states stay safe; your own
 **Runs on** choice always wins).
 
-**Nintendo DS:** **DSperate** is the default DS core on Anbernic H700, TrimUI Brick/Smart Pro, RK3566 and dArkOS
+**Nintendo DS:** **DSperate** is the default DS core on Anbernic H700, RK3566, RK3326 (R36S), TrimUI Brick/Smart Pro and dArkOS
 handhelds, delivering much faster software emulation with pocket-ui's full pause menu, while Snapdragon handhelds default
 to **melonDS DS**. Switch between cores per game or per console under [Runs on](options.md#runs-on); in-game `.sav`
 files are shared (compatible with standalone melonDS too), while save states remain separate per core. Screens stack
@@ -178,7 +178,7 @@ except Saturn which defaults to standalone YabaSanshiro without a BIOS).
 
 ### Game Boy Advance on H700
 
-On Anbernic H700 handhelds, newly started GBA games default to **pocket-core · gpSP** (keeping the full pause menu,
+On Anbernic H700 handhelds and RK3326 handhelds such as the R36S, newly started GBA games default to **pocket-core · gpSP** (keeping the full pause menu,
 thumbnail slots and Continue). Games with existing mGBA Continue states or save slots automatically stick with mGBA so
 existing states still load. Switch anytime to **pocket-core · mGBA** under [Runs on](options.md#runs-on); save in-game
 first since save states don't cross cores. Under Auto performance, H700 games run at full CPU speed and restore clocks
@@ -225,7 +225,9 @@ run-ahead and auto-save (applied next launch).
 
 ## PlayStation 2, GameCube, Wii and 3DS
 
-Powered by ROCKNIX's standalone emulators: **ARMSX2** (PS2), **Dolphin** (GameCube & Wii) and **Azahar** (3DS).
+Powered by ROCKNIX's standalone emulators: **ARMSX2** (PS2), **Dolphin** (GameCube & Wii) and **Azahar** (3DS), on the
+Snapdragon handhelds. Of the smaller chips, only RK3566 handhelds play PlayStation 2 (ARMSX2); H700 and RK3326
+handhelds have none of the four.
 
 Pause menu: Continue, Save, Load, Options, Save & quit (plain Quit if Settings → Playing →
 [Continue where I quit](settings-playing.md#continue-where-i-quit) is Off); START opens Quick settings.
@@ -263,7 +265,7 @@ You can also choose xemu under [Runs on](options.md#runs-on).
 - **Saves:** in-game saves work and store inside pocket-ui's folder (never cluttering `roms/xbox`). **Save states aren't
   supported yet**; Save, Load and Continue will appear once the core adds them.
 - Compatibility, speed and audio vary on this young port; let us know what works for you.
-- Credits: hakuX-lr 0.38.0 by portare-ch (PortareOS), based on hakuX by rfandango (GPL-3.0), release
+- Credits: hakuX-lr 0.38.0 by portare-ch (PortareOS), based on hakuX by rfandango, GPL-3.0-or-later, release
   linux-v0.38.0 at dbc8b16. Full licence and source links live in `/storage/pocket-ui/licences/NOTICE.md`.
 
 ## On standalone emulators
@@ -279,10 +281,11 @@ once under Settings → Help & tools → [Tools](extras.md#tools), then place ga
 key `.txt`, or `.zip`). They appear on your shelf in blue-topped Vita cases.
 
 Nintendo 64, PSP, Dreamcast, DS and Saturn (with BIOS) run in pocket-core on supported hardware after matching or
-beating stock ROCKNIX emulators ([HOST.md](../HOST.md)), with automatic fallback if a title won't start. On Anbernic H700
-handhelds, **Nintendo DS runs on DSperate in pocket-core** with pocket-ui's full pause menu, while N64, PSP and
-Dreamcast stay on ROCKNIX's emulators (RetroArch for N64/Dreamcast, PPSSPP for PSP) with the D-pad automatically mapped
-to the left stick on stickless units ([Runs on › D-pad](options.md#runs-on)).
+beating stock ROCKNIX emulators ([HOST.md](../HOST.md)), with automatic fallback if a title won't start. On the smaller
+chips (Anbernic H700, RK3566 such as the RG353M and RG DS Plus, RK3326 such as the R36S), **Nintendo DS runs on DSperate
+in pocket-core** with pocket-ui's full pause menu, while N64, PSP and Dreamcast stay on ROCKNIX's emulators (RetroArch
+Mupen64Plus-Next for N64, standalone PPSSPP for PSP, RetroArch Flycast 2021 for Dreamcast) with the D-pad automatically
+mapped to the left stick on stickless units ([Runs on › D-pad](options.md#runs-on)).
 
 ## Folder names
 
