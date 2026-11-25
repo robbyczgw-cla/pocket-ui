@@ -358,6 +358,32 @@ pub fn footer_top(text: &mut Text, desc: &str, w: i32, h: i32, pill_x: i32, line
 /// A lone "&" holds the words on both sides of it ("Lights & buttons", a page's name): it never starts or ends a line
 /// (18.11.2026: "& buttons." stood alone under "Settings › Controls › Lights" beside the flatter hint bar).
 fn words_of(line: &str) -> Vec<&str> {
+    units_of(line).into_iter().map(|(_, w)| w).collect()
+}
+
+/// `words_of` with what joins each to the one before: a space between words, nothing between two hanzi or kana, where
+/// Chinese and Japanese break too (`text::line_units`, with kinsoku). A Chinese sentence was one "word" wider than the
+/// column and never stood beside the pill: a line more than English (24.11.2026, Options in Large text).
+fn units_of(line: &str) -> Vec<(&'static str, &str)> {
+    word_spans(line).into_iter().flat_map(|w| {
+        let parts = crate::text::line_units(w);
+        if parts.len() > 1 && parts.iter().skip(1).all(|(g, _)| g.is_empty()) { parts } else { vec![(" ", w)] }
+    }).collect()
+}
+
+/// Units joined as they stood: the first without its glue.
+fn join_units(units: &[(&str, &str)]) -> String {
+    let mut out = String::new();
+    for (i, (glue, w)) in units.iter().enumerate() {
+        if i > 0 {
+            out.push_str(glue);
+        }
+        out.push_str(w);
+    }
+    out
+}
+
+fn word_spans(line: &str) -> Vec<&str> {
     // Each word's byte range in `line`.
     let mut spans: Vec<(usize, usize)> = Vec::new();
     let mut at = 0;
@@ -415,7 +441,7 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
         let too_wide = |w: &str, text: &mut Text| text.width_plain(Face::Body, px, w) > column;
         // The words as painted: the paragraph in the interface's language (`wrap_prose` translates it as well).
         let shown = text.translated(p).to_string();
-        let unbroken = !words_of(&shown).into_iter().any(|w| too_wide(w, text));
+        let unbroken = !units_of(&shown).into_iter().any(|(_, w)| too_wide(w, text));
         // A line of the plain wrap that starts or ends at a lone "&" takes the way below, which keeps it with its words.
         let at_ampersand = narrow.iter().any(|l| l.starts_with("& ") || l.ends_with(" &") || l == "&");
         if k == narrow.len() && unbroken && !at_ampersand {
@@ -428,32 +454,53 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
         // table's patterns, which Settings' first frame must not, tests/settings_pages.rs).
         let translating = text.translating();
         text.set_translate(false);
-        let mut words: Vec<&str> = if unbroken { narrow.iter().flat_map(|l| words_of(l)).collect() } else { words_of(&shown) };
+        let mut words: Vec<(&str, &str)> = if unbroken {
+            // The narrow lines' units; where two lines meet between hanzi, nothing joins them.
+            let mut all: Vec<(&str, &str)> = Vec::new();
+            for l in &narrow {
+                let mut units = units_of(l);
+                if let (Some((_, before)), Some(first)) = (all.last(), units.first_mut()) {
+                    if before.chars().last().zip(first.1.chars().next()).is_some_and(|(a, b)| crate::text::cjk_break(a, b)) {
+                        first.0 = "";
+                    }
+                }
+                all.append(&mut units);
+            }
+            all
+        } else {
+            units_of(&shown)
+        };
         let mut beside: Vec<String> = Vec::new();
         for _ in 0..k {
-            let mut line: Vec<&str> = Vec::new();
-            while let Some(w) = words.last() {
-                let candidate = std::iter::once(*w).chain(line.iter().copied()).collect::<Vec<_>>().join(" ");
-                if (!line.is_empty() || too_wide(w, text)) && text.width(Face::Body, px, &candidate) > column {
+            let mut line: Vec<(&str, &str)> = Vec::new();
+            while let Some(&w) = words.last() {
+                let candidate = join_units(&std::iter::once(w).chain(line.iter().copied()).collect::<Vec<_>>());
+                if (!line.is_empty() || too_wide(w.1, text)) && text.width(Face::Body, px, &candidate) > column {
                     break;
                 }
-                line.insert(0, *w);
+                line.insert(0, w);
                 words.pop();
             }
-            beside.insert(0, line.join(" "));
+            beside.insert(0, join_units(&line));
         }
         // A short line above gets words back from the first line beside the pill until the two are about as long
         // ("LCD grid imitates a handheld screen," over "scanlines and CRT a TV.", not "LCD grid" alone on top).
-        let mut part = if words.is_empty() { Vec::new() } else { text.wrap_prose(Face::Body, px, &words.join(" "), wide) };
+        let mut part = if words.is_empty() { Vec::new() } else { text.wrap_prose(Face::Body, px, &join_units(&words), wide) };
         if let ([above], Some(first)) = (part.as_mut_slice(), beside.first_mut()) {
             while text.width(Face::Body, px, above) < text.width(Face::Body, px, first) {
-                let Some((word, rest)) = first.split_once(' ') else { break };
-                let longer = format!("{above} {word}");
+                let units = units_of(first);
+                let [(_, word), rest @ ..] = units.as_slice() else { break };
+                if rest.is_empty() {
+                    break;
+                }
+                let glue = if above.chars().last().zip(word.chars().next()).is_some_and(|(a, b)| crate::text::cjk_break(a, b)) { "" } else { " " };
+                let longer = format!("{above}{glue}{word}");
                 if text.width(Face::Body, px, &longer) > wide {
                     break;
                 }
+                let rest = join_units(rest);
                 *above = longer;
-                *first = rest.to_string();
+                *first = rest;
             }
         }
         text.set_translate(translating);
@@ -481,7 +528,7 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
 pub fn footer_px(text: &mut Text, desc: &str, pill_x: i32) -> u32 {
     let column = pill_x - 24 - (PAD + BTN_PAD);
     let shown = text.translated(desc).to_string();
-    if words_of(&shown).into_iter().any(|w| text.width_plain(Face::Body, SMALL, w) > column) {
+    if units_of(&shown).into_iter().any(|(_, w)| text.width_plain(Face::Body, SMALL, w) > column) {
         crate::title_block::smaller(SMALL)
     } else {
         SMALL
@@ -937,6 +984,8 @@ mod tests {
     /// "&" binds the words beside it: never at a line's start or end (a page's name, "Lights & buttons").
     #[test]
     fn a_footer_never_breaks_at_an_ampersand() {
+        assert_eq!(units_of("按 A 继续游戏"), vec![(" ", "按"), (" ", "A"), (" ", "继"), ("", "续"), ("", "游"), ("", "戏")]);
+        assert_eq!(join_units(&units_of("在设置中更改。Wi-Fi 设置")), "在设置中更改。Wi-Fi 设置");
         assert_eq!(words_of("in Lights & buttons."), vec!["in", "Lights & buttons."]);
         assert_eq!(words_of("A & B & C d"), vec!["A & B & C", "d"]);
         assert_eq!(words_of("& x"), vec!["& x"]);
@@ -982,6 +1031,23 @@ mod tests {
 
     /// Sleep & power in Retro's letters, Large Spanish at 1024x768 (the merge gate, 09.11.2026): "despertarlo." was wider
     /// than the column beside the hints and came out broken in two. A word too wide for the column stays whole, above.
+    /// A Chinese explanation has no spaces: it breaks between hanzi beside the pill like words do, never as one "word"
+    /// too wide for the column that goes above and takes a line more (Options, Large text, 24.11.2026). Nothing lost,
+    /// no space put in, every line beside the pill within the column.
+    #[test]
+    fn a_chinese_footer_breaks_between_hanzi_beside_the_pill() {
+        let mut text = Text::new();
+        text.set_translate(false);
+        let desc = "电视般的行间暗线，在高分辨率菜单中会自动淡出，按 A 切换。";
+        let column = text.width(Face::Body, SMALL, desc) * 2 / 3;
+        let pill_x = column + 24 + PAD + BTN_PAD;
+        let out = footer_lines(&mut text, desc, 1280, pill_x, 4);
+        assert_eq!(out.len(), 2, "two lines beside the pill: {out:?}");
+        assert_eq!(out.concat(), desc, "nothing lost, no space put in: {out:?}");
+        let px = footer_px(&mut text, desc, pill_x);
+        assert!(out.iter().all(|l| text.width(Face::Body, px, l) <= column), "{out:?}");
+    }
+
     #[test]
     fn a_footer_word_wider_than_the_column_beside_the_pill_stays_whole() {
         let mut text = Text::new();

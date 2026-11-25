@@ -318,6 +318,28 @@ mod tests {
         &MANIFEST[at..end]
     }
 
+    /// The Chinese font files reach the app: the APK carries them in assets/fonts (build-apk.sh, apk_audit.py), and
+    /// every activity that starts native code copies them to files/fonts first (`ShippedFonts`), where
+    /// `text_fallback::shipped_dir` looks once per process; afterwards would be too late.
+    #[test]
+    fn the_chinese_fonts_are_copied_out_of_the_apk_before_the_native_code_starts() {
+        const PLAYER: &str = include_str!("../android/java/xyz/pocketui/app/PlayerActivity.java");
+        const FONTS: &str = include_str!("../android/java/xyz/pocketui/app/ShippedFonts.java");
+        const BUILD: &str = include_str!("../scripts/android/build-apk.sh");
+        const AUDIT: &str = include_str!("../scripts/android/apk_audit.py");
+        for (name, src) in [("PocketBase", &POCKET[POCKET.find("abstract class PocketBase").unwrap()..]), ("PlayerActivity", PLAYER)] {
+            let create = &src[src.find("protected void onCreate(").unwrap_or_else(|| panic!("{name} onCreate"))..];
+            let (install, sup) = (create.find("ShippedFonts.install(this)"), create.find("super.onCreate("));
+            assert!(install.is_some() && install < sup, "{name}: the fonts before super.onCreate");
+        }
+        assert!(FONTS.contains("\"fonts\"") && FONTS.contains("assets.list(\"fonts\")") && FONTS.contains("renameTo"));
+        assert!(BUILD.contains("scripts/shipped-fonts.sh \"$OUT/apk/assets\""));
+        for f in ["FusionPixel12-zh_hans-CJK.otf", "NotoSansSC-Regular-CJK.otf"] {
+            assert!(AUDIT.contains(&format!("assets/fonts/{f}")), "{f}");
+            assert!(include_str!("../scripts/shipped-fonts.sh").contains(f), "{f}");
+        }
+    }
+
     /// The player's dialogs (`inLanguage`): every language of the row counts as chosen, so one without lines there
     /// (Korean, 21.11.2026) is English, never the phone's: on a German phone, Korean chosen gave German dialogs.
     #[test]

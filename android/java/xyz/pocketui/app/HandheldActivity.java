@@ -20,6 +20,70 @@ public class HandheldActivity extends PocketBase {
     @Override protected native String nativePrepareDocument(int fd,String key,String name);
 
     private native void nativeEnding();
+    /** "Choose cover…" on a game's card (src/app_cover_pick.rs): picked, cancelled, too-big, no-picker or failed. */
+    private native void nativeCoverPicked(String outcome);
+
+    private static final int PICK_COVER = 52;
+    private volatile String coverDest;
+    private volatile long coverLimit;
+
+    /** Android's photo picker for a game's own cover: no storage permission (Android 11+ with the picker's update, else
+     *  the system's image chooser). The chosen picture is copied to `dest` (at most `limit` bytes) on a thread; Rust reads
+     *  it and checks it (`covers::custom::from_picture`). The answer comes through nativeCoverPicked. */
+    public String pickCover(String dest, String limit) {
+        coverDest = dest;
+        coverLimit = Long.parseLong(limit);
+        runOnUiThread(() -> {
+            Intent intent = photoPicker()
+                ? new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES).setType("image/*")
+                : new Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*");
+            try { startActivityForResult(intent, PICK_COVER); }
+            catch (android.content.ActivityNotFoundException e) {
+                android.util.Log.w("PocketHandheld", "no picture picker", e);
+                coverOutcome("no-picker");
+            }
+        });
+        return "";
+    }
+
+    private static boolean photoPicker() {
+        if (android.os.Build.VERSION.SDK_INT >= 33) return true;
+        return android.os.Build.VERSION.SDK_INT >= 30 && android.os.ext.SdkExtensions.getExtensionVersion(android.os.Build.VERSION_CODES.R) >= 2;
+    }
+
+    private void coverOutcome(String outcome) {
+        try { nativeCoverPicked(outcome); } catch (Throwable t) { android.util.Log.w("PocketHandheld", "cover answer", t); }
+    }
+
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        if (request != PICK_COVER) { super.onActivityResult(request, result, data); return; }
+        Uri uri = data == null ? null : data.getData();
+        if (result != RESULT_OK || uri == null) { coverOutcome("cancelled"); return; }
+        String dest = coverDest;
+        long limit = coverLimit;
+        new Thread(() -> coverOutcome(copyPicture(uri, dest, limit)), "cover-pick").start();
+    }
+
+    /** The picture's bytes into `dest`: "picked", or "too-big" past `limit` (nothing is kept then), or "failed". */
+    private String copyPicture(Uri uri, String dest, long limit) {
+        java.io.File out = new java.io.File(dest);
+        try (java.io.InputStream in = getContentResolver().openInputStream(uri); java.io.OutputStream os = new java.io.FileOutputStream(out)) {
+            if (in == null) throw new java.io.IOException("no stream");
+            byte[] buf = new byte[64 * 1024];
+            long total = 0;
+            for (int n; (n = in.read(buf)) > 0; ) {
+                total += n;
+                if (total > limit) { os.close(); out.delete(); return "too-big"; }
+                os.write(buf, 0, n);
+            }
+            android.util.Log.i("PocketHandheld", "cover: picture copied, " + total + " bytes");
+            return "picked";
+        } catch (Exception e) {
+            android.util.Log.w("PocketHandheld", "cover: picture not read", e);
+            out.delete();
+            return "failed";
+        }
+    }
 
     /** The view ends, finished or taken down by Android (a configuration it doesn't follow, memory): what the app keeps is
      *  written, then its process ends, as the app ends on Linux. Its loop does not end with the Activity, and NativeActivity's

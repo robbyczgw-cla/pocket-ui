@@ -68,6 +68,8 @@ cp LICENSE NOTICE.md "$OUT/apk/assets/licences/"
 cp android/CORE-LICENCES.md "$OUT/apk/assets/licences/ANDROID-CORES.md"
 cp android/licences/README.md "$OUT/apk/assets/licences/ANDROID-RUST-NOTICES.md"
 cp assets/fonts/OFL.txt "$OUT/apk/assets/licences/FONTS-OFL.txt"
+# The Chinese font files: assets/fonts, copied to files/fonts at the start (ShippedFonts.java).
+sh scripts/shipped-fonts.sh "$OUT/apk/assets"
 # Every core, bundled or downloadable, has its licence texts, pinned source revision, source archive and patches, or the build stops
 # (as the Linux images do for their packages). The APK carries the written offer, the list the Licences page shows and the patches.
 python3 -I scripts/android/core_licences.py check --cache "$ANDROID_CORE_CACHE" --downloads "$OUT/core-downloads" || { echo 'build-apk: a core lacks its licence, source or patches' >&2; exit 1; }
@@ -79,7 +81,17 @@ python3 -I scripts/android/core_licences.py patches --cache "$ANDROID_CORE_CACHE
 scripts/third-party.sh --target aarch64-linux-android --manifest-path android/Cargo.toml --texts "$OUT/apk/assets/licences/RUST-LICENSES.txt" --out "$OUT/apk/assets/licences/RUST-CRATES.md" > "$OUT/licence-report.log" 2>&1 || true
 test -s "$OUT/apk/assets/licences/RUST-LICENSES.txt" && test -s "$OUT/apk/assets/licences/RUST-CRATES.md"
 # The player is a separate library/process without winit: check its linked dependency graph independently.
-scripts/third-party.sh --target aarch64-linux-android --manifest-path android/player/Cargo.toml --texts "$OUT/apk/assets/licences/PLAYER-RUST-LICENSES.txt" --out "$OUT/apk/assets/licences/PLAYER-RUST-CRATES.md" > "$OUT/player-licence-report.log" 2>&1
+# It stops on any linked crate that is not GPLv2-compatible, except the 7z reader's sevenz-rust2 and lzma-rust2: the same
+# Apache-2.0 case as on Linux, accepted 2026-11-20 (NOTICE.md; scripts/export-public.sh lets exactly these through too).
+# 24.11.2026: the 0.7 release APK stopped here once .7z play reached the player.
+if ! scripts/third-party.sh --target aarch64-linux-android --manifest-path android/player/Cargo.toml --texts "$OUT/apk/assets/licences/PLAYER-RUST-LICENSES.txt" --out "$OUT/apk/assets/licences/PLAYER-RUST-CRATES.md" > "$OUT/player-licence-report.log" 2>&1; then
+    other=$(grep '^  PROBLEM ' "$OUT/player-licence-report.log" | grep -v -E '^  PROBLEM  (sevenz-rust2|lzma-rust2) ' || true)
+    if [ -n "$other" ] || ! grep -q '^  PROBLEM ' "$OUT/player-licence-report.log"; then
+        cat "$OUT/player-licence-report.log" >&2; echo "build-apk: the player links a crate that was not accepted (above)" >&2; exit 1
+    fi
+    echo "player licences: only the accepted 7z crates (sevenz-rust2, lzma-rust2) are Apache-2.0-only, as on Linux (NOTICE.md)"
+fi
+test -s "$OUT/apk/assets/licences/PLAYER-RUST-LICENSES.txt" && test -s "$OUT/apk/assets/licences/PLAYER-RUST-CRATES.md"
 # And the handheld view's library (android/handheld): the Linux app's crates, with winit (Apache-2.0) as the launcher's; no
 # core is linked into it (they load in the player's process), so it is reported like the launcher, not stopped.
 scripts/third-party.sh --target aarch64-linux-android --manifest-path android/handheld/Cargo.toml --texts "$OUT/apk/assets/licences/HANDHELD-RUST-LICENSES.txt" --out "$OUT/apk/assets/licences/HANDHELD-RUST-CRATES.md" > "$OUT/handheld-licence-report.log" 2>&1 || true

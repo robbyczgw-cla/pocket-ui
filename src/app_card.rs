@@ -265,7 +265,7 @@ impl App {
     }
 
     /// The card's rows: a save with two versions first (`app_sync_conflicts`), then Echoes, Versions, Stickers
-    /// (`app_curator`), Screenshots (`app_gallery`), and last Delete from the card and Hide from the shelf
+    /// (`app_curator`), Screenshots (`app_gallery`), on Android Choose cover… (`app_cover_pick`), and last Delete from the card and Hide from the shelf
     /// (`app_storage`). The one
     /// list for a new card and for every refresh of an open one, so a refresh never drops a row.
     pub(crate) fn card_rows(&self, system: &str, path: &Path) -> Vec<CuratorRow> {
@@ -275,6 +275,7 @@ impl App {
             .chain(self.card_screenshots_row(system, path))
             .chain(self.card_crate_row(path))
             .chain(self.card_dolphin_row(system, path))
+            .chain(self.card_cover_rows(system, path))
             .chain(self.card_manage_rows(path))
             .collect()
     }
@@ -662,6 +663,7 @@ impl App {
         if now < due {
             return Some(due);
         }
+        pocket_ui::mark!("shelf-warm", "box");
         let (w, h) = self.screen_size();
         let (w, h) = (w as i32, h as i32);
         self.cabinet_poll();
@@ -799,7 +801,7 @@ impl App {
         use pocket_ui::battery_games::{card_line, left, Basis, Rate};
         let Some(case) = state.split(':').find_map(|p| p.strip_prefix("battery=")) else { return };
         let t = pocket_ui::recents::now_secs();
-        let rate = |per_hour: f64, basis| Some(Rate { per_hour, basis, secs: 3600.0 });
+        let rate = |per_hour: f64, basis| Some(Rate { per_hour, used_per_hour: per_hour, basis, secs: 3600.0 });
         let (rate, plugged) = match case {
             "system" => (rate(14.4, Basis::System), false),
             "all" => (rate(10.6, Basis::AllGames), false),

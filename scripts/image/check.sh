@@ -295,6 +295,14 @@ if LC_ALL=C grep -a -q dsperate "$S/pocket-ui/releases/$V/pocket-ui"; then
   python3 -I /repo/scripts/image/ds-checks.py "$S/pocket-ui/releases/$V/cores" "$V" >>"$W/lists/storage.expected"
   sort -u -o "$W/lists/storage.expected" "$W/lists/storage.expected"
 fi
+# 25.11.2026: the font files every package carries (scripts/shipped-fonts.sh, as scripts/image/build.sh puts them in), byte for
+# byte; the 0.7.1 cards failed "exactly the expected files" because this list did not know the fonts/ folder
+SHIPPED_FONTS=$(sed -n 's/^FONTS="\(.*\)"$/\1/p' /repo/scripts/shipped-fonts.sh 2>/dev/null)
+if [ -n "$SHIPPED_FONTS" ]; then
+  check "the shipped font files are assets/fonts', byte for byte" 'sh /repo/scripts/shipped-fonts.sh --check "$S/pocket-ui/releases/$V"'
+  { echo "755 0:0 d ./pocket-ui/releases/$V/fonts"; for f in $SHIPPED_FONTS; do echo "644 0:0 f ./pocket-ui/releases/$V/fonts/$f"; done; } >>"$W/lists/storage.expected"
+  sort -u -o "$W/lists/storage.expected" "$W/lists/storage.expected"
+fi
 check "exactly the expected files, owners and modes" 'same "$W/lists/storage" "$W/lists/storage.expected"' ||
   diff "$W/lists/storage.expected" "$W/lists/storage" | sed 's/^/     /'
 check ".please_resize_me there: ROCKNIX grows STORAGE at the first boot" '[ -f "$S/.please_resize_me" ]'

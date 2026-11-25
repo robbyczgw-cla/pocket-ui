@@ -16,9 +16,10 @@
 use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+use std::os::unix::fs::FileExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use pocket_ui::brick_gl::{Look, Presenter};
 use pocket_ui::brick_picture;
@@ -33,6 +34,11 @@ static STOP: AtomicBool = AtomicBool::new(false);
 
 extern "C" fn on_signal(_: libc::c_int) {
     STOP.store(true, Ordering::Relaxed);
+}
+
+fn startup_step(message: &str) {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    eprintln!("pocket-fb: startup {}.{:03}: {message}", now.as_secs(), now.subsec_millis());
 }
 
 // ---- The framebuffer ----
@@ -190,6 +196,9 @@ struct Fb {
     visible: usize,
     format: Format,
     vsync: bool,
+    /// RK3326 fbdev: stage a frame in ordinary RAM, then write it at the visible offset.
+    write_buffer: Option<Vec<u8>>,
+    wrote_frame: bool,
     /// The screen as we found it, put back on exit.
     saved: Vec<u8>,
     blanked: bool,
@@ -200,7 +209,8 @@ struct Fb {
 }
 
 impl Fb {
-    fn open(path: &str, mode: Option<(u32, u32, u32)>, vsync: bool, bgr: bool) -> Result<Fb, String> {
+    fn open(path: &str, mode: Option<(u32, u32, u32)>, vsync: bool, bgr: bool, trace_startup: bool, positioned: bool) -> Result<Fb, String> {
+        if trace_startup { startup_step("opening framebuffer"); }
         let file = std::fs::OpenOptions::new().read(true).write(true).open(path).map_err(|e| format!("{path}: {e}"))?;
         let fd = file.as_raw_fd();
         let (width, height, stride, visible, format, map_len, vsync) = match mode {
@@ -213,12 +223,16 @@ impl Fb {
                 let mut var = VarInfo::default();
                 // SAFETY: both ioctls only write into the struct given, which is at least as large as the kernel's.
                 let mut fix = FixInfo { id: [0; 16], smem_start: 0, smem_len: 0, kind: 0, type_aux: 0, visual: 0, xpanstep: 0, ypanstep: 0, ywrapstep: 0, line_length: 0, rest: [0; 32] };
+                if trace_startup { startup_step("reading variable framebuffer info"); }
                 if unsafe { libc::ioctl(fd, FBIOGET_VSCREENINFO as _, &mut var as *mut VarInfo) } != 0 {
                     return Err(format!("{path}: FBIOGET_VSCREENINFO: {}", std::io::Error::last_os_error()));
                 }
+                if trace_startup { startup_step("FBIOGET_VSCREENINFO returned"); }
+                if trace_startup { startup_step("reading fixed framebuffer info"); }
                 if unsafe { libc::ioctl(fd, FBIOGET_FSCREENINFO as _, &mut fix as *mut FixInfo) } != 0 {
                     return Err(format!("{path}: FBIOGET_FSCREENINFO: {}", std::io::Error::last_os_error()));
                 }
+                if trace_startup { startup_step("FBIOGET_FSCREENINFO returned"); }
                 let format = Format::from_var(&var).ok_or_else(|| format!("{path}: {} bits per pixel", var.bits_per_pixel))?;
                 let stride = fix.line_length as usize;
                 eprintln!(
@@ -236,22 +250,43 @@ impl Fb {
         if map_len < need {
             return Err(format!("{path}: {map_len} bytes, the visible page needs {need}"));
         }
+        if positioned {
+            // Rockchip 4.4 can block in the GEM mmap path. fb_write uses the driver's kernel mapping instead.
+            startup_step("using positioned framebuffer writes without mapping or mode changes");
+            return Ok(Fb {
+                file, map: std::ptr::null_mut(), map_len, width, height, stride, visible, format,
+                vsync: false, write_buffer: Some(vec![0; need - visible]), wrote_frame: false,
+                saved: Vec::new(), blanked: false, plain_file: mode.is_some(), found: None,
+            });
+        }
+        if trace_startup { startup_step("mapping framebuffer"); }
         // SAFETY: a shared mapping of the whole framebuffer; `map` is only used within `map_len`, unmapped in Drop.
         let map = unsafe { libc::mmap(std::ptr::null_mut(), map_len, libc::PROT_READ | libc::PROT_WRITE, libc::MAP_SHARED, fd, 0) };
         if map == libc::MAP_FAILED {
             return Err(format!("{path}: mmap: {}", std::io::Error::last_os_error()));
         }
         let map = map.cast::<u8>();
+        if trace_startup { startup_step("framebuffer mmap returned"); }
+        if trace_startup { startup_step("copying framebuffer contents"); }
         // SAFETY: `need <= map_len`, checked above.
         let saved = unsafe { std::slice::from_raw_parts(map.add(visible), need - visible) }.to_vec();
-        let mut found = VarInfo::default();
-        // SAFETY: the ioctl only writes into the struct given. A plain file has none.
-        let found = (mode.is_none() && unsafe { libc::ioctl(fd, FBIOGET_VSCREENINFO as _, &mut found as *mut VarInfo) } == 0).then_some(found);
-        Ok(Fb { file, map, map_len, width, height, stride, visible, format, vsync, saved, blanked: false, plain_file: mode.is_some(), found })
+        if trace_startup { startup_step("framebuffer snapshot ready"); }
+        let found = if mode.is_some() {
+            None
+        } else {
+            if trace_startup { startup_step("reading framebuffer mode for handover"); }
+            let found = Self::read_pan(fd);
+            if trace_startup { startup_step("framebuffer mode read returned"); }
+            found
+        };
+        Ok(Fb { file, map, map_len, width, height, stride, visible, format, vsync, write_buffer: None, wrote_frame: false, saved, blanked: false, plain_file: mode.is_some(), found })
     }
 
     /// The page that showed when we came shows again (after the GPU, whose flips leave the pan where the last one was).
     fn restore_pan(&mut self) {
+        if self.write_buffer.is_some() {
+            return;
+        }
         if let Some(var) = self.found.as_mut() {
             // SAFETY: FBIOPAN_DISPLAY reads the struct given, which is the kernel's own from FBIOGET_VSCREENINFO.
             if unsafe { libc::ioctl(self.file.as_raw_fd(), FBIOPAN_DISPLAY as _, var as *mut VarInfo) } != 0 {
@@ -263,14 +298,20 @@ impl Fb {
 
     /// Where the visible page is now: the GPU's flips move it.
     fn follow_pan(&mut self) {
-        if self.plain_file {
+        if self.plain_file || self.write_buffer.is_some() {
             return;
         }
+        self.set_visible_pan(Self::read_pan(self.file.as_raw_fd()));
+    }
+
+    fn read_pan(fd: RawFd) -> Option<VarInfo> {
         let mut var = VarInfo::default();
         // SAFETY: the ioctl only writes into the struct given.
-        if unsafe { libc::ioctl(self.file.as_raw_fd(), FBIOGET_VSCREENINFO as _, &mut var as *mut VarInfo) } != 0 {
-            return;
-        }
+        (unsafe { libc::ioctl(fd, FBIOGET_VSCREENINFO as _, &mut var as *mut VarInfo) } == 0).then_some(var)
+    }
+
+    fn set_visible_pan(&mut self, var: Option<VarInfo>) {
+        let Some(var) = var else { return };
         let visible = var.yoffset as usize * self.stride + var.xoffset as usize * self.format.bytes();
         if visible + self.stride * self.height as usize <= self.map_len {
             self.visible = visible;
@@ -307,33 +348,63 @@ impl Fb {
         self.wait_vsync();
         let rows = height.min(self.height) as usize;
         let columns = width.min(self.width) as usize;
+        let row_bytes = columns * self.format.bytes();
+        let out = match self.write_buffer.as_mut() {
+            Some(buffer) => &mut buffer[..],
+            // SAFETY: Fb::open and set_visible_pan keep the complete visible page within the mapping.
+            None => unsafe { std::slice::from_raw_parts_mut(self.map.add(self.visible), self.stride * self.height as usize) },
+        };
         for y in 0..rows {
             let Some(src) = pixels.get(y * stride..y * stride + columns * 4) else { return };
-            // SAFETY: `visible + stride * height <= map_len` (checked in `open`) and `columns <= self.width`.
-            let dst = unsafe { std::slice::from_raw_parts_mut(self.map.add(self.visible + y * self.stride), columns * self.format.bytes()) };
-            convert_row(self.format, src, dst);
+            convert_row(self.format, src, &mut out[y * self.stride..y * self.stride + row_bytes]);
+        }
+        if let Some(buffer) = self.write_buffer.as_ref().filter(|_| rows != 0 && row_bytes != 0) {
+            if !self.wrote_frame { startup_step("writing first framebuffer frame with pwrite"); }
+            let result = if row_bytes == self.stride {
+                self.file.write_all_at(&buffer[..rows * self.stride], self.visible as u64)
+            } else {
+                (0..rows).try_for_each(|y| {
+                    let offset = y * self.stride;
+                    self.file.write_all_at(&buffer[offset..offset + row_bytes], (self.visible + offset) as u64)
+                })
+            };
+            if let Err(e) = result {
+                startup_step(&format!("framebuffer pwrite failed: {e}"));
+                STOP.store(true, Ordering::Relaxed);
+            } else if !self.wrote_frame {
+                startup_step("first framebuffer pwrite returned");
+                self.wrote_frame = true;
+            }
         }
     }
 
-    /// `--take` (dArkOS, docs/DARKOS.md): fb0 is the DRM driver's fbdev emulation there, and the last picture on the panel is
-    /// EmulationStation's KMS one until fbdev's mode is set again. Setting the mode we read (forced) and panning to our page makes the
-    /// kernel put fbdev's framebuffer back on the panel; it refuses (EBUSY) while another program still holds the display.
+    /// Put fbdev back on the panel after EmulationStation releases KMS, on hosts using the mapped backend.
     fn take(&mut self) {
-        let Some(mut var) = self.found.filter(|_| !self.plain_file) else { return };
+        let Some(mut var) = self.found else { return };
+        startup_step("unblanking framebuffer (FBIOBLANK)");
         self.blank(false);
-        var.rest[1] = FB_ACTIVATE_NOW_FORCE; // `activate`, right after `nonstd`
-        // SAFETY: both ioctls read the struct given, which is the kernel's own from FBIOGET_VSCREENINFO.
-        let put = unsafe { libc::ioctl(self.file.as_raw_fd(), FBIOPUT_VSCREENINFO as _, &mut var as *mut VarInfo) };
+        let fd = self.file.as_raw_fd();
+        var.rest[1] = FB_ACTIVATE_NOW_FORCE;
+        startup_step("setting framebuffer mode (FBIOPUT_VSCREENINFO)");
+        // SAFETY: both ioctls use the kernel's framebuffer geometry in var.
+        let put = unsafe { libc::ioctl(fd, FBIOPUT_VSCREENINFO as _, &mut var as *mut VarInfo) };
         let put = if put == 0 { "ok".to_string() } else { std::io::Error::last_os_error().to_string() };
+        startup_step(&format!("FBIOPUT_VSCREENINFO returned: {put}"));
         var.rest[1] = 0;
-        let pan = unsafe { libc::ioctl(self.file.as_raw_fd(), FBIOPAN_DISPLAY as _, &mut var as *mut VarInfo) };
+        startup_step("panning framebuffer (FBIOPAN_DISPLAY)");
+        let pan = unsafe { libc::ioctl(fd, FBIOPAN_DISPLAY as _, &mut var as *mut VarInfo) };
         let pan = if pan == 0 { "ok".to_string() } else { std::io::Error::last_os_error().to_string() };
         eprintln!("pocket-fb: take the screen: mode set {put}, pan {pan}");
+        startup_step("reading framebuffer pan");
         self.follow_pan();
+        startup_step("framebuffer handover returned");
     }
 
     fn blank(&mut self, off: bool) {
         self.blanked = off;
+        if self.write_buffer.is_some() {
+            return;
+        }
         let level = if off { FB_BLANK_POWERDOWN } else { FB_BLANK_UNBLANK };
         // SAFETY: FBIOBLANK takes the level by value. A file instead of a device answers with an error, which is fine.
         let _ = unsafe { libc::ioctl(self.file.as_raw_fd(), FBIOBLANK as _, level) };
@@ -342,6 +413,7 @@ impl Fb {
 
 impl Drop for Fb {
     fn drop(&mut self) {
+        if self.write_buffer.is_some() { return; }
         if self.blanked {
             self.blank(false);
         }
@@ -992,6 +1064,7 @@ impl Server {
     /// The pictures here are wl_shm's ARGB8888 / XRGB8888: little-endian words, so the bytes are blue, green, red, unused.
     fn grab(&mut self, path: &str) -> bool {
         if self.focus == Some(NATIVE_PORT) {
+            if self.fb.write_buffer.is_some() { return false; }
             self.fb.follow_pan();
             // SAFETY: Fb::open/follow_pan check the complete visible page.
             let rgb = unsafe { native_rgb(self.fb.map, self.fb.width as usize, self.fb.height as usize, self.fb.visible, self.fb.stride, self.fb.format) };
@@ -1836,21 +1909,26 @@ fn run() -> Result<(), String> {
     if let Some((socket, command)) = &args.ipc_send {
         return ipc_send(socket, command);
     }
-    let mut fb = Fb::open(&args.fb, args.mode, args.vsync, args.bgr)?;
+    let positioned = args.take && std::env::var_os("POCKET_FB_POSITIONED_WRITE").is_some_and(|v| v == "1");
+    let use_gl = args.gl && !positioned;
+    let mut fb = Fb::open(&args.fb, args.mode, args.vsync, args.bgr, args.take, positioned)?;
     if args.take {
         fb.take();
     }
     if let Some(path) = &args.picture {
-        return show_picture(&mut fb, path, args.hold, args.gl.then_some(args.gl_window.as_str()));
+        return show_picture(&mut fb, path, args.hold, use_gl.then_some(args.gl_window.as_str()));
     }
     if let Some(text) = &args.message {
-        return show_message(&mut fb, text, args.hold, args.gl.then_some(args.gl_window.as_str()));
+        return show_message(&mut fb, text, args.hold, use_gl.then_some(args.gl_window.as_str()));
     }
     let _ = SCREEN.set((fb.width, fb.height));
-    let gl = if args.gl { start_gl(&mut fb, &args.gl_window, args.gl_trust) } else { None };
+    let gl = if use_gl { start_gl(&mut fb, &args.gl_window, args.gl_trust) } else { None };
     let gl_to_file = fb.plain_file && gl.is_some();
+    if args.take { startup_step("binding Wayland socket"); }
     let wayland = listen(&args.wayland)?;
+    if args.take { startup_step("binding IPC socket"); }
     let ipc = listen(&args.ipc)?;
+    if args.take { startup_step("both sockets ready"); }
     // SAFETY: the handler only stores into an atomic.
     unsafe {
         for s in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP] {
@@ -2011,7 +2089,7 @@ mod tests {
         let dir = tempfile::Builder::new().prefix("pocket-fb-cpu-copy-").tempdir().unwrap();
         let path = dir.path().join("fb");
         std::fs::write(&path, vec![0u8; (sw * sh * 4) as usize]).unwrap();
-        let mut fb = Fb::open(path.to_str().unwrap(), Some((sw, sh, 32)), false, false).unwrap();
+        let mut fb = Fb::open(path.to_str().unwrap(), Some((sw, sh, 32)), false, false, false, false).unwrap();
         let mut cpu = CpuCopy::default();
         let warm = [0xffff, 0xe000, 0xc000];
         // The screen a fresh copy of each picture makes (the old way: a Frame, a zeroed screen, `blit`).

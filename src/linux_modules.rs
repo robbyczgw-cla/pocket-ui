@@ -233,6 +233,7 @@ pub mod switcher;
 /// The status corner at the top right: the time, a Wi-Fi symbol while connected, the battery.
 pub mod status_corner;
 pub mod battery;
+pub mod battery_curve;
 pub mod battery_estimate;
 pub mod battery_history;
 pub mod battery_games;

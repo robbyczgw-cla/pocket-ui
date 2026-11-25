@@ -522,7 +522,7 @@ for SH in $SHELLS; do
   check "$SH: uninstall: Syncthing drop-in gone" '[ ! -e "$r/storage/.config/system.d/syncthing.service.d" ]'
   check "$SH: uninstall: the user's smb.conf back" '[ "$(cat "$r/storage/.config/smb.conf")" = "[global] the user had this" ] && [ ! -e "$r/storage/.config/smb.conf.rocknix" ]'
   check "$SH: uninstall: pocket-ui's lines gone from mako's config, ROCKNIX's stay, mako told" \
-    '[ "$(cat "$r/storage/.config/mako/config")" = "$(printf "max-visible=1\nwidth=500")" ] && grep -q "makoctl mode -r pocket-ui" "$r/calls" && grep -q "makoctl reload" "$r/calls"'
+    '[ "$(cat "$r/storage/.config/mako/config")" = "$(printf "max-visible=1\nwidth=500")" ] && grep -q "makoctl mode -r pocket-ui -r pocket-ui-game-volume" "$r/calls" && grep -q "makoctl reload" "$r/calls"'
   check "$SH: uninstall: settings and games kept" '[ -f "$r/storage/.config/pocket-ui/settings.json" ] && [ "$(cat "$r/storage/roms/gba/game.srm")" = save ]'
   check "$SH: uninstall: daemon-reload, essway restarted" 'grep -q daemon-reload "$r/calls" && grep -q "restart essway" "$r/calls"'
   before=$(tree)

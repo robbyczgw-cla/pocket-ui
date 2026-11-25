@@ -204,11 +204,13 @@ else
   for b in pocket-ui pocket-core; do [ -f "$IN/bin/$b" ] || die "neither $APP nor bin/$b in $IN"; done
   S=$(mktemp -d)
   install -m 755 "$IN/bin/pocket-ui" "$IN/bin/pocket-core" "$ROOT/deploy/portmaster-setup.sh" "$S/"
+  # The Chinese font files (scripts/shipped-fonts.sh): fonts/ next to the programs.
+  sh "$ROOT/scripts/shipped-fonts.sh" "$S"
   # The boot screen (docs/BOOT-SPLASH.md) when it was built; a release without it shows no boot screen, nothing else.
-  FILES="pocket-ui pocket-core portmaster-setup.sh"
+  FILES="pocket-ui pocket-core portmaster-setup.sh fonts"
   if [ -f "$IN/bin/pocket-splash" ]; then
     install -m 755 "$IN/bin/pocket-splash" "$S/"
-    FILES="pocket-ui pocket-core pocket-splash portmaster-setup.sh"
+    FILES="pocket-ui pocket-core pocket-splash portmaster-setup.sh fonts"
   fi
   if [ -n "$GBA_CORE_DIR" ]; then
     sh "$ROOT/scripts/gba-core-files.sh" "$GBA_CORE_DIR" "$S/cores"
@@ -230,6 +232,10 @@ fi
 X=$(mktemp -d)
 tar -xzf "$GH/$APP" -C "$X" || die "$APP can't be unpacked"
 for b in pocket-ui pocket-core; do [ -f "$X/$b" ] || die "$APP has no $b"; check_binary "$X/$b"; done
+# A player that paints Chinese from files needs them in the archive (else Chinese is not offered, and Japanese names lose their letters).
+if grep -aqF NotoSansSC-Regular-CJK.otf "$X/pocket-ui"; then
+  sh "$ROOT/scripts/shipped-fonts.sh" --check "$X" || die "$APP lacks the font files (scripts/shipped-fonts.sh)"
+fi
 if [ -n "$GBA_CORE_DIR" ]; then
   sh "$ROOT/scripts/gba-core-files.sh" "$GBA_CORE_DIR" "$X/.expected-cores"
   (cd "$X/.expected-cores" && find . -type f) | while IFS= read -r f; do

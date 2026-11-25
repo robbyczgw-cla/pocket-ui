@@ -74,6 +74,7 @@ mkdir -p "$P/files"
 install -m 755 "$BIN_DIR/pocket-ui" "$BIN_DIR/pocket-core" "$BIN_DIR/pocket-splash" "$ROOT/deploy/portmaster-setup.sh" "$ROOT/deploy/run-pocket-ui.sh" "$P/files/"
 install -m 644 "$ROOT/deploy/essway-pocket-ui.conf" "$P/files/10-pocket-ui.conf"
 install -m 644 "$ROOT/deploy/pocket-splash.service" "$P/files/pocket-splash.service"
+sh "$ROOT/scripts/shipped-fonts.sh" "$P/files"
 [ -z "$GBA_CORE_DIR" ] || sh "$ROOT/scripts/gba-core-files.sh" "$GBA_CORE_DIR" "$P/files/cores"
 [ -z "$DS_CORE_DIR" ] || python3 -I "$ROOT/scripts/dsperate-files.py" "$DS_CORE_DIR" "$P/files/cores"
 # A pocket-ui with DSperate carries its verified core, licences and source (as release-channel.sh and the images do)
@@ -82,6 +83,7 @@ if LC_ALL=C grep -a -q dsperate "$P/files/pocket-ui"; then
 fi
 printf '%s\n' "$VERSION" >"$P/files/VERSION"
 (cd "$P/files" && sha256sum pocket-ui pocket-core pocket-splash portmaster-setup.sh run-pocket-ui.sh 10-pocket-ui.conf pocket-splash.service VERSION >SHA256SUMS
+ find fonts -type f | LC_ALL=C sort | xargs sha256sum >>SHA256SUMS
  [ ! -d cores ] || find cores -type f | LC_ALL=C sort | xargs sha256sum >>SHA256SUMS)
 install -m 755 "$ROOT/deploy/package/install.sh" "$ROOT/deploy/package/uninstall.sh" "$P/"
 install -m 644 "$ROOT/LICENSE" "$ROOT/NOTICE.md" "$P/"

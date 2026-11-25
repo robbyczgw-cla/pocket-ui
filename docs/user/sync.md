@@ -193,7 +193,7 @@ computer. Let the devices sync before you switch, and this does not happen.
 Wii, 3DS and GameCube `.gci` saves have no game name pocket-ui can match. They appear only in the list under
 Settings → Connections → Sync, with their file name.
 
-With Syncthing off, or when nothing has two versions, there is no row on the card, no line on the shelf, and the
+With Syncthing and Pocket Sync both off, or when nothing has two versions, there is no row on the card, no line on the shelf, and the
 Sync page says **Nothing waiting**.
 
 ## Library data

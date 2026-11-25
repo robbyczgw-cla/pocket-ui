@@ -169,19 +169,20 @@ own mount of `/storage` (`mount_flash`, `mount_sysroot`, `mount_storage`). [V]
   `rocknix-automount.service.d/20-pocket-games-card.conf` (`deploy/image/rocknix-automount-games-card.conf`) replaces the
   unit's `ExecStart` with `deploy/image/games-card.sh` (`/storage/pocket-ui/games-card.sh`). The script checks the
   partitions automount would consider (mmcblk/sd/nvme, a device over 8 GiB, not mounted, not an
-  Android `boot0` device, not the card `/storage` or `/flash` are on), FAT/exFAT/NTFS only, and mounts each read-only on
-  `/run/pocket-ui/probe`. An ArkOS card has no entry `roms` at its root in any case (Anbernic's stock card with `Roms/`
-  goes ROCKNIX's way) and at least two known system folders there. Found: mounted read-write on `/storage/games-external`
-  as automount mounts it (BusyBox `mount`, `-t ntfs3` for NTFS), with no probe file, no fsck, no folders made on it;
+  Android `boot0` device, not the card `/storage` or `/flash` are on), and probes FAT, exFAT, NTFS and ext4 read-only on
+  `/run/pocket-ui/probe`. An ArkOS card has at least two known system folders at its root. A `roms/` directory (any case)
+  left over from another mount is allowed if it contains only empty folders. The script mounts a match at `/storage/games-external`
+  without a probe file, fsck or new folders. FAT, exFAT and NTFS mount read-write (BusyBox `mount`, `-t ntfs3` for NTFS).
+  Ext4 stays read-only with journal replay and symlink traversal disabled.
   `/storage/games-internal/roms` bound on `/storage/roms` and ROCKNIX's system folders made there (only when the last
   mount on `/storage/roms` isn't the card), as automount does without a card; the card's `bios/` files copied into
   `/storage/roms/bios/` where missing (never over a file, at most 512 MiB each, through a `.pocket-part` name); and
   `/run/pocket-ui/games-card-root` holds `/storage/games-external`: pocket-ui reads the game folders at that root.
-  Anything else (no such card, a card with `roms/`, a blank card, a probe that fails, `system.automount=0`, a
+  Anything else (no such card, a card with a populated `roms/`, a blank card, a probe that fails, `system.automount=0`, a
   `system.gamesdevice` set, the first start) hands off to ROCKNIX's automount and removes the marker. A failure on the
-  ArkOS way (the read-write mount, the probe's unmount) ends with the internal folder only; automount never gets an
+  ArkOS way (the final mount, the probe's unmount) ends with the internal folder only; automount never gets an
   ArkOS card. Log: `/var/log/pocket-ui-games-card.log`. `deploy/image/test-games-card.sh` (run by
-  `test-mount-storage.sh`, in the gate) covers a stock R36S card, a dArkOS card, NTFS, the card byte for byte unchanged,
+  `test-mount-storage.sh`, in the gate) covers a stock R36S card, a dArkOS card, NTFS, ext4, the card byte for byte unchanged,
   the BIOS copy, the restart by udev, the cards that go to automount and each failure, with stand-ins for mount and
   blkid. [I] on a device: never run on a real one yet. Cards flashed before this have no drop-in (the seed is only read at
   the first start).

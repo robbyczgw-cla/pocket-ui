@@ -22,8 +22,12 @@ import time
 
 CONTROLS = ('Speaker Switch', 'DAC Playback Volume', 'DAC Playback Switch',
             'Line Out Playback Volume', 'Line Out Playback Switch')
-CEILING_DB = -73.08 + 44 * 1.16
 TOLERANCE_DB = 1.5
+
+
+def speaker_dac(percent):
+    # See src/h700_volume.rs. Round to a hardware DAC step over 25–100%.
+    return 44 + (max(0, percent - 25) * 19 + 37) // 75
 
 
 def gain_row(percent, controls, props):
@@ -31,14 +35,15 @@ def gain_row(percent, controls, props):
     line = int(controls['Line Out Playback Volume'])
     soft = props['softVolumes']
     assert len(soft) == 2 and all(0 < v <= 1.001 for v in soft), 'invalid software residual'
-    assert 0 <= dac <= 44 and 2 <= line <= 31, 'codec gain outside speaker limits'
+    assert 0 <= dac <= 63 and 2 <= line <= 31, 'codec gain outside speaker limits'
     assert all(controls[n] == ('on' if n == 'Speaker Switch' else 'on,on')
                for n in ('Speaker Switch', 'DAC Playback Switch', 'Line Out Playback Switch')), 'playback switch off'
     measured = [-73.08 + dac * 1.16 - 46.5 + line * 1.5 + 20 * math.log10(v) for v in soft]
-    expected = CEILING_DB + 60 * math.log10(percent / 100)
+    target_dac = speaker_dac(percent)
+    expected = -73.08 + target_dac * 1.16 + 60 * math.log10(percent / 100)
     return dict(percent=percent, controls=controls, soft=soft, measured_db=measured,
                 expected_db=expected, error_db=[v-expected for v in measured],
-                passed=all(abs(v-expected) <= TOLERANCE_DB for v in measured))
+                passed=dac == target_dac and all(abs(v-expected) <= TOLERANCE_DB for v in measured))
 
 
 def validate_topology(speaker, lineout, mixer):
@@ -146,7 +151,7 @@ def probe(device, wait=time.sleep):
         for percent in range(10,101,10):
             device.idle()
             device.set_volume(percent)
-            wait(2)  # bounded keeper poll + at most 44 one-step/20-ms DAC changes
+            wait(2)  # bounded keeper poll + at most 63 one-step/20-ms DAC changes
             result['rows'].append(device.sample(percent))
     except Exception as error:
         result['error'] = str(error)

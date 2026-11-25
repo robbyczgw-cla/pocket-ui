@@ -73,6 +73,7 @@ R=$T/pocket-ui/releases/$VERSION
 UNITS=$T/.config/system.d
 mkdir -p "$R" "$T/pocket-ui/licences" "$UNITS/essway.service.d" "$UNITS/sysinit.target.wants"
 install -m 755 "$BIN_DIR/pocket-ui" "$BIN_DIR/pocket-core" "$BIN_DIR/pocket-splash" "$ROOT/deploy/portmaster-setup.sh" "$R/"
+sh "$ROOT/scripts/shipped-fonts.sh" "$R"
 [ -z "$GBA_CORE_DIR" ] || sh "$ROOT/scripts/gba-core-files.sh" "$GBA_CORE_DIR" "$R/cores"
 [ -z "$DS_CORE_DIR" ] || python3 -I "$ROOT/scripts/dsperate-files.py" "$DS_CORE_DIR" "$R/cores"
 # A pocket-ui with DSperate carries its verified core, licences and source (as release-channel.sh and the images do)

@@ -86,6 +86,7 @@ abstract class PocketBase extends NativeActivity {
      *  uses the edges round the hole; the Handheld view (`HandheldActivity`) keeps out of it. */
     protected int cutoutMode() { return android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES; }
     @Override protected void onCreate(Bundle saved) {
+        ShippedFonts.install(this); // before the native code: it looks for files/fonts once (text_fallback::shipped_dir)
         super.onCreate(saved);
         deviceControls(); // before the first picture: a handheld starts the long way round
         semantics = new SemanticView(this);
@@ -247,10 +248,9 @@ abstract class PocketBase extends NativeActivity {
         lastController = controller;
         // A phone without a pad during the first start: upright, its pages are made for it (the r/EmulationOnAndroid video
         // showed them on their side, 18.11.2026). A tablet still turns freely.
+        // A square panel (the RG Rotate) follows the system's turn instead (`Orientation`).
         boolean phone = getResources().getConfiguration().smallestScreenWidthDp < 600;
-        int wanted = controller ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            : setupUpright && phone ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-            : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR;
+        int wanted = Orientation.wanted(controller, setupUpright, phone, Orientation.squareDisplay(this));
         if (wanted == orientation) return;
         orientation = wanted;
         runOnUiThread(() -> setRequestedOrientation(wanted));
@@ -901,8 +901,8 @@ abstract class PocketBase extends NativeActivity {
         boolean pt=settings.contains("\"language\":\"pt\"");
         boolean fr=settings.contains("\"language\":\"fr\"");
         boolean it=settings.contains("\"language\":\"it\"");
-        // Korean has no lines here yet: chosen, it is English (not the phone's language).
-        boolean chosen=de||es||pt||fr||it||settings.contains("\"language\":\"en\"")||settings.contains("\"language\":\"ko\"")||settings.contains("\"german\":false");
+        // Korean and Chinese have no lines here yet: chosen, they are English (not the phone's language).
+        boolean chosen=de||es||pt||fr||it||settings.contains("\"language\":\"en\"")||settings.contains("\"language\":\"ko\"")||settings.contains("\"language\":\"zh\"")||settings.contains("\"german\":false");
         if(de||(!chosen&&system.equals("de")))return german;
         if(pt||(!chosen&&system.equals("pt")))return portuguese;
         if(fr||(!chosen&&system.equals("fr")))return french;

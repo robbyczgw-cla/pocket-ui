@@ -124,6 +124,11 @@ impl Report {
         self.findings.iter().all(|f| f.group == Group::Tips)
     }
 
+    pub fn ready_label(&self) -> String {
+        let (ready, total) = (self.ready, self.total);
+        if total == 1 { format!("{ready} of 1 game ready") } else { format!("{ready} of {total} games ready") }
+    }
+
     /// Include what the system list cost: the whole list given up (the shelf runs on the built-in one) and the systems the
     /// shelf had to leave out, with the entry's place in the original file.
     #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]

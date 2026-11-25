@@ -16,7 +16,10 @@ pub fn english(s: &Summary) -> Option<String> {
         return None;
     }
     let unlocked = s.unlocked.min(s.total);
-    Some(format!("{unlocked} of {} achievements · {}%", s.total, percent(unlocked, s.total)))
+    Some(match s.total {
+        1 => "1 of 1 achievement · 100%".into(),
+        total => format!("{unlocked} of {total} achievements · {}%", percent(unlocked, total)),
+    })
 }
 
 /// Whole percent, rounded down, so only a set with every achievement unlocked says 100%.
@@ -51,6 +54,7 @@ mod tests {
         assert!(english(&tally(59, 60)).unwrap().ends_with("· 98%"), "rounded down: only a full set says 100%");
         assert!(english(&tally(60, 60)).unwrap().ends_with("· 100%"));
         assert_eq!(english(&tally(1, 300)).unwrap(), "1 of 300 achievements · 0%");
+        assert_eq!(english(&tally(1, 1)).unwrap(), "1 of 1 achievement · 100%");
         // More unlocked than the set has now (a set made smaller): never above the set.
         assert_eq!(english(&tally(70, 60)).unwrap(), "60 of 60 achievements · 100%");
     }

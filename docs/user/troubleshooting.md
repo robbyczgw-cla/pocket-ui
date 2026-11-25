@@ -2,7 +2,7 @@
 
 ## Known limits
 
-**Ready-made SD card images** for the Retroid Pocket Mini V2 and Anbernic H700 models live on the
+**Ready-made cards** for the TrimUI Brick, Retroid, Anbernic, the R36S and more live on the
 [install page](https://pocketui.xyz/install.html), alongside the Ports installer, two-file card install and SSH package
 ([Getting started](getting-started.md#1-put-pocket-ui-on-the-card)). Tested on several handhelds, most heavily on the
 Retroid Pocket Mini V2.
@@ -212,19 +212,17 @@ ROCKNIX's settings set to "custom", and for ten minutes when the system kept cha
 way rather than fight over it). `pocket-ui.log` says which, in lines starting with `fan curve:`.
 
 **A game's sound crackles and the game slows down.**
-
-High-rate cores such as ClownMDEmu now keep their original pitch and duration when converted to the device’s output rate.
-
-PAL games running on a 60 Hz screen keep a little more sound buffered so repeated pictures do not interrupt
-the audio. Returning from pause preserves that queued sound and waits for enough audio for the next frame before fading in.
-Starting or continuing a game keeps its opening sound while the audio output connects, including when a Continue
-moment restores a large audio buffer. If muting the device stops its audio output, the first connection wait
-is limited to two seconds; the game then keeps running and discards inaudible sound. When the output runs
-again, fresh sound fades back in instead of replaying the muted backlog.
-Try the same scene with another available core or player in the game's **Options → Runs on**. If that plays correctly,
-include both choices, the game and your device in [Report a problem](#report-a-problem). This helps distinguish a
+Try the same scene with another available core or player in the game's **Options → Runs on**. If that plays cleanly,
+include both choices, the game and your device in [Report a problem](#report-a-problem). This helps tell apart a
 player timing problem from a game that is too demanding. On H700 handhelds, GBA normally uses gpSP; older Continue
-moments can still use mGBA. Changing the player can require starting the game again; keep your in-game save first.
+moments can still use mGBA. Changing the player can require starting the game again, so keep your in-game save first.
+
+How pocket-ui keeps audio smooth: high-rate cores such as ClownMDEmu keep their original pitch and duration when
+converted to the device's output rate, and PAL games on a 60 Hz screen buffer a little more sound so repeated frames do
+not interrupt the audio. Returning from pause keeps queued sound and fades back in cleanly once enough audio is ready,
+and starting or continuing a game holds its opening sound while the audio output connects (even when Continue restores a
+large buffer). If muting the device stops its audio output, pocket-ui waits at most two seconds before letting the game
+run silently, then fades fresh sound back in when unmuted instead of replaying the muted backlog.
 
 **The menus make no sound.**
 Settings → Screen & sound → Menu sounds must be on, and the console's volume must be above 0 and not muted. The clicks never play while
@@ -451,12 +449,12 @@ In `/storage/.config/pocket-ui/` on the SD card:
 Saves are kept with the games: in-game (battery) saves next to the game file in
 `roms/<system>/`, save states in `roms/savestates/<system>/`. On pocket-ui's own host the eight
 slots are `<game>.pstate` and `<game>.pstate1` to `<game>.pstate7`, the moment you quit is
-`<game>.pstate.auto`, and each has a `.png` preview next to it.
+`<game>.pstate.auto.z`, and each has a `.png` preview next to it.
 
 **How do I run the first-start setup again?**
-Each step is in Settings: Look (Look), Wi-Fi (Connections), Box art & downloads and Add games (both under Games).
-<!-- TODO: if a full reset of the first start is wanted, document it (today: set "onboarded" to
-     false in settings.json). -->
+Open Settings → Help & tools → **First-start setup**. It walks through language, Wi-Fi, games and layout again and
+leaves your games, saves and settings alone. Each step is also in Settings: Look (Look), Wi-Fi (Connections), Box art &
+downloads and Add games (both under Games).
 
 **Does pocket-ui change anything on Android?**
 No. See [What it does not touch](index.md#what-it-does-not-touch).

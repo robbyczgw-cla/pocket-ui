@@ -124,7 +124,7 @@ pub struct CardData {
     pub note: String,
     pub more_by: Option<(String, Vec<RelatedGame>)>,
     pub series: Option<(String, Vec<RelatedGame>)>,
-    /// RetroAchievements: "12 of 40" when the game has a set (`achievements::snapshot::Summary`).
+    /// RetroAchievements: "12 of 40 achievements" when the game has a set (`achievements::snapshot::Summary`).
     pub achievements: Option<String>,
     /// Curator's rows, in order (none when Curator has nothing to show for the game).
     pub rows: Vec<CuratorRow>,
@@ -283,6 +283,10 @@ pub enum RowKind {
     Crate,
     /// "Setting up Dolphin": Android, a GameCube or Wii game that plays in the Dolphin app (`rescue::DialogKind::Dolphin`).
     Dolphin,
+    /// "Choose cover…": Android's handheld view, Android's photo picker for the game's own cover (`app_cover_pick`).
+    ChooseCover,
+    /// "Reset to automatic": a game with a chosen cover, the usual one again (`app_cover_pick`).
+    ResetCover,
     /// "Delete from the card": the last but one row (`app_storage`); A opens the delete sheet. Only where the game's
     /// folder can be written (`game_files::can_delete`): not on dArkOS's read-only view, not on Android.
     Delete,

@@ -37,6 +37,12 @@ a stalled final source reports “The download server stopped responding. Nothin
 Try again.” Failure leaves the active installation unchanged. Source-index failures go to the
 UI log without URLs or credentials. The progress counter restarts on a change of host.
 
+On pocket-ui's ROCKNIX SD images, an app update over Wi-Fi or from an offline ZIP also refreshes the installed
+`/storage/pocket-ui/games-card.sh` and, on R36S images that have it, `/flash/r36s-panels/README.txt`.
+The new app does this after its first frame confirms the release. It uses copies embedded in the verified app,
+checks SHA-256 before each replacement and keeps the previous file as `.bak`. The games-card script takes
+effect the next time ROCKNIX runs automount, including on reboot.
+
 `scripts/release-channel.sh` prepares the app beside the signed website list under
 `/updates/<channel>/`, with GitHub as the signed fallback (the default since 0.3; `--github-primary` keeps a
 test channel on GitHub only, and so does a `--base-url` of its own unless `--direct-app` is given). pocket-ui
@@ -478,7 +484,9 @@ manifest on FAT32. The fixed boot script restores it if activation is interrupte
 A missing or changed asset is downloaded into RAM and verified before any card writes,
 unpacked in a separate temporary directory with the existing strict tar validator, checked to
 contain only its named file, and moved into staging. No component can replace application
-executables or player data: allowed paths are cores, BIOS data and the exact six helper names.
+executables or player data: allowed paths are cores, BIOS and port data, the exact six helper names and, from 0.8 on,
+fonts/ (the Chinese font files: the updater takes them as parts now, while `brick-update-pack.py` still puts them into
+the app archive, so that the updaters already on cards install it; a later release moves them out).
 Free space includes inherited data, one temporary component and reserve; cancellation and all
 failures leave `app` active. Only after every asset passes does the existing ready/pending/rename
 sequence run. There is no binary patching and no dependency on one specific previous version.

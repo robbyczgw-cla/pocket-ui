@@ -33,6 +33,8 @@ log() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >>"$LOG"; }
 FBMODE=; [ -f "$FB" ] && FBMODE="--mode 640x480x32"
 
 PIDS=
+FBPID=
+BRIDGE_STUCK=
 kd() { # the console's mode: 1 graphics (the console draws nothing), 0 text
   [ -c "$TTY" ] && command -v python3 >/dev/null 2>&1 && python3 -I -c 'import fcntl,os,sys; fd=os.open(sys.argv[1], os.O_RDWR); fcntl.ioctl(fd, 0x4B3A, int(sys.argv[2]))' "$TTY" "$1" 2>>"$LOG"
 }
@@ -45,14 +47,28 @@ stop_helpers() {
     sleep 0.2; n=$((n + 1))
   done
   for p in $PIDS; do kill -KILL "$p" 2>/dev/null; done
-  PIDS=
+  if [ -n "$FBPID" ] && kill -0 "$FBPID" 2>/dev/null; then
+    # Give SIGKILL time to take effect without wait(1), which cannot reap a task stuck in the kernel.
+    n=0
+    while [ "$n" -lt 5 ] && kill -0 "$FBPID" 2>/dev/null; do
+      sleep 0.2
+      n=$((n + 1))
+    done
+    if kill -0 "$FBPID" 2>/dev/null; then
+      BRIDGE_STUCK=1
+      log "screen bridge pid $FBPID remains after SIGKILL; skipping console and backlight operations"
+    fi
+  fi
+  PIDS= FBPID=
 }
 
 # The failure screen: the reason, what to do and the last log lines, on the console for DARKOS_HOLD seconds (15), then
 # EmulationStation comes back. Written with printf and setfont only, as dArkOS's own scripts do, so it also works when our
 # programs are missing, cannot run or crashed. The Handyfoto of this screen is all a tester has to send.
 fail_screen() { # reason, hint
-  stop_helpers; kd 0
+  stop_helpers
+  [ -z "$BRIDGE_STUCK" ] || return 0
+  kd 0
   [ -w "$TTY" ] || return 0
   for f in Lat7-TerminusBold20x10 Lat7-Terminus16 Lat7-TerminusBold16; do
     [ -f "/usr/share/consolefonts/$f.psf.gz" ] && { setfont -C "$TTY" "$f" >/dev/null 2>&1; break; }
@@ -91,6 +107,7 @@ die() {
 
 if [ "${1:-}" != --inside ]; then
   : >"$LOG"
+  : >"$DATA/logs/pocket-fb.log"
   log "=== start, $(uname -r), $(sed -n 's/^PRETTY_NAME=//p' /etc/os-release 2>/dev/null)"
   chmod +x "$ROOT"/bin/* "$ROOT"/port-data/hwroot/usr/bin/* 2>/dev/null  # a card that keeps no permissions (exFAT, FAT) ignores this and runs everything
   for f in pocket-ui pocket-core pocket-fb; do
@@ -140,6 +157,15 @@ if [ "${1:-}" != --inside ]; then
     *) BOARD=darkos-generic SCREEN= ;;
   esac
   [ -z "$REFUSE" ] || die "$REFUSE is not supported by this test version yet." "Only 640x480 handhelds for now."
+  # Some community builds report only a board-specific compatible. Fall back to the known RK3326 device keys.
+  compatible=${DARKOS_COMPATIBLE-$(tr '\000' ' ' 2>/dev/null </proc/device-tree/compatible)}
+  RK3326_FB_WRITE=
+  case " $compatible " in
+    *' rockchip,rk3326 '*|*' rockchip,px30 '*) RK3326_FB_WRITE=1 ;;
+    *' rockchip,rk3566 '*|*' rockchip,rk3568 '*) ;;
+    *) case "$dev" in R36S|RG351*|G350|A10MINI|RGB10) RK3326_FB_WRITE=1 ;; esac ;;
+  esac
+  export RK3326_FB_WRITE
   # What the screen really is: fbdev's mode (`U:640x480p-60`), else the width of its virtual size.
   size=$(sed -n '1s/^[^:]*:\([0-9]*x[0-9]*\).*/\1/p' /sys/class/graphics/fb0/modes 2>/dev/null)
   [ -n "$size" ] || size="$(cut -d, -f1 /sys/class/graphics/fb0/virtual_size 2>/dev/null)x480"
@@ -303,9 +329,11 @@ orig_bl=; [ -n "$BL" ] && orig_bl=$(cat "$BL/brightness" 2>/dev/null)
 cleanup() {
   trap - EXIT INT TERM HUP
   stop_helpers
-  kd 0
-  # Volume and brightness are the player's (ogage's keys, Settings): kept as they are, except a screen left dark.
-  [ -n "$orig_bl" ] && [ "$(cat "$BL/brightness" 2>/dev/null)" = 0 ] && [ "$orig_bl" != 0 ] && echo "$orig_bl" >"$BL/brightness" && log "screen was left dark: brightness back to $orig_bl"
+  if [ -z "$BRIDGE_STUCK" ]; then
+    kd 0
+    # Restore brightness only when the player did not leave the screen dark.
+    [ -n "$orig_bl" ] && [ "$(cat "$BL/brightness" 2>/dev/null)" = 0 ] && [ "$orig_bl" != 0 ] && echo "$orig_bl" >"$BL/brightness" && log "screen was left dark: brightness back to $orig_bl"
+  fi
   rm -f "$WAYLAND_DISPLAY" "$SWAYSOCK" "$UHOME/.asoundrc"
 }
 TERMED=
@@ -315,16 +343,24 @@ trap 'TERMED=1; cleanup' INT TERM HUP
 kd 1
 rm -f "$WAYLAND_DISPLAY" "$SWAYSOCK"
 # --take: the framebuffer's picture goes on the screen (EmulationStation has let go of it; fbdev's mode comes back).
-"$ROOT/bin/pocket-fb" --wayland "$WAYLAND_DISPLAY" --ipc "$SWAYSOCK" --fb "$FB" $FBMODE --take >>"$DATA/logs/pocket-fb.log" 2>&1 &
+POCKET_FB_POSITIONED_WRITE=$RK3326_FB_WRITE "$ROOT/bin/pocket-fb" --wayland "$WAYLAND_DISPLAY" --ipc "$SWAYSOCK" --fb "$FB" $FBMODE --take >>"$DATA/logs/pocket-fb.log" 2>&1 &
 FBPID=$!
 PIDS="$FBPID"
+log "waiting for screen bridge (pid $FBPID, up to 20 s)"
 i=0
 while [ ! -S "$WAYLAND_DISPLAY" ] || [ ! -S "$SWAYSOCK" ]; do
-  i=$((i + 1))
   kill -0 "$FBPID" 2>/dev/null || die "The screen bridge (pocket-fb) stopped." "See logs/pocket-fb.log."
-  [ $i -gt 50 ] && die "The screen bridge did not come up." "See logs/pocket-fb.log."
+  if [ "$i" = 50 ] || [ "$i" = 200 ]; then
+    wayland=missing ipc=missing
+    [ -S "$WAYLAND_DISPLAY" ] && wayland=ready
+    [ -S "$SWAYSOCK" ] && ipc=ready
+    log "screen bridge after $((i / 10)) s: Wayland $wayland, IPC $ipc"
+    [ "$i" = 200 ] && die "The screen bridge did not come up." "See logs/pocket-fb.log."
+  fi
   sleep 0.1
+  i=$((i + 1))
 done
+log "screen bridge ready after $((i / 10)).$((i % 10)) s"
 [ -x "$VIEW$ROOT/bin/pocket-ui" ] || die "pocket-ui is not in the games folder view." "Looked for $ROOT/bin/pocket-ui."
 # Power off, restart and sleep: pocket-ui's stand-in systemctl (hwroot) cannot reach systemd from the chroot, so it asks here,
 # outside the chroot, and this runs the real one (dArkOS's own scripts do the same: `sudo systemctl poweroff`).

@@ -1258,18 +1258,11 @@ pub fn top_board(w: i32, h: i32) -> Pic {
     let mut p = Pic::new(w, h, OPAQUE);
     let board_edge = wood(BOARD_EDGE);
     let table = grain_table(3 * h as usize + 64, 0x1234);
-    for y in 0..h {
-        for x in 0..w {
-            let drift = 3.0 * (x as f32 * 0.004).sin() + 4.0 + 2.0 * noise(x as f32 * 0.02, 9);
-            let k = grain(&table, y as f32 * 2.2, drift)
-                * if y == 0 {
-                    1.3
-                } else if y >= h - 3 {
-                    0.66
-                } else {
-                    1.0
-                };
-            p.px[(y * w + x) as usize] = OPAQUE | scale_rgb(board_edge, k);
+    let drift: Vec<_> = (0..w).map(|x| 3.0 * (x as f32 * 0.004).sin() + 4.0 + 2.0 * noise(x as f32 * 0.02, 9)).collect();
+    for (y, row) in (0..h).zip(p.px.chunks_exact_mut(p.w as usize)) {
+        let shade = if y == 0 { 1.3 } else if y >= h - 3 { 0.66 } else { 1.0 };
+        for (pixel, &drift) in row.iter_mut().zip(&drift) {
+            *pixel = OPAQUE | scale_rgb(board_edge, grain(&table, y as f32 * 2.2, drift) * shade);
         }
     }
     p
@@ -2155,6 +2148,22 @@ mod tests {
         let block: Vec<u32> = (0..17 * 9).map(|i| i * 0x030507 & 0xffffff).collect();
         for (x, y) in [(10, 8), (11, 9), (10, 9), (11, 8), (-3, -5), (90, 60)] {
             same(&format!("copy_solid at ({x}, {y})"), old_and_new(48, 32, |c| copy_solid(c, x, y, 17, &block)));
+        }
+    }
+
+    #[test]
+    fn the_top_board_keeps_its_grain_when_the_columns_are_prepared_once() {
+        let (w, h) = (1248, 39);
+        let board = top_board(w, h);
+        let table = grain_table(3 * h as usize + 64, 0x1234);
+        let color = wood(BOARD_EDGE);
+        for y in 0..h {
+            let shade = if y == 0 { 1.3 } else if y >= h - 3 { 0.66 } else { 1.0 };
+            for x in 0..w {
+                let drift = 3.0 * (x as f32 * 0.004).sin() + 4.0 + 2.0 * noise(x as f32 * 0.02, 9);
+                let expected = OPAQUE | scale_rgb(color, grain(&table, y as f32 * 2.2, drift) * shade);
+                assert_eq!(board.px[(y * w + x) as usize], expected, "board pixel ({x}, {y})");
+            }
         }
     }
 

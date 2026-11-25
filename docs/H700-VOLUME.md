@@ -1,4 +1,4 @@
-# H700 speaker ceiling and mute
+# H700 speaker gain and mute
 
 `h700_volume::Keeper` follows the system volume while pocket-ui is running, including pocket-core and standalone
 games. It is enabled only on an H700, without `POCKETUI_MOCK`, with the affected H616 UCM Speaker section
@@ -23,22 +23,16 @@ keeps these settings and the PCM/audio pacing path intact; it adds no digital bo
 
 ## Gain, mute and routing
 
-The single ceiling constant `h700_volume::SPEAKER_MAX_RAW` is provisionally **44 = −22.04 dB**. This is the
-quiet listening reference reported by the device operator; no higher production ceiling is justified.
-The measured −2.4 dBFS digital peak in Alien Hominid/mGBA does not establish the speaker's electrical/mechanical
-clipping threshold. The device session was stopped at the operator’s request; no higher ceiling was tested.
-
-Nonzero speaker wishes target that fixed DAC ceiling (or the downward-only diagnostic ceiling). PipeWire alone
-applies the system volume through Line Out plus a software residual: `60*log10(percent/100)` dB relative to the
-maximum, following [PulseAudio's cubic conversion](https://github.com/pulseaudio/pulseaudio/blob/master/src/pulse/volume.c).
+The speaker DAC uses raw 44 through 25%, then adds headroom linearly in dB up to ROCKNIX's raw 63 at
+100%. Each raw step is 1.16 dB. PipeWire applies its existing `60*log10(percent/100)` dB curve through
+Line Out and the software residual, following [PulseAudio's cubic conversion](https://github.com/pulseaudio/pulseaudio/blob/master/src/pulse/volume.c).
 At zero percent the observed Line Out hardware mute keeps playback silent while the codec stays clocked.
-The DAC is not another percentage control.
 
 The RG35XX Plus's actual DAPM graph connects `Speaker <- LINEOUT <- Line Out Ramp Controller`. The
 [H616 codec driver](https://code.googlesource.com/linux/torvalds/linux/+/de03b17ec046d81c4713bc54306579b9024fc513/sound/soc/sunxi/sun4i-codec.c)
 routes that output through the Line Out controls. Earlier documentation and the fake ALSA layer incorrectly
 assumed a bypass. In 0.4.0 the same percentage reduced both DAC and Line Out: at 50%, DAC 31 (-37.12 dB)
-plus Line Out 19 (-18 dB) and software gain 1.0 gave -55.12 dB. With DAC 44 it gives -40.04 dB; 100% stays
+plus Line Out 19 (-18 dB) and software gain 1.0 gave -55.12 dB. With the former fixed DAC 44 it gave -40.04 dB; 100% gave
 -22.04 dB. These are read-back control gains in the serial signal path, not measured speaker SPL or output voltage.
 PipeWire's ideal 50% target gives -40.10 dB; the 0.06 dB difference is hardware/software quantization.
 A 10..100% control sweep confirmed the fixed-ceiling path on one RG35XX Plus. Two quiet half-second 1 kHz
@@ -81,7 +75,7 @@ validation below).
 Only the known `5096000.codec` Speaker/Headphones sinks are treated as internal. `Headphone Jack` is read from
 ALSA's CARD interface. Either a plugged jack or the Headphones sink keeps Speaker off. Headphones use DAC 63 and
 PipeWire's existing Line Out attenuation; there is no speaker ceiling on the headphone path. Jack insertion turns
-the speaker off before raising the DAC. Unplug reapplies the speaker ceiling, including after UCM resets DAC to 63.
+the speaker off before raising the DAC. Unplug reapplies the speaker's DAC target, including after UCM resets DAC to 63.
 No default sink is selected by pocket-ui: WirePlumber retains routing policy. Bluetooth, USB, HDMI and unknown sinks
 are not assigned the internal volume; when leaving the internal route the codec's speaker and DAC are silenced.
 
@@ -91,11 +85,10 @@ One worker starts after the first frame. It validates control ranges/TLV with on
 persistent `libasound.so.2` control handle (`hw:Codec`). The six named controls are read/written directly; the DAC
 ramp forks no subprocess and never opens/reopens a PCM stream. ABI signatures follow ALSA `control.h`.
 
-DAC changes when restoring sound or changing routes move **one raw DAC step at most every 20 ms**.
-Faster key notifications are coalesced; only the newest target is followed. Ordinary nonzero volume steps keep
-the same DAC ceiling and leave the gain change to PipeWire; no mixer switch or route is toggled. Zero/mute bypasses the gain ramp; the read-back Line Out mute at zero keeps the codec clocked, while
-a sink mute or a missing Line Out mute powers it off once the wish is observed. An external ALSA edit cancels an in-progress ramp. Smooth steps reduce discontinuities but
-are not proof of click-free analog output; that still needs the operator's listening A/B.
+DAC changes for volume keys, Quick settings and startup move **one raw DAC step at most every 20 ms** when
+ramping. Faster key notifications are coalesced; only the newest target is followed. Zero/mute and the immediate gain
+reduction when returning from headphones bypass the ramp. The read-back Line Out mute at zero keeps the codec clocked.
+A sink mute or a missing Line Out mute powers it off once the wish is observed. An external ALSA edit cancels a ramp.
 
 The default sink and its JSON volume/mute are polled with two bounded pactl helpers: every 500 ms when idle,
 100 ms during/after key activity. Each helper has a 3-second timeout. H700 game keys wake this worker instead of
@@ -106,12 +99,12 @@ threads, and no helper is launched for individual ramp steps.
 
 Unchanged volume/mute/route wishes cause no writes, even when someone uses `amixer`. An external edit of an owned
 control yields ownership until a new deliberate volume/mute request. Routing may always turn the speaker off and
-reduce an unsafe speaker gain, but never undo a user's hardware mute. Attaching normally never raises an existing DAC level
-or unmutes existing switches. One exception is the first 0.4.1 start: with the internal speaker selected, no jack,
-nonzero unmuted volume and all playback switches on, a DAC within one raw step of the old 0.4.0 curve is
-recognized as inherited and ramped to the fixed ceiling. Other values and hardware mutes are left alone.
-The check is stored in `<data>/h700-volume-041` only after it finishes; a later start cannot repeat it on a
-manual edit. Diagnostic ceilings disable the migration. Exit never restores an inherited low value.
+reduce an unsafe speaker gain, but never undo a user's hardware mute. At startup, the active speaker ramps from the saved DAC gain at raw 44 or higher. If ROCKNIX has reset the DAC
+to 63, the worker first restores the former raw 44 reference before ramping into the extra headroom. The sink percentage
+stays at its saved value. A lower DAC readback waits for a deliberate volume change, except for the one-time 0.4.0
+migration. That migration still recognizes raw gain within one step of the historical curve with all playback switches on.
+Its existing `<data>/h700-volume-041` marker records completion, and diagnostic ceilings disable the migration.
+Startup ramps keep the reached gain on exit. Hardware mute still belongs to the user.
 Headphones keep their existing attach behavior. After an explicit volume action, normal sound can resume. Our own switches can be
 restored when returning from headphones or another sink, without undoing an external switch change.
 
@@ -130,11 +123,11 @@ H700 Battery no longer halves a running game's CPU limit. The own player uses it
 policy; guests retain the governor/limit selected by their launcher. The original menu/idle governor is restored
 on exit. Other device profiles retain their Battery cap. UI descriptions and translations state the H700 exception.
 
-With a game running, H700 volume feedback is suppressed: no pocket-core volume texture, no mako volume window,
-no hidden-shelf redraw for consumed level-key events or held-key polling. Repeat work still has timer deadlines;
-opening/closing Quick settings, the pause menu and notices still draws. Shelf volume feedback is unchanged.
-The dArkOS port borrows the H700 profile's rows for its RK3566/RK3326 boards but is not this chip or audio path: it keeps
-the bar over a game (`mako_osd::quiet_for`).
+On ROCKNIX H700, releasing a volume key in a game shows the final percentage for one second in a compact
+mako notification. ROCKNIX already sends that notification on release. The game mode permits just its
+`Volume: N%` notification, and pocket-ui still skips the volume texture, extra OSD polling and hidden-shelf
+redraw. Opening Quick settings or the pause menu still draws. The shelf uses pocket-ui's own volume display.
+The dArkOS port keeps its pocket-core bar on the RK3566 and RK3326 boards.
 For a silent lab run, `POCKETUI_H700_SPEAKER_MAX_RAW=1` lowers the compiled ceiling for that process only.
 It accepts only 1..SPEAKER_MAX_RAW and can never raise the production maximum. Nonzero wishes retain raw 1 at
 this lab ceiling. This is not a mute: a separately verified digital-zero source and advancing PCM clock are
@@ -176,5 +169,4 @@ Settings/saves were restored by MD5; public 0.2.2 was restored, diagnostic envir
 
 These silent windows establish scheduling and control behavior, not acoustic click/distortion performance.
 The sink monitor precedes the analog DAC; digital zeros cannot prove click-free analog steps. Physical headphone
-insertion/removal, listening at the production ceiling, and sleep/wake remain hardware checks. The ceiling stays
-44 (−22.04 dB), with no claim of a calibrated clipping threshold. No loud listening run is implied by a release.
+insertion/removal, listening at the ROCKNIX maximum, and sleep/wake remain hardware checks.

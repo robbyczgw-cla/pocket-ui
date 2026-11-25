@@ -1259,7 +1259,7 @@ impl App {
 
     /// The card's rows again (after stickers changed, or a new index after a rating). All of them (`card_rows`): the
     /// Curator rows alone took Screenshots and the delete row off the card.
-    fn curator_card_refresh(&mut self) {
+    pub(crate) fn curator_card_refresh(&mut self) {
         let Some((system, path)) = self.card.as_ref().map(|o| (o.system.clone(), o.path.clone())) else { return };
         let rows = self.card_rows(&system, &path);
         if let Some(open) = self.card.as_mut() {
@@ -1344,6 +1344,9 @@ impl App {
             RowKind::Crate => self.card_into_crate(),
             // How to set up the Dolphin app (`app_runs_on_android`).
             RowKind::Dolphin => self.open_dolphin_card(None),
+            // The game's own cover, Android's handheld view (`app_cover_pick`).
+            RowKind::ChooseCover => self.card_choose_cover(),
+            RowKind::ResetCover => self.card_reset_cover(),
             // The game's screenshots (`app_gallery`).
             RowKind::Screenshots => self.open_gallery_for_card(),
         }
@@ -1695,6 +1698,7 @@ impl App {
         let sub = match (p.echoes.len(), &p.why) {
             (0, _) => "Nothing in your library is alike enough yet.".to_string(),
             (_, Some(why)) => format!("Why these? {why}"),
+            (1, None) => "1 game you own".into(),
             (n, None) => format!("{n} games you own, the closest first"),
         };
         let sub = self.text.fit(Face::Body, 28, &sub, c.w - 2 * MARGIN);

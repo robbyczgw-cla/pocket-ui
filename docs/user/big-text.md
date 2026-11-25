@@ -12,6 +12,15 @@ Turning it off restores Normal text and Full motion. It isn't a separate lock; b
 afterwards. Whenever Big text is active (Large text plus non-Full motion), [Zoom](#zoom) also appears right on the first
 page of the pause menu. After an update, this card appears under "New in this version".
 
+### On smaller screens
+
+On the TrimUI Brick, small text starts slightly larger for readability. Short console facts step down one size before
+dropping a row, narrow game-info columns show unrated games as **None · Y** (press Y to set status or rating), and
+headers keep the release year visible by using short console names like **NES**. In German, **Zuletzt** on Home's hint
+bar opens Recent games. Credits and password notes also step down a size before truncating, Pixel Path keeps its grades,
+descriptions and live stats above the hints, and Sleep & power keeps full explanations readable while Up/Down scrolls
+the rows above them.
+
 ## Zoom
 
 Available in the [pause menu](pause-menu.md) for games running in pocket-ui's own player, **Zoom** blows up the paused
@@ -46,10 +55,3 @@ Tap once to lock it down, tap again to release.
 - Saved per console or per game just like the rest of Controls, works for all players, and **Reset controls** resets it
   to Off.
 - Fast-forward doesn't need Hold to toggle: HOME + R2 already toggles it on and off ([Shortcuts](options.md#shortcuts)).
-
-On the TrimUI Brick, small text starts slightly larger for readability. Short console facts step down one size before
-dropping a row, narrow game-info columns show unrated games as **None · Y** (press Y to set status or rating), and
-headers keep the release year visible by using short console names like **NES**. In German, **Zuletzt** on Home's hint
-bar opens Recent games. Credits and password notes also step down a size before truncating, Pixel Path keeps its grades,
-descriptions and live stats above the hints, and Sleep & power keeps full explanations readable while Up/Down scrolls
-the rows above them.

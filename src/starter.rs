@@ -110,6 +110,7 @@ pub fn find(system: &str, file_name: &str) -> Option<&'static Game> {
 /// "12 KB", "3.4 MB".
 pub fn size_label(bytes: u64) -> String {
     match bytes {
+        1 => "1 byte".into(),
         0..=1023 => format!("{bytes} bytes"),
         1024..=1_048_575 => format!("{} KB", bytes.div_ceil(1024)),
         _ => format!("{:.1} MB", bytes as f64 / 1_048_576.0),

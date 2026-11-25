@@ -121,9 +121,12 @@ What would make 13,000 unusable, and what does not:
 On pocket-ui's own SD images an ArkOS, dArkOS or stock R36S games card in the second slot is used exactly as it is. ROCKNIX
 alone would mount it, write a probe file and make `roms/` with about 100 empty folders on it, and show only that empty
 `roms/`: the games at the card's root (`gba/`, `snes/`, `psx/`, `bios/` ...) would be hidden. `deploy/image/games-card.sh` looks
-at the card read-only first: no `roms` folder at its root (in any case) and at least two known system folders there make it an
-ArkOS card. Such a card is mounted on `/storage/games-external` and nothing is written on it; `/storage/roms` stays the internal
-folder; BIOS files from the card's `bios/` are copied into the internal `bios/` where one is missing; and
+at the card read-only first. An ArkOS card has at least two known system folders at its root. A `roms/` directory containing
+only empty folders is allowed, including when ROCKNIX created it on a previous boot. The check accepts FAT, exFAT, NTFS and
+ext4 with any partition label. The card is mounted on
+`/storage/games-external` without creating files there. Ext4 games partitions, an option for SD2 in dArkOSen, stay
+mounted read-only with journal replay and symlink traversal disabled. `/storage/roms` stays the internal folder.
+BIOS files from the card's `bios/` are copied into the internal `bios/` where one is missing, and
 `/run/pocket-ui/games-card-root` tells pocket-ui to read the game folders at the card's root. Every other card (a ROCKNIX card
-with `roms/`, an Anbernic stock card with `Roms/`, a blank one) goes through ROCKNIX's automount as before. Details and the
+with games in `roms/`, an Anbernic stock card with `Roms/`, a blank one) goes through ROCKNIX's automount as before. Details and the
 failure cases: [SD-IMAGE.md](SD-IMAGE.md), "How ROCKNIX sets up a new card".

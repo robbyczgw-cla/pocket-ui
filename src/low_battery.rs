@@ -10,7 +10,7 @@
 //! On external power (charging, full, or "Not charging" with a charger in, or any USB/mains supply online) nothing
 //! happens, so a device on the charger stays up as long as it likes (`no-autosuspend` overnight on the charger).
 //!
-//! The reading runs on its own thread (two small sysfs files); the UI thread only hears of a crossing.
+//! The reading runs on its own thread; the UI thread only hears of a crossing.
 
 use std::path::Path;
 use std::time::Duration;
@@ -25,6 +25,9 @@ pub const EVERY: Duration = Duration::from_secs(30);
 pub const CONFIRM: u32 = 2;
 /// The warning comes again only after the battery was above `WARN_AT` by this much.
 const REARM: u8 = 2;
+/// An R36S V22 on ROCKNIX 20261101 reported 3.598 V (voltage_avg) at 48 % while discharging at 375 mA.
+/// The R36S device tree's open-circuit table puts 3.30 V between 10 % (3.28 V) and 15 % (3.33 V).
+const R36S_CRITICAL_VETO_UV: i64 = 3_300_000;
 
 /// One reading of the battery.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -87,7 +90,7 @@ impl Guard {
 /// battery's own status, or another supply next to it in /sys/class/power_supply that is online).
 pub fn read(dir: &Path) -> Option<Level> {
     let get = |p: &Path| std::fs::read_to_string(p).ok().map(|s| s.trim().to_string());
-    let percent = get(&dir.join("capacity"))?.parse::<i64>().ok()?.clamp(0, 100) as u8;
+    let percent = get(&dir.join("capacity"))?.parse::<u8>().ok().filter(|&percent| percent <= 100)?;
     let status = get(&dir.join("status")).unwrap_or_default();
     let charger = matches!(status.as_str(), "Charging" | "Full" | "Not charging")
         || dir.parent().is_some_and(|supplies| {
@@ -100,6 +103,23 @@ pub fn read(dir: &Path) -> Option<Level> {
         percent,
         external_power: charger,
     })
+}
+
+/// A critical R36S reading with high battery voltage is treated as unreadable by the guard.
+pub fn read_for_guard(dir: &Path, model: Option<crate::device::Model>) -> Option<Level> {
+    let level = read(dir)?;
+    if !level.external_power && level.percent <= CRITICAL_AT && model.is_some_and(crate::device::Model::is_rk3326) {
+        let voltage = |name| {
+            std::fs::read_to_string(dir.join(name)).ok()
+                .and_then(|s| s.trim().parse::<i64>().ok())
+                .filter(|&uv| uv > 0)
+        };
+        // The RK817 driver exports voltage_avg on ROCKNIX.
+        if voltage("voltage_now").or_else(|| voltage("voltage_avg")).is_some_and(|uv| uv >= R36S_CRITICAL_VETO_UV) {
+            return None;
+        }
+    }
+    Some(level)
 }
 
 /// What the shelf says at the warning.
@@ -197,8 +217,62 @@ mod tests {
             std::fs::write(battery.join("status"), status).unwrap();
             assert_eq!(read(&battery), plugged(3), "{status}");
         }
-        std::fs::write(battery.join("capacity"), "garbage").unwrap();
-        assert_eq!(read(&battery), None);
+        for invalid in ["garbage", "-1", "101"] {
+            std::fs::write(battery.join("capacity"), invalid).unwrap();
+            assert_eq!(read(&battery), None, "{invalid}");
+        }
         assert_eq!(read(&root.join("nothing")), None);
+    }
+
+    #[test]
+    fn r36s_does_not_switch_off_when_critical_percent_disagrees_with_voltage() {
+        let root = TestDir::new("lowbat-r36s");
+        let battery = root.join("battery");
+        std::fs::create_dir(&battery).unwrap();
+        std::fs::write(battery.join("status"), "Discharging\n").unwrap();
+        let model = crate::device::identify("Game Console R36S", b"gameconsole,r36s\0").model;
+        let mut guard = Guard::default();
+        for (percent, voltage_file) in [(0, "voltage_avg"), (1, "voltage_now"), (2, "voltage_avg")] {
+            std::fs::write(battery.join("capacity"), percent.to_string()).unwrap();
+            std::fs::write(battery.join(voltage_file), "4000000\n").unwrap();
+            for _ in 0..CONFIRM {
+                let alert = guard.observe(read_for_guard(&battery, model));
+                assert!(!matches!(alert, Some(Alert::Critical(_))), "{percent}% at 4.0 V triggered shutdown");
+            }
+            std::fs::remove_file(battery.join(voltage_file)).unwrap();
+        }
+        std::fs::write(battery.join("voltage_avg"), "4000000\n").unwrap();
+        for invalid in [b"".as_slice(), b"0", b"400?", b"\xff"] {
+            std::fs::write(battery.join("voltage_now"), invalid).unwrap();
+            assert_eq!(read_for_guard(&battery, model), None, "fall back to the high average voltage");
+        }
+        std::fs::remove_file(battery.join("voltage_now")).unwrap();
+        std::fs::write(battery.join("voltage_avg"), "3240000\n").unwrap();
+        assert_eq!(guard.observe(read_for_guard(&battery, model)), Some(Alert::Low(2)));
+        assert_eq!(guard.observe(read_for_guard(&battery, model)), Some(Alert::Critical(2)));
+        std::fs::remove_file(battery.join("voltage_avg")).unwrap();
+        assert_eq!(read_for_guard(&battery, model), bat(2));
+    }
+
+    #[test]
+    fn r36s_distinguishes_a_false_zero_from_a_nearly_empty_battery() {
+        let root = TestDir::new("lowbat-r36s-voltage-avg");
+        let battery = root.join("battery");
+        std::fs::create_dir(&battery).unwrap();
+        std::fs::write(battery.join("status"), "Discharging\n").unwrap();
+        let model = crate::device::identify("Game Console R36S", b"gameconsole,r36s\0").model;
+        let mut guard = Guard::default();
+
+        std::fs::write(battery.join("capacity"), "0\n").unwrap();
+        std::fs::write(battery.join("voltage_avg"), "3600000\n").unwrap();
+        for _ in 0..CONFIRM {
+            let alert = guard.observe(read_for_guard(&battery, model));
+            assert!(!matches!(alert, Some(Alert::Critical(_))), "0% at 3.60 V triggered shutdown");
+        }
+
+        std::fs::write(battery.join("capacity"), "1\n").unwrap();
+        std::fs::write(battery.join("voltage_avg"), "3200000\n").unwrap();
+        assert_eq!(guard.observe(read_for_guard(&battery, model)), Some(Alert::Low(1)));
+        assert_eq!(guard.observe(read_for_guard(&battery, model)), Some(Alert::Critical(1)));
     }
 }

@@ -161,11 +161,43 @@ check "mounted read-write on games-external, internal roms, marker" 'arkos_used 
 check "nothing written on the card" '[ "$(sum)" = "$before" ]'
 check "a BIOS folder called BIOS works too (exFAT ignores case)" '[ "$(cat $INT/roms/bios/gba_bios.bin)" = card-gba ]'
 
+echo "== ArkOS variants with an ext4 games partition"
+reset; card mmcblk1 62500000; part mmcblk1p1 vfat BOOT; part mmcblk1p2 ext4 rootfs; part mmcblk1p3 ext4 EASYROMS
+mkdir -p "$T/cards/mmcblk1p3/"{gba,snes,bios}
+f mmcblk1p3/bios/example.bin test-bios
+before=$(sum)
+run
+check "ext4 system card: the games partition supplies the library, not BOOT or rootfs" 'grep -q "^/dev/mmcblk1p3 $EXT ext4 ro " "$T/mounts" && [ "$(cat "$RUN/games-card-root")" = "$EXT" ] && ! automounted'
+check "ext4 probe and final mount both prevent journal replay and following symlinks" '[ "$(grep -c "^mount .*ro,noload,nosymfollow,nodev,nosuid,noexec /dev/mmcblk1p3 " "$T/calls")" = 2 ]'
+check "ext4 BIOS copied into internal storage and the card stays unchanged" '[ "$(cat "$INT/roms/bios/example.bin")" = test-bios ] && [ "$(sum)" = "$before" ]'
+
+reset; card mmcblk1 62500000; part mmcblk1p1 ext4 SECOND_CARD
+mkdir -p "$T/cards/mmcblk1p1/"{GB,SNES}
+run
+check "ext4 games-only card with a custom label and uppercase system folders is recognized" 'grep -q "^/dev/mmcblk1p1 $EXT ext4 ro " "$T/mounts" && [ "$(cat "$RUN/games-card-root")" = "$EXT" ] && ! automounted'
+
+reset; card mmcblk1 62500000; part mmcblk1p1 ext4 GAMES
+mkdir -p "$T/cards/mmcblk1p1/roms/"{gba,snes}
+run
+check "ext4 card with ROCKNIX directory layout still delegates" 'automounted && [ ! -e "$RUN/games-card-root" ]'
+
 echo "== ArkOS card on NTFS"
 reset; card mmcblk1 62333952; part mmcblk1p1 ntfs GAMES
 f mmcblk1p1/GBA/a.gba; f mmcblk1p1/SNES/b.sfc
 run
 check "mounted with the kernel's ntfs3, as automount does" 'grep -q "^mount -t ntfs3 /dev/mmcblk1p1 $EXT\$" $T/calls && [ "$(cat $RUN/games-card-root)" = "$EXT" ] && ! automounted'
+
+echo "== ArkOS games with leftover ROCKNIX folders"
+reset; stock_r36s
+mkdir -p "$T/cards/mmcblk1p3/ROMs/"{gba,snes,bios,ports}
+before=$(sum)
+run
+check "empty nested system folders do not hide the ArkOS games" 'arkos_used /dev/mmcblk1p3 && [ "$(sum)" = "$before" ]'
+
+reset; stock_r36s
+f mmcblk1p3/roms 'a file, not a directory'
+run
+check "a file named roms still delegates" 'automounted && [ ! -e "$RUN/games-card-root" ]'
 
 echo "== cards that go through ROCKNIX's automount, unchanged"
 reset; card mmcblk1 62333952; part mmcblk1p1 exfat ROMS; f mmcblk1p1/roms/gba/a.gba; f mmcblk1p1/roms/snes/b.sfc; f mmcblk1p1/gba/x.gba; f mmcblk1p1/psx/y.chd

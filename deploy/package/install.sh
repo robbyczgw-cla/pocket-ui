@@ -173,6 +173,8 @@ for f in pocket-ui pocket-core pocket-splash portmaster-setup.sh; do
   cp "$F/$f" "$STAGE/$f" && chmod 755 "$STAGE/$f" || die "cannot copy $f to $STAGE"
 done
 [ ! -d "$F/cores" ] || cp -r "$F/cores" "$STAGE/cores" || die "cannot copy bundled cores"
+# The Chinese font files, next to the programs (scripts/shipped-fonts.sh).
+[ ! -d "$F/fonts" ] || cp -r "$F/fonts" "$STAGE/fonts" || die "cannot copy the font files"
 for b in pocket-ui pocket-core pocket-splash; do
   got=$("$STAGE/$b" --version 2>&1)
   [ "$got" = "$b $VERSION" ] || die "$b does not run here (it said: '$(printf '%s' "$got" | head -c 200)'); this system lacks what it needs"
@@ -208,6 +210,10 @@ same_release() {
   if [ -d "$STAGE/cores" ]; then
     [ -d "$REL/cores" ] && diff -r "$STAGE/cores" "$REL/cores" >/dev/null 2>&1 || return 1
   elif [ -d "$REL/cores" ]; then return 1; fi
+  # A release installed before the font files came along is not the same: they are added.
+  if [ -d "$STAGE/fonts" ]; then
+    [ -d "$REL/fonts" ] && diff -r "$STAGE/fonts" "$REL/fonts" >/dev/null 2>&1 || return 1
+  fi
   for f in pocket-ui pocket-core pocket-splash portmaster-setup.sh; do
     [ -x "$REL/$f" ] && cmp -s "$STAGE/$f" "$REL/$f" || return 1
   done

@@ -1736,7 +1736,8 @@ mod tests {
     fn the_android_manual_names_every_language_the_menus_have() {
         let index = ANDROID_PAGES.iter().find(|(n, _)| *n == "index").map(|(_, md)| *md).unwrap();
         let line = index.lines().find(|l| l.contains("the menus themselves can be")).expect("the language line");
-        for lang in crate::i18n::Lang::ALL {
+        // A language still being translated is not offered (`Lang::offered`), and not named.
+        for lang in crate::i18n::Lang::ALL.into_iter().filter(|l| l.complete()) {
             let english = match lang {
                 crate::i18n::Lang::En => continue,
                 crate::i18n::Lang::De => "German",
@@ -1745,6 +1746,7 @@ mod tests {
                 crate::i18n::Lang::Fr => "French",
                 crate::i18n::Lang::It => "Italian",
                 crate::i18n::Lang::Ko => "Korean",
+                crate::i18n::Lang::Zh => "Chinese",
             };
             assert!(line.contains(english), "{lang:?} is missing: {line}");
         }
@@ -2071,8 +2073,8 @@ mod tests {
                     Block::Rule | Block::Picture(_) => {}
                 }
                 for ch in all.iter().flat_map(|t| t.chars()) {
-                    // Hangul comes from the Korean fonts pocket-ui ships (`text_fallback::korean`), in both faces.
-                    if !ch.is_whitespace() && !(text.has_glyph(Face::Body, ch) && text.has_glyph(Face::Title, ch)) && !crate::text_fallback::korean_has(ch) {
+                    // Hangul and hanzi come from the fonts pocket-ui ships (`text_fallback::korean`, `cjk`), in both faces.
+                    if !ch.is_whitespace() && !(text.has_glyph(Face::Body, ch) && text.has_glyph(Face::Title, ch)) && !crate::text_fallback::korean_has(ch) && !crate::text_fallback::cjk_has(ch) {
                         missing.insert((name, ch));
                     }
                 }

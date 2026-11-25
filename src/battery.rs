@@ -91,7 +91,7 @@ impl Sample {
         self.charging || self.full
     }
 
-    /// On the charger and not charging, well below full: the kernel's "Full" under [`FULL_FROM`].
+    /// On the charger and not charging, well below full: the kernel's "Full" or "Not charging" under [`FULL_FROM`].
     pub fn held(&self) -> bool {
         self.full && self.capacity < FULL_FROM
     }
@@ -112,7 +112,9 @@ pub fn read(dir: &Path, t: u64) -> Option<Sample> {
         t,
         capacity,
         charging: status == "Charging",
-        full: status == "Full",
+        // "Not charging": the charger is in and not charging (the RG35XX Plus at 100 %, a charge that stopped early), as
+        // `low_battery` reads it. Not "on battery": 18 hours of it once made a day without drain.
+        full: matches!(status.as_str(), "Full" | "Not charging"),
         mv: num("voltage_now").map_or(0, |uv| (uv / 1000).clamp(0, u16::MAX as i64) as u16),
         ma: num("current_now").map_or(0, |ua| (ua / 1000).clamp(i32::MIN as i64, i32::MAX as i64) as i32),
         temp: num("temp").map(|t| t.clamp(i16::MIN as i64 + 1, i16::MAX as i64) as i16),
@@ -174,9 +176,12 @@ pub fn describe(now: Option<&Sample>, est: Option<&Estimate>) -> (String, String
         return ("No battery found".into(), "This device doesn't report a battery.".into());
     };
     match est {
-        Some(Estimate::Left { per_hour, secs, over }) => (
+        Some(Estimate::Left { per_hour, secs, over, curve }) => (
             left_phrase(*secs),
-            if *per_hour < 1.0 {
+            // From the curve the time doesn't follow the points an hour: the gauge's points are unequal (`battery_curve`).
+            if *curve {
+                format!("Based on how this battery drains, measured over the last {} min.", over / 60)
+            } else if *per_hour < 1.0 {
                 format!("At the current rate: under 1% an hour, measured over the last {} min.", over / 60)
             } else {
                 format!("At the current rate: {per_hour:.0}% an hour, measured over the last {} min.", over / 60)
@@ -214,6 +219,26 @@ pub fn draw_line(name: &str, d: &Draw, capacity: Option<u8>) -> String {
         format!("  ·  {} left at that rate", about((c as f32 / d.per_hour * 3600.0) as u64))
     });
     format!("{name} {verb} about {:.0}% an hour{watts}{left}", d.per_hour)
+}
+
+/// "7 h 40 min", "45 min": a sleep's length, to the minute (it is measured, not estimated).
+pub fn span(secs: u64) -> String {
+    let m = secs / 60;
+    match (m / 60, m % 60) {
+        (0, m) => format!("{m} min"),
+        (h, 0) => format!("{h} h"),
+        (h, m) => format!("{h} h {m} min"),
+    }
+}
+
+/// The Battery page's line for the last sleep (`battery_estimate::last_sleep`): "Last sleep: 3% in 7 h 40 min". The gauge
+/// counts whole points, so a sleep that cost none says "under 1%". Short enough for Large German on the Brick's 1024x768.
+pub fn sleep_line(s: &crate::battery_estimate::Slept) -> String {
+    let long = span(s.secs());
+    if s.drop == 0 {
+        return format!("Last sleep: under 1% in {long}");
+    }
+    format!("Last sleep: {}% in {long}", s.drop)
 }
 
 /// Hours the graph can show; L1/R1 step through them.
@@ -453,6 +478,17 @@ mod tests {
     }
 
     #[test]
+    fn the_sleep_line_says_what_the_night_cost() {
+        use crate::battery_estimate::Slept;
+        let night = Slept { from: 0, to: 460 * 60, drop: 3 };
+        assert_eq!(sleep_line(&night), "Last sleep: 3% in 7 h 40 min");
+        let brick = Slept { from: 0, to: 10 * 3600, drop: 90 };
+        assert_eq!(sleep_line(&brick), "Last sleep: 90% in 10 h");
+        let nap = Slept { from: 0, to: 45 * 60, drop: 0 };
+        assert_eq!(sleep_line(&nap), "Last sleep: under 1% in 45 min");
+    }
+
+    #[test]
     fn about_rounds_honestly() {
         assert_eq!(about(60), "about 5 min");
         assert_eq!(about(23 * 60), "about 20 min");
@@ -470,6 +506,7 @@ mod tests {
                 per_hour: 15.0,
                 secs: 3 * 3600 + 20 * 60,
                 over: 2400,
+                curve: false,
             }),
         );
         assert_eq!(h, "About 3 h 20 min left");
@@ -480,9 +517,12 @@ mod tests {
                 per_hour: 1.5,
                 secs: 40 * 3600,
                 over: 2400,
+                curve: false,
             }),
         );
         assert_eq!(h, "More than a day left");
+        let (_, sub) = describe(Some(&now), Some(&Estimate::Left { per_hour: 30.0, secs: 6 * 3600, over: 2400, curve: true }));
+        assert_eq!(sub, "Based on how this battery drains, measured over the last 40 min.", "no rate that doesn't add up");
         let (h, sub) = describe(
             Some(&s(100, 50, true)),
             Some(&Estimate::Charging {
@@ -523,6 +563,29 @@ mod tests {
         assert!(!full.held());
         assert_eq!(headline(crate::battery_estimate::estimate(&[full], full.t).as_ref()), "Full");
         assert_eq!(crate::system_ctl::Battery { percent: 100, charge: crate::system_ctl::Charge::Full }.label(), "Full");
+    }
+
+    /// The RG35XX Plus (axp717) on the charger at 100 % says "Not charging", not "Full": 18 hours of it on 23.11.2026
+    /// (its sensors.log) were history "on battery" with no drain, which pulled every rate down and made the Battery page
+    /// promise hours that weren't there. The kernel's "Not charging" means the charger is in and isn't charging, as
+    /// `low_battery` always read it: every place that shows the battery says so.
+    #[test]
+    fn not_charging_reads_as_on_the_charger_everywhere() {
+        let dir = TestDir::new("battery-not-charging");
+        std::fs::write(dir.join("capacity"), "100\n").unwrap();
+        std::fs::write(dir.join("status"), "Not charging\n").unwrap();
+        let full = read(&dir, 1_000_000).unwrap();
+        assert!(full.plugged() && !full.charging, "{full:?}");
+        assert_eq!(headline(crate::battery_estimate::estimate(&[full], full.t).as_ref()), "Full");
+        let qs = crate::system_ctl::Battery { percent: 100, charge: crate::system_ctl::parse_charge("Not charging") };
+        assert_eq!(qs.label(), "Full", "quick settings");
+        std::fs::write(dir.join("capacity"), "40\n").unwrap();
+        let held = read(&dir, 1_000_000).unwrap();
+        assert!(held.held() && held.plugged(), "{held:?}");
+        assert_eq!(headline(crate::battery_estimate::estimate(&[held], held.t).as_ref()), "Plugged in");
+        let qs = crate::system_ctl::Battery { percent: 40, charge: crate::system_ctl::parse_charge("Not charging") };
+        assert_eq!(qs.label(), "40%, plugged in", "quick settings");
+        assert!(crate::low_battery::read(&dir).unwrap().external_power, "the low-battery guard read it so already");
     }
 
     #[test]

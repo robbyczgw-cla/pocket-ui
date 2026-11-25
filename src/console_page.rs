@@ -373,7 +373,7 @@ pub(crate) fn row_layout(text: &mut Text, key_w: i32, w: i32, label: &str, value
     let mut key_w = crate::type_scale::wide(key_w, 28);
     // The value as it is shown (translated), measured word by word without counting the words as shown strings.
     let shown = text.wrap_prose(Face::Body, 28, value, i32::MAX / 4).join(" ");
-    let longest = shown.split_whitespace().map(|word| text.width_plain(Face::Body, 28, word)).max().unwrap_or(0);
+    let longest = crate::text::line_units(&shown).iter().map(|(_, word)| text.width_plain(Face::Body, 28, word)).max().unwrap_or(0);
     if w - key_w < longest {
         let label_w = text.width(Face::Body, 28, label) + 16;
         key_w = (w - longest).max(label_w).min(key_w);

@@ -23,7 +23,9 @@ STAGE=$(mktemp -d)
 # pocket-splash, the boot screen, goes along: its unit runs current/pocket-splash (docs/BOOT-SPLASH.md).
 cp "target/$TARGET/release/pocket-ui" "target/$TARGET/release/pocket-core" "target/$TARGET/release/pocket-splash" deploy/portmaster-setup.sh "$STAGE/"
 chmod +x "$STAGE"/*
-FILES='pocket-ui pocket-core pocket-splash portmaster-setup.sh'
+# The Chinese font files, read from the card (src/text_fallback.rs `shipped_dir`: fonts/ next to the programs).
+sh scripts/shipped-fonts.sh "$STAGE"
+FILES='pocket-ui pocket-core pocket-splash portmaster-setup.sh fonts'
 if LC_ALL=C grep -a -q dsperate "$STAGE/pocket-ui"; then
   [ -n "${DS_CORE_DIR:-}" ] || { echo 'release-app: DS_CORE_DIR must name the portable DSperate build' >&2; exit 1; }
   python3 -I scripts/dsperate-files.py "$DS_CORE_DIR" "$STAGE/cores"

@@ -587,6 +587,48 @@ fn android_pages_fit_the_retroid_mini_v2_with_its_controller_and_with_a_finger()
     assert!(faults.is_empty(), "{} faults on the Mini V2, the first ones: {:#?}", faults.len(), &faults[..faults.len().min(40)]);
 }
 
+/// A small square screen: the Anbernic RG Rotate (720x720) under Android 12, at the densities its maker's ROMs use.
+#[cfg(test)]
+pub const SQUARE_720: [(&str, u32, u32, f32); 2] = [("square-720x720-d2", 720, 720, 2.0), ("square-720x720-d1.5", 720, 720, 1.5)];
+
+/// Every Android page fits a 720x720 screen (the RG Rotate) at density 2.0 and 1.5, in two font sizes, with its pad and with a
+/// finger, in English, German and Spanish. At 2.0 the window is 344x304 dp: the folder page's button stood over its text,
+/// Licences and Report a problem were cut off and lists showed two rows (24.11.2026, `phone::layout_density`).
+#[test]
+fn android_pages_fit_a_square_720x720_screen_at_density_2() {
+    let Some(langs) = super::fit_children("android_02_tests::phones::android_pages_fit_a_square_720x720_screen_at_density_2", "ANDROID_SQUARE_FIT_CHILD", true) else { return };
+    let mut faults = Vec::new();
+    for lang in langs {
+        i18n::set(lang);
+        for (name, w, h, density) in SQUARE_720 {
+            for (scale, pad) in [(1.0f32, true), (1.3, true), (1.3, false)] {
+                for case in cases().into_iter().chain(continue_cases()) {
+                    let case = Case { pad: pad || case.pad, ..case };
+                    let looks: &[Theme] = if case.looks { &Theme::PHONE } else { &Theme::PHONE[..1] };
+                    for &theme in looks {
+                        let open_split = theme == Theme::Split && case.name.starts_with("box");
+                        let f = look(lang, (w, h), density, Cut::Flat, scale, theme, &case, None);
+                        faults.extend(f.lines.into_iter().filter(|l| !(open_split && l.starts_with("ELL"))).map(|l| format!("{lang:?} {name} font={scale} pad={pad} {} {theme:?}: {l}", case.name)));
+                    }
+                }
+            }
+        }
+    }
+    i18n::set(Lang::En);
+    assert!(faults.is_empty(), "{} faults on a 720x720 screen, the first ones: {:#?}", faults.len(), &faults[..faults.len().min(40)]);
+}
+
+/// A list on the square screen at 2.0 shows more than two rows: Settings' rows are at most a quarter of the window high.
+#[test]
+fn android_lists_on_a_square_720x720_screen_show_more_than_two_rows() {
+    let (sw, sh) = safe_area((720, 720), 2.0, Cut::Flat);
+    let mut u = page();
+    let (_, lh) = u.canvas_for((sw, sh), 2.0);
+    // A settings row is 56 dp high (Material's list item with one line of text).
+    let row = u.dp * 56.0;
+    assert!(lh as f32 / row >= 6.0, "{} rows of 56 dp in {lh} px at {} px per dp", lh as f32 / row, u.dp);
+}
+
 /// The pause sheet's rows fit under its head on the phone formats, with the gesture bar, the back-gesture zones and a camera
 /// hole taken off: all of Save & quit's rows on the screen, in two columns of at least 300 when held across.
 #[test]

@@ -5,7 +5,38 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
-## [0.7.0] - 2026-11-26
+## [0.7.1] - 2026-11-25
+
+### Added
+
+- **See what sleep uses:** Settings → Battery now shows what the last sleep used, such as "Last sleep: 3% in 7 h 40 min". It covers both deep sleep and screen-off idle time, and stays hidden if the charger was plugged in or sleep lasted under 30 minutes. Time asleep no longer counts toward a system's battery use.
+- **Japanese and Chinese game names as written:** kana and kanji in game names are now drawn with pocket-ui's own fonts (the pixel font Fusion Pixel in Retro, Noto Sans SC in Barlow) on pocket-ui OS and TrimUI Brick, instead of being spelled out in Latin letters or left out (TrimUI Brick) or drawn in the system font. Handwritten tape labels print such names instead of cutting them to their digits.
+- **pocket-ui beta for dArkOS: RetroArch games get the HOME shortcuts too:** HOME + R1 saves, HOME + L1 loads, HOME + R2 toggles fast-forward, hold HOME + L2 to rewind, HOME + A saves a screenshot into Screenshots and HOME + Y shows the FPS. HOME is the same key as in pocket-ui (F, or R3 and FN on the R36S family). Shortcuts you switch off stay off, and dArkOS's own RetroArch settings stay untouched.
+- **Choose your own cover on Android** (pocket-ui for Android, Handheld view): a game's card now has **Choose cover…**, which opens Android's photo picker. Your picture becomes the game's box art right away, on the shelf, the case and the spine, and stays after a restart. **Reset to automatic** brings back the usual cover. PNG or JPEG up to 8 MB, no storage permission needed.
+- **In-game volume indicator on Anbernic H700 handhelds** (RG35XX family, RG40XX, RG CubeXX, RG34XX, RG28XX): changing the volume during play now shows a small on-screen bar, matching ROCKNIX.
+- **Experimental Anbernic RG Rotate detection:** pocket-ui now recognises the RG Rotate; rotating the screen turns the display accordingly and never puts the handheld to sleep.
+
+### Changed
+
+- **Battery time left that matches your handheld:** pocket-ui learns how your battery actually drains and bases "About … left" on that, on the Battery page and in the pause menu alike, instead of assuming every percent lasts equally long. On an RG35XX Plus at 40%, it estimated about 6 h where the old formula showed under 2 h 30 min, and the battery really lasted 6 h 10 min.
+- **Smoother shelf scrolling on TrimUI Brick and R36S** (and all handhelds): shelf preparation now waits until the D-pad is released, and shelf wood grain is painted once per column instead of per pixel.
+
+### Fixed
+
+- **R36S beta card:** a wrong 0% battery reading no longer switches the handheld off every minute or two while the battery is still charged.
+- **Small square screens on Android** (pocket-ui for Android): on a 720x720 handheld at Android's usual density the pages now fit. The folder page's button no longer covers its text, Licences and Report a problem show their whole text, and lists show four rows instead of two.
+- **Square screens keep the system's turn** (pocket-ui for Android): with a built-in pad the app used to ask Android for landscape, which on a square panel turned the picture a quarter turn against the buttons. On a square screen the app, the Handheld view and games now follow the system's own rotation.
+- **TrimUI Brick now switches off safely at low battery** (pocket-ui's own card): at 2 % on battery the game is saved and the Brick switches off, instead of running on until the battery is completely empty and the game in progress is lost.
+- **Battery on the charger reads right** (seen on the RG35XX Plus): a handheld on the charger that says it is not charging (full, or a charge that stopped early) now shows Full or Plugged in, and those hours no longer count as time on battery in the battery estimates.
+- **Korean numbers use a decimal point:** values such as watts and gigabytes read "2.3 W" in Korean instead of "2,3 W".
+- Game Boy Advance, Super Nintendo and Game Boy boxes on the shelf now show their cover's colour on the spine, under the system's band at the top. Before, every one of them had the same white or grey spine, so a whole row looked white or grey.
+- **Full speaker loudness on Anbernic H700 handhelds** (RG35XX family, RG40XX, RG CubeXX, RG34XX, RG28XX): pocket-ui OS now reaches the same speaker loudness at max volume as ROCKNIX.
+- **R36S second card detection and refreshed card files:** the R36S beta card now recognises a wider range of second SD cards, including ext4 cards and stock cards with leftover ROCKNIX `roms/` folders, and confirmed app updates refresh installed image files on the card (including `games-card.sh`).
+- **pocket-ui beta for dArkOS on RK3326 (R36S, R36XX and similar):** pocket-ui now draws to the screen without the step where it hung at startup on the R36XX: frames are written to the framebuffer directly instead of through a memory mapping and mode changes. Also a bounded framebuffer handoff with a longer startup wait, `FBIOBLANK` skipped on RK3326, and bounded display-bridge cleanup.
+- **Fresh update check on opening Updates** (ROCKNIX, TrimUI Brick, dArkOS): opening Settings → System → Updates now fetches the release list right away instead of showing an older cached version until the next automatic check.
+
+
+## [0.7.0] - 2026-11-24
 
 ### Added
 

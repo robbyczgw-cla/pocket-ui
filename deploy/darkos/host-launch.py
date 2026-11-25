@@ -56,6 +56,55 @@ def command_line(template, values):
     return result
 
 
+# dArkOS's RetroArch, called by its path in the ES command (`/usr/local/bin/%EMULATOR%` with retroarch or retroarch32).
+RETROARCH = re.compile(r'(/usr/local/bin/retroarch(?:32)?)(?=\s)')
+# pocket-ui's HOME shortcuts for this game (ra_hotkeys::prepare_darkos), in the run folder; absent: dArkOS's own hotkeys.
+SESSION = 'retroarch-shortcuts.cfg'
+
+
+# An --appendconfig already in the command (`=` or a space, its value bare or quoted).
+APPEND = re.compile(r'--appendconfig(?:=|\s+)("[^"]*"|\'[^\']*\'|[^\s;&|]+)')
+
+
+def with_session(template, emulator, session, earlier=()):
+    """The ES command template with pocket-ui's session config laid over dArkOS's retroarch.cfg (--appendconfig, this
+    start only), where the command runs dArkOS's RetroArch itself; emulator scripts keep their own configuration. Done on
+    the template, before a game's name is in it. The player's retroarch.cfg is never written.
+    RetroArch keeps only the last --appendconfig but takes several files in one, joined by "|", the later ones winning:
+    an --appendconfig of the command keeps its files with ours behind them, and `earlier` (the wrapper's own, see
+    `wrapper_appendconfig`) goes in front of ours, since our flag comes after the wrapper's and replaces it."""
+    if not Path(session).is_file():
+        return template
+    if emulator in ('retroarch', 'retroarch32'):
+        template = template.replace('/usr/local/bin/%EMULATOR%', '/usr/local/bin/' + emulator)
+    parts = []
+    for command in re.split(r'(;|&&|\|\||\|(?!\|))', template):
+        if RETROARCH.search(command):
+            own = APPEND.search(command)
+            if own:
+                files = [own.group(1).strip('\'"'), str(session)]
+                command = command[:own.start()] + shlex.quote('--appendconfig=' + '|'.join(files)) + command[own.end():]
+            else:
+                files = [str(f) for f in earlier] + [str(session)]
+                command = RETROARCH.sub(lambda m: m.group(1) + ' ' + shlex.quote('--appendconfig=' + '|'.join(files)), command, count=1)
+        parts.append(command)
+    return ''.join(parts)
+
+
+def wrapper_appendconfig(emulator, home, boot=Path('/boot'), devices=Path('/proc/bus/input/devices'), inputs=Path('/dev/input')):
+    """The file dArkOS's /usr/local/bin/retroarch wrapper appends itself, which our later --appendconfig would replace:
+    `~/.config/<emulator>/retroarch.cfg.ext` on an RK3566 (/boot/rk3566*) with more than 7 entries in /dev/input and a
+    second joystick (the wrapper asks sdljoytest; the kernel's js handlers say the same). None otherwise."""
+    ext = Path(home) / '.config' / emulator / 'retroarch.cfg.ext'
+    try:
+        if not any(Path(boot).glob('rk3566*')) or len(list(Path(inputs).iterdir())) <= 7:
+            return None
+        sticks = len(re.findall(r'^H: Handlers=.*\bjs\d+', Path(devices).read_text(errors='replace'), re.M))
+    except OSError:
+        return None
+    return ext if sticks > 1 else None
+
+
 def launch(sid, shelf_path):
     root = Path(os.environ['DARKOS_ROOT'])
     run = Path(os.environ['DARKOS_STATE'])
@@ -76,6 +125,9 @@ def launch(sid, shelf_path):
             game = {t: e.findtext(t, '') for t in ('emulator', 'core', 'governor')}
             break
     template, emulator, core, governor = choose(node, settings, game)
+    program = RETROARCH.search(template.replace('/usr/local/bin/%EMULATOR%', '/usr/local/bin/' + emulator))
+    ext = wrapper_appendconfig(Path(program.group(1)).name, home) if program else None
+    template = with_session(template, emulator, run / SESSION, [ext] if ext else [])
     line = command_line(template, dict(ROM=str(rom), ROM_RAW=str(rom), BASENAME=rom.stem,
                                        SYSTEM=node.findtext('name', ''), EMULATOR=emulator, CORE=core, GOVERNOR=governor))
     fb = str(root / 'bin/pocket-fb')

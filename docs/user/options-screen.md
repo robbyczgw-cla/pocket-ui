@@ -59,7 +59,7 @@ When set to **Auto**, pocket-ui picks the frame for each system automatically:
 | Game & Watch | Brushed gold faceplate |
 | Virtual Boy | Black visor with red trim |
 | Atari 2600, Atari 7800 | Woodgrain |
-| Game Gear, Neo Geo Pocket (Color), Lynx, Pokemon mini | **Handheld**: recessed dark lens with a small power LED where space allows |
+| Game Gear, Neo Geo Pocket (Color), Lynx, Pokémon mini | **Handheld**: recessed dark lens with a small power LED where space allows |
 | Every other console | **Monitor**: graphite surround with rounded corners |
 
 Any frame you choose manually stays put; only **Auto** follows this table.

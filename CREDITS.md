@@ -20,6 +20,9 @@
 - Barlow, by Jeremy Tribby, for the interface font, and Titillium Web for the test store's font package.
 - [Galmuri](https://github.com/quiple/galmuri), by Lee Minseo, and [Noto Sans KR](https://github.com/notofonts/noto-cjk)
   (both SIL OFL 1.1), for the Korean letters of the Retro and Barlow styles.
+- [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font), by TakWolf (made from Ark Pixel Font, Cubic 11 and
+  Galmuri), and [Noto Sans SC](https://github.com/notofonts/noto-cjk) (both SIL OFL 1.1), for the Chinese and Japanese
+  letters of the Retro and Barlow styles.
 - Caveat Brush, by Impallari Type (SIL OFL 1.1), for the handwriting on the home-made label of a game without box art,
   and Manjil Aryal's CC0 photo of a roll of masking tape (WordPress Photo Directory) for its tape
   ([assets/media/tape/SOURCES.md](assets/media/tape/SOURCES.md)).

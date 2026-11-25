@@ -38,7 +38,7 @@ confirms with bottom, Odin style with right; Settings → Buttons on Handheld vi
 In-game controls stay faithful to the original console layout (right button = console A) across Odin, Xbox- and
 Switch-style pads. Flipping Odin's Controller style mid-game pauses safely and keeps Player 1 assigned.
 
-**Multiplayer:** Plugging in or pairing a Bluetooth/USB controller adds Player 2–4 automatically while your built-in pad
+**Multiplayer:** Plugging in or pairing a Bluetooth/USB controller adds Player 2 to 4 automatically while your built-in pad
 stays Player 1 (single-player games accept input from any pad). Disconnecting a pad pauses the game and reclaims its
 slot on reconnect. Up to four players; menus respond to every connected pad.
 
@@ -92,6 +92,12 @@ First start.
 **Covers and pictures:** choosing "Download on Wi-Fi" loads box art, screenshots and Wikipedia descriptions on demand as
 you browse over unmetered Wi-Fi (never bulk-scraping your whole card in the background; cached art works offline).
 Change anytime under Settings → Covers and pictures.
+
+**Your own cover** (Handheld view): open a game's card and pick **Choose cover…** to choose a picture with Android's
+photo picker (no storage permission needed). PNG or JPEG up to 8 MB; pocket-ui shrinks it to at most 1024 pixels on the
+longest side, and it shows at once on the shelf, the case and the spine. **Reset to automatic** brings back the usual
+cover; pocket-ui keeps a copy of a replaced or reset cover, as the web companion does. Cancelling or a picture it can't
+read leaves the cover as it was and says why.
 
 **Picture & Screen frames:** Player Options → Picture matches pocket-ui OS: **Screen scaling** (Aspect, Integer,
 Fullscreen), **Look** (Clean, Smooth, Soft, Bloom, LCD grid with LCD colours on handhelds, Scanlines, Old TV), **Screen

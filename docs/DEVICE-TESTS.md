@@ -29,7 +29,8 @@ scripts/device-check.sh --volume --family h700 --host root@<device-host> --out v
 
 `scripts/volume-device-check.py` takes the lock on the device (`flock -n`) for one bounded session, reads the real amixer TLV and
 kernel DAPM graph, then sets 10..100% without opening any PCM. It sums the serial DAC, Line Out and software
-residual gains, checking both channels against `-22.04 + 60*log10(percent/100)` dB, tolerance ±1.5 dB.
+residual gains, checking the DAC against the [H700 speaker curve](H700-VOLUME.md#gain-mute-and-routing)
+and both channels against `-73.08 + 1.16*DAC + 60*log10(percent/100)` dB, tolerance ±1.5 dB.
 Unknown topology/TLV, open PCM, active streams, physical input or a battery below 20% abort the test. It restores the exact sink
 volume/mute, mixer controls and saved WirePlumber bytes, including after a curve failure. A changed output route
 is reported as an incomplete restore rather than forcing old speaker switches onto headphones or another output.

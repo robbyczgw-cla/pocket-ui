@@ -29,8 +29,8 @@ On handhelds with a second SD slot (all Anbernic H700 models), a second card is 
 
 Good to know:
 
-- **Only the second card's games appear while it is inserted.** Games on your first card aren't erased; remove the second
-  card and reboot to see them again.
+- **Games on both cards show together.** While the second card is in, the shelf lists its games and the games on your
+  first card side by side. A game with the same folder and file name on both cards shows once.
 - **Don't use a card that still holds an OS image.** If it was flashed with pocket-ui OS or ROCKNIX, only a small
   partition is visible. Home and Add games warn you if that happens: remove it or reformat it on a computer first.
 - **Saves and save states live on the second card too**, next to your games (`roms/savestates`). Settings remain on card

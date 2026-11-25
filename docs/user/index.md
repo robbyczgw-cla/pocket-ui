@@ -5,8 +5,8 @@
 
 # pocket-ui
 
-pocket-ui OS is a cozy handheld operating system and game player built on ROCKNIX. It replaces the usual menu with a
-shelf of your games in their real boxes. Everything works with buttons, and touch screens work on the shelf and in lists
+pocket-ui OS is a cozy handheld operating system and game player. On most handhelds it is built on ROCKNIX; on the
+TrimUI Brick it runs from a card of its own. It replaces the usual menu with a shelf of your games in their real boxes. Everything works with buttons, and touch screens work on the shelf and in lists
 too.
 
 You can read this guide right on your handheld under Settings → Help & tools → **Manual**. The manual is in English,
@@ -18,12 +18,14 @@ pages cover what works today and clearly flag anything that is still experimenta
 
 ## What you need
 
-- A supported handheld running ROCKNIX, such as a Retroid Pocket Mini V2, AYN Odin 2 Mini or Anbernic H700 model, or a genuine R36S (beta, with its own card).
+- A supported handheld, such as a TrimUI Brick, Retroid Pocket Mini V2, Anbernic RG35XX or R36S. The
+  [install page](https://pocketui.xyz/install.html) lists them all.
 - A microSD card (8 GB or larger; 16 GB+ on the RG28XX and RG35XX 2024) for pocket-ui OS and your games.
   <!-- TODO: recommended SD card size. The test card grew its game partition to about 60 GB. -->
-- Five minutes at a computer to flash the ready-made SD card image with balenaEtcher or Raspberry Pi Imager. Grab images
-  for the Retroid Pocket Mini V2, Anbernic H700 models and the R36S on the [install page](https://pocketui.xyz/install.html), or
-  install pocket-ui onto an existing ROCKNIX card ([Getting started](getting-started.md)).
+- Five minutes at a computer to prepare the ready-made card: flash the image with balenaEtcher or Raspberry Pi Imager,
+  or on the TrimUI Brick unzip the card download onto an empty card. Grab the card for your handheld on the
+  [install page](https://pocketui.xyz/install.html), or install pocket-ui onto an existing ROCKNIX card
+  ([Getting started](getting-started.md)).
 - Your own ROMs and BIOS files. pocket-ui ships with no games.
 - Wi-Fi is optional. You need it for box art, descriptions, PortMaster, RetroAchievements, online updates and wireless
   file transfers. Without Wi-Fi, you can update from a zip on the card
@@ -97,7 +99,7 @@ pages cover what works today and clearly flag anything that is still experimenta
 17. [Arcade games](arcade.md): which core plays them, matching romsets, parents, BIOS and CHD files, when a game does not start.
 18. [Patches, translations and MSU-1](patches-msu1.md): patching a game on a computer or with RetroArch, and one MSU-1 recipe (not checked on the device).
 19. [Box art & downloads](extras.md): box art, PortMaster games, tools.
-20. [Sync](sync.md): saves and states on all your devices, with Syncthing.
+20. [Sync](sync.md): saves and states on all your devices, with Pocket Sync or Syncthing.
 21. [Tailscale](remote.md): reach the Pocket from anywhere on your private network.
 22. [Web companion](web-companion.md): your library, uploads and play time in a browser, on your Wi-Fi or over Tailscale.
 23. [PC streaming](pc-streaming.md): Moonlight, pairing and leaving a stream.

@@ -772,17 +772,15 @@ Update transport (`src/update.rs`): signed alternate sources, per-source 30-seco
 Standalone card assets: `src/update/brick_assets.rs` hashes immutable installed components, downloads every missing component into RAM before card writes, and reuses unchanged files with a durable rename/recovery manifest. `src/update/brick_delta.rs` extends that to the app tarball itself: folders that are byte for byte what the running `app/` holds, and big unchanged files, are renamed into `app.new/` (`move:` manifest lines) instead of unpacked (`untar::unpack_file_throttled_skipping`). `src/update/brick_io.rs` caps RAM downloads and shares a 2 MiB/s, 256 KiB/fsync bulk-write budget between update extraction, web/phone transfers and save backup/restore; their worker threads use idle I/O priority. The fixed Brick boot script recovers interrupted moves and rollback before launching an app. Before UI startup, `pocket-ui --brick-seed-data SOURCE DESTINATION [RELEASE]` (`src/update/brick_seed.rs`) compares bundled engine data by content and atomically replaces only changed files through the same write budget. It invalidates the BIOS release marker before writes, so rollback repairs partial new data; unrelated player BIOS files stay untouched. The optional release marker is published by the same descriptor-relative helper with an exclusive temporary and atomic rename, refusing symlinks. `scripts/brick-update-pack.py` prepares immutable packages; `scripts/test-brick-update-pack.py` covers stable reuse and hosting-size refusal.
 
 The H700 hardware-volume worker (`h700_volume::Keeper`, owned by the UI lifetime) follows system volume/mute
-and the headphone jack after the first frame. It caps the affected H616 UCM speaker DAC at raw 44 and uses real
-mixer mute. At 0 %, a read-back Line Out raw 0 keeps the codec powered but silent, so RetroArch can drain
-its audio queue instead of hanging N64; until that mute is observed, the codec is powered off. PipeWire alone applies the volume curve through Line Out and its software residual: the speaker
-is fed by LINEOUT, so applying the percentage to the DAC as well would attenuate twice. External edits are
-preserved and only owned, unchanged settings are restored on exit.
-See [H700-VOLUME.md](H700-VOLUME.md) for its provisional ceiling and hardware-test limits.
+and the headphone jack after the first frame. PipeWire applies its system curve through Line Out and the software
+residual. The speaker DAC adds headroom above 25% and reaches raw 63 at 100%. At 0%, a read-back Line Out mute
+keeps the codec powered so RetroArch can drain its audio queue instead of hanging N64. External edits are
+respected and only owned, unchanged controls are restored on exit. See [H700-VOLUME.md](H700-VOLUME.md).
 
-On H700 the volume worker ramps the DAC when restoring sound or changing routes through a persistent ALSA control handle (no per-step processes or PCM
-reopen), while the UI suppresses game volume overlays and hidden-shelf animation/redraw. Battery retains the
-normal game CPU policy instead of a half-speed limit; menu/idle governors still restore. The owner-operated
-OSD A/B uses `POCKETUI_H700_VOLUME_OSD=1`; [H700-VOLUME.md](H700-VOLUME.md) records verification limits.
+The worker ramps DAC changes through a persistent ALSA control handle. ROCKNIX supplies the compact H700
+volume notification on key release without extra OSD polling or hidden-shelf redraw. Battery retains the
+normal game CPU policy, and the menu/idle governors still restore. The owner-operated OSD A/B uses
+`POCKETUI_H700_VOLUME_OSD=1`.
 
 The diagnostic report redactor (`report::mac_at`) recognizes ASCII address syntax on bytes, without slicing a
 UTF-8 string at a fixed byte lookahead. Its other text spans end at matched ASCII delimiters or character boundaries.

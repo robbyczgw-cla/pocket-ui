@@ -27,7 +27,7 @@ Spanish, Brazilian Portuguese, French, Italian or Korean ([Settings â†’ System â
 
 ## Pages
 
-1. [Games without Wi-Fi](copy-games.md); [Game check](game-check.md): will your games start?; [games from your phone](phone-upload.md) over the same Wi-Fi; [Kids mode](kids-mode.md): a big simple shelf for a child.
+1. [Games without Wi-Fi](copy-games.md); [Game check](game-check.md): will your games start?; [games from your phone](phone-upload.md) over the same Wi-Fi; [games from your RomM server](romm.md), downloaded at their first start; [Kids mode](kids-mode.md): a big simple shelf for a child.
 2. [How to](how-to.md): update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device.
 3. [Playing](playing.md): Home, finding a game, the looks, Recent games; [Console pages](console-pages.md): a console's facts and its Credits & links; [Easy](easy.md): the look with one big game at a time; [Big text, Zoom and Hold to toggle](big-text.md): larger text in one switch, a magnifier for the pause menu, buttons that stay down. [Continue](continue.md): an open case means your moment is waiting, and A goes straight back.
 4. [The pause menu](pause-menu.md): what each emulator offers, quitting, Pixel Path; [Saving in the pause menu](pause-menu-saves.md): save slots, Where I quit and Before load, Earlier, when a save fails.
@@ -44,7 +44,7 @@ Spanish, Brazilian Portuguese, French, Italian or Korean ([Settings â†’ System â
 15. [Arcade games](arcade.md): which core plays them, matching romsets, parents, BIOS and CHD files, when a game does not start.
 16. [Patches, translations and MSU-1](patches-msu1.md): patching a game on a computer or with RetroArch, and one MSU-1 recipe (not checked on the device).
 17. [Box art & downloads](extras.md): box art, PortMaster games, tools.
-18. [Sync](sync.md): saves and states on all your devices, with Syncthing.
+18. [Sync](sync.md): saves and states on all your devices, with Pocket Sync or Syncthing.
 19. [Tailscale](remote.md): reach the Brick from anywhere on your private network.
 20. [Web companion](web-companion.md): your library, uploads and play time in a browser, on your Wi-Fi or over Tailscale.
 21. [Updates](updates.md): updating pocket-ui safely.

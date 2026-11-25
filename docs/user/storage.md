@@ -46,8 +46,8 @@ rows; [Hide or delete a game](library.md#hide-or-delete-a-game)).
 
 Once free space dips below 1 GB, pocket-ui alerts you once on the shelf ("The SD card is nearly full: 812 MB left …") at
 boot or after quitting a game, and highlights the Free row in red. The warning stays quiet until you free up at least
-1.5 GB again. Why 1 GB? Modern 3D save states are big: a single PS2 state runs 20–40 MB and GameCube/Wii states hit
-40–100 MB, and a session keeps both an exit state and a "Before load" state (up to 200 MB). Below 1 GB free, pocket-ui
+1.5 GB again. Why 1 GB? Modern 3D save states are big: a single PS2 state runs 20 to 40 MB and GameCube/Wii states hit
+40 to 100 MB, and a session keeps both an exit state and a "Before load" state (up to 200 MB). Below 1 GB free, pocket-ui
 also pauses writing new [Earlier](pause-menu-saves.md#earlier) snapshots (which never exceed 1 GB total anyway). Think of
 this as an early heads-up before space runs out; it doesn't monitor individual saves.
 

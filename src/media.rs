@@ -571,20 +571,19 @@ fn card_edge(p: &mut Pic, m: Medium, f: f32) {
     }
 }
 
-/// The printed spine a system's cases share, whatever the game (paper, band; no paper = the cover's own colour): every
-/// box of the system reads the same on the shelf, as real ones do. The US Super Nintendo's grey with its band in the
-/// system's lilac (a dark one made the grey box look switched off beside the coloured ones, the visual review
-/// 2026-11-04), the
-/// NES's black box, the Game Boy's and the Game Boy Advance's white with their band; the Nintendo 64's art in the
-/// cover's colour with the red block at its top that carries the white logo square (US boxes; `n64_badge`); and the PS2
-/// case's black insert spine.
+/// The printed spine a system's cases share, whatever the game (paper, band; no paper = the cover's own colour): the
+/// band at the top reads the same on every box of the system. The Super Nintendo's, the Game Boy's and the Game Boy
+/// Advance's spine in the cover's colour under the system's band (they were printed grey and white on every box, as the
+/// real ones; a shelf of them was a white or grey wall, the owner on the R36S 2026-11-24); the Nintendo 64's the same
+/// with the red block at its top that carries the white logo square (US boxes; `n64_badge`); the NES's black box; and
+/// the PS2 case's black insert spine.
 fn spine_print(m: Medium) -> Option<(Option<u32>, u32)> {
     match m {
-        Medium::Snes => Some((Some(0xc9c9cd), 0x7a6cb0)),
+        Medium::Snes => Some((None, 0x7a6cb0)),
         Medium::N64 => Some((None, 0xd0101a)),
         Medium::Nes => Some((Some(0x101012), 0xb3141c)),
-        Medium::Gb => Some((Some(0xeeeeea), 0x2d2f6e)),
-        Medium::Gba => Some((Some(0xf1f1ef), 0x463f96)),
+        Medium::Gb => Some((None, 0x2d2f6e)),
+        Medium::Gba => Some((None, 0x463f96)),
         // The PS2's insert: a black spine whatever the cover, a neutral block at its top (no logo).
         Medium::Ps2 => Some((Some(0x111114), 0x2a2a2e)),
         _ => None,
@@ -2454,6 +2453,31 @@ mod tests {
             let (fx, fy, fw, fh) = label_rect(m, 1.0);
             let colours: std::collections::HashSet<u32> = (fy..fy + fh).flat_map(|r| (fx..fx + fw).map(move |c| (c, r))).map(|(c, r)| front.get(c, r) & 0xffffff).collect();
             assert!(colours.len() > 8, "{m:?}: the plain front has a gradient and its name, not one flat colour");
+        }
+    }
+
+    /// A GBA, SNES or Game Boy box's spine is in its cover's colour, with its system's band at the top: a red cover
+    /// gives a red spine, not the white or grey print every box of the system shared (the owner on the R36S,
+    /// 2026-11-24: nearly every European GBA and SNES spine on the shelf was white or grey).
+    #[test]
+    fn a_nintendo_box_spine_wears_its_covers_colour() {
+        let mut text = Text::new();
+        let red = 0xc02028;
+        let look = Look { color: red, band: 0x20a040, plastic: 0x9c99a2, tape: false };
+        for m in [Medium::Gba, Medium::Snes, Medium::Gb] {
+            let s = spine(&mut text, m, 1.0, look, "");
+            let t = m.template();
+            let (x, y, w, h) = t.at(t.spine_label, shelf_scale());
+            let c = s.get(x + w / 2, y + h / 2) & 0xffffff;
+            let (r, g, b) = (c >> 16 & 0xff, c >> 8 & 0xff, c & 0xff);
+            assert!(r > 150 && g < 70 && b < 70, "{m:?}: spine {c:06x}, cover red {red:06x}");
+            // The band keeps the system's colour, whatever the cover.
+            if let (Some(band), Some((_, sys))) = (t.band, spine_print(m)) {
+                let (bx, by, bw, bh) = t.at(band, shelf_scale());
+                let got = s.get(bx + bw / 2, by + bh / 2) & 0xffffff;
+                let d = |s: u32| ((got >> s & 0xff) as i32 - (sys >> s & 0xff) as i32).abs();
+                assert!(d(16) < 40 && d(8) < 40 && d(0) < 40, "{m:?}: band {got:06x}, system {sys:06x}");
+            }
         }
     }
 

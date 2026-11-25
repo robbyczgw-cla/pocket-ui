@@ -64,7 +64,7 @@ Settings → **System** covers updates, language, sleep/power, battery stats, cl
 |---|---|
 | **Back to EmulationStation** | pocket-ui beta for dArkOS only ([DARKOS.md](../DARKOS.md)): closes pocket-ui immediately and returns to dArkOS's own menu with no extra prompt (saving and closing any running game first). Also in Quick settings; holding SELECT + START still opens its dialog |
 | **Updates** | Download and install pocket-ui updates over Wi-Fi or from your SD card. See [Updates](updates.md) |
-| **Language** | Switch menus, hints and notices between **English**, **Deutsch**, **Español**, **Português (Brasil)**, **Français** and **Italiano**. See [Language](language.md) |
+| **Language** | Switch menus, hints and notices between **English**, **Deutsch**, **Español**, **Português (Brasil)**, **Français**, **Italiano** and **한국어**. See [Language](language.md) |
 | **View** | pocket-ui for Android only: flip between **Handheld** (controller-first shelf) and **Mobile** (touch-first view). First start opens Handheld; your chosen view is remembered |
 | **Sleep & power** | Screen-off timeout, sleep timer, auto-power-off after sleeping and Power button actions (shows current screen-off time, e.g. "2 min"). See [Sleep & power](#sleep--power) |
 | **Battery** | Live charge, runtime estimate, 48-hour graph and per-console battery draw. See [Battery](#battery) |
@@ -72,9 +72,6 @@ Settings → **System** covers updates, language, sleep/power, battery stats, cl
 | **Storage** | Space breakdown across games, saves, states, art and hidden games (shows free space, e.g. "41.2 GB free"). See [Storage](storage.md) |
 | **Backup & reset** | Back up or restore saves and settings to your SD card, or reset settings to defaults. See [Backup & reset](#backup--reset) |
 | **Kids mode** | Curated, PIN-locked shelf for kids with daily play limits and max volume. See [Kids mode](kids-mode.md) |
-
-ROCKNIX's own system settings and standalone PS2/GameCube/Wii/3DS settings in `system.cfg` are managed outside this
-backup.
 
 ### Time
 
@@ -111,7 +108,7 @@ Settings → System → **Battery** shows your current charge, estimated runtime
 
 - **Time left:** shows "About 3 h 20 min left" on battery, "Full in about 45 min" while charging, or "Plugged in" when
   connected below 95% without charging, along with the recent drain rate ("At the current rate: 15% an hour, measured
-  over the last 40 min"). Weighted toward the most recent 20–90 minutes of awake battery use (needs 20 minutes after boot
+  over the last 40 min"). Weighted toward the most recent 20 to 90 minutes of awake battery use (needs 20 minutes after boot
   or wake, ~6 minutes while charging; resets on sudden fuel-gauge jumps).
 - **Graph:** opens on the last 24 hours; switch between 3, 6, 12, 24 and 48 hours with L1/R1. Charging shows in green;
   sleep or powered-off stretches appear hatched.
@@ -164,7 +161,7 @@ Settings → **Help & tools** holds this manual, the Tour, setup profiles, ROCKN
 | **First-start setup** | Re-run the welcome wizard (language, Wi-Fi on Linux, games, layout) without touching games, saves or settings. See [Getting started](getting-started.md#3-first-start) |
 | **Tools** | Launch ROCKNIX utilities: emulator menus, RetroArch, gamepad test/calibration, file manager, terminal and installed tools. See [Tools](#tools) |
 | **Report a problem** | Jumps to About with Report a problem highlighted; press A to save a diagnostic bundle into `reports` on the games share ([Report a problem](troubleshooting.md#report-a-problem)). Also available from SELECT + START held |
-| **About** | Version, base OS (e.g. "pocket-ui OS 0.7.0 · built on ROCKNIX 20261001 (SM8250)" on SD images, or ROCKNIX version on add-on installs), game count, free space, IP, battery, log paths and open-source licences (`/storage/pocket-ui/licences`). Marks experimental Retroid models ([Other handhelds](other-handhelds.md#other-retroid-devices)). Includes **Report a problem** and **Open EmulationStation…** (with warning, [Safe mode](safe-mode.md#opening-rocknixs-own-menu); omitted on TrimUI Brick) |
+| **About** | Version, base OS (e.g. "pocket-ui OS 0.7.1 · built on ROCKNIX 20261001 (SM8250)" on SD images, or ROCKNIX version on add-on installs), game count, free space, IP, battery, log paths and open-source licences (`/storage/pocket-ui/licences`). Marks experimental Retroid models ([Other handhelds](other-handhelds.md#other-retroid-devices)). Includes **Report a problem** and **Open EmulationStation…** (with warning, [Safe mode](safe-mode.md#opening-rocknixs-own-menu); omitted on TrimUI Brick) |
 
 ### How you like to play
 

@@ -349,7 +349,7 @@ fn paint_live_source(source: &str, d: &Path, valid: bool) {
         "game-settings" | "console-settings" | "core-options" => ("game-options", &["Picture", "Controls"]),
         "cheats" | "own-cheats" => if menu.is_some() { ("game-cheats", &names) } else { ("game-options", &["Picture", "Shortcuts"]) },
         "ra-account" => ("achievements", &["Sign in", "Sign out", "Log out"]),
-        "battery-history" | "battery-games" => ("battery", &["Not enough data yet", "No battery found"]),
+        "battery-history" | "battery-games" | "battery-curve" => ("battery", &["Not enough data yet", "No battery found"]),
         "backup" | "backup-saves" => ("backup", &["A counts them first"]),
         "play-log" => if pocket_ui::play_log::read(&d.join("data")).sessions.is_empty() { ("history", &["Nothing played", "Games you play show up here"]) } else { ("history", &["Reader Rule Game", "2 min"]) },
         "sync-prefs" => ("sync", &["Nothing waiting", "After playing"]),

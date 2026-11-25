@@ -3,26 +3,13 @@
 //! everything. `mako-notify` leaves it out only when EmulationStation is in front, and pocket-ui's `app_id` is not
 //! that, so the box landed on top of pocket-ui's own display (`osd.rs`).
 //!
-//! We do not pose as EmulationStation. mako has modes instead: a criteria section scoped to a mode,
+//! The config block hides the stock box on the shelf and wherever pocket-core draws its own OSD.
+//! On H700, the game mode lets through only ROCKNIX's volume notification, in a smaller box.
+//! ROCKNIX sends it on key release, with no additional volume polling or hidden-shelf redraw.
+//! Other standalone games get the regular ROCKNIX notifications.
 //!
-//! ```text
-//! # BEGIN pocket-ui
-//! [mode=pocket-ui app-name=mako-notify]
-//! invisible=1
-//! # END pocket-ui
-//! ```
-//!
-//! is appended once to `/storage/.config/mako/config` (a missing file is made with ROCKNIX's default; `mako-notify` otherwise never
-//! rewrites; each call only runs `makoctl reload`, which keeps the modes: they are the daemon's state, not the
-//! config's). While the mode `pocket-ui` is on, the notifications of `mako-notify` are not shown. It is on while
-//! pocket-ui or pocket-core is in front (pocket-ui draws the display, or the overlay in pocket-core), and off while
-//! RetroArch, a standalone emulator or an app is in front: there we draw nothing, and ROCKNIX's box is the only
-//! feedback. Screenshots ("Screenshot Saved", also from `mako-notify`) are hidden along with it while the mode is on.
-//!
-//! `set_hidden` is called from the UI thread; the `makoctl` runs happen on threads, the last wish wins. The mode lives
-//! in the daemon: when mako restarts (sway reloading its config), it is off until the next call, and the box shows
-//! until the next game start or end. To undo: delete the lines from `# BEGIN pocket-ui` to `# END pocket-ui` in the
-//! config and `makoctl mode -r pocket-ui; makoctl reload` (`deploy/package/uninstall.sh` does it).
+//! Config updates preserve the rest of the user's file. Mode changes run off the UI thread, and the last
+//! request wins. The daemon keeps its modes across a reload. The uninstaller removes both modes and the block.
 
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -48,7 +35,8 @@ fn quiet_for(h700_profile: bool, darkos: bool, old_display: bool) -> bool {
 pub const CONFIG: &str = "/storage/.config/mako/config";
 /// `mako-notify` is what `input_sense` calls; without it there is no box to hide.
 const NOTIFY: &str = "/usr/bin/mako-notify";
-pub const MODE: &str = "pocket-ui";
+const MODE: &str = "pocket-ui";
+const GAME_VOLUME_MODE: &str = "pocket-ui-game-volume";
 const BEGIN: &str = "# BEGIN pocket-ui";
 const END: &str = "# END pocket-ui";
 /// The notification's `app_name` (what `mako-notify` sends over D-Bus).
@@ -63,8 +51,11 @@ const MAKO_DEFAULT: &str = "max-visible=1\nlayer=overlay\nfont=monospace 30\ntex
 
 fn block() -> String {
     format!(
-        "{BEGIN} (hides ROCKNIX's volume and brightness box while pocket-ui draws its own; removed by uninstall.sh)\n\
-         [mode={MODE} app-name={APP_NAME}]\ninvisible=1\n{END}\n"
+        "{BEGIN} (routes ROCKNIX's OSD while pocket-ui is in front; removed by uninstall.sh)\n\
+         [mode={MODE} app-name={APP_NAME}]\ninvisible=1\n\
+         [mode={GAME_VOLUME_MODE} app-name={APP_NAME} summary~=\"^Volume: [0-9]+%$\"]\n\
+         invisible=0\nlayer=overlay\nanchor=top-center\nformat=%s\nfont=monospace 16\nwidth=176\nheight=42\n\
+         padding=6\ndefault-timeout=1000\nignore-timeout=1\n{END}\n"
     )
 }
 
@@ -98,7 +89,7 @@ pub fn with_block(text: &str) -> Option<String> {
 /// Puts the block into mako's config and tells mako. Slow (a process): call it from a thread. Does nothing without
 /// `mako-notify`; a missing config is made with ROCKNIX's default and the block (`MAKO_DEFAULT`). Returns whether
 /// the file changed.
-pub fn ensure() -> Result<bool, String> {
+fn ensure() -> Result<bool, String> {
     if !Path::new(NOTIFY).exists() {
         return Ok(false);
     }
@@ -138,26 +129,66 @@ fn makoctl(bin: &Path, args: &[&str]) -> Result<(), String> {
     }
 }
 
-fn set_mode(bin: &Path, hidden: bool) -> Result<(), String> {
-    makoctl(bin, &["mode", if hidden { "-a" } else { "-r" }, MODE])
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Display {
+    PocketUi,
+    Rocknix,
+    RocknixVolume,
 }
 
-static WANT: AtomicBool = AtomicBool::new(false);
+fn game_display(hosted: bool, quiet_h700: bool) -> Display {
+    if quiet_h700 {
+        Display::RocknixVolume
+    } else if hosted {
+        Display::PocketUi
+    } else {
+        Display::Rocknix
+    }
+}
+
+fn set_mode(bin: &Path, display: Display) -> Result<(), String> {
+    let hide_stock = display != Display::Rocknix;
+    let show_volume = display == Display::RocknixVolume;
+    makoctl(bin, &[
+        "mode",
+        if hide_stock { "-a" } else { "-r" }, MODE,
+        if show_volume { "-a" } else { "-r" }, GAME_VOLUME_MODE,
+    ])
+}
+
+static WANT: Mutex<Display> = Mutex::new(Display::PocketUi);
 /// One `makoctl` at a time, so that two quick changes arrive in order.
 static APPLY: Mutex<()> = Mutex::new(());
 static COMPLAINED: AtomicBool = AtomicBool::new(false);
 
-/// Hides (`true`) or shows ROCKNIX's box from now on. Returns at once; the work runs on a thread. Does nothing on a
-/// system without `mako-notify`.
-pub fn set_hidden(hidden: bool) {
-    WANT.store(hidden, Ordering::SeqCst);
+/// Install the block after the first frame, then apply the latest display, even if a game already started.
+pub fn start() -> Result<bool, String> {
+    let result = ensure();
+    apply();
+    result
+}
+
+pub fn show_shelf() {
+    set_display(Display::PocketUi);
+}
+
+pub fn show_game(hosted: bool) {
+    set_display(game_display(hosted, quiet_h700_games()));
+}
+
+fn set_display(display: Display) {
+    *WANT.lock().unwrap_or_else(|e| e.into_inner()) = display;
+    apply();
+}
+
+fn apply() {
     if !Path::new(NOTIFY).exists() {
         return;
     }
     std::thread::spawn(|| {
         let _one_at_a_time = APPLY.lock().unwrap_or_else(|e| e.into_inner());
-        // Whatever was wanted last, not what this call asked for.
-        if let Err(e) = set_mode(Path::new("makoctl"), WANT.load(Ordering::SeqCst)) {
+        let display = *WANT.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = set_mode(Path::new("makoctl"), display) {
             if !COMPLAINED.swap(true, Ordering::Relaxed) {
                 eprintln!("mako: {e}");
             }
@@ -170,8 +201,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn darkos_keeps_the_volume_bar_over_a_game_and_h700_rocknix_stays_quiet() {
-        assert!(quiet_for(true, false, false), "an H700 under ROCKNIX: no volume display behind a game");
+    fn h700_rocknix_uses_native_volume_and_other_games_keep_their_display() {
+        let h700 = quiet_for(true, false, false);
+        for hosted in [false, true] {
+            assert_eq!(game_display(hosted, h700), Display::RocknixVolume);
+        }
+        assert_eq!(game_display(true, quiet_for(true, true, false)), Display::PocketUi);
+        assert_eq!(game_display(true, quiet_for(true, false, true)), Display::PocketUi);
+        assert_eq!(game_display(false, false), Display::Rocknix);
         assert!(!quiet_for(true, true, false), "dArkOS (H700 profile rows, RK3566/RK3326 chips): the bar shows");
         assert!(!quiet_for(true, false, true), "the measurement override brings the old display back");
         assert!(!quiet_for(false, false, false));
@@ -185,7 +222,13 @@ mod tests {
     fn the_block_is_added_once_and_goes_again() {
         let with = with_block(ROCKNIX_DEFAULT).unwrap();
         assert!(with.starts_with(ROCKNIX_DEFAULT), "ROCKNIX's lines stay as they were");
-        assert!(with.contains("[mode=pocket-ui app-name=mako-notify]\ninvisible=1\n"));
+        let hidden = "[mode=pocket-ui app-name=mako-notify]\ninvisible=1\n";
+        let compact_volume = concat!(
+            "[mode=pocket-ui-game-volume app-name=mako-notify summary~=\"^Volume: [0-9]+%$\"]\n",
+            "invisible=0\nlayer=overlay\nanchor=top-center\nformat=%s\nfont=monospace 16\nwidth=176\nheight=42\n",
+            "padding=6\ndefault-timeout=1000\nignore-timeout=1\n",
+        );
+        assert!(with.contains(&format!("{hidden}{compact_volume}")), "only the volume summary overrides the hide rule");
         assert_eq!(with_block(&with), None, "idempotent");
         assert_eq!(without_block(&with), ROCKNIX_DEFAULT, "the undo restores the file exactly");
         assert_eq!(without_block(ROCKNIX_DEFAULT), ROCKNIX_DEFAULT);
@@ -198,7 +241,7 @@ mod tests {
         let old = format!("a=1\n{BEGIN} old\n[mode=x]\ninvisible=0\n{END}\nb=2\n");
         let new = with_block(&old).unwrap();
         assert_eq!(new.matches(BEGIN).count(), 1);
-        assert!(new.starts_with("a=1\nb=2\n") && !new.contains("invisible=0"));
+        assert!(new.starts_with("a=1\nb=2\n") && !new.contains("[mode=x]"));
         // No block yet in an empty file.
         assert_eq!(with_block("").unwrap(), block());
     }
@@ -225,11 +268,16 @@ mod tests {
         let log = dir.join("calls");
         std::fs::write(&bin, format!("#!/bin/sh\necho \"$*\" >>{}\n[ \"$1\" != fail ]\n", log.display())).unwrap();
         std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
-        set_mode(&bin, true).unwrap();
-        set_mode(&bin, false).unwrap();
-        assert_eq!(std::fs::read_to_string(&log).unwrap(), "mode -a pocket-ui\nmode -r pocket-ui\n");
+        set_mode(&bin, Display::RocknixVolume).unwrap();
+        set_mode(&bin, Display::PocketUi).unwrap();
+        set_mode(&bin, Display::Rocknix).unwrap();
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), concat!(
+            "mode -a pocket-ui -a pocket-ui-game-volume\n",
+            "mode -a pocket-ui -r pocket-ui-game-volume\n",
+            "mode -r pocket-ui -r pocket-ui-game-volume\n",
+        ));
         assert!(makoctl(&bin, &["fail"]).is_err());
-        assert!(set_mode(&dir.join("nothing"), true).is_err(), "no makoctl: an error, no panic");
+        assert!(set_mode(&dir.join("nothing"), Display::PocketUi).is_err(), "no makoctl: an error, no panic");
     }
     #[test]
     fn file_source_rule_notification_config() {

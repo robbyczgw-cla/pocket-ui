@@ -238,8 +238,8 @@ impl App {
     fn paint_game_check_running(&mut self, c: &mut Canvas, page: &GameCheckPage) {
         self.sheet_header(c, SETTINGS_NAME);
         let dots = ".".repeat(1 + (self.started.elapsed().as_millis() / 400 % 3) as usize);
-        let (done, total, system) = &page.progress;
-        let line = if *total == 0 { String::new() } else if system.is_empty() { format!("{done} of {total} games") } else { format!("{done} of {total} games · {system}") };
+        let (done, total, _) = &page.progress;
+        let line = page.progress_label();
         let y = self.game_check_words(c, None, &format!("Looking at your games{dots}"), &line);
         if *total > 0 {
             let (x, w) = (NU_PAD + NU_BTN_PAD, c.w - 2 * (NU_PAD + NU_BTN_PAD));
@@ -293,7 +293,7 @@ impl App {
             self.nu_hints(c, hints);
             return;
         }
-        let line = format!("{} of {} games ready", report.ready, report.total);
+        let line = report.ready_label();
         self.text.draw(c, Face::Body, NU_SMALL, NU_PAD + NU_BTN_PAD, top + 34 + pocket_ui::type_scale::grow(NU_SMALL), pal().quiet, &line);
         let rows: Vec<(String, String)> = groups.iter().map(|(g, n)| (g.name().to_string(), n.to_string())).collect();
         let list_top = top + 34 + pocket_ui::type_scale::line(NU_SMALL, 18);

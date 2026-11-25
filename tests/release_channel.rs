@@ -120,11 +120,12 @@ fn builds_a_signed_list_that_names_the_files_of_the_github_release() {
     let tarball = site.join(format!("github/pocket-ui-{VERSION}-aarch64.tar.gz"));
     assert_eq!(app.sha256, sha(&tarball));
     assert_eq!(app.size, std::fs::metadata(&tarball).unwrap().len());
-    // What the device unpacks: exactly the three files of a release (update::install_app).
+    // What the device unpacks: exactly the three files of a release (update::install_app) and the Chinese font files
+    // next to them (scripts/shipped-fonts.sh).
     let listing = Command::new("tar").arg("-tzf").arg(&tarball).output().unwrap();
     let mut names: Vec<String> = String::from_utf8_lossy(&listing.stdout).lines().map(str::to_string).collect();
     names.sort();
-    assert_eq!(names, ["pocket-core", "pocket-ui", "portmaster-setup.sh"]);
+    assert_eq!(names, ["fonts/", "fonts/FusionPixel12-zh_hans-CJK.otf", "fonts/NotoSansSC-Regular-CJK.otf", "pocket-core", "pocket-ui", "portmaster-setup.sh"]);
     // The device resolves the URL as it stands: absolute, on https.
     assert_eq!(pocket_ui::update::resolve(pocket_ui::update::DEFAULT_URL, &app.url), app.url);
     assert!(m.os.is_none(), "no system update without --os-tar");

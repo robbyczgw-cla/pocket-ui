@@ -119,7 +119,9 @@ pub fn hand_covers(c: char) -> bool {
 }
 
 /// The pen a name is written with: the hand font (its letters folded to the nearest it has: "Ōkami" as "Okami"), or
-/// the interface's title face when even that leaves letters out.
+/// the interface's title face when even that leaves letters out, or when the name has ideographs, kana or hangul that
+/// pocket-ui's own fonts paint (`text_fallback::cjk`, `korean`): a Chinese name is written as it is, never cut to its
+/// digits ("聖剣伝説2" was "2"), nor a Japanese one turned into Latin letters.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Pen {
     Hand,
@@ -128,6 +130,10 @@ pub enum Pen {
 }
 
 pub fn pen_for(title: &str) -> (Pen, String) {
+    use crate::text_fallback::{cjk_has, korean_has};
+    if title.chars().any(|c| cjk_has(c) || korean_has(c)) {
+        return (Pen::Print(Face::Title), title.to_string());
+    }
     let mut covers = hand_covers;
     let folded = crate::latinise::fold(title, &mut covers).into_owned();
     if folded.chars().all(hand_covers) {
@@ -320,8 +326,9 @@ fn set_in(text: &mut Text, pen: Pen, title: &str, max_w: i32, max_h: i32, max_li
 fn wrap(text: &mut Text, pen: Pen, px: u32, s: &str, max_w: i32, max_lines: usize) -> Option<Vec<String>> {
     let mut lines: Vec<String> = Vec::new();
     let mut cur = String::new();
-    for w in s.split_whitespace() {
-        let cand = if cur.is_empty() { w.to_string() } else { format!("{cur} {w}") };
+    // Between words, and between any two hanzi or kana of a printed CJK name (`text::line_units`).
+    for (glue, w) in crate::text::line_units(s) {
+        let cand = if cur.is_empty() { w.to_string() } else { format!("{cur}{glue}{w}") };
         if width(text, pen, px, &cand) <= max_w {
             cur = cand;
         } else {
@@ -337,10 +344,11 @@ fn wrap(text: &mut Text, pen: Pen, px: u32, s: &str, max_w: i32, max_lines: usiz
     }
     // Two lines of about the same width read better than a long one and a lone word.
     if lines.len() == 2 && max_lines >= 2 {
-        let words: Vec<&str> = s.split_whitespace().collect();
+        let units = crate::text::line_units(s);
+        let join = |part: &[(&str, &str)]| part.iter().enumerate().map(|(k, (g, w))| if k == 0 { w.to_string() } else { format!("{g}{w}") }).collect::<String>();
         let mut best: Option<(i32, String, String)> = None;
-        for i in 1..words.len() {
-            let (a, b) = (words[..i].join(" "), words[i..].join(" "));
+        for i in 1..units.len() {
+            let (a, b) = (join(&units[..i]), join(&units[i..]));
             let (wa, wb) = (width(text, pen, px, &a), width(text, pen, px, &b));
             if wa <= max_w && wb <= max_w && best.as_ref().is_none_or(|(d, _, _)| (wa - wb).abs() < *d) {
                 best = Some(((wa - wb).abs(), a, b));
@@ -742,9 +750,24 @@ mod tests {
     fn letters_the_hand_lacks_are_folded_or_printed() {
         assert_eq!(pen_for("Ōkami Demake"), (Pen::Hand, "Ōkami Demake".to_string()), "Latin Extended-A is in the cut");
         assert_eq!(pen_for("Pokémon Ação").0, Pen::Hand);
-        // Japanese: written as the app reads it out elsewhere (romanised), else printed; never an empty label.
-        let (pen, name) = pen_for("ドラゴンクエスト");
-        assert!(!name.trim().is_empty() && (matches!(pen, Pen::Print(_)) || name.chars().all(hand_covers)), "{pen:?} {name}");
+        // Chinese, Japanese and Korean names that pocket-ui's own fonts paint: printed as written, never cut to their
+        // digits ("聖剣伝説2" was "2" on its spine, 24.11.2026) nor romanised.
+        for name in ["ドラゴンクエスト", "聖剣伝説2", "仙剑奇侠传", "젤다의 전설"] {
+            assert_eq!(pen_for(name), (Pen::Print(Face::Title), name.to_string()), "{name}");
+        }
+    }
+
+    /// A printed Chinese name breaks between hanzi like any line of the interface (`text::line_units`), never with a
+    /// space put into it, never left whole past the label.
+    #[test]
+    fn a_long_chinese_name_on_tape_breaks_between_hanzi_without_spaces() {
+        let mut text = Text::new();
+        let name = "仙剑奇侠传三外传问情篇";
+        let room = width(&mut text, Pen::Print(Face::Title), 30, "仙剑奇侠传三") + 2;
+        let lines = wrap(&mut text, Pen::Print(Face::Title), 30, name, room, 3).expect("it goes on three lines");
+        assert!(lines.len() >= 2, "{lines:?}");
+        assert_eq!(lines.concat(), name, "nothing lost, no space added: {lines:?}");
+        assert!(lines.iter().all(|l| width(&mut text, Pen::Print(Face::Title), 30, l) <= room), "{lines:?}");
     }
 
     use crate::image::Image;

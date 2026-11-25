@@ -155,6 +155,8 @@ mod app_save_trouble;
 mod app_emu_choice;
 /// How a game starts on Android's handheld view and its "Runs on" page (`pocket_ui::play_route`).
 mod app_runs_on_android;
+/// A game's own cover chosen on its card, Android's handheld view (`covers::custom`).
+mod app_cover_pick;
 mod app_this_game;
 /// Speed guard: the frame line of the latency trace (POCKETUI_TRACE, docs/LATENCY.md).
 mod app_trace;
@@ -409,6 +411,10 @@ enum UserEvent {
     BackToEs,
     /// The game card's description from Wikipedia arrived, or could not be loaded (`app_card`).
     CardText { title: String, text: Result<String, String> },
+    /// Android's photo picker answered "Choose cover…" (`app_cover_pick`): picked, cancelled, too-big, no-picker, failed.
+    CoverPicked(String),
+    /// The chosen picture, checked and scaled on a thread (`covers::custom::from_picture`), for a game (system, file).
+    CoverReady { system: String, rom: PathBuf, png: Result<Vec<u8>, pocket_ui::covers::custom::Refused> },
     /// Syncthing: news for Settings > Sync, and the result of the scan after a game (`app_sync.rs`).
     Sync(pocket_ui::sync_page::Event),
     /// Tailscale: news for Settings > Tailscale (`app_tailscale.rs`).
@@ -756,6 +762,7 @@ const SETTINGS: [SettingsRow; app_settings_groups::count()] = app_settings_group
 #[derive(Debug)]
 enum UpdateEvent {
     Checked(Result<Manifest, String>),
+    CheckingCard,
     Progress(u64),
     Worker { job: u64, snapshot: update::WorkerSnapshot },
     Inspected(update::observation::Inspection),
@@ -764,7 +771,7 @@ enum UpdateEvent {
     /// The system update was staged; the note says what the new system lacks that pocket-ui uses (`os_compat`).
     OsStaged(Option<String>),
     /// The quiet look from the shelf for a newer pocket-ui (`app_update_hint`).
-    Looked(Result<Manifest, String>),
+    Looked { job_at_start: u64, result: Result<Manifest, String> },
     /// What the card holds (`app_card_update`): at the start, or from "Look on the card".
     CardLooked { at_start: bool, look: update::card::Look },
 }
@@ -780,8 +787,11 @@ enum UpdatePhase {
     Finished(UpdateReport),
 }
 
+const LOOKING_ON_CARD: &str = "Looking on the card";
+
 enum UpdateTask {
     Check,
+    CheckCard,
     App { version: String, total: u64, cancel: update::Cancel },
     System { version: String, total: u64, cancel: update::Cancel },
 }
@@ -796,16 +806,16 @@ impl UpdateTarget {
 
 impl UpdateTask {
     fn cancel(&self) -> Option<&update::Cancel> {
-        match self { Self::Check => None, Self::App { cancel, .. } | Self::System { cancel, .. } => Some(cancel) }
+        match self { Self::Check | Self::CheckCard => None, Self::App { cancel, .. } | Self::System { cancel, .. } => Some(cancel) }
     }
     fn target(&self) -> UpdateTarget {
-        match self { Self::Check => UpdateTarget::Check, Self::App { version, .. } => UpdateTarget::App(version.clone()), Self::System { version, .. } => UpdateTarget::System(version.clone()) }
+        match self { Self::Check | Self::CheckCard => UpdateTarget::Check, Self::App { version, .. } => UpdateTarget::App(version.clone()), Self::System { version, .. } => UpdateTarget::System(version.clone()) }
     }
     fn label(&self) -> String {
-        match self { Self::Check => "Checking for updates".into(), Self::App { version, .. } => format!("Installing pocket-ui {version}"), Self::System { version, .. } => format!("Getting system {version}") }
+        match self { Self::Check => "Checking for updates".into(), Self::CheckCard => LOOKING_ON_CARD.into(), Self::App { version, .. } => format!("Installing pocket-ui {version}"), Self::System { version, .. } => format!("Getting system {version}") }
     }
     fn total(&self) -> u64 {
-        match self { Self::Check => 0, Self::App { total, .. } | Self::System { total, .. } => *total }
+        match self { Self::Check | Self::CheckCard => 0, Self::App { total, .. } | Self::System { total, .. } => *total }
     }
 }
 
@@ -840,6 +850,8 @@ struct Updates {
     release_build: Option<bool>,
     sel: usize,
     manifest: Option<Manifest>,
+    /// When the manifest now on offer was read successfully. Wall time counts sleep between visits.
+    manifest_checked_at: Option<std::time::SystemTime>,
     phase: UpdatePhase,
     next_job: u64,
     done: u64,
@@ -860,6 +872,18 @@ impl Updates {
     /// (Android: the APK's, which Android's list offers by).
     fn app_available(&self) -> Option<&update::Release> {
         pocket_ui::update_page::available(self.manifest.as_ref(), update::shown_version(), self.release_build())
+    }
+
+    fn network_offer_is_fresh(&self, now: std::time::SystemTime) -> bool {
+        const FRESH_FOR: Duration = Duration::from_secs(5 * 60);
+        self.manifest.is_some() && self.manifest_checked_at
+            .and_then(|at| now.duration_since(at).ok())
+            .is_some_and(|age| age < FRESH_FOR)
+    }
+
+    fn remember_manifest(&mut self, manifest: Manifest, now: std::time::SystemTime) {
+        self.manifest = Some(manifest);
+        self.manifest_checked_at = Some(now);
     }
 
     fn start(&mut self, task: UpdateTask) {
@@ -948,6 +972,17 @@ mod update_job_characterisation {
             updates.finish(UpdateOutcome::Failed);
             assert!(pocket_ui::background_io::job(|| ()).is_some());
         }
+    }
+
+    #[test]
+    fn only_a_recent_successful_network_list_skips_the_check_on_open() {
+        let now = std::time::SystemTime::now();
+        let mut updates = Updates { manifest: Some(Manifest::default()), ..Updates::default() };
+        assert!(!updates.network_offer_is_fresh(now), "an undated list is stale");
+        updates.remember_manifest(Manifest::default(), now);
+        assert!(updates.network_offer_is_fresh(now + Duration::from_secs(299)));
+        assert!(!updates.network_offer_is_fresh(now + Duration::from_secs(300)));
+        assert!(!updates.network_offer_is_fresh(now - Duration::from_secs(1)), "the player's clock went backwards");
     }
 
     #[test]
@@ -1692,6 +1727,8 @@ struct App {
     leave: Option<pocket_ui::rescue::Dialog>,
     /// The GameCube or Wii game Dolphin's card stands before (system, name, path): "Start the game" starts it.
     dolphin_launch: Option<(String, String, PathBuf)>,
+    /// The game (system, file) Android's photo picker is choosing a cover for (`app_cover_pick`).
+    cover_pick: Option<(String, PathBuf)>,
     touch_rec: touch::Recognizer,
     /// where it is in window pixels, whether its left button is down, and the wheel's fraction (`app_touch`).
     cursor: Option<(f64, f64)>,
@@ -2253,9 +2290,19 @@ impl App {
                 eprintln!("ra_hotkeys: {e}");
             }
         }
+        // The dArkOS port's games in dArkOS's command: the same shortcuts for its RetroArch, in a file of this session that
+        // host-launch.py hands over as --appendconfig (dArkOS's retroarch.cfg stays as it is).
+        if emulator == "darkos" && pocket_ui::device::darkos_port() {
+            let values = options::GameSettings::load(&self.data_dir, &system, &path).effective();
+            let on = pocket_ui::ra_hotkeys::enabled(&values, self.kids_live(), self.big_on());
+            if let Some(paths) = pocket_ui::ra_hotkeys::DarkosPaths::from_env() {
+                if let Err(e) = pocket_ui::ra_hotkeys::prepare_darkos(&paths, on) {
+                    eprintln!("ra_hotkeys: dArkOS session: {e}");
+                }
+            }
+        }
         pocket_ui::mark!("launch", "{system} {}", path.display());
-        // pocket-core games get our display (the overlay); RetroArch, the standalone emulators and apps get ROCKNIX's box.
-        pocket_ui::mako_osd::set_hidden(hosted || pocket_ui::mako_osd::quiet_h700_games());
+        pocket_ui::mako_osd::show_game(hosted);
         pocket_ui::trace::step("launch spawn begin");
         let pgid = spawn_game(self.proxy.clone(), &run, &env);
         pocket_ui::trace::step("launch spawn ready");
@@ -2441,7 +2488,7 @@ impl App {
             self.restore_system_then_fan();
         }
         // Back on the shelf (or the next game's start says otherwise right after): our display again.
-        pocket_ui::mako_osd::set_hidden(true);
+        pocket_ui::mako_osd::show_shelf();
         pocket_ui::trace::step("exit shelf state ready");
         standalone::exited();
         self.launch_at = None;
@@ -3968,16 +4015,7 @@ impl App {
                     self.sys.open_time(Instant::now());
                     Some(SettingsPage::List(sel))
                 }
-                Opens::Updates => {
-                    self.updates.sel = 0;
-                    self.updates.set_confirmation(false);
-                    if pocket_ui::device::no_wifi_chip() {
-                        self.update_action(UpdateAction::Card);
-                    } else if self.updates.manifest.is_none() && self.update_auto() {
-                        self.update_action(UpdateAction::Check);
-                    }
-                    Some(SettingsPage::Updates)
-                }
+                Opens::Updates => Some(self.open_updates()),
                 Opens::GameCheck => self.open_game_check(),
                 Opens::Sync => self.open_sync(),
                 Opens::Pockets => self.open_pocket_sync(),
@@ -4466,7 +4504,10 @@ impl App {
                 };
                 let mut lines = vec![
                     ("Version", version),
-                    ("Games", format!("{games} on {} systems", self.systems.len())),
+                    ("Games", match self.systems.len() {
+                        1 => format!("{games} on 1 system"),
+                        n => format!("{games} on {n} systems"),
+                    }),
                     ("Free space", free),
                     // The status corner's figure (its thread's memory): no sysfs read in every frame of this page.
                     ("Battery", pocket_ui::status_corner::status().battery.map_or_else(|| "unknown".into(), |b| b.label())),
@@ -4553,7 +4594,8 @@ impl App {
         let history = pocket_ui::battery_history::view();
         let samples = history.recent(now, battery::KEEP);
         let current = battery::read(&battery::dir(), now);
-        let (headline, sub) = battery::describe(current.as_ref(), pocket_ui::battery_estimate::estimate(samples, now).as_ref());
+        let curve = pocket_ui::battery_history::curve();
+        let (headline, sub) = battery::describe(current.as_ref(), pocket_ui::battery_estimate::estimate_with(samples, now, curve.as_ref()).as_ref());
 
         let mut x = left;
         if let Some(s) = &current {
@@ -4568,6 +4610,16 @@ impl App {
         let running = self.running.as_ref().map(|r| r.system.clone());
         draws.sort_by_key(|d| (std::cmp::Reverse(d.tag.is_some() && d.tag == running), std::cmp::Reverse(d.tag.is_some()), std::cmp::Reverse(d.last)));
         draws.truncate(2);
+        let capacity = current.as_ref().filter(|s| !s.plugged()).map(|s| s.capacity);
+        let mut lines: Vec<String> = draws
+            .iter()
+            .map(|d| battery::draw_line(&d.tag.as_deref().map_or("The menus".to_string(), |t| system_short(&self.systems, t)), d, capacity))
+            .collect();
+        // What the last sleep cost (the screen off, the game paused) comes first: no other place says it, while a game's
+        // cost is in its pause menu too. Where room runs out (Large German on 1024x768 keeps one line) the systems go.
+        if let Some(slept) = pocket_ui::battery_estimate::last_sleep(&history, now) {
+            lines.insert(0, battery::sleep_line(&slept));
+        }
         // When the screen goes off and the Pocket sleeps is set elsewhere now: one line says where.
         let pointer = { self.text.wrap_prose(Face::Body, NU_SMALL, SLEEP_SETTINGS_POINTER, c.w - 4 * pad) };
         let (draw_step, desc_step) = (pocket_ui::type_scale::line(NU_SMALL, 14), pocket_ui::type_scale::line(NU_SMALL, 10));
@@ -4580,10 +4632,10 @@ impl App {
         // Where even the shortest graph would leave the lines under it no room (Large German on 1024x768), the games'
         // cost lines go before the pointer to the Sleep settings and the graph, which lie on the hint bar otherwise.
         let top_of_graph = top + 130;
-        while draws.len() > 0 && hints_top - under_for(draws.len()) - top_of_graph < min_graph {
-            draws.pop();
+        while !lines.is_empty() && hints_top - under_for(lines.len()) - top_of_graph < min_graph {
+            lines.pop();
         }
-        let under = under_for(draws.len());
+        let under = under_for(lines.len());
 
         // The graph, with room for the % labels on its left and the hours under it.
         let (gx, gy) = (left + 100, top + 130);
@@ -4604,11 +4656,9 @@ impl App {
         };
         self.text.draw_right(c, Face::Body, NU_SMALL, right, below, pal().dust, &span);
 
-        let capacity = current.as_ref().filter(|s| !s.plugged()).map(|s| s.capacity);
         let mut ly = below + 12;
-        for d in &draws {
-            let name = d.tag.as_deref().map_or("The menus".to_string(), |t| system_short(&self.systems, t));
-            let line = self.text.fit(Face::Body, NU_SMALL, &battery::draw_line(&name, d, capacity), right - gx);
+        for line in &lines {
+            let line = self.text.fit(Face::Body, NU_SMALL, line, right - gx);
             ly += draw_step;
             self.text.draw(c, Face::Body, NU_SMALL, gx, ly, pal().quiet, &line);
         }
@@ -4825,6 +4875,18 @@ impl App {
         self.update_url.clone().unwrap_or_else(update::default_url)
     }
 
+    /// A visit is an explicit check when the remembered list has aged. The automatic switch controls shelf notices.
+    fn open_updates(&mut self) -> SettingsPage {
+        self.updates.sel = 0;
+        self.updates.set_confirmation(false);
+        if pocket_ui::device::no_wifi_chip() {
+            self.update_action(UpdateAction::Card);
+        } else if self.updates.card.is_none() && !self.updates.network_offer_is_fresh(std::time::SystemTime::now()) {
+            self.update_action(UpdateAction::Check);
+        }
+        SettingsPage::Updates
+    }
+
     /// What the Updates page offers right now, in display order. Android's handheld view has no update file on a card.
     fn update_actions(&self) -> Vec<UpdateAction> {
         let (available, confirming) = (self.updates.app_available().is_some(), self.updates.confirming());
@@ -4862,6 +4924,7 @@ impl App {
                 std::thread::spawn(move || {
                     let result = app_update_hint::fetch(&url);
                     if result.is_err() && supports_card && pocket_ui::wifi::ip_now().is_none() {
+                        send(UpdateEvent::CheckingCard);
                         send(UpdateEvent::CardLooked { at_start: false, look: update::card::look() });
                     } else {
                         send(UpdateEvent::Checked(result));
@@ -4879,7 +4942,7 @@ impl App {
             }
             UpdateAction::Auto => {}
             UpdateAction::Card => {
-                self.updates.start(UpdateTask::Check);
+                self.updates.start(UpdateTask::CheckCard);
                 std::thread::spawn(move || send(UpdateEvent::CardLooked { at_start: false, look: update::card::look() }));
             }
             UpdateAction::InstallNow => {
@@ -4932,9 +4995,18 @@ impl App {
                 }
                 return;
             }
-            UpdateEvent::Looked(result) => {
-                self.update_hint_looked(result, Instant::now());
+            UpdateEvent::Looked { job_at_start, result } => {
+                self.update_hint_looked(result, Instant::now(), job_at_start);
                 self.resume_shelf_after_update();
+                return;
+            }
+            UpdateEvent::CheckingCard => {
+                if let UpdatePhase::Running(job) = &mut self.updates.phase {
+                    if matches!(job.task, UpdateTask::Check) {
+                        job.task = UpdateTask::CheckCard;
+                        job.label = job.task.label();
+                    }
+                }
                 return;
             }
             UpdateEvent::CardLooked { at_start: true, look } => {
@@ -4945,7 +5017,7 @@ impl App {
             UpdateEvent::CardLooked { at_start: false, look } => self.card_update_looked(look),
             UpdateEvent::Checked(Ok(m)) => {
                 self.updates.card = None;
-                self.updates.manifest = Some(m);
+                self.updates.remember_manifest(m, std::time::SystemTime::now());
                 let none = !self.update_actions().iter().any(|a| matches!(a, UpdateAction::InstallApp));
                 self.updates.message = none.then(|| if self.updates.release_build() { "Everything is up to date." } else { update::DEVELOPMENT_BUILD }.to_string());
                 UpdateOutcome::Checked
@@ -5024,6 +5096,7 @@ impl App {
                     _ => format!("{label}, {}%", (frac * 100.0) as u32),
                 }
             }
+            Some((LOOKING_ON_CARD, _)) => LOOKING_ON_CARD.into(),
             Some((label, _)) => format!("{label}…"),
             // Installed: the bar stays full and the line says what comes next until the new version is up.
             None if app_step.is_some_and(|(step, _)| step == update::Step::Restarting) => { bar(c, 1.0); update::Step::Restarting.line(100) }
@@ -5057,10 +5130,11 @@ impl App {
         let mut chosen = None;
         for (i, &(r, px)) in layouts.iter().enumerate() {
             let mut lines: Vec<String> = Vec::new();
-            for word in footer.split_whitespace() {
+            // Between words, and between any two hanzi or kana (`text::line_units`).
+            for (glue, word) in pocket_ui::text::line_units(&footer) {
                 match lines.last_mut() {
-                    Some(line) if self.text.width(Face::Body, px, &format!("{line} {word}")) <= max_w => {
-                        line.push(' ');
+                    Some(line) if self.text.width(Face::Body, px, &format!("{line}{glue}{word}")) <= max_w => {
+                        line.push_str(glue);
                         line.push_str(word);
                     }
                     _ => lines.push(word.to_string()),
@@ -6301,11 +6375,18 @@ fn snapshot_cheats(state: &str, tmp: &std::path::Path) -> Option<CheatMenu> {
 }
 
 /// Six made-up hours of battery history in `data_dir` for the Battery page's snapshot: GBA, the menus, PlayStation, the
-/// last 20 minutes on the charger (the battery itself comes from `POCKETUI_BATTERY`).
-fn snapshot_battery_samples(data_dir: &std::path::Path) {
+/// last 20 minutes on the charger (the battery itself comes from `POCKETUI_BATTERY`). `slept`: a night of deep sleep
+/// before them, 7 h 40 min that cost 3 points (the Battery page's sleep line).
+fn snapshot_battery_samples(data_dir: &std::path::Path, slept: bool) {
     use pocket_ui::battery::Sample;
     let now = recents::now_secs();
     let mut h = pocket_ui::battery_history::History::new();
+    if slept {
+        for (m, capacity) in [(840u64, 98u8), (380, 95)] {
+            let s = Sample { t: now - m * 60, capacity, charging: false, full: false, mv: 3900, ma: -60, temp: Some(250), tag: 0 };
+            h.push(s, Some(pocket_ui::battery_history::SLEEP_TAG));
+        }
+    }
     let mut capacity = 95.0f32;
     for m in (0..360u64).rev() {
         let (tag, drain, charging) = match m {
@@ -6379,8 +6460,8 @@ fn snapshot(app: &mut App, args: &[String]) {
     app.setup = None;
     // A game's card is the page in every state but `box:` (`game_box`), as the snapshot tests have always seen it.
     app.game_box = false;
-    if state.starts_with("battery") && state.ends_with(":samples") {
-        snapshot_battery_samples(&app.data_dir);
+    if state.starts_with("battery") && (state.ends_with(":samples") || state.ends_with(":sleep")) {
+        snapshot_battery_samples(&app.data_dir, state.ends_with(":sleep"));
     }
     // What a running pocket-ui reads on threads (shown as "Loading…" until then) is read before the picture.
     pocket_ui::battery_history::load_now(&app.data_dir);
@@ -7117,8 +7198,8 @@ fn snapshot(app: &mut App, args: &[String]) {
         settings.values.insert(pocket_ui::over_game::KEY.into(), l.value().into());
     }
     // "battery:<range>": the Battery page with `battery::RANGES[range]` hours (a day by default).
-    // "battery[:<range>][:samples]": the Battery page and its graph's range; `:samples` with six made-up hours of
-    // history (`snapshot_battery_samples`).
+    // "battery[:<range>][:samples|:sleep]": the Battery page and its graph's range; `:samples` with six made-up hours of
+    // history (`snapshot_battery_samples`), `:sleep` with a night asleep before them.
     let battery_args: Option<Vec<&str>> = state.strip_prefix("battery").map(|r| r.split(':').filter(|p| !p.is_empty()).collect());
     let battery_range = battery_args.as_ref().map(|a| a.first().and_then(|n| n.parse().ok()).unwrap_or(pocket_ui::battery::DEFAULT_RANGE));
     // "manual:<page>:<pixels>": a page of the manual (0 = the first), scrolled down by that much.
@@ -8020,7 +8101,7 @@ fn start_input(started: Instant) -> std::sync::Arc<pocket_ui::pad::Early<UserEve
     out
 }
 
-/// A private headless harness for user journeys. Normal starts never enable it, even with mock hardware.
+/// A private input and capture harness for user journeys, headless by default. Normal starts never enable it.
 /// Its path contains the command FIFO, captures and a stand-in game runner; it never borrows a running UI's FIFO.
 fn test_driver_dir() -> Option<&'static PathBuf> {
     static DIR: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
@@ -8712,6 +8793,8 @@ impl App {
             }
             UserEvent::Pad(_) if self.switcher.is_some() && self.running.is_none() => {}
             UserEvent::CardText { title, text } => self.card_text(title, text),
+            UserEvent::CoverPicked(outcome) => self.cover_picked(outcome),
+            UserEvent::CoverReady { system, rom, png } => self.cover_ready(system, rom, png),
             UserEvent::Pad(PadEvent::Button { button, pressed: true, .. }) if self.port_files.is_some() && self.running.is_none() => {
                 self.port_files_input(button);
             }
@@ -8792,7 +8875,10 @@ impl App {
 
 impl ApplicationHandler<UserEvent> for App {
     fn resumed(&mut self, el: &ActiveEventLoop) {
-        if test_driver_dir().is_some() { return; }
+        // A framebuffer journey uses the same input fixture as the headless tests, with a real window.
+        if test_driver_dir().is_some() && std::env::var_os("POCKETUI_TEST_WINDOW").is_none() {
+            return;
+        }
         if self.window.is_some() {
             return;
         }
@@ -9195,25 +9281,29 @@ impl ApplicationHandler<UserEvent> for App {
         if let Some(t) = self.room_tick(now) {
             wake = Some(wake.map_or(t, |w| w.min(t)));
         }
-        // The selected game's box front and cartridge, built while the player rests on it (`app_card::box_warm_tick`).
-        if let Some(t) = self.box_warm_tick(now) {
-            wake = Some(wake.map_or(t, |w| w.min(t)));
-        }
-        // The focused game's console rig and cartridge/disc, pre-warmed while resting on a case (`app_cabinet::insert_warm_tick`).
-        if let Some(t) = self.insert_warm_tick(now) {
-            wake = Some(wake.map_or(t, |w| w.min(t)));
-        }
-        // The library's game facts, looked up ahead in idle moments: the first card's "More by" needs all of them (`app_card::infos_warm_tick`).
-        if let Some(t) = self.infos_warm_tick(now) {
-            wake = Some(wake.map_or(t, |w| w.min(t)));
-        }
-        // The Cabinet: the shelves next to the selected one, made ahead after a move (`app_cabinet::cabinet_warm_tick`).
-        if let Some(t) = self.cabinet_warm_tick(now) {
-            wake = Some(wake.map_or(t, |w| w.min(t)));
-        }
-        // Lived-in shelf: the row's leaning and lying spines, made ahead after the row opened (`app_cabinet::lived_warm_tick`).
-        if let Some(t) = self.lived_warm_tick(now) {
-            wake = Some(wake.map_or(t, |w| w.min(t)));
+        // Key repeat runs without new input events. The shelf's idle work must wait for release even when
+        // the idle delays have expired, so rig, box and spine preparation cannot run between animation frames.
+        if self.held.is_none() {
+            // The selected game's box front and cartridge, built while the player rests on it (`app_card::box_warm_tick`).
+            if let Some(t) = self.box_warm_tick(now) {
+                wake = Some(wake.map_or(t, |w| w.min(t)));
+            }
+            // The focused game's console rig and cartridge/disc, pre-warmed while resting on a case (`app_cabinet::insert_warm_tick`).
+            if let Some(t) = self.insert_warm_tick(now) {
+                wake = Some(wake.map_or(t, |w| w.min(t)));
+            }
+            // The library's game facts, looked up ahead in idle moments: the first card's "More by" needs all of them (`app_card::infos_warm_tick`).
+            if let Some(t) = self.infos_warm_tick(now) {
+                wake = Some(wake.map_or(t, |w| w.min(t)));
+            }
+            // The Cabinet: the shelves next to the selected one, made ahead after a move (`app_cabinet::cabinet_warm_tick`).
+            if let Some(t) = self.cabinet_warm_tick(now) {
+                wake = Some(wake.map_or(t, |w| w.min(t)));
+            }
+            // Lived-in shelf: the row's leaning and lying spines, made ahead after the row opened (`app_cabinet::lived_warm_tick`).
+            if let Some(t) = self.lived_warm_tick(now) {
+                wake = Some(wake.map_or(t, |w| w.min(t)));
+            }
         }
         if let Some(t) = self.sys.next_wake() {
             wake = Some(wake.map_or(t, |w| w.min(t)));
@@ -9911,6 +10001,8 @@ fn main() {
     };
     let mock_update_manifest = app_update_hint::mock_manifest();
     let mock_release_build = (mock_update_manifest.is_some() || app_card_update::mocked().is_some()).then_some(true);
+    // With the mock notice on, the fixture stands in for a just-completed automatic look.
+    let mock_checked_at = (mock_update_manifest.is_some() && !update_hint.state.off).then(std::time::SystemTime::now);
     let mut app = App {
         proxy,
         started,
@@ -9988,7 +10080,7 @@ fn main() {
         manual_hold: None,
         manual_from_setup: false,
         // A mock run's stand-in list (`POCKETUI_UPDATE_HINT`) also has its pocket-ui on the Updates page, with notes.
-        updates: Updates { release_build: mock_release_build, manifest: mock_update_manifest, ..Updates::default() },
+        updates: Updates { release_build: mock_release_build, manifest: mock_update_manifest, manifest_checked_at: mock_checked_at, ..Updates::default() },
         update_url: settings.update_url.clone(),
         store_url: settings.store_url.clone(),
         starter: Default::default(),
@@ -10014,6 +10106,7 @@ fn main() {
         hits: Default::default(),
         leave: None,
         dolphin_launch: None,
+        cover_pick: None,
         touch_rec: Default::default(),
         cursor: None,
         mouse_down: false,
@@ -10222,12 +10315,11 @@ fn main() {
         });
         // ROCKNIX's own volume box would sit on top of our display: mako hides it while we are in front (src/mako_osd.rs).
         pocket_ui::startup::after_first_frame("mako-osd", || {
-            match pocket_ui::mako_osd::ensure() {
+            match pocket_ui::mako_osd::start() {
                 Ok(true) => println!("mako: hiding ROCKNIX's volume box while pocket-ui is in front"),
                 Ok(false) => {}
                 Err(e) => eprintln!("mako: {e}"),
             }
-            pocket_ui::mako_osd::set_hidden(true);
         });
         // Wi-Fi comes back by itself when it drops, and a profile that lost its key is repaired (`wifi::watchdog`).
         let net = app.sys.net();

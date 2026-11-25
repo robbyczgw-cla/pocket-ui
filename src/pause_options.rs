@@ -847,10 +847,12 @@ mod tests {
                             let page = OptionsPage { heading: Some("Options"), counts: None, rows: &rows, sel, footer: None, description_above_hints: false, explanation: false, accent: 0x808080, corner: &corner, picture: None };
                             let out = paint_options(&mut c, &mut text, &mut hits, &page);
                             let at = format!("{lang:?} {size:?} {pw}x{ph} ({w}x{h}) sel {sel}: {:?}", desc.chars().take(40).collect::<String>());
-                            let painted: Vec<&str> = out.desc.iter().flat_map(|l| l.split_whitespace()).collect();
+                            // Every letter in order, spaces aside: Chinese breaks between two hanzi, where there is no
+                            // space, so words split at spaces would differ though nothing is lost.
+                            let painted: String = out.desc.iter().flat_map(|l| l.split_whitespace()).collect();
                             // Each paragraph (a line of the text) is translated on its own, as `kit::footer_lines` does.
                             let whole: Vec<String> = desc.lines().filter(|p| !p.trim().is_empty()).map(|p| text.translated(p).to_string()).collect();
-                            let want: Vec<&str> = whole.iter().flat_map(|p| p.split_whitespace()).collect();
+                            let want: String = whole.iter().flat_map(|p| p.split_whitespace()).collect();
                             if painted != want || out.desc.iter().any(|l| l.contains('\u{2026}')) {
                                 faults.push(format!("{at}: cut: {:?}", out.desc));
                             }

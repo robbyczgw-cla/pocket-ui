@@ -196,7 +196,9 @@ Available everywhere (shelf, Quick settings and gameplay), with a slim top bar s
 | SELECT + Vol+ / Vol- | Screen colour warmth: Vol+ warmer, Vol- cooler (**Cooler 1…10**, **Neutral**, **Warmer 1…10**; synced with Settings → Screen & sound → **Screen colour**, where A resets to Neutral) |
 
 RetroArch and standalone emulators apply these changes without drawing pocket-ui's bar; colour warmth and Extra dim
-reach RetroArch, PS2, GameCube and PortMaster only where the display supports system-wide gamma.
+reach RetroArch, PS2, GameCube and PortMaster only where the display supports system-wide gamma. On the TrimUI Brick,
+pressing volume keys while the hardware mute slider is engaged displays **Muted** and restores your exact previous volume
+when you flip the slider back.
 
 ### The power menu
 
@@ -218,10 +220,6 @@ with a description under each row:
 | B, or Power again | Close the power menu and resume gameplay. |
 
 Mid-game, the power menu pauses your game cleanly behind it and restores play if you cancel or wake from Sleep.
-
-For Wild Arms XF and Crisis Core in pocket-ui's own PSP host, GPU readbacks are skipped by default to prevent an
-exit-save hang (an explicit per-game/per-console Emulator setting still wins if you need to change it for visual
-effects).
 
 ### Test buttons
 
@@ -253,8 +251,3 @@ RetroArch, Azahar (3DS), PortMaster and other standalone players keep their own 
 Analogue triggers register at 55% pull and release below 40% to prevent chatter (unchanged analogue triggers keep full
 travel in standalone games; digital triggers behave as standard buttons). HOME, power and volume always remain active.
 
-On the TrimUI Brick, pressing volume keys while the hardware mute slider is engaged displays **Muted** and restores your
-exact previous volume when you flip the slider back.
-
-Game and console titles always keep their original spelling in every interface language, including wrapped box art and
-card labels.

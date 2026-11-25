@@ -89,6 +89,29 @@ run_failures() {
   printf '#!/bin/sh\necho "test crash" >&2\nexit 7\n' >"$P/app/bin/pocket-ui"; fail_case "$C" "pocket-ui crashes" "code 7"; restore
   printf '#!/bin/sh\nexit 0\n' >"$P/app/bin/pocket-ui"; fail_case "$C" "pocket-ui ends at once" "stopped after"; restore
   printf '#!/bin/sh\necho "cannot open fb" >&2\nexit 1\n' >"$P/app/bin/pocket-fb"; fail_case "$C" "screen bridge dies" "pocket-fb"; restore
+  mv "$P/app/bin/pocket-fb" "$P/app/bin/pocket-fb-real"
+  printf '#!/bin/sh\nsleep 6\nexec "$(dirname "$0")/pocket-fb-real" "$@"\n' >"$P/app/bin/pocket-fb"
+  chmod +x "$P/app/bin/pocket-fb"
+  es_start "$C"
+  waitfor place setup:welcome 20 && ok "$C: a slow bridge still reaches the welcome screen" || bad "$C: slow bridge never reached the welcome screen"
+  check "$C: the launcher logged the slow bridge" grep -q 'screen bridge after 5 s: Wayland missing, IPC missing' "$P/logs/start.log"
+  pkill -TERM -f "$P/app/start.sh direct" 2>/dev/null; wait_end
+  rm -f "$P/app/bin/pocket-fb-real"; restore
+  printf '#!/bin/sh\necho "positioned framebuffer writes: ${POCKET_FB_POSITIONED_WRITE:-off}"\nexit 1\n' >"$P/app/bin/pocket-fb"
+  for model in 'R36S-V21' G80CA-MB 'Hardkernel ODROID-GO3' 'Anbernic RG353M'; do
+    case "$model" in
+      'Anbernic RG353M') device=RG353M expected=off ;;
+      'Hardkernel ODROID-GO3') device=RG351MP expected=1 ;;
+      *) device=RG353M expected=1 ;;
+    esac
+    PADENV="DARKOS_MODEL='$model' DARKOS_DEVICE=$device DARKOS_COMPATIBLE=''" HOLD=1 es_start "$C"
+    wait_end
+    check "$C: $model positioned framebuffer writes are $expected" grep -qx "positioned framebuffer writes: $expected" "$P/logs/pocket-fb.log"
+  done
+  PADENV="DARKOS_MODEL='Unknown board' DARKOS_DEVICE=GENERIC DARKOS_COMPATIBLE='vendor,board rockchip,rk3326'" HOLD=1 es_start "$C"
+  wait_end
+  check "$C: an unknown RK3326 board also enables positioned framebuffer writes" grep -qx 'positioned framebuffer writes: 1' "$P/logs/pocket-fb.log"
+  restore
   rm -f "$P/start.sh"; fail_case "$C" "start.sh missing" "start.sh did not run"; restore
   # a card mounted noexec: start.sh is run by sh, the programs cannot be run
   mount -o remount,noexec "$C"; : >/tmp/tty.out

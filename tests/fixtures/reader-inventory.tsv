@@ -23,6 +23,8 @@ android/java/xyz/pocketui/app/GameDirect.java	1	if(in.read()<0)return "provider 
 android/java/xyz/pocketui/app/GameDirect.java	1	try(FileInputStream in=new FileInputStream("/proc/self/fd/"+fd.getFd())){
 android/java/xyz/pocketui/app/GameDirect.java	1	try(ParcelFileDescriptor fd=context.getContentResolver().openFileDescriptor(document,"r")){
 android/java/xyz/pocketui/app/GameDirect.java	1	while(length<header.length&&(n=in.read(header,length,header.length-length))>0)length+=n;
+android/java/xyz/pocketui/app/HandheldActivity.java	1	for (int n; (n = in.read(buf)) > 0; ) {
+android/java/xyz/pocketui/app/HandheldActivity.java	1	try (java.io.InputStream in = getContentResolver().openInputStream(uri); java.io.OutputStream os = new java.io.FileOutputStream(out)) {
 android/java/xyz/pocketui/app/PlayerActivity.java	1	gameDocument=getContentResolver().openFileDescriptor(android.net.Uri.parse(getIntent().getStringExtra("document")),"r");
 android/java/xyz/pocketui/app/PlayerActivity.java	1	int[] safe=SafeInsets.read(this,insets);safeLeft=safe[0];safeTop=safe[1];safeRight=safe[2];safeBottom=safe[3];
 android/java/xyz/pocketui/app/PlayerActivity.java	1	public java.io.InputStream open(String path)throws java.io.IOException{return assets.open(path);}
@@ -67,6 +69,12 @@ android/java/xyz/pocketui/app/SaveCopy.java	1	private OutputStream open(String f
 android/java/xyz/pocketui/app/SaveCopy.java	1	try (InputStream in = new FileInputStream(local); OutputStream out = open(folder, parts[parts.length - 1])) {
 android/java/xyz/pocketui/app/SaveCopy.java	2	try (InputStream in = resolver.openInputStream(doc(found[0]))) {
 android/java/xyz/pocketui/app/SaveCopy.java	1	try (OutputStream out = open(folderId, name)) { out.write(bytes); }
+android/java/xyz/pocketui/app/ShippedFonts.java	1	if (stamp.equals(read(mark))) return;
+android/java/xyz/pocketui/app/ShippedFonts.java	1	int n = in.read(b);
+android/java/xyz/pocketui/app/ShippedFonts.java	1	private static String read(File file) {
+android/java/xyz/pocketui/app/ShippedFonts.java	1	try (InputStream in = assets.open("fonts/" + name); FileOutputStream out = new FileOutputStream(part)) {
+android/java/xyz/pocketui/app/ShippedFonts.java	1	try (InputStream in = new FileInputStream(file)) {
+android/java/xyz/pocketui/app/ShippedFonts.java	1	while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
 android/java/xyz/pocketui/app/SystemAssets.java	1	InputStream open(String path) throws IOException;
 android/java/xyz/pocketui/app/SystemAssets.java	1	try(InputStream input=source.open(path); FileOutputStream output=new FileOutputStream(part)){
 android/java/xyz/pocketui/app/SystemAssets.java	1	while((n=input.read(buffer))!=-1)output.write(buffer,0,n);
@@ -175,6 +183,7 @@ src/app_card.rs	1	let warmed = open(self);
 src/app_card_update.rs	1	std::fs::read_to_string(data.join(SEEN_FILE)).ok().map(|s| s.trim().to_string())
 src/app_case_knows.rs	1	let bytes = std::fs::read(rom).ok()?;
 src/app_case_knows.rs	1	let numbers = std::fs::read(std::env::var("POCKETUI_SNAPSHOT_DS_PALETTES").ok()?).ok()?;
+src/app_cover_pick.rs	1	let read = std::fs::File::open(file).and_then(|f| f.take(custom::MAX_BYTES + 1).read_to_end(&mut bytes));
 src/app_disc.rs	1	Discs::read(&run.path).and_then(DiscRow::new)
 src/app_earlier.rs	1	row.selected().map(|e| (image::load_png(&slots::preview_path(&e.path)), e.at))
 src/app_emu_choice.rs	1	_ => (Cfg::read(Path::new(emu_choice::SYSTEM_CFG)), Cfg::read(Path::new(emu_choice::SHIPPED_CFG)), false),
@@ -294,13 +303,14 @@ src/backup_saves.rs	1	match e.metadata() {
 src/backup_saves.rs	1	return b.read(&mut y).is_ok_and(|m| m == 0);
 src/backup_saves.rs	1	to.symlink_metadata().is_ok_and(|m| !m.is_file() || seconds(&m) + SAME_TIME >= item.modified)
 src/battery.rs	1	let get = |name: &str| std::fs::read_to_string(dir.join(name)).ok().map(|s| s.trim().to_string());
+src/battery_curve.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(FILE)).unwrap_or_default()
 src/battery_games.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(FILE)).unwrap_or_default()
 src/battery_history.rs	1	Some(_) => std::fs::read(&bak).map_err(|e| e.to_string()).and_then(|b| History::parse(&b)).is_err(),
-src/battery_history.rs	1	history: History::open(data_dir),
 src/battery_history.rs	1	if let Ok(bytes) = std::fs::read(&ring) {
 src/battery_history.rs	1	if let Some(r) = battery::read(dir, t) {
 src/battery_history.rs	1	let age = std::fs::metadata(&bak)
 src/battery_history.rs	1	let bytes = match std::fs::read(path) {
+src/battery_history.rs	1	let history = History::open(data_dir);
 src/battery_history.rs	1	let mut first = battery::read(dir, t)?;
 src/battery_history.rs	1	let rec = Recorder::open(data_dir);
 src/battery_history.rs	1	match std::fs::read(&bak).map_err(|e| e.to_string()).and_then(|b| History::parse(&b)) {
@@ -345,7 +355,7 @@ src/bin/pocket_fb.rs	1	let Some(request) = brick_picture::Request::read(words) e
 src/bin/pocket_fb.rs	1	let alive = match stream.read(&mut buf) {
 src/bin/pocket_fb.rs	1	let file = std::fs::File::open(path).map_err(|e| format!("{path}: {e}"))?;
 src/bin/pocket_fb.rs	1	let file = std::fs::OpenOptions::new().read(true).write(true).open(path).map_err(|e| format!("{path}: {e}"))?;
-src/bin/pocket_fb.rs	1	let mut fb = Fb::open(&args.fb, args.mode, args.vsync, args.bgr)?;
+src/bin/pocket_fb.rs	1	let mut fb = Fb::open(&args.fb, args.mode, args.vsync, args.bgr, args.take, positioned)?;
 src/bin/pocket_fb.rs	1	let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
 src/bin/pocket_fb.rs	1	s.read_exact(&mut body).map_err(|e| e.to_string())?;
 src/bin/pocket_fb.rs	1	s.read_exact(&mut head).map_err(|e| e.to_string())?;
@@ -724,8 +734,8 @@ src/i18n.rs	1	match std::fs::read_to_string(path) {
 src/image.rs	1	Some("jpg" | "jpeg") => load_jpeg(path),
 src/image.rs	1	Some("png") => load_png(path),
 src/image.rs	1	let meta = std::fs::symlink_metadata(&file).ok()?;
-src/image.rs	1	let mut decoder = jpeg_decoder::Decoder::new(std::io::BufReader::new(crate::background_io::open(path).ok()?));
 src/image.rs	1	let source = std::fs::File::open(&file).ok()?.take(MAX_CAPTURE_BYTES);
+src/image.rs	1	read_jpeg(std::io::BufReader::new(crate::background_io::open(path).ok()?))
 src/image.rs	1	read_png(std::io::BufReader::new(crate::background_io::open(path).ok()?))
 src/image.rs	1	self.source.read(bytes)
 src/image.rs	1	std::fs::File::open(path).ok()?.read_exact(&mut head).ok()?;
@@ -808,7 +818,9 @@ src/logs.rs	1	let text = fs::read_to_string(logs.join(STATE_FILE)).ok()?;
 src/logs.rs	1	match f.read(&mut buf) {
 src/logs.rs	1	self.file = OpenOptions::new().create(true).append(true).open(&self.path).ok();
 src/low_battery.rs	1	let get = |p: &Path| std::fs::read_to_string(p).ok().map(|s| s.trim().to_string());
+src/low_battery.rs	1	let level = read(dir)?;
 src/low_battery.rs	1	std::fs::read_dir(supplies).into_iter().flatten().flatten().any(|e| {
+src/low_battery.rs	1	std::fs::read_to_string(dir.join(name)).ok()
 src/main.rs	1	(image::load_png(std::path::Path::new(&preview)), t)
 src/main.rs	1	app.earlier_snapshot(state, args.get(2).and_then(|p| image::load_image(std::path::Path::new(p))));
 src/main.rs	1	if let (Some(pic), Some(layout)) = (args.get(3).and_then(|p| image::load_image(std::path::Path::new(p))), app.preview_layout(w as i32, h as i32)) {
@@ -1011,6 +1023,8 @@ src/quick.rs	1	if let Some(v) = std::fs::read_to_string(&file).ok().and_then(|s|
 src/quick_profiles.rs	1	let cpufreq = std::fs::read_dir(root.join("sys/devices/system/cpu/cpufreq"))
 src/ra_hotkeys.rs	1	.and_then(|name| std::fs::read_to_string(paths.joypads.join(format!("{name}.cfg"))).ok());
 src/ra_hotkeys.rs	1	let Ok(cfg) = std::fs::read_to_string(paths.retroarch_cfg) else { return Ok(false) };
+src/ra_hotkeys.rs	1	let autoconfig = std::fs::read_to_string(paths.autoconfig.join(format!("{name}.cfg"))).ok()?;
+src/ra_hotkeys.rs	1	let devices = std::fs::read_to_string(&paths.input_devices).unwrap_or_default();
 src/ra_hotkeys.rs	1	let devices = std::fs::read_to_string(paths.input_devices).unwrap_or_default();
 src/ra_state.rs	1	for entry in std::fs::read_dir(dir)? {
 src/ra_state.rs	1	if !entry.metadata().is_ok_and(|m| m.is_file() && m.len() > 0) {
@@ -1145,11 +1159,9 @@ src/sleep.rs	1	.and_then(|d| std::fs::read_to_string(d.join("brightness")).ok())
 src/sleep.rs	1	.or_else(|| std::fs::read_to_string(&self.dark_file).ok()?.trim().parse::<u32>().ok().filter(|v| *v > 0))
 src/sleep.rs	1	crate::low_battery::read(&crate::battery::dir())
 src/sleep.rs	2	if plan.due(now) && crate::auto_off::decide(false, crate::low_battery::read(&self.battery_dir)) == crate::auto_off::Verdict::SwitchOff {
-src/sleep.rs	1	let mut level = crate::low_battery::read(&dir);
 src/sleep.rs	1	let r: Resume = serde_json::from_slice(&std::fs::read(&path).ok()?).ok()?;
 src/sleep.rs	1	let saved = std::fs::read_to_string(&file).ok()?.trim().parse::<u32>().ok()?;
 src/sleep.rs	1	let saved: Option<Config> = crate::fsutil::read_json_or_backup(&data_dir.join(CONFIG_FILE));
-src/sleep.rs	1	level = crate::low_battery::read(&dir);
 src/sleep.rs	1	read(libc::CLOCK_BOOTTIME) - read(libc::CLOCK_MONOTONIC)
 src/sleep.rs	1	stats: read("success").zip(read("fail")),
 src/sleep.rs	1	std::fs::read_dir("/proc").into_iter().flatten().flatten().any(|e| {
@@ -1308,6 +1320,7 @@ src/tailscale.rs	1	while matches!(reader.read_until(b'\n', &mut buf), Ok(n) if n
 src/text.rs	1	let bytes = std::fs::read(fonts_dir().join(name)).ok()?;
 src/text_fallback.rs	1	let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
 src/text_fallback.rs	1	let map = unsafe { memmap2::Mmap::map(&file) }.map_err(|e| e.to_string())?;
+src/text_fallback.rs	1	open(&dir.join(if pixel { CJK_PIXEL_FILE } else { CJK_SANS_FILE }))
 src/timeline.rs	1	Picture::File(p) => std::fs::read(crate::state_file::resolve(p)).ok(),
 src/timeline.rs	1	copied = crate::state_file::read(from).map_err(|e| Skip::Skipped(format!("{}: {e}", from.display())))?;
 src/timeline.rs	1	for f in std::fs::read_dir(system.path()).into_iter().flatten().flatten() {
@@ -1417,6 +1430,12 @@ src/update/cheats.rs	1	let mut files: Vec<PathBuf> = places.iter().filter_map(|d
 src/update/cheats.rs	1	let the_pack = |f: &Path| std::fs::metadata(f).is_ok_and(|m| m.len() == rel.size) && store::sha256_file(f).is_ok_and(|h| h == want);
 src/update/cheats.rs	2	std::fs::File::open(&part).and_then(|f| f.sync_all()).map_err(|_| WRITE)?;
 src/update/cheats.rs	1	std::fs::copy(&file, &part).map_err(|_| WRITE)?;
+src/update/image_files.rs	1	file.read_to_end(&mut old)?;
+src/update/image_files.rs	1	let directory = |path: &Path| fs::symlink_metadata(path).is_ok_and(|m| m.is_dir());
+src/update/image_files.rs	1	let metadata = file.metadata()?;
+src/update/image_files.rs	1	let mut file = match fs::OpenOptions::new().read(true).custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK).open(path) {
+src/update/image_files.rs	1	let regular = |path: &Path| fs::symlink_metadata(path).is_ok_and(|m| m.is_file());
+src/update/image_files.rs	1	match fs::symlink_metadata(&backup) {
 src/update/observation.rs	1	Layout::Rocknix => std::fs::read_link(root.join("known-good")).ok().and_then(|p| root.join(p).canonicalize().ok()).zip(release.canonicalize().ok()).is_some_and(|(good, running)| good == running),
 src/update/observation.rs	1	file.take(257).read_to_string(&mut text)?;
 src/update/observation.rs	1	fn present(path: &Path) -> bool { std::fs::symlink_metadata(path).is_ok() }

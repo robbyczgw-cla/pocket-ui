@@ -693,7 +693,7 @@ impl App {
         true
     }
 
-    /// `--snapshot card-manage:<system>:<name>[:row|:hide|:delete|:armed|:saves|:working|:error]` (the card of that
+    /// `--snapshot card-manage:<system>:<name>[:row|:hide|:delete|:delete-one|:armed|:saves|:working|:error]` (the card of that
     /// game with Delete from the card selected, Hide from the shelf selected, the delete sheet with made-up sizes,
     /// armed, with saves and states and Sync on, before the sizes are in, a game no longer there), and
     /// `storage-notice` (Home with the low-space notice).
@@ -717,11 +717,12 @@ impl App {
         self.show_card(Item::Game(s, g), system, gname, path);
         let Some(open) = self.card.as_mut() else { return true };
         let info = || DeleteInfo { game_bytes: 2_310_000_000, files: 3, names: vec!["Racer.cue".into(), "Racer (Track 1).bin".into()], kept_files: 4, kept_bytes: 41_200_000 };
-        if matches!(mode, "delete" | "armed" | "saves" | "working" | "error") {
+        if matches!(mode, "delete" | "delete-one" | "armed" | "saves" | "working" | "error") {
             open.card.mode = Mode::Delete(pocket_ui::game_card::DeleteSheet { info: None, with_saves: false, sel: 1, armed: false, synced: false, busy: false });
             match mode {
                 "working" => {}
                 "error" => open.card.delete_info(Err("The game's file is no longer on the SD card.".into()), false),
+                "delete-one" => open.card.delete_info(Ok(DeleteInfo { game_bytes: 4_000_000, files: 1, names: vec!["Advance Wars.gba".into()], kept_files: 0, kept_bytes: 0 }), false),
                 _ => open.card.delete_info(Ok(info()), mode == "saves"),
             }
             if mode == "armed" {

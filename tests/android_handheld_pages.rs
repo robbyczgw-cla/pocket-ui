@@ -40,6 +40,15 @@ impl Card {
 
     /// [`Card::screen`] with the menus in `lang`.
     fn screen_in(&self, state: &str, android: bool, lang: &str) -> String {
+        self.paint(&format!("{state}:device=odin2mini"), android, lang)
+    }
+
+    /// [`Card::screen`] on the default handheld (the card's rows are below its info page on the Odin 2 Mini's).
+    fn screen_default(&self, state: &str, android: bool) -> String {
+        self.paint(state, android, "en")
+    }
+
+    fn paint(&self, state: &str, android: bool, lang: &str) -> String {
         let tmp = self.dir.path();
         let (png, words) = (tmp.join("shot.png"), tmp.join("words.tsv"));
         let _ = std::fs::remove_file(&words);
@@ -51,7 +60,7 @@ impl Card {
             cmd.env("POCKETUI_ANDROID_PROFILE", "1");
         }
         let out = cmd
-            .args(["--snapshot", &format!("{state}:device=odin2mini"), png.to_str().unwrap()])
+            .args(["--snapshot", state, png.to_str().unwrap()])
             .env("POCKETUI_MOCK", "1").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
             .env("POCKETUI_LANG", lang)
             .env("POCKETUI_VISIBLE_TEXT", &words)
@@ -199,4 +208,34 @@ fn android_pages_paint_no_linux_words() {
     // Linux's Tour card and quick settings keep their words.
     assert!(sees(&card.screen("tour:quick", false), "Wi-Fi"));
     assert!(sees(&card.screen("manual:0", false), "ROCKNIX"));
+}
+
+/// A game's own cover on Android (24.11.2026, a player's wish): the card offers "Choose cover…" (Android's photo picker),
+/// and "Reset to automatic" once a cover was chosen. Linux's card has neither: there the web companion chooses one.
+#[test]
+fn the_card_offers_choose_cover_on_android_and_reset_once_one_is_chosen() {
+    let card = Card::new();
+    // The card from its top down to its end (Down n times), all its words.
+    let whole = |android: bool| [0, 4, 8, 12, 16, 20, 24, 60].iter().map(|n| card.screen_default(&format!("curator:card:snes:chrono:{n}"), android)).collect::<Vec<_>>().join("\n");
+    let linux = whole(false);
+    assert!(sees(&linux, "Hide from the shelf"), "the card's end: {linux}");
+    assert!(!sees(&linux, "Choose cover"), "Linux chooses covers in the web companion: {linux}");
+
+    let android = whole(true);
+    assert!(sees(&android, "Choose cover…"), "Android's card: {android}");
+    assert!(!sees(&android, "Reset to automatic"), "nothing to reset yet: {android}");
+
+    let rom = card.dir.path().join("roms/snes/Chrono Trigger (USA).sfc");
+    assert!(rom.exists(), "the fake library's game");
+    let chosen = pocket_ui::covers::custom::path(&card.dir.path().join("data"), "snes", &rom);
+    std::fs::create_dir_all(chosen.parent().unwrap()).unwrap();
+    let mut png = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut png, 8, 8);
+        enc.set_color(png::ColorType::Rgb);
+        enc.write_header().unwrap().write_image_data(&[0x80; 8 * 8 * 3]).unwrap();
+    }
+    std::fs::write(&chosen, png).unwrap();
+    let android = whole(true);
+    assert!(sees(&android, "Choose cover…") && sees(&android, "Reset to automatic"), "a chosen cover can be reset: {android}");
 }

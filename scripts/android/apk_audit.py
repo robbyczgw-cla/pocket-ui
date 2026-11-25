@@ -30,6 +30,7 @@ ROM_SUFFIXES = {".gb", ".gbc", ".gba", ".nes", ".sfc", ".smc", ".md", ".gen", ".
 REQUIRED = ["classes.dex", "AndroidManifest.xml", "assets/cores.json", "assets/licences/LICENSE", "assets/licences/NOTICE.md",
             "assets/licences/ANDROID-CORES.md", "assets/licences/RUST-LICENSES.txt", "assets/licences/PLAYER-RUST-LICENSES.txt",
             "assets/licences/SOURCE-OFFER.txt", "assets/licences/CORES.tsv", "assets/core-channel.url",
+            "assets/fonts/FusionPixel12-zh_hans-CJK.otf", "assets/fonts/NotoSansSC-Regular-CJK.otf",
             "lib/arm64-v8a/libpocket_android.so", "lib/arm64-v8a/libpocket_core_android.so"]
 PSP_REQUIRED = {"compat.ini", "font_atlas.zim", "ppge_atlas.zim", "flash0/font/ltn0.pgf", "vfpu/vfpu_sin_lut8192.dat"}
 # Pinned source assets whose suffix also names a ROM format: an RGBA texture and translator notes.

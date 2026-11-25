@@ -47,6 +47,9 @@ pub enum Lang {
     /// Korean: the interface's lines come from `ko.tsv`, its letters
     /// from the Korean fonts pocket-ui ships (`text_fallback::korean`).
     Ko,
+    /// Simplified Chinese: the interface's lines come from `zh.tsv`, its letters from the Chinese fonts pocket-ui ships
+    /// as files (`text_fallback::cjk`); offered only where they are (`Lang::offered`).
+    Zh,
 }
 
 /// What differs by language besides the words. A new language is a line here, one in `Lang`, and its table.
@@ -59,24 +62,30 @@ struct Traits {
     accept_language: &'static str,
     /// The game search's keyboard has y and z the German way round.
     qwertz: bool,
+    /// What stands between a number's whole part and its decimals ("2,3 W", Korean "2.3 W").
+    decimal: char,
     /// Its table has every line the others have (`Lang::complete`): false while a language is being translated; its
     /// missing lines are painted in English, and the checks that every line is there leave it out until it is true.
     complete: bool,
+    /// Its letters come from the Chinese font files pocket-ui ships (`text_fallback::cjk_available`): not offered, and
+    /// not set, where they are missing.
+    cjk_fonts: bool,
 }
 
 /// In the order of `Lang`.
-const TRAITS: [Traits; 7] = [
-    Traits { code: "en", name: "English", accept_language: "Accept-Language: en,de;q=0.5", qwertz: false, complete: true },
-    Traits { code: "de", name: "Deutsch", accept_language: "Accept-Language: de,en;q=0.8", qwertz: true, complete: true },
-    Traits { code: "es", name: "Español", accept_language: "Accept-Language: es,en;q=0.8", qwertz: false, complete: true },
-    Traits { code: "pt", name: "Português (Brasil)", accept_language: "Accept-Language: pt-BR,pt;q=0.9,en;q=0.7", qwertz: false, complete: true },
-    Traits { code: "fr", name: "Français", accept_language: "Accept-Language: fr-FR,fr;q=0.9,en;q=0.7", qwertz: false, complete: true },
-    Traits { code: "it", name: "Italiano", accept_language: "Accept-Language: it,en;q=0.8", qwertz: false, complete: true },
-    Traits { code: "ko", name: "한국어", accept_language: "Accept-Language: ko-KR,ko;q=0.9,en;q=0.7", qwertz: false, complete: true },
+const TRAITS: [Traits; 8] = [
+    Traits { code: "en", name: "English", accept_language: "Accept-Language: en,de;q=0.5", qwertz: false, decimal: '.', complete: true, cjk_fonts: false },
+    Traits { code: "de", name: "Deutsch", accept_language: "Accept-Language: de,en;q=0.8", qwertz: true, decimal: ',', complete: true, cjk_fonts: false },
+    Traits { code: "es", name: "Español", accept_language: "Accept-Language: es,en;q=0.8", qwertz: false, decimal: ',', complete: true, cjk_fonts: false },
+    Traits { code: "pt", name: "Português (Brasil)", accept_language: "Accept-Language: pt-BR,pt;q=0.9,en;q=0.7", qwertz: false, decimal: ',', complete: true, cjk_fonts: false },
+    Traits { code: "fr", name: "Français", accept_language: "Accept-Language: fr-FR,fr;q=0.9,en;q=0.7", qwertz: false, decimal: ',', complete: true, cjk_fonts: false },
+    Traits { code: "it", name: "Italiano", accept_language: "Accept-Language: it,en;q=0.8", qwertz: false, decimal: ',', complete: true, cjk_fonts: false },
+    Traits { code: "ko", name: "한국어", accept_language: "Accept-Language: ko-KR,ko;q=0.9,en;q=0.7", qwertz: false, decimal: '.', complete: true, cjk_fonts: false },
+    Traits { code: "zh", name: "简体中文", accept_language: "Accept-Language: zh-CN,zh;q=0.9,en;q=0.7", qwertz: false, decimal: '.', complete: false, cjk_fonts: true },
 ];
 
 impl Lang {
-    pub const ALL: [Lang; 7] = [Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko];
+    pub const ALL: [Lang; 8] = [Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::Zh];
 
     fn traits(self) -> &'static Traits {
         &TRAITS[self as usize]
@@ -112,7 +121,18 @@ impl Lang {
 
     /// `offered` with the developer's switches given.
     fn offered_with(self, all: bool, table: Option<&str>) -> bool {
-        offered_if(self.complete(), self.traits().code, all, table)
+        offered_if(self.complete(), self.traits().code, all, table) && self.paintable()
+    }
+
+    /// Whether this handheld has the letters to paint it: Chinese needs the font files pocket-ui ships
+    /// (`text_fallback::cjk_available`; a card or an app without them gets English, never lines of nothing).
+    pub fn paintable(self) -> bool {
+        self.paintable_with(crate::text_fallback::cjk_available)
+    }
+
+    /// `paintable` with the question "are the Chinese font files there" given (asked only for a language that needs them).
+    fn paintable_with(self, cjk_fonts: impl FnOnce() -> bool) -> bool {
+        !self.traits().cjk_fonts || cjk_fonts()
     }
 
     /// The languages to choose from, in `ALL`'s order: the offered ones, and the one in use if it is not (a developer's
@@ -145,10 +165,11 @@ impl Lang {
         let (slot, src, file) = self.source()?;
         Some(slot.get_or_init(|| {
             let (src, file) = override_table(std::env::var("POCKETUI_I18N_TABLE").ok(), self).unwrap_or((src, file));
-            let (table, errors) = Table::parse(src);
+            let (mut table, errors) = Table::parse(src);
             for e in &errors {
                 eprintln!("i18n: {file} {e}");
             }
+            table.decimal = self.traits().decimal;
             table
         }))
     }
@@ -163,14 +184,21 @@ impl Lang {
             Lang::Fr => (&FRENCH, FR, "fr.tsv"),
             Lang::It => (&ITALIAN, IT, "it.tsv"),
             Lang::Ko => (&KOREAN, KO, "ko.tsv"),
+            Lang::Zh => (&CHINESE, ZH, "zh.tsv"),
         })
     }
 
     /// The language of a locale name as ROCKNIX writes it (`system.language=de_DE`, `LANG=es_MX.UTF-8`) or Android
-    /// says it (`es`, `es-419`); English for any other.
+    /// says it (`es`, `es-419`); English for any other. Chinese is Simplified Chinese (`zh_CN`, `zh-Hans`, `zh_SG`, a bare
+    /// `zh`): Taiwan's, Hong Kong's and Macau's Traditional Chinese (`zh_TW`, `zh-HK`, `zh-Hant`) start in English, not in
+    /// letters their readers don't write.
     pub fn from_locale(locale: &str) -> Lang {
         let l = locale.trim().to_ascii_lowercase();
-        let code = l.split(['_', '-', '.']).next().unwrap_or("");
+        let mut parts = l.split(['_', '-', '.', '@']);
+        let code = parts.next().unwrap_or("");
+        if code == "zh" && parts.take(2).any(|p| matches!(p, "tw" | "hk" | "mo" | "hant")) {
+            return Lang::En;
+        }
         Lang::ALL.into_iter().find(|lang| lang.traits().code == code).unwrap_or_default()
     }
 
@@ -248,10 +276,12 @@ thread_local! {
 }
 
 /// Switches the whole interface at once: the next frame is painted in it (no restart, nothing to reload).
-/// `POCKETUI_LANG` (`de`, `es`, `pt`, `fr`, `it`, `ko` or `en`) overrides it, for snapshots and tests. On a thread with a language of its own
+/// `POCKETUI_LANG` (`de`, `es`, `pt`, `fr`, `it`, `ko`, `zh` or `en`) overrides it, for snapshots and tests. On a thread with a language of its own
 /// (`for_this_thread`) only that thread's language changes.
 pub fn set(lang: Lang) {
     let lang = std::env::var("POCKETUI_LANG").ok().map_or(lang, |l| Lang::from_locale(&l));
+    // Chinese chosen on a card whose font files went missing: English, not lines of nothing (`Lang::paintable`).
+    let lang = if lang.paintable() { lang } else { Lang::En };
     if THREAD_LANG.with(|t| t.get()) != PROCESS {
         THREAD_LANG.with(|t| t.set(lang as u8));
     } else {
@@ -317,6 +347,10 @@ const IT: &str = concat!(include_str!("../assets/i18n/it.tsv"), include_str!("..
 const KO: &str = include_str!("../assets/i18n/ko.tsv");
 #[cfg(feature = "brick")]
 const KO: &str = concat!(include_str!("../assets/i18n/ko.tsv"), include_str!("../assets/i18n/brick-ko.tsv"));
+#[cfg(not(feature = "brick"))]
+const ZH: &str = include_str!("../assets/i18n/zh.tsv");
+#[cfg(feature = "brick")]
+const ZH: &str = concat!(include_str!("../assets/i18n/zh.tsv"), include_str!("../assets/i18n/brick-zh.tsv"));
 
 /// FNV-1a: the keys are short, and SipHash's protection against crafted keys buys nothing here.
 #[derive(Default, Clone, Copy)]
@@ -382,6 +416,8 @@ struct Pattern {
 pub struct Table {
     exact: FastMap<&'static str, &'static str>,
     patterns: Vec<Pattern>,
+    /// The language's decimal sign (`Traits::decimal`); a comma for a table read on its own.
+    decimal: char,
 }
 
 fn hole_kind(name: &str) -> Option<Hole> {
@@ -488,7 +524,7 @@ impl Table {
         }
         // The most specific pattern first: "{n} games you own" before "{n} games".
         patterns.sort_by_key(|p| std::cmp::Reverse(p.segs.iter().map(|s| if let Seg::Lit(l) = s { l.len() } else { 0 }).sum::<usize>()));
-        (Table { exact, patterns }, errors)
+        (Table { exact, patterns, decimal: ',' }, errors)
     }
 
     pub fn exact(&self, s: &str) -> Option<&'static str> {
@@ -632,7 +668,7 @@ impl Table {
                                         out.push_str(v);
                                     }
                                 },
-                                Hole::Num => out.push_str(&decimal_comma(v)),
+                                Hole::Num => out.push_str(&decimal_sign(v, self.decimal)),
                                 _ => out.push_str(v),
                             }
                         }
@@ -664,14 +700,14 @@ impl Made {
     }
 }
 
-/// A number in a translated line: every language with a table writes its decimals with a comma ("7,4 Go", "118,1 GB
-/// frei"; a device showed "7.4 Go" on 15.11.). Only one point between digits is a decimal point: "0.5.0" (a version)
-/// and "1,204" stay as they are.
-fn decimal_comma(v: &str) -> Cow<'_, str> {
+/// A number in a translated line with the language's decimal sign: a comma in German, French and the others ("7,4 Go",
+/// "118,1 GB frei"; a device showed "7.4 Go" on 15.11.), a point in Korean, as the number came. Only one point between
+/// digits is a decimal point: "0.5.0" (a version) and "1,204" stay as they are.
+fn decimal_sign(v: &str, sign: char) -> Cow<'_, str> {
     let b = v.as_bytes();
     match v.find('.') {
-        Some(at) if v.matches('.').count() == 1 && !v.contains(',') && at > 0 && b[at - 1].is_ascii_digit() && b.get(at + 1).is_some_and(u8::is_ascii_digit) => {
-            Cow::Owned(format!("{},{}", &v[..at], &v[at + 1..]))
+        Some(at) if sign != '.' && v.matches('.').count() == 1 && !v.contains(',') && at > 0 && b[at - 1].is_ascii_digit() && b.get(at + 1).is_some_and(u8::is_ascii_digit) => {
+            Cow::Owned(format!("{}{sign}{}", &v[..at], &v[at + 1..]))
         }
         _ => Cow::Borrowed(v),
     }
@@ -765,6 +801,7 @@ static PORTUGUESE: OnceLock<Table> = OnceLock::new();
 static FRENCH: OnceLock<Table> = OnceLock::new();
 static ITALIAN: OnceLock<Table> = OnceLock::new();
 static KOREAN: OnceLock<Table> = OnceLock::new();
+static CHINESE: OnceLock<Table> = OnceLock::new();
 
 type NameSet = HashSet<Box<str>, BuildHasherDefault<Fnv>>;
 
@@ -1298,6 +1335,8 @@ mod tests {
                 // Korean says Home, Auto, Max, Original and Metroidvania in its own words (홈, 자동, 최대, 오리지널, 메트로배니아), as
                 // Korean menus do.
                 .filter(|l| !(file == "ko.tsv" && (["Home", "Auto", "Max", "‹ Warm ›", "‹ Normal ›", "‹ Scanlines ›", "‹ Original ›", "Metroidvania"].contains(l) || l.starts_with("Code "))))
+                // Chinese too (主页, 自动, 最高), and Bluetooth is 蓝牙 in every Chinese menu.
+                .filter(|l| !(file == "zh.tsv" && (["Home", "Auto", "Max", "Bluetooth", "‹ Warm ›", "‹ Normal ›", "‹ Scanlines ›", "‹ Original ›", "Metroidvania"].contains(l) || l.starts_with("Code "))))
                 .filter_map(|name| t.translate(name).filter(|g| g != name).map(|g| format!("{name:?} -> {g:?}")))
                 .collect();
             assert!(changed.is_empty(), "{file}: {} names the table changes:\n{}", changed.len(), changed.join("\n"));
@@ -1338,6 +1377,23 @@ mod tests {
         assert_eq!(empty.translate("Settings"), None, "no table: English");
     }
 
+    /// Each language writes a decimal number its own way, in every shipped table: a comma in German, Spanish, Portuguese,
+    /// French and Italian, a point in Korean ("2,3 W" on the Battery page in Korean, 24.11.2026: every language with a
+    /// table had been given the comma). The list is the languages' own usage, not the code's.
+    #[test]
+    fn each_language_writes_decimals_its_own_way() {
+        let usage = |l: Lang| match l {
+            Lang::En | Lang::Ko | Lang::Zh => '.',
+            Lang::De | Lang::Es | Lang::Pt | Lang::Fr | Lang::It => ',',
+        };
+        for lang in Lang::ALL {
+            let Some(t) = lang.table() else { continue };
+            let line = t.translate("PS1 uses about 7% an hour, 2.3 W").unwrap_or_else(|| panic!("{lang:?}: the draw line is in the table"));
+            let want = format!("2{}3", usage(lang));
+            assert!(line.contains(&want), "{lang:?}: {line:?} should have {want:?}");
+        }
+    }
+
     #[test]
     fn a_number_with_decimals_takes_the_languages_comma() {
         // 15.11. on a pocket in French: "7.4 Go libres", and "118.1 GB frei" in German.
@@ -1345,9 +1401,9 @@ mod tests {
         assert_eq!(t.translate("7.4 GB free").as_deref(), Some("7,4 Go libres"));
         assert_eq!(t.translate("118 GB free").as_deref(), Some("118 Go libres"));
         assert_eq!(t.translate("6 of 96 exits").as_deref(), Some("6 sur 96 sorties"));
-        assert_eq!(decimal_comma("0.5.0"), "0.5.0", "a version stays");
-        assert_eq!(decimal_comma("1,204"), "1,204");
-        assert_eq!(decimal_comma("60.00"), "60,00");
+        assert_eq!(decimal_sign("0.5.0", ','), "0.5.0", "a version stays");
+        assert_eq!(decimal_sign("1,204", ','), "1,204");
+        assert_eq!(decimal_sign("60.00", ','), "60,00");
     }
 
     #[test]
@@ -1549,20 +1605,28 @@ mod tests {
         for korean in ["ko", "KO", "ko_KR", "ko-KR", "ko_KR.UTF-8", "ko_KR.eucKR"] {
             assert_eq!(Lang::from_locale(korean), Lang::Ko, "{korean}");
         }
-        for other in ["est", "et_EE", "eo", "ptx", "fra", "frp", "ita", "itx_IT", "kor", "kok_IN", "C.UTF-8"] {
+        for chinese in ["zh", "ZH", "zh_CN", "zh-CN", "zh_CN.UTF-8", "zh-Hans", "zh-Hans-CN", "zh_SG", "zh_CN.GB18030"] {
+            assert_eq!(Lang::from_locale(chinese), Lang::Zh, "{chinese}");
+        }
+        // Traditional Chinese reads other letters: Taiwan, Hong Kong and Macau start in English.
+        for traditional in ["zh_TW", "zh-TW", "zh_TW.UTF-8", "zh_HK", "zh-HK", "zh_MO", "zh-Hant", "zh-Hant-TW", "zh_HK.Big5HKSCS"] {
+            assert_eq!(Lang::from_locale(traditional), Lang::En, "{traditional}");
+        }
+        for other in ["est", "et_EE", "eo", "ptx", "fra", "frp", "ita", "itx_IT", "kor", "kok_IN", "zho", "C.UTF-8"] {
             assert_eq!(Lang::from_locale(other), Lang::En, "{other}");
         }
     }
 
     #[test]
     fn the_row_walks_through_every_language_both_ways() {
-        assert_eq!(Lang::ALL.map(Lang::next), [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::En]);
-        assert_eq!(Lang::ALL.map(Lang::previous), [Lang::Ko, Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It]);
+        // Chinese is still being translated: off the row, and a developer's Chinese leaves it for English or Korean.
+        assert_eq!(Lang::ALL.map(Lang::next), [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::En, Lang::En]);
+        assert_eq!(Lang::ALL.map(Lang::previous), [Lang::Ko, Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko]);
         // With every language offered, the whole round.
         let all = Lang::ALL;
-        assert_eq!(all.map(|l| step_in(&all, l, true)), [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::En]);
-        assert_eq!(all.map(|l| step_in(&all, l, false)), [Lang::Ko, Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It]);
-        assert_eq!(Lang::ALL.map(Lang::name), ["English", "Deutsch", "Español", "Português (Brasil)", "Français", "Italiano", "한국어"]);
+        assert_eq!(all.map(|l| step_in(&all, l, true)), [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::Zh, Lang::En]);
+        assert_eq!(all.map(|l| step_in(&all, l, false)), [Lang::Zh, Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko]);
+        assert_eq!(Lang::ALL.map(Lang::name), ["English", "Deutsch", "Español", "Português (Brasil)", "Français", "Italiano", "한국어", "简体中文"]);
         assert_eq!(serde_json::to_string(&Lang::Es).unwrap(), "\"es\"");
         assert_eq!(serde_json::to_string(&Lang::Pt).unwrap(), "\"pt\"");
         assert_eq!(serde_json::from_str::<Lang>("\"pt\"").unwrap(), Lang::Pt);
@@ -1616,13 +1680,30 @@ mod tests {
         assert!(offered_if(false, "ko", false, Some("ko:/tmp/ko.tsv")) && !offered_if(false, "ko", false, Some("it:/tmp/it.tsv")));
         assert!(!offered_if(false, "ko", false, Some("ko")), "no file named");
         assert!(offered_if(true, "it", false, None));
-        // Every language is complete and offered now.
-        assert!(Lang::ALL.iter().all(|l| l.complete() && l.offered()));
-        assert_eq!(Lang::row(), Lang::ALL);
+        // Every language but Chinese is complete and offered; Chinese is being translated.
+        assert!(Lang::ALL.iter().filter(|l| **l != Lang::Zh).all(|l| l.complete() && l.offered()));
+        assert!(!Lang::Zh.complete() && !Lang::Zh.offered());
+        assert_eq!(Lang::row(), Lang::ALL[..7]);
+        assert_eq!(Lang::from_system_locale("zh_CN"), Lang::En, "a Chinese phone starts in English until then");
     }
 
     /// Korean is switched on (`complete`): offered on the row, a Korean system or phone starts in it, and the
     /// completeness checks hold it to every line (`shipped`).
+    /// Chinese is painted from font files on the card (`text_fallback::cjk`): where they are missing (a card or an
+    /// app built without them, a file deleted) it is neither offered nor kept, so a Chinese setting shows English, never
+    /// lines of nothing. Every other language needs no file.
+    #[test]
+    fn chinese_needs_its_font_files_and_falls_back_to_english_without_them() {
+        assert!(Lang::Zh.paintable(), "assets/fonts has them on the build computer");
+        assert!(!Lang::Zh.paintable_with(|| false));
+        for lang in Lang::ALL.into_iter().filter(|l| *l != Lang::Zh) {
+            assert!(lang.paintable_with(|| panic!("{lang:?} asked for the Chinese fonts")), "{lang:?}");
+        }
+        let _zh = for_this_thread(Lang::En);
+        set(Lang::Zh);
+        assert_eq!(current(), Lang::Zh, "with the files, as chosen");
+    }
+
     #[test]
     fn korean_is_offered_and_held_to_every_line() {
         let (_, errors) = Table::parse(KO);

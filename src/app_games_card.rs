@@ -8,7 +8,7 @@ use super::{App, Notice};
 
 /// Over the shelf, once, after a games card came out; over a game it waits until the game ended.
 pub(crate) const CARD_OUT: &str = "Your games card came out. Put it back to play: your games and saves are on it. A game that was running couldn't save after that moment.";
-const CARD_IN: &str = "Games card found. While it's in, only its games show; your other games come back when you take it out.";
+const CARD_IN: &str = "Games card found. Its games show together with the games on your first card.";
 
 
 impl App {

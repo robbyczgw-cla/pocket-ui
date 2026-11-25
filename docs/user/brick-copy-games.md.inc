@@ -10,7 +10,7 @@ Each system has its folder in `Roms`: `gb`, `gbc`, `gba`, `nes`, `snes`, `psx`, 
 and also `ngp` / `ngpc` for Neo Geo Pocket/Color,
 `wonderswan` / `wonderswancolor`, `pcengine`, `atarilynx`, `atari2600`, and `atari7800`.
 Arcade games go in `fbn`, `neogeo`, `cps1`, `cps2`, or `cps3`: keep their ZIP archives intact and
-use ROM sets matching FBNeo `f3b7749`. Neo Geo also needs `neogeo.zip` alongside its games or in
+use FinalBurn Neo ROM sets ([Arcade games](arcade.md)). Neo Geo also needs `neogeo.zip` alongside its games or in
 `Roms/bios`. The card includes no games or BIOS. N64, PSP and Dreamcast games go in `n64`, `psp` and `dreamcast`; Dreamcast BIOS files (`dc_boot.bin`, `dc_flash.bin`, optional) go in `bios/dc`.
 
 Additional folders: `fds`, `sg-1000`, `segacd`, `sega32x`, `pcenginecd`, `supergrafx`, `pokemini`,
@@ -35,8 +35,7 @@ DOS/ScummVM games are the practical starting point.
 ## One note on some systems
 
 Pick a system on Add games and it may say under its Files and BIOS lines: *Runs on this handheld, but not every game runs
-smoothly.* It appears where the system is heavy for the chip in your handheld (for example PlayStation 2 and GameCube on a
-Snapdragon 865, Nintendo 64, PSP, Dreamcast and Nintendo DS on an H700), so a game or two may stutter or need another try. Systems
+smoothly.* It appears where the system is heavy for the chip in your handheld, so a game or two may stutter or need another try. Systems
 without the note are ones where games normally run fine; a handheld pocket-ui doesn't know shows no note at all.
 
 ## The ways on Add games

@@ -50,6 +50,82 @@ pub fn valid_png(bytes: &[u8]) -> bool {
     false
 }
 
+/// Why a picture chosen on the device (Android's photo picker, `app_cover_pick`) is not taken as a cover. Its words are
+/// what the card says; the cover stays as it was.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Refused {
+    /// Over [`MAX_BYTES`], the web companion's limit for a cover.
+    TooBig,
+    /// Not a PNG or JPEG, or one that doesn't read to the end (a HEIC, a WebP, a GIF, a broken file).
+    NotAPicture,
+    /// More pixels than any picture pocket-ui reads (`image::size_ok`): a camera's 50-megapixel photo.
+    TooManyPixels,
+}
+
+impl Refused {
+    pub fn message(self) -> &'static str {
+        match self {
+            Refused::TooBig => "That picture is over 8 MB. Pick a smaller one.",
+            Refused::NotAPicture => "Couldn't read that picture. Pick a PNG or JPEG.",
+            Refused::TooManyPixels => "That picture is too large. Pick a smaller resolution.",
+        }
+    }
+}
+
+/// The width and height a PNG or JPEG says it has, read before any pixel (`image::size_ok` decides then).
+fn picture_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    if bytes.starts_with(PNG_SIGNATURE) {
+        let head = bytes.get(16..24)?;
+        return Some((u32::from_be_bytes(head[..4].try_into().ok()?), u32::from_be_bytes(head[4..].try_into().ok()?)));
+    }
+    if !bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        return None;
+    }
+    let mut decoder = jpeg_decoder::Decoder::new(io::Cursor::new(bytes));
+    decoder.read_info().ok()?;
+    decoder.info().map(|i| (u32::from(i.width), u32::from(i.height)))
+}
+
+/// A picture chosen on the device as this game's cover: a PNG or JPEG of up to [`MAX_BYTES`], scaled down to
+/// [`MAX_SIDE`] on its longest side as the web companion's browser does, and given back as the PNG [`valid_png`] takes,
+/// ready for [`apply`].
+pub fn from_picture(bytes: &[u8]) -> Result<Vec<u8>, Refused> {
+    if bytes.len() as u64 > MAX_BYTES {
+        return Err(Refused::TooBig);
+    }
+    let (w, h) = picture_size(bytes).ok_or(Refused::NotAPicture)?;
+    if !crate::image::size_ok(w, h) {
+        return Err(Refused::TooManyPixels);
+    }
+    let img = if bytes.starts_with(PNG_SIGNATURE) {
+        crate::image::read_png(io::Cursor::new(bytes))
+    } else {
+        crate::image::read_jpeg(io::Cursor::new(bytes))
+    }
+    .filter(|i| i.w > 0 && i.h > 0 && i.px.len() == i.w as usize * i.h as usize)
+    .ok_or(Refused::NotAPicture)?;
+    let img = if img.w > MAX_SIDE || img.h > MAX_SIDE {
+        let (w, h) = img.fit(MAX_SIDE as i32, MAX_SIDE as i32);
+        img.resized(w, h)
+    } else {
+        img
+    };
+    let rgb: Vec<u8> = img.px.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8]).collect();
+    let mut out = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut out, img.w, img.h);
+        enc.set_color(png::ColorType::Rgb);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut writer = enc.write_header().map_err(|_| Refused::NotAPicture)?;
+        writer.write_image_data(&rgb).map_err(|_| Refused::NotAPicture)?;
+    }
+    // A photo's PNG at 1024 pixels is far below the limit; one that isn't is refused as the web companion would.
+    if !valid_png(&out) {
+        return Err(Refused::TooBig);
+    }
+    Ok(out)
+}
+
 pub fn path(data: &Path, system: &str, rom: &Path) -> PathBuf {
     let mut key = Sha256::new();
     key.update(system.as_bytes());
@@ -127,3 +203,7 @@ pub fn apply(data: &Path, system: &str, rom: &Path, png: Option<&[u8]>) -> io::R
     // A reset has already moved the old file, or found that there is nothing to reset.
     png.map_or(Ok(()), |bytes| crate::fsutil::write_atomic(&target, bytes))
 }
+
+#[cfg(test)]
+#[path = "custom_tests.rs"]
+mod tests;

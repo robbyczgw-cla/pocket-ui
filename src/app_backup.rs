@@ -268,7 +268,8 @@ impl App {
         let confirming = page.confirm.is_some() && page.confirm == Some(page.row());
         let (head, lines, color): (String, Vec<String>, u32) = if let (Some(b), Some(p)) = (&page.busy, &page.progress) {
             let (done, total) = (p.done.load(Ordering::Relaxed), p.total.load(Ordering::Relaxed));
-            (format!("{b}{dots}"), vec![format!("{done} of {total} files."), "Press B to cancel. Stopped backups leave no partial files.".into()], pal().chalk)
+            let count = if total == 1 { format!("{done} of 1 file.") } else { format!("{done} of {total} files.") };
+            (format!("{b}{dots}"), vec![count, "Press B to cancel. Stopped backups leave no partial files.".into()], pal().chalk)
         } else if let Some(b) = &page.busy {
             (format!("{b}{dots}"), vec!["This takes a moment.".into()], pal().chalk)
         } else if let Some((m, err)) = &page.message {
@@ -357,7 +358,11 @@ impl App {
                 Row::Backup(k) => (
                     page.backup(k).map(Backup::when).unwrap_or_default(),
                     vec![
-                        page.backup(k).map_or(String::new(), |b| format!("{} files, made by pocket-ui {}. {}", b.manifest.files.len(), b.manifest.app, b.dir.display())),
+                        page.backup(k).map_or_else(String::new, |b| {
+                            let (files, version, dir) = (b.manifest.files.len(), &b.manifest.app, b.dir.display());
+                            if files == 1 { format!("1 file, made by pocket-ui {version}. {dir}") }
+                            else { format!("{files} files, made by pocket-ui {version}. {dir}") }
+                        }),
                         "A restores it; what you have now is backed up first. pocket-ui starts again.".into(),
                     ],
                     pal().chalk,

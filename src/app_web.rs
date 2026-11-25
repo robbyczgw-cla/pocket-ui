@@ -271,7 +271,7 @@ impl App {
         let avail = self.updates.app_available();
         let (state, step, percent) = match &self.updates.phase {
             UpdatePhase::Running(job) => match &job.task {
-                UpdateTask::Check => (UpdateState::Checking, None, None),
+                UpdateTask::Check | UpdateTask::CheckCard => (UpdateState::Checking, None, None),
                 UpdateTask::App { .. } => match self.updates.app_step() {
                     Some((s, frac)) => {
                         let st = match s {
@@ -398,22 +398,12 @@ impl App {
                 Ok(())
             }
             Edit::Cover { system, rom, png } => {
-                if self.running.is_some() || pocket_ui::covers::game_on() {
-                    return Err("A game is running. Change the cover once it ends.".into());
-                }
-                if !self.systems.iter().any(|s| s.name == system && s.games.iter().any(|g| g.path == rom)) || !rom.exists() {
-                    return Err("That game is not on the Pocket any more.".into());
-                }
-                io(pocket_ui::covers::custom::apply(&self.data_dir, &system, &rom, png.as_deref()))?;
-                self.covers.clear();
-                self.pictures_changed();
-                self.cabinet.cover_replaced(&rom);
-                self.search_covers_changed();
-                self.look_previews = None;
-                if png.is_none() {
-                    self.auto_covers("cover reset");
-                }
-                Ok(())
+                use super::app_cover_pick::NotChanged;
+                self.set_custom_cover(&system, &rom, png.as_deref()).map_err(|e| match e {
+                    NotChanged::Running => "A game is running. Change the cover once it ends.".to_string(),
+                    NotChanged::Gone => "That game is not on the Pocket any more.".to_string(),
+                    NotChanged::Io(e) => format!("The Pocket could not save it: {e}"),
+                })
             }
             Edit::RenameShelf { index, was, name } => {
                 let name: String = name.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(pocket_ui::curator::prefs::SHELF_NAME_MAX).collect();

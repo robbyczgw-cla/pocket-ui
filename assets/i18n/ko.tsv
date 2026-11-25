@@ -13,16 +13,23 @@ Every achievement of this game unlocked	이 게임의 모든 업적을 달성했
 RetroAchievements: sign in again in Settings	RetroAchievements: 설정에서 다시 로그인하세요
 Couldn't read the game to identify it	게임을 읽지 못해 식별할 수 없어요
 {n} of {m} unlocked · {k} of {n2} points	{n}/{m} 달성 · {k}/{n2}점
+{n} of {m} unlocked · {k} of 1 point	{n}/{m}개 달성 · {k}/1점
 · {n} to send	· {n}개 전송 대기
 Looking up this game on RetroAchievements…	RetroAchievements에서 게임 찾는 중…
 This game has no achievements yet.	이 게임에는 아직 업적이 없어요.
 {n} of {m} unlocked	{n}/{m} 달성
 {n} of {m} achievements · {k}%	업적 {n}/{m} · {k}%
+{n} of 1 achievement	업적 {n}/1개
+{n} of {m} achievements	업적 {n}/{m}개
+1 of 1 achievement · 100%	업적 1/1개 · 100%
 RetroAchievements has no achievements for this version of the game.	RetroAchievements에 이 버전 게임의 업적이 없어요.
 Couldn't reach RetroAchievements. Unlocks count once the Pocket is online at the start of a game.	RetroAchievements에 연결할 수 없어요. 게임 시작 시 Pocket이 온라인이면 달성 기록이 반영돼요.
 RetroAchievements isn't available for this game.	이 게임은 RetroAchievements를 지원하지 않아요.
 RetroAchievements: {s}	RetroAchievements: {s}
-{n} of {m} achievements in {s}	{s} 업적 {n}/{m}
+{n} of 1 achievement in 1 game	게임 1개의 업적 {n}/1개
+{n} of {m} achievements in {k} games	게임 {k}개의 업적 {n}/{m}개
+{n} of {m} achievements in 1 game	게임 1개의 업적 {n}/{m}개
+{n} of 1 achievement in {m} games	게임 {m}개의 업적 {n}/1개
 Log out	로그아웃
 Sign in	로그인
 Press A again to log out. B keeps you signed in.	A를 한 번 더 누르면 로그아웃해요. B는 로그인을 유지해요.
@@ -90,6 +97,7 @@ pocket-ui's settings, every Options page, and your library notes (status, notes,
 To {s} on the SD card. Not your games, saves or states.	SD 카드의 {s}에 저장돼요. 게임, 세이브, 스테이트는 제외돼요.
 pocket-ui's settings and Options back to their defaults, after a backup.	백업 후 pocket-ui 설정과 옵션을 기본값으로 되돌려요.
 Kept: your library notes, Sync, Tailscale, accounts and what the Store installed. pocket-ui starts again.	유지 항목: 라이브러리 메모, 동기화, Tailscale, 계정, Store에서 설치한 항목. pocket-ui가 재시작돼요.
+1 file, made by pocket-ui {s}. {t}	파일 1개, pocket-ui {s}에서 생성. {t}
 {n} files, made by pocket-ui {s}. {t}	파일 {n}개, pocket-ui {s}에서 생성. {t}
 A restores it; what you have now is backed up first. pocket-ui starts again.	A로 복원하며, 현재 상태는 먼저 백업돼요. pocket-ui가 재시작돼요.
 Saved: {s}	저장됨: {s}
@@ -204,6 +212,7 @@ Nothing picked yet: every game	선택 없음: 모든 게임
 More like {s}	{s} 비슷한 게임
 Nothing in your library is alike enough yet.	라이브러리에 충분히 비슷한 게임이 아직 없어요.
 Why these? {t}	추천 이유: {t}
+1 game you own	보유 게임 1개
 {n} games you own, the closest first	보유 게임 {n}개, 가장 비슷한 순
 Not on this device	이 기기에 없음
 One version on this Pocket, and a remake.	이 Pocket에 버전 1개와 리메이크가 있어요.
@@ -610,6 +619,7 @@ Stopping..	중단하는 중..
 Stopping...	중단하는 중...
 Back up saves	세이브 백업
 Back up settings	설정 백업
+{n} of 1 file.	파일 {n}/1개.
 {n} of {m} files.	파일 {n}/{m}개.
 Press B to cancel. Stopped backups leave no partial files.	B로 중단해요. 중단된 백업은 아무것도 남기지 않아요.
 Files: {n}. Free on the card: {s}.	파일: {n}개. SD 카드 여유 공간: {s}.
@@ -690,6 +700,7 @@ No battery found	배터리를 찾지 못했어요
 This device doesn't report a battery.	이 기기는 배터리 정보를 제공하지 않아요.
 At the current rate: under 1% an hour, measured over the last {n} min.	현재 소비 속도: 시간당 1% 미만 (최근 {n}분 측정).
 At the current rate: {n}% an hour, measured over the last {m} min.	현재 소비 속도: 시간당 {n}% (최근 {m}분 측정).
+Based on how this battery drains, measured over the last {n} min.	이 배터리의 이전 방전 기록 기준 (최근 {n}분 측정).
 Full in {t}	{t} 후 완충
 On the charger, about {n}% an hour at the moment.	충전기 연결 중, 현재 시간당 약 {n}% 충전돼요.
 Time until full needs a few more minutes on the charger.	완충 예상 시간을 계산하려면 몇 분 더 충전해야 해요.
@@ -702,6 +713,8 @@ Samples are taken once a minute.	1분에 한 번씩 측정해요.
 {s} uses about {n}% an hour  ·  {t} left at that rate	{s}: 시간당 약 {n}%  ·  이 속도로 {t} 남음
 {s} uses about {n}% an hour, {m} W	{s}: 시간당 약 {n}%, {m} W
 {s} uses about {n}% an hour	{s}: 시간당 약 {n}%
+Last sleep: {n}% in {t}	마지막 절전: {t} 동안 {n}%
+Last sleep: under 1% in {t}	마지막 절전: {t} 동안 1% 미만
 {t} use about {n}% an hour, {m} W  ·  {t2} left at that rate	{t}: 시간당 약 {n}%, {m} W  ·  이 속도로 {t2} 남음
 {t} use about {n}% an hour  ·  {t2} left at that rate	{t}: 시간당 약 {n}%  ·  이 속도로 {t2} 남음
 {t} use about {n}% an hour, {m} W	{t}: 시간당 약 {n}%, {m} W
@@ -1465,6 +1478,7 @@ Options   {t}	옵션   {t}
 
 # --- Settings → About
 Version	버전
+{n} on 1 system	1개 시스템의 {n}개
 {n} on {m} systems	{m}개 시스템의 {n}개
 Free space	남은 공간
 Network	네트워크
@@ -2232,7 +2246,11 @@ Your {n} games are on the shelf.	게임 {n}개가 선반에 올라왔어요.
 Go to your games	게임으로 이동
 Optional. You can grab these any time.	선택 사항이에요. 나중에 언제든 받을 수 있어요.
 Looking up {n} of {m}{s}	{m}개 중 {n}개 찾는 중{s}
+Looking up {n} of 1 picture{s}	이미지 1개 중 {n}개 찾는 중{s}
+Looking up {n} of 1 picture	이미지 1개 중 {n}개 찾는 중
 Looking up {n} of {m} pictures{s}	이미지 {m}개 중 {n}개 찾는 중{s}
+Looking up {n} of 1 cover{s}	표지 1개 중 {n}개 찾는 중{s}
+Looking up {n} of 1 cover	표지 1개 중 {n}개 찾는 중
 Looking up {n} of {m} covers{s}	표지 {m}개 중 {n}개 찾는 중{s}
 Looking up {n} of {m} pictures	이미지 {m}개 중 {n}개 찾는 중
 Looking up {n} of {m} covers	표지 {m}개 중 {n}개 찾는 중
@@ -3512,6 +3530,8 @@ Or add your own: Settings › Games › Add games (phone, file sharing).	직접 
 Needs Wi-Fi. Connect in Settings › Connections › Wi-Fi first.	Wi-Fi가 필요해요. 먼저 설정 › 연결 › Wi-Fi에서 연결하세요.
 {n} free homebrew games, shared by their creators.	제작자가 공유한 무료 홈브루 게임 {n}개예요.
 Get all games	모든 게임 받기
+1 byte	1바이트
+{n} bytes	{n}바이트
 Get all {n} games	게임 {n}개 모두 받기
 All games are already here	모든 게임이 이미 있어요
 Already here	이미 있음
@@ -3576,6 +3596,8 @@ Return to the game. It keeps retrying; this banner clears once a save succeeds.	
 # Saves with two versions (src/sync_conflicts.rs, sync_conflict_page.rs, app_sync_conflicts.rs)
 Two versions	버전 2개
 {n} versions	버전 {n}개
+1 version to review.	확인할 버전 1개가 있어요.
+1 version	버전 1개
 Game save	게임 세이브
 Saved state	저장된 스테이트
 Memory card	메모리 카드
@@ -3642,7 +3664,9 @@ Keep it	유지
 Scanning SD card usage. Takes a few seconds.	SD 카드 용량을 계산하는 중이에요. 몇 초 정도 걸려요.
 Under 1 GB free. A full SD card can break saves and states. Clear some space below.	남은 공간이 1 GB 미만이에요. SD 카드가 가득 차면 스테이트를 기록할 수 없고 세이브도 실패할 수 있어요. 아래에서 필요 없는 항목을 삭제하세요.
 Shows a low-space alert on the shelf under 1 GB free.	여유 공간이 1 GB 미만이 되면 pocket-ui가 선반에서 알려줘요.
+1 folder could not be read. Its contents aren't counted.	폴더 1개를 읽지 못해 그 안의 용량은 포함되지 않았어요.
 {n} folders could not be read; what is in them is not counted.	폴더 {n}개를 읽지 못해 그 안의 용량은 포함되지 않았어요.
+On 1 system. A opens the list by size.	1개 기종. A를 누르면 용량순으로 볼 수 있어요.
 On {n} systems. A lists them by size.	{n}개 기종. A를 누르면 용량순으로 볼 수 있어요.
 To delete a game, press X on it, then choose Delete from the card.	게임을 삭제하려면 게임 카드를 열고(게임에서 X) SD 카드에서 삭제를 선택하세요.
 No automatic states of games not played for {n} months.	{n}개월 동안 플레이하지 않은 게임의 자동 스테이트가 없어요.
@@ -3697,6 +3721,7 @@ Games can't be deleted in Kids mode.	키즈 모드에서는 게임을 삭제할 
 Delete {s}?	{s} 삭제할까요?
 Saves and states	세이브와 스테이트
 Working out what it takes…	용량 계산 중…
+Frees {s}: 1 file.	{s} 확보: 파일 1개.
 Frees {s}: {n} files.	{s} 확보: 파일 {n}개.
 {s} and {n} more	{s} 외 {n}개
 Sync shares saves and states: they are deleted from your other devices too.	동기화로 공유되는 세이브와 스테이트는 다른 기기에서도 함께 삭제돼요.
@@ -4033,6 +4058,8 @@ Covers and pictures download on unmetered Wi-Fi as you browse. Your choice stays
 Tap a game to select it, tap again to play. Swipe along the shelf. Back goes one step back.	게임을 탭해 선택하고 한 번 더 탭해 플레이하세요. 선반을 밀어 넘기고 뒤로 가기로 한 단계 돌아가요.
 Everything is ready. You can change these choices in Settings and add more game folders later.	준비가 끝났어요. 설정에서 언제든 바꾸고 나중에 게임 폴더를 더 추가할 수 있어요.
 No games found. Choose another folder or skip for now.	게임을 찾지 못했어요. 다른 폴더를 선택하거나 지금은 건너뛰세요.
+Found 1 game on 1 system	1개 시스템에서 게임 1개를 찾았어요
+Found {n} games on 1 system	1개 시스템에서 게임 {n}개를 찾았어요
 Found {n} games on {m} systems	{m}개 시스템에서 게임 {n}개를 찾았어요
 No folder chosen yet. You can add games later.	아직 폴더를 선택하지 않았어요. 게임은 나중에 추가할 수 있어요.
 Controller detected	컨트롤러 감지됨
@@ -4237,7 +4264,9 @@ Hidden. Settings › System › Storage brings it back.	숨겨졌어요. 설정 
 Check if your games can launch? Takes a moment, changes nothing.	실행되는지 확인해 볼까요? 잠시만 걸리며 아무것도 바뀌지 않아요.
 Check	점검
 Looking at your games{s}	게임 확인 중{s}
+{n} of 1 game · {s}	게임 {n}/1개 · {s}
 {n} of {n2} games · {s}	게임 {n}/{n2}개 · {s}
+{n} of 1 game	게임 {n}/1개
 {n} of {n2} games	게임 {n}/{n2}개
 Can't read the list of systems	시스템 목록을 읽을 수 없어요
 The games are safe. Restart the Pocket and try again.	게임은 안전해요. Pocket을 재시작한 뒤 다시 시도해 보세요.
@@ -4256,6 +4285,7 @@ Every entry of the system list is damaged, so pocket-ui uses its built-in list.	
 Games in their standard folders show anyway. To use your own list, fix this file or put a good one back, then scan your games again.	기본 폴더의 게임은 그대로 표시돼요. 직접 만든 목록을 쓰려면 이 파일을 수정하거나 정상 파일로 바꾼 뒤 게임을 다시 스캔하세요.
 Couldn't read your settings file, so pocket-ui loaded defaults. Your games and saves are untouched.	설정 파일을 읽을 수 없어 pocket-ui 기본 설정으로 시작했어요. 게임과 세이브에는 영향이 없어요.
 First 50,000 files checked	처음 50,000개 파일 점검 완료
+{n} of 1 game ready	게임 {n}/1개 준비 완료
 {n} of {n2} games ready	게임 {n}/{n2}개 준비 완료
 And {n} more. Fix these first, then check again.	외 {n}개 더 있어요. 먼저 이 항목들을 해결하고 다시 점검하세요.
 Hide this copy	이 사본 숨기기
@@ -4382,7 +4412,7 @@ Copy games with a USB cable. Windows and Linux open it by themselves; a Mac need
 USB file transfer is on. Connect a computer: your games are under Roms.	USB 파일 전송이 켜졌어요. 컴퓨터를 연결하면 게임이 Roms 아래에 있어요.
 USB file transfer didn't start. Take out what's in the USB port and try again.	USB 파일 전송을 시작하지 못했어요. USB 포트에 연결된 장치를 빼고 다시 시도하세요.
 Your games card came out. Put it back to play: your games and saves are on it. A game that was running couldn't save after that moment.	게임용 SD 카드가 빠졌어요. 게임과 세이브가 들어 있으니 다시 꽂으세요. 실행 중이던 게임은 그 시점 이후 저장되지 않았어요.
-Games card found. While it's in, only its games show; your other games come back when you take it out.	게임용 SD 카드를 찾았어요. 꽂혀 있는 동안 이 카드의 게임만 표시되며, 빼면 다른 게임이 돌아와요.
+Games card found. Its games show together with the games on your first card.	게임용 SD 카드를 찾았어요. 이 카드의 게임이 첫 번째 카드의 게임과 함께 표시돼요.
 Games card in	게임용 SD 카드 삽입됨
 Games load from your second SD card. To add more, pop it into a computer and copy to its roms folder.	두 번째 SD 카드에서 게임을 읽어요. 게임을 더 넣으려면 카드를 컴퓨터에 꽂고 roms 폴더에 복사하세요.
 Card is read-only: copying won't work	카드가 읽기 전용이라 복사할 수 없어요
@@ -4416,6 +4446,7 @@ Saving your game…	게임 저장 중…
 It saves by itself. Press A next time to carry on.	자동으로 저장돼요. 다음에 A를 누르면 이어서 할 수 있어요.
 For grown-ups	어른 전용
 Enter your PIN.	PIN을 입력하세요.
+Too many tries. Wait 1 second.	시도 횟수가 너무 많아요. 1초 후에 다시 시도하세요.
 Too many tries. Wait {n} seconds.	시도 횟수가 너무 많아요. {n}초 후에 다시 시도하세요.
 That's not it. Try again.	맞지 않아요. 다시 시도해 보세요.
 Forgot it? Put a file called {s} in the top folder of the card's ROCKNIX drive and restart.	잊으셨나요? 카드의 ROCKNIX 드라이브 최상위 폴더에 {s} 파일을 넣고 재시작하세요.
@@ -5874,3 +5905,16 @@ Add PC and indie games from portmaster.games via SD card. Press A to see how.	po
 Couldn't unpack the runtimes.	런타임을 풀지 못했어요.
 No Wi-Fi on this handheld: copy box art and PortMaster games from a computer.	이 기기에는 Wi-Fi가 없어요: 컴퓨터에서 표지와 PortMaster 게임을 복사하세요.
 Couldn't install the runtime into PortMaster. Still on the card; press A to try again.	런타임을 PortMaster에 설치하지 못했어요. 아직 SD 카드에 있어요. A를 눌러 다시 시도하세요.
+Pick a picture from this device	이 기기에서 이미지 선택
+Back to the automatic cover	자동 표지로 되돌리기
+Cover updated	표지가 변경됐어요
+Cover reset	표지가 초기화됐어요
+Loading picture…	이미지를 불러오는 중…
+No picture chosen. Your cover wasn't changed.	이미지를 선택하지 않았어요. 표지는 그대로 유지돼요.
+Couldn't open that picture. Your cover wasn't changed.	이 이미지를 열 수 없어요. 표지는 그대로 유지돼요.
+No picture picker found on this device.	이 기기에서 이미지 선택기를 찾을 수 없어요.
+A game is running. Quit it first to change the cover.	게임이 실행 중이에요. 표지를 바꾸려면 먼저 게임을 종료하세요.
+That game isn't in your library anymore.	이 게임은 더 이상 보관함에 없어요.
+That picture is over 8 MB. Pick a smaller one.	이미지가 8 MB를 넘어요. 더 작은 이미지를 선택하세요.
+Couldn't read that picture. Pick a PNG or JPEG.	이 이미지를 읽을 수 없어요. PNG 또는 JPEG 파일을 선택하세요.
+That picture is too large. Pick a smaller resolution.	이미지 해상도가 너무 커요. 더 작은 이미지를 선택하세요.

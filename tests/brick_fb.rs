@@ -29,13 +29,17 @@ impl Bridge {
     }
 
     fn start_env(bits: u32, env: &[(&str, &str)]) -> Bridge {
+        Bridge::start_mode((W, H), bits, env)
+    }
+
+    fn start_mode((w, h): (u32, u32), bits: u32, env: &[(&str, &str)]) -> Bridge {
         let dir = tempfile::tempdir().unwrap();
         let bytes = if bits == 16 { 2 } else { 4 };
-        let original = vec![0x5au8; (W * H) as usize * bytes];
+        let original = vec![0x5au8; (w * h) as usize * bytes];
         std::fs::write(dir.path().join("fb"), &original).unwrap();
         let child = Command::new(env!("CARGO_BIN_EXE_pocket-fb"))
             .args(["--wayland", dir.path().join("w").to_str().unwrap(), "--ipc", dir.path().join("i").to_str().unwrap()])
-            .args(["--fb", dir.path().join("fb").to_str().unwrap(), "--mode", &format!("{W}x{H}x{bits}")])
+            .args(["--fb", dir.path().join("fb").to_str().unwrap(), "--mode", &format!("{w}x{h}x{bits}")])
             .envs(env.iter().copied())
             .stderr(Stdio::null())
             .spawn()
@@ -85,6 +89,113 @@ fn wait_for(what: &str, mut ok: impl FnMut() -> bool) {
         assert!(start.elapsed() < Duration::from_secs(10), "no {what} after 10 s");
         std::thread::sleep(Duration::from_millis(5));
     }
+}
+
+#[test]
+fn bridge_start_log_distinguishes_framebuffer_setup_from_socket_failure() {
+    let dir = tempfile::tempdir().unwrap();
+    let fb = dir.path().join("fb");
+    let wayland = dir.path().join("wayland");
+    let ipc = dir.path().join("ipc");
+    std::fs::write(&fb, vec![0; (W * H * 4) as usize]).unwrap();
+    std::fs::create_dir(&ipc).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_pocket-fb"))
+        .args(["--fb", fb.to_str().unwrap(), "--mode", "64x48x32", "--take"])
+        .args(["--wayland", wayland.to_str().unwrap(), "--ipc", ipc.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let log = String::from_utf8(output.stderr).unwrap();
+    let mapped = log.find("framebuffer snapshot ready").expect(&log);
+    let binding = log.find("binding Wayland socket").expect(&log);
+    let ipc_binding = log.find("binding IPC socket").expect(&log);
+    assert!(mapped < binding && binding < ipc_binding, "{log}");
+    assert!(log.contains(&format!("pocket-fb: {}:", ipc.display())), "{log}");
+}
+
+#[test]
+fn rk3326_draws_with_a_driver_whose_mapping_and_display_ioctls_would_block() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("fb.c");
+    let driver = dir.path().join("fb.so");
+    let blocked_called = dir.path().join("blocked-called");
+    std::fs::write(&source, br#"
+#define _LARGEFILE64_SOURCE
+#include <dlfcn.h>
+#include <linux/fb.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
+static int framebuffer = -2;
+static void block_in_driver(void) {
+    FILE *called = fopen(getenv("TEST_FB_BLOCKED_CALLED"), "w");
+    fclose(called);
+    sleep(60);
+}
+
+void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t offset) {
+    if (fd == framebuffer) {
+        block_in_driver();
+    }
+    void *(*real_mmap)(void *, size_t, int, int, int, off_t) = dlsym(RTLD_NEXT, "mmap");
+    return real_mmap(addr, len, prot, flags, fd, offset);
+}
+
+void *mmap64(void *addr, size_t len, int prot, int flags, int fd, off64_t offset) {
+    return mmap(addr, len, prot, flags, fd, offset);
+}
+
+int ioctl(int fd, unsigned long request, ...) {
+    va_list arg;
+    va_start(arg, request);
+    if (request == FBIOGET_VSCREENINFO) {
+        framebuffer = fd;
+        struct fb_var_screeninfo *v = va_arg(arg, struct fb_var_screeninfo *);
+        *v = (struct fb_var_screeninfo) {
+            .xres = 64, .yres = 48, .xres_virtual = 64, .yres_virtual = 49, .yoffset = 1, .bits_per_pixel = 32,
+            .red = {16, 8, 0}, .green = {8, 8, 0}, .blue = {0, 8, 0}
+        };
+    } else if (request == FBIOGET_FSCREENINFO) {
+        struct fb_fix_screeninfo *f = va_arg(arg, struct fb_fix_screeninfo *);
+        *f = (struct fb_fix_screeninfo) {.smem_len = 64 * 49 * 4, .line_length = 64 * 4};
+    } else if (fd == framebuffer) {
+        block_in_driver();
+    } else {
+        int (*real_ioctl)(int, unsigned long, ...) = dlsym(RTLD_NEXT, "ioctl");
+        void *argument = va_arg(arg, void *);
+        va_end(arg);
+        return real_ioctl(fd, request, argument);
+    }
+    va_end(arg);
+    return 0;
+}
+"#).unwrap();
+    assert!(Command::new("cc").args(["-shared", "-fPIC", "-o"]).arg(&driver).arg(&source).arg("-ldl").status().unwrap().success());
+    let fb = dir.path().join("fb");
+    std::fs::write(&fb, vec![0; (W * (H + 1) * 4) as usize]).unwrap();
+    let child = Command::new(env!("CARGO_BIN_EXE_pocket-fb"))
+        .args(["--fb", fb.to_str().unwrap(), "--take"])
+        .args(["--wayland", dir.path().join("w").to_str().unwrap(), "--ipc", dir.path().join("i").to_str().unwrap()])
+        .env("LD_PRELOAD", &driver)
+        .env("TEST_FB_BLOCKED_CALLED", &blocked_called)
+        .env("POCKET_FB_POSITIONED_WRITE", "1")
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut bridge = Bridge { child, dir };
+    wait_for("the sockets", || bridge.path("w").exists() && bridge.path("i").exists());
+    assert!(bridge.command_ok("output * power off"));
+    assert!(bridge.command_ok("output * power on"));
+    let mut ui = Client::connect(&bridge.path("w"), "pocket-ui");
+    ui.show(0, RED);
+    let offset = (W * 4) as usize;
+    wait_for("the frame at the reported pan offset", || bridge.fb()[offset..offset + 4] == [0, 0, 0xff, 0]);
+    assert_eq!(&bridge.fb()[..offset], vec![0; offset]);
+    bridge.stop();
+    assert!(!blocked_called.exists());
 }
 
 /// A Wayland client written out by hand: enough to show one solid colour.
@@ -516,6 +627,81 @@ fn the_real_pocket_ui_reaches_the_framebuffer() {
     let _ = bridge.wait();
     assert!(painted, "pocket-ui's first screen never reached the framebuffer");
     assert!(loading, "the loading message never reached pocket-fb after the fade: {}", std::fs::read_to_string(log).unwrap_or_default());
+}
+
+/// Preparing shelf and launch pictures takes time on the UI thread. Its budget during a held direction is
+/// zero, including after the idle timers expire. Count the preparations to avoid measuring host wall time.
+#[test]
+fn held_cabinet_navigation_spends_no_frame_time_on_shelf_preparation() {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    struct Ui(Child);
+    impl Drop for Ui {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    let bridge = Bridge::start_mode((1024, 768), 32, &[]);
+    let roms = bridge.path("gb");
+    std::fs::create_dir(&roms).unwrap();
+    for i in 0..20 {
+        std::fs::write(roms.join(format!("Game {i:02}.gb")), b"game").unwrap();
+    }
+    let systems = bridge.path("systems.cfg");
+    std::fs::write(&systems, format!("<systemList><system><name>gb</name><fullname>Game Boy</fullname><path>{}</path><extension>.gb</extension><command>true</command></system></systemList>", roms.display())).unwrap();
+    std::fs::create_dir(bridge.path("data")).unwrap();
+    std::fs::write(bridge.path("data/settings.json"), r#"{"onboarded":true,"seen_version":"9.9.9","theme":"cabinet","motion":"full","animations":"cozy"}"#).unwrap();
+
+    let trace = bridge.path("trace");
+    let log = bridge.path("ui.log");
+    let mut ui = Ui(Command::new(env!("CARGO_BIN_EXE_pocket-ui"))
+        .arg("--test-driver").arg(bridge.dir.path())
+        .env("POCKETUI_TEST_WINDOW", "1")
+        .env("POCKETUI_MOCK", "1")
+        .env("POCKETUI_DEVICE", "brick")
+        .env("POCKETUI_LANG", "en")
+        .env("POCKETUI_ROOM_TIME", "12:00")
+        .env("POCKETUI_ES_SYSTEMS", systems)
+        .env("POCKETUI_DATA", bridge.path("data"))
+        .env("POCKETUI_TRACE", &trace)
+        .env("WAYLAND_DISPLAY", bridge.path("w"))
+        .env("SWAYSOCK", bridge.path("i"))
+        .env("XDG_RUNTIME_DIR", bridge.dir.path())
+        .stdout(std::fs::File::create(&log).unwrap())
+        .stderr(Stdio::null())
+        .spawn().unwrap());
+
+    let read_trace = || std::fs::read_to_string(&trace).unwrap_or_default();
+    wait_for("a 1024x768 software frame", || {
+        assert!(ui.0.try_wait().unwrap().is_none(), "UI stopped: {}", std::fs::read_to_string(&log).unwrap_or_default());
+        read_trace().lines().any(|l| l.contains(" paint ") && l.ends_with("1024x768"))
+    });
+    let mut fifo = None;
+    wait_for("the UI's command FIFO", || {
+        fifo = std::fs::OpenOptions::new().write(true).custom_flags(libc::O_NONBLOCK).open(bridge.path("ui.in")).ok();
+        fifo.is_some()
+    });
+    let mut fifo = fifo.unwrap();
+    let current_game = |name: &str| read_trace().lines().rev().find(|l| l.contains(" frame ")).is_some_and(|l| l.ends_with(name));
+    if !current_game("Game 00.gb") {
+        writeln!(fifo, "down").unwrap();
+        wait_for("the first game", || current_game("Game 00.gb"));
+    }
+    writeln!(fifo, "tbtn 41 right down").unwrap();
+    wait_for("the held direction to pass the idle delay and repeat across the shelf", || {
+        read_trace().lines().filter_map(|l| l.split_once(" sel=game:gb/Game ")).any(|(_, game)| game >= "06.gb")
+    });
+    writeln!(fifo, "tbtn 41 right up").unwrap();
+
+    wait_for("the release to reach the UI", || read_trace().contains(" Right up"));
+    let events = read_trace();
+    let (_, held) = events.split_once(" Right down").unwrap();
+    let (held, _) = held.split_once(" Right up").unwrap();
+    let preparation: Vec<_> = held.lines().filter(|line| line.contains(" shelf-warm ")).collect();
+    assert!(preparation.is_empty(), "shelf preparation used the animation's frame budget: {preparation:?}");
+    wait_for("launch warming to resume after release", || read_trace().split_once(" Right up").is_some_and(|(_, after)| after.contains(" shelf-warm insert")));
 }
 
 /// The bridge with the GPU's way: Mesa's software GPU on a pbuffer when a computer has one, what was drawn read back into the file.

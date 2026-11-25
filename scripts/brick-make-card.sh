@@ -70,6 +70,8 @@ cp -R "$PORTMASTER_PARTS/sources/." "$CARD/pocket-ui/sources/portmaster/"
 cp "$ROOT/deploy/brick/entries/updater" "$CARD/.tmp_update/updater"                          # entry: the firmware's start script
 cp "$ROOT/deploy/brick/entries/MainUI" "$ROOT/deploy/brick/entries/premainui.sh" "$ROOT/deploy/brick/entries/preload.sh" "$CARD/trimui/app/"   # entry: TrimUI's own
 for f in pocket-ui pocket-core pocket-fb brick-hw brick-egl; do cp "$BINS/$f" "$P/bin/$f"; done
+# The Chinese font files in app/fonts (src/text_fallback.rs `shipped_dir`: one folder up from app/bin).
+sh "$ROOT/scripts/shipped-fonts.sh" "$P"
 # Our own programs carry no build machine path (scripts/release-rustflags.sh with CARGO_TARGET_DIR set before it is sourced;
 # brick-hw with -ffile-prefix-map and -s). BRICK_ALLOW_PATHS=1 for a private test card only.
 [ "${BRICK_ALLOW_PATHS:-0}" = 1 ] || "$ROOT/scripts/check-binary-paths.sh" "$P"/bin/pocket-ui "$P"/bin/pocket-core "$P"/bin/pocket-fb "$P"/bin/brick-egl "$P"/bin/brick-hw >/dev/null \
@@ -163,7 +165,8 @@ cp "$P/VERSION" "$P/BUILD-INFO.txt"; { echo; cat "$CORES/CORES.txt"; } >>"$P/BUI
 # Everything the updater looks for, in the folder.
 for f in bin/pocket-ui bin/pocket-core bin/pocket-fb bin/brick-hw bin/brick-egl lib/libwayland-client.so.0 lib/libffi.so.8 msg/starting.png msg/missing.png msg/missing.raw msg/crashed.png msg/starting-wide.png msg/missing-wide.png msg/missing-wide.raw msg/crashed-wide.png es_systems.cfg asoundrc \
   hwroot/usr/bin/volume hwroot/usr/bin/pactl hwroot/usr/bin/brightness hwroot/usr/bin/systemctl hwroot/usr/bin/wifictl hwroot/usr/bin/timedatectl zoneinfo/UTC hwroot/usr/bin/grim cores/gambatte_libretro.so cores/mgba_libretro.so \
-  cores/nestopia_libretro.so cores/snes9x_libretro.so cores/pcsx_rearmed_libretro.so cores/gpsp_libretro.so cores/fceumm_libretro.so cores/picodrive_libretro.so VERSION; do [ -s "$P/$f" ] || die "the card folder has no $f"; done
+  cores/nestopia_libretro.so cores/snes9x_libretro.so cores/pcsx_rearmed_libretro.so cores/gpsp_libretro.so cores/fceumm_libretro.so cores/picodrive_libretro.so VERSION \
+  fonts/FusionPixel12-zh_hans-CJK.otf fonts/NotoSansSC-Regular-CJK.otf; do [ -s "$P/$f" ] || die "the card folder has no $f"; done
 for f in .tmp_update/updater trimui/app/MainUI trimui/app/premainui.sh trimui/app/preload.sh pocket-ui/start.sh pocket-ui/app/start.sh pocket-ui/app/RELEASE \
   pocket-ui/app/bin/tailscale pocket-ui/app/bin/tailscaled pocket-ui/app/bin/curl pocket-ui/app/bin/dropbearmulti pocket-ui/app/bin/syncthing pocket-ui/app/hwroot/usr/bin/brick-ssh pocket-ui/app/hwroot/usr/bin/brick-syncthing \
   pocket-ui/app/hwroot/usr/bin/brick-tailscale pocket-ui/app/hwroot/usr/bin/tailscale; do [ -s "$CARD/$f" ] || die "no $f"; done

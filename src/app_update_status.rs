@@ -11,7 +11,7 @@ impl Updates {
             UpdatePhase::Confirming => ("confirming", None, "app", self.manifest.as_ref().and_then(|m| m.app.as_ref()).map(|a| a.version.as_str()), None, false, false),
             UpdatePhase::Running(job) => {
                 let (phase, kind, version) = match &job.task {
-                    UpdateTask::Check => ("checking", "check", None),
+                    UpdateTask::Check | UpdateTask::CheckCard => ("checking", "check", None),
                     UpdateTask::App { version, .. } => (job.worker.phase.code(), "app", Some(version.as_str())),
                     UpdateTask::System { version, .. } => (job.worker.phase.code(), "system", Some(version.as_str())),
                 };

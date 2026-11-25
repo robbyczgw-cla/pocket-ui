@@ -70,8 +70,8 @@ pub fn trouble_line(c: &mut Canvas, text: &mut Text, line: &str) -> i32 {
     let px = type_scale::px(SMALL) as i32;
     let line_h = px * 4 / 3;
     // Close under the title (it has no pill since 0.2), so the rows keep nearly their normal pitch below; Korean letters
-    // stand taller than Latin ones and go down by the difference (`Text::korean_rise`).
-    let rise = lines.first().map_or(0, |l| text.korean_rise(Face::Body, SMALL, l));
+    // stand taller than Latin ones and go down by the difference (`Text::cjk_rise`).
+    let rise = lines.first().map_or(0, |l| text.cjk_rise(Face::Body, SMALL, l));
     let first = kit::header_bottom(c.h) + px * 2 / 3 + rise;
     c.disc(x + 8, first - px * 3 / 10, 8, crate::palette::ALERT);
     for (i, l) in lines.iter().enumerate() {

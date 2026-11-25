@@ -31,13 +31,17 @@ if [ -d "$BIN/cores" ]; then
   n=0; for f in $(find "$BIN/cores" -type f); do n=$((n + $(blocks "$f"))); done
   line "cores/" "$n"
 fi
+# The Chinese font files build.sh writes next to the programs (scripts/shipped-fonts.sh).
+n=0
+for f in $(sed -n 's/^FONTS="\(.*\)"$/\1/p' scripts/shipped-fonts.sh); do n=$((n + $(blocks "assets/fonts/$f"))); done
+line "fonts/" "$n"
 # What build.sh also writes (launcher, helper, systemd drop-ins, defaults, the ArkOS card's mount; the GAMES drive's two files counted on every model).
 n=0
 for f in deploy/portmaster-setup.sh deploy/run-pocket-ui.sh deploy/essway-pocket-ui.conf deploy/pocket-splash.service deploy/image/image-defaults.sh \
          deploy/image/games-mount.sh deploy/image/rocknix-automount-games.conf deploy/image/games-card.sh deploy/image/rocknix-automount-games-card.conf; do n=$((n + $(blocks "$f"))); done
 line "launcher, helper, drop-ins, defaults" "$n"
-# One block per directory: pocket-ui, releases, the version, .pocket-seed and its five folders, the automount drop-ins.
-line "directories" 11
+# One block per directory: pocket-ui, releases, the version, its fonts, .pocket-seed and its five folders, the automount drop-ins.
+line "directories" 12
 left=$((P2_FREE_BLOCKS - need))
 echo "  ------"
 printf '  %6d blocks  needed, %d free, %d left = %d KiB (at least %d blocks = %d KiB kept for growth)\n' \

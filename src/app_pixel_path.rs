@@ -397,8 +397,12 @@ impl App {
             let (vpx, value) = self.text.fit_sizes(Face::Body, &[32, 29, 26], &s.value, right - NU_BTN_PAD - grade_w - if large { 0 } else { 24 } - value_x);
             self.text.draw(c, Face::Body, vpx, value_x, base, 0xffffff, &value);
             if !s.line.is_empty() && (!tight || i == sel) && !cramped {
-                let line = self.text.fit(Face::Body, 28, &s.line, right - NU_BTN_PAD - value_x);
-                self.text.draw(c, Face::Body, 28, value_x, base + line_dy, 0x9a978f, &line);
+                // Hanzi stand taller than capitals, and the line has no room to go down (it ran into the next row's value,
+                // 24.11.2026): a line with them is a size smaller, where it is.
+                let shown = self.text.translated(&s.line).to_string();
+                let px = if self.text.cjk_rise(Face::Body, 28, &shown) > 0 { 26 } else { 28 };
+                let line = self.text.fit(Face::Body, px, &s.line, right - NU_BTN_PAD - value_x);
+                self.text.draw(c, Face::Body, px, value_x, base + line_dy, 0x9a978f, &line);
             }
         }
 

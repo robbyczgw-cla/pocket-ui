@@ -46,7 +46,9 @@ with A):
   next launch still resumes from your last saved Quit/sleep moment. See [The pause menu](pause-menu.md#the-pause-menu-home)
   for per-emulator details.
 
-Even with this Off, putting your handheld to sleep or using Power off still saves your spot safely.
+Applies to pocket-core plus PS2, GameCube, Wii and 3DS. **RetroArch games always auto-save on Quit** regardless of
+Continue where I quit (ROCKNIX configures RetroArch that way). Even with this Off, putting your handheld to sleep,
+using Power off or switching through [Recent games](playing.md#recent-games) still saves your spot safely.
 
 ### Console boot screen
 
@@ -85,10 +87,6 @@ Settings → Playing → **Remind me where I was** (**Off** by default; toggle w
 resume a game you haven't touched in over two weeks: when you last played, total play time and your own game-card note.
 In pocket-core, the game holds still on its resumed frame until you press any button to jump right in. See
 [Where was I?](continue.md#where-was-i).
-
-Applies to pocket-core plus PS2, GameCube, Wii and 3DS. **RetroArch games always auto-save on Quit** regardless of
-Continue where I quit (ROCKNIX configures RetroArch that way). Sleep, Power off and
-[Recent games](playing.md#recent-games) always keep your moment too.
 
 ### Over the game
 

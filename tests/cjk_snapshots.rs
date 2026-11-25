@@ -1,11 +1,12 @@
 //! Japanese game names (`src/text_fallback.rs`): a made-up library of Super Famicom and Famicom games with Japanese
 //! names, rendered with `pocket-ui --snapshot` on the shelf (a system's list in Split and in Cards), on the game card
-//! and in the search, dark and light, Normal and Large text, with ROCKNIX's Noto Sans CJK (`POCKETUI_CJK_FONT`) and
-//! without it. With the font the names are painted from it and run into nothing the plain names don't; without it
-//! every screen still renders, its names written in Latin letters (`src/latinise.rs`, `tests/cjk_glyphs.rs`).
+//! and in the search, dark and light, Normal and Large text, with pocket-ui's own Chinese font files (every handheld
+//! since 24.11.2026), with those and ROCKNIX's Noto Sans CJK (`POCKETUI_CJK_FONT`), and without either. With a font the
+//! names are painted from it and run into nothing the plain names don't; without one every screen still renders, its
+//! names written in Latin letters (`src/latinise.rs`, `tests/cjk_glyphs.rs`).
 //!
-//! Needs the font: `POCKETUI_TEST_CJK_FONT`, else the one of an unpacked ROCKNIX image at
-//! /tmp/rocknix-root-20261001; without it the test says so and passes. On Linux without a compositor it starts
+//! The ROCKNIX half needs its font: `POCKETUI_TEST_CJK_FONT`, else the one of an unpacked ROCKNIX image at
+//! /tmp/rocknix-root-20261001; without it that half says so. On Linux without a compositor it starts
 //! scripts/wayland-stub.py (python3), as tests/i18n_snapshots.rs.
 
 use std::collections::BTreeSet;
@@ -66,9 +67,10 @@ fn library(dir: &Path) {
     std::fs::write(dir.join("es_systems.cfg"), cfg).unwrap();
 }
 
-/// A screen's pixels and the text painter's record of text running into text or off the edge (`POCKETUI_TEXT_BOXES`).
-fn render(tmp: &Path, stub: Option<&Stub>, state: &str, light: bool, size: &str, font: Option<&Path>) -> (Vec<u8>, BTreeSet<String>) {
-    let name = format!("{}-{}-{size}-{}", state.replace(':', "-"), if light { "light" } else { "dark" }, if font.is_some() { "font" } else { "none" });
+/// A screen's pixels and the text painter's record of text running into text or off the edge (`POCKETUI_TEXT_BOXES`),
+/// with the system's font `font` (None: none) and pocket-ui's own Chinese font files (`own`; false: a card without them).
+fn render(tmp: &Path, stub: Option<&Stub>, state: &str, light: bool, size: &str, font: Option<&Path>, own: bool) -> (Vec<u8>, BTreeSet<String>) {
+    let name = format!("{}-{}-{size}-{}-{}", state.replace(':', "-"), if light { "light" } else { "dark" }, if font.is_some() { "font" } else { "none" }, if own { "own" } else { "bare" });
     let data = tmp.join(format!("data-{name}"));
     std::fs::create_dir_all(&data).unwrap();
     std::fs::write(data.join("settings.json"), if light { r#"{"onboarded": true, "appearance": "light"}"# } else { r#"{"onboarded": true}"# }).unwrap();
@@ -84,6 +86,7 @@ fn render(tmp: &Path, stub: Option<&Stub>, state: &str, light: bool, size: &str,
         .env("POCKETUI_TEXT_SIZE", size)
         .env("POCKETUI_TEXT_BOXES", &boxes)
         .env("POCKETUI_CJK_FONT", font.map_or("off".into(), |f| f.as_os_str().to_owned()))
+        .env("POCKETUI_FONTS_DIR", if own { Path::new(&Root).join("assets/fonts").into_os_string() } else { "off".into() })
         .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
         .env("POCKETUI_DATA", &data)
         .output()
@@ -93,12 +96,14 @@ fn render(tmp: &Path, stub: Option<&Stub>, state: &str, light: bool, size: &str,
     (std::fs::read(&png).unwrap(), record.lines().filter(|l| !l.is_empty()).map(str::to_string).collect())
 }
 
+/// With pocket-ui's own Chinese fonts (every handheld, the Brick too) and with the system's Noto Sans CJK besides them
+/// (ROCKNIX), against neither (the names in Latin letters).
 #[test]
-fn japanese_names_are_painted_from_the_system_font_and_run_into_nothing() {
-    let Some(font) = font() else {
-        eprintln!("SKIPPED: no Noto Sans CJK (set POCKETUI_TEST_CJK_FONT to ROCKNIX's NotoSansCJKsc-Regular.otf)");
-        return;
-    };
+fn japanese_names_are_painted_from_a_cjk_font_and_run_into_nothing() {
+    let font = font();
+    if font.is_none() {
+        eprintln!("SKIPPED the half with Noto Sans CJK (set POCKETUI_TEST_CJK_FONT to ROCKNIX's NotoSansCJKsc-Regular.otf)");
+    }
     let _tmp_guard = tempfile::tempdir().unwrap();
     let tmp = _tmp_guard.path().to_path_buf();
     library(&tmp);
@@ -108,20 +113,25 @@ fn japanese_names_are_painted_from_the_system_font_and_run_into_nothing() {
     for state in ["letters:snes:0", "letters:snes:3:split", "curator:card:snes:ファイナル", "search:results:マリオ"] {
         for light in [false, true] {
             for size in ["normal", "large"] {
-                let (with, with_rec) = render(&tmp, stub.as_ref(), state, light, size, Some(&font));
-                let (without, without_rec) = render(&tmp, stub.as_ref(), state, light, size, None);
-                let what = format!("{state} ({}, {size})", if light { "light" } else { "dark" });
-                if with == without {
-                    problems.push(format!("{what}: the same picture with the font as without it"));
-                }
-                // No more text running into text, touching or cut by the edge than with the names in Latin letters (the strings
-                // differ: a name is cut short at another letter). The jump's big letter covers the selected card's
-                // name on purpose, with either.
-                for kind in ["O\t", "T\t", "E\t"] {
-                    let count = |rec: &BTreeSet<String>| rec.iter().filter(|l| l.starts_with(kind)).count();
-                    if count(&with_rec) > count(&without_rec) {
-                        problems.extend(with_rec.iter().filter(|l| l.starts_with(kind)).map(|l| format!("{what}: {}", l.replace('\t', " | "))));
-                        problems.push(format!("{what}: without the font only {:?}", without_rec.iter().filter(|l| l.starts_with(kind)).collect::<Vec<_>>()));
+                let (without, without_rec) = render(&tmp, stub.as_ref(), state, light, size, None, false);
+                for (font, which) in [(None, "own fonts"), (font.as_deref(), "own and system fonts")] {
+                    if which != "own fonts" && font.is_none() {
+                        continue;
+                    }
+                    let (with, with_rec) = render(&tmp, stub.as_ref(), state, light, size, font, true);
+                    let what = format!("{state} ({}, {size}, {which})", if light { "light" } else { "dark" });
+                    if with == without {
+                        problems.push(format!("{what}: the same picture with the font as without it"));
+                    }
+                    // No more text running into text, touching or cut by the edge than with the names in Latin letters (the strings
+                    // differ: a name is cut short at another letter). The jump's big letter covers the selected card's
+                    // name on purpose, with either.
+                    for kind in ["O\t", "T\t", "E\t"] {
+                        let count = |rec: &BTreeSet<String>| rec.iter().filter(|l| l.starts_with(kind)).count();
+                        if count(&with_rec) > count(&without_rec) {
+                            problems.extend(with_rec.iter().filter(|l| l.starts_with(kind)).map(|l| format!("{what}: {}", l.replace('\t', " | "))));
+                            problems.push(format!("{what}: without the font only {:?}", without_rec.iter().filter(|l| l.starts_with(kind)).collect::<Vec<_>>()));
+                        }
                     }
                 }
             }

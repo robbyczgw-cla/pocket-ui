@@ -46,6 +46,15 @@ impl<D, W> Surface<D, W> {
     }
 }
 
+/// softbuffer's damage rectangle, for `present_with_damage`: the page always takes the whole frame.
+#[derive(Clone, Copy, Debug)]
+pub struct Rect {
+    pub x: u32,
+    pub y: u32,
+    pub width: NonZeroU32,
+    pub height: NonZeroU32,
+}
+
 pub struct Buffer<'a, D, W> {
     surface: &'a mut Surface<D, W>,
 }
@@ -53,6 +62,10 @@ impl<D, W> Buffer<'_, D, W> {
     pub fn present(self) -> Result<(), SoftBufferError> {
         web::publish(&self.surface.pixels, self.surface.size);
         Ok(())
+    }
+    /// The page has no partial update: the damage rows (pocket-fb's on a device) are a whole frame here.
+    pub fn present_with_damage(self, _damage: &[Rect]) -> Result<(), SoftBufferError> {
+        self.present()
     }
     pub fn age(&self) -> u8 {
         0

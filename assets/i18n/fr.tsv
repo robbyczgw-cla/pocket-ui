@@ -12,16 +12,23 @@ Every achievement of this game unlocked	Tous les succès de ce jeu sont débloqu
 RetroAchievements: sign in again in Settings	RetroAchievements : reconnecte-toi dans les Paramètres
 Couldn't read the game to identify it	Impossible de lire le jeu pour l'identifier
 {n} of {m} unlocked · {k} of {n2} points	{n} sur {m} débloqués · {k} sur {n2} points
+{n} of {m} unlocked · {k} of 1 point	{n} sur {m} débloqués · {k} sur 1 point
 · {n} to send	· {n} à envoyer
 Looking up this game on RetroAchievements…	Recherche de ce jeu sur RetroAchievements…
 This game has no achievements yet.	Ce jeu n'a pas encore de succès.
 {n} of {m} unlocked	{n} sur {m} débloqués
 {n} of {m} achievements · {k}%	{n} sur {m} succès · {k} %
+{n} of 1 achievement	{n} sur 1 succès
+{n} of {m} achievements	{n} succès sur {m}
+1 of 1 achievement · 100%	1 sur 1 succès · 100 %
 RetroAchievements has no achievements for this version of the game.	RetroAchievements n'a pas de succès pour cette version du jeu.
 Couldn't reach RetroAchievements. Unlocks count once the Pocket is online at the start of a game.	Impossible de joindre RetroAchievements. Les succès comptent si le Pocket est en ligne au lancement d'un jeu.
 RetroAchievements isn't available for this game.	RetroAchievements n'est pas disponible pour ce jeu.
 RetroAchievements: {s}	RetroAchievements : {s}
-{n} of {m} achievements in {s}	{n} sur {m} succès dans {s}
+{n} of 1 achievement in 1 game	{n} sur 1 succès dans 1 jeu
+{n} of {m} achievements in {k} games	{n} succès sur {m} dans {k} jeux
+{n} of {m} achievements in 1 game	{n} succès sur {m} dans 1 jeu
+{n} of 1 achievement in {m} games	{n} sur 1 succès dans {m} jeux
 Log out	Se déconnecter
 Sign in	Connexion
 Press A again to log out. B keeps you signed in.	Appuie à nouveau sur A pour te déconnecter. B garde ta session.
@@ -89,6 +96,7 @@ pocket-ui's settings, every Options page, and your library notes (status, notes,
 To {s} on the SD card. Not your games, saves or states.	Dans {s} sur la carte SD. Ni jeux, ni sauvegardes, ni save states.
 pocket-ui's settings and Options back to their defaults, after a backup.	Paramètres et Options de pocket-ui remis par défaut, après une copie.
 Kept: your library notes, Sync, Tailscale, accounts and what the Store installed. pocket-ui starts again.	Gardés : tes notes de bibliothèque, Synchro, Tailscale, comptes et ce que le Store a installé. pocket-ui redémarre.
+1 file, made by pocket-ui {s}. {t}	1 fichier, créé par pocket-ui {s}. {t}
 {n} files, made by pocket-ui {s}. {t}	{n} fichiers, créés par pocket-ui {s}. {t}
 A restores it; what you have now is backed up first. pocket-ui starts again.	A la restaure ; ce que tu as maintenant est copié avant. pocket-ui redémarre.
 Saved: {s}	Enregistré : {s}
@@ -202,6 +210,7 @@ Nothing picked yet: every game	Rien de choisi pour l'instant : tous les jeux
 More like {s}	Similaires à {s}
 Nothing in your library is alike enough yet.	Rien dans ta bibliothèque n'y ressemble encore assez.
 Why these? {t}	Pourquoi ceux-ci ? {t}
+1 game you own	1 de tes jeux
 {n} games you own, the closest first	{n} de tes jeux, les plus proches d'abord
 Not on this device	Pas sur cet appareil
 One version on this Pocket, and a remake.	Une version sur ce Pocket, et un remake.
@@ -609,6 +618,7 @@ Stopping..	Arrêt..
 Stopping...	Arrêt...
 Back up saves	Copier les sauvegardes
 Back up settings	Copier les paramètres
+{n} of 1 file.	{n} sur 1 fichier.
 {n} of {m} files.	{n} fichiers sur {m}.
 Press B to cancel. Stopped backups leave no partial files.	B l'arrête. Une copie arrêtée ne laisse rien derrière elle.
 Files: {n}. Free on the card: {s}.	Fichiers : {n}. Libre sur la carte : {s}.
@@ -689,6 +699,7 @@ No battery found	Aucune batterie trouvée
 This device doesn't report a battery.	Cet appareil n'indique pas de batterie.
 At the current rate: under 1% an hour, measured over the last {n} min.	Au rythme actuel : moins de 1 % par heure, mesuré sur {n} min.
 At the current rate: {n}% an hour, measured over the last {m} min.	Au rythme actuel : {n} % par heure, mesuré sur {m} min.
+Based on how this battery drains, measured over the last {n} min.	D'après la décharge passée de cette batterie, mesuré sur {n} min.
 Full in {t}	Pleine dans {t}
 On the charger, about {n}% an hour at the moment.	Sur le chargeur, environ {n} % par heure en ce moment.
 Time until full needs a few more minutes on the charger.	Le temps avant charge complète demande encore quelques minutes sur le chargeur.
@@ -701,6 +712,8 @@ Samples are taken once a minute.	Les mesures sont prises une fois par minute.
 {s} uses about {n}% an hour  ·  {t} left at that rate	{s} consomme environ {n} % par heure  ·  il reste {t} à ce rythme
 {s} uses about {n}% an hour, {m} W	{s} consomme environ {n} % par heure, {m} W
 {s} uses about {n}% an hour	{s} consomme environ {n} % par heure
+Last sleep: {n}% in {t}	Dernière veille : {n} % en {t}
+Last sleep: under 1% in {t}	Dernière veille : moins de 1 % en {t}
 {t} use about {n}% an hour, {m} W  ·  {t2} left at that rate	{t} consomment environ {n} % par heure, {m} W  ·  il reste {t2} à ce rythme
 {t} use about {n}% an hour  ·  {t2} left at that rate	{t} consomment environ {n} % par heure  ·  il reste {t2} à ce rythme
 {t} use about {n}% an hour, {m} W	{t} consomment environ {n} % par heure, {m} W
@@ -1468,6 +1481,7 @@ Options   {t}	Options   {t}
 
 # --- Settings → About
 Version	Version
+{n} on 1 system	{n} sur 1 système
 {n} on {m} systems	{n} sur {m} systèmes
 Free space	Espace libre
 Network	Réseau Wi-Fi
@@ -2233,7 +2247,11 @@ Your {n} games are on the shelf.	Tes {n} jeux sont sur l'étagère.
 Go to your games	Aller à tes jeux
 Optional. You can grab these any time.	Facultatif. Tu pourras les récupérer plus tard.
 Looking up {n} of {m}{s}	Recherche de {n} sur {m}{s}
+Looking up {n} of 1 picture{s}	Recherche de {n} sur 1 image{s}
+Looking up {n} of 1 picture	Recherche de {n} sur 1 image
 Looking up {n} of {m} pictures{s}	Recherche de {n} sur {m} images{s}
+Looking up {n} of 1 cover{s}	Recherche de {n} sur 1 jaquette{s}
+Looking up {n} of 1 cover	Recherche de {n} sur 1 jaquette
 Looking up {n} of {m} covers{s}	Recherche de {n} sur {m} jaquettes{s}
 Looking up {n} of {m} pictures	Recherche de {n} sur {m} images
 Looking up {n} of {m} covers	Recherche de {n} sur {m} jaquettes
@@ -3511,6 +3529,8 @@ Or add your own: Settings › Games › Add games (phone, file sharing).	Ou copi
 Needs Wi-Fi. Connect in Settings › Connections › Wi-Fi first.	Wi-Fi nécessaire. Connecte-toi d'abord dans Paramètres › Connexions › Wi-Fi.
 {n} free homebrew games, shared by their creators.	{n} petits jeux gratuits, partagés par leurs auteurs.
 Get all games	Récupérer tous les jeux
+1 byte	1 octet
+{n} bytes	{n} octets
 Get all {n} games	Récupérer les {n} jeux
 All games are already here	Tous les jeux sont déjà là
 Already here	Déjà là
@@ -3574,6 +3594,8 @@ Quit anyway	Quitter quand même
 Return to the game. It keeps retrying; this banner clears once a save succeeds.	Retour au jeu. Il continue d'essayer d'enregistrer ; la ligne disparaît dès qu'une sauvegarde passe.
 Two versions	Deux versions
 {n} versions	{n} versions
+1 version to review.	1 version à vérifier.
+1 version	1 version
 Game save	Sauvegarde du jeu
 Saved state	État sauvé
 Memory card	Carte mémoire
@@ -3639,7 +3661,9 @@ Keep it	Garder
 Scanning SD card usage. Takes a few seconds.	Calcul de ce qu'il y a sur la carte SD. Ça prend quelques secondes.
 Under 1 GB free. A full SD card can break saves and states. Clear some space below.	Il reste moins de 1 Go. Une fois la carte SD pleine, les save states ne peuvent plus être écrites et les sauvegardes peuvent échouer. Supprime plus bas ce dont tu n'as pas besoin.
 Shows a low-space alert on the shelf under 1 GB free.	pocket-ui te le signale sur l'étagère quand il reste moins de 1 Go.
+1 folder could not be read. Its contents aren't counted.	1 dossier n'a pas pu être lu. Son contenu n'est pas compté.
 {n} folders could not be read; what is in them is not counted.	{n} dossiers n'ont pas pu être lus ; ce qu'ils contiennent n'est pas compté.
+On 1 system. A opens the list by size.	Sur 1 système. A ouvre la liste par taille.
 On {n} systems. A lists them by size.	Sur {n} systèmes. A les liste par taille.
 To delete a game, press X on it, then choose Delete from the card.	Pour supprimer un jeu, ouvre sa fiche (X sur le jeu), puis Supprimer de la carte.
 No automatic states of games not played for {n} months.	Aucune save state auto de jeux non joués depuis {n} mois.
@@ -3694,6 +3718,7 @@ Games can't be deleted in Kids mode.	Impossible de supprimer des jeux en Mode en
 Delete {s}?	Supprimer {s} ?
 Saves and states	Sauvegardes et save states
 Working out what it takes…	Calcul de la place prise…
+Frees {s}: 1 file.	Libère {s} : 1 fichier.
 Frees {s}: {n} files.	Libère {s} : {n} fichiers.
 {s} and {n} more	{s} et {n} de plus
 Sync shares saves and states: they are deleted from your other devices too.	Synchro partage les sauvegardes et les save states : ils sont aussi supprimés de tes autres appareils.
@@ -4025,6 +4050,8 @@ Covers and pictures download on unmetered Wi-Fi as you browse. Your choice stays
 Tap a game to select it, tap again to play. Swipe along the shelf. Back goes one step back.	Touche un jeu pour le sélectionner, touche à nouveau pour jouer. Fais glisser le long de l'étagère. Retour fait un pas en arrière.
 Everything is ready. You can change these choices in Settings and add more game folders later.	Tout est prêt. Tu peux changer ces choix dans les Paramètres et ajouter d'autres dossiers de jeux plus tard.
 No games found. Choose another folder or skip for now.	Aucun jeu trouvé. Choisis un autre dossier ou passe pour l'instant.
+Found 1 game on 1 system	1 jeu trouvé sur 1 système
+Found {n} games on 1 system	{n} jeux trouvés sur 1 système
 Found {n} games on {m} systems	{n} jeux trouvés sur {m} systèmes
 No folder chosen yet. You can add games later.	Aucun dossier choisi pour l'instant. Tu pourras ajouter des jeux plus tard.
 Controller detected	Manette détectée
@@ -4170,7 +4197,9 @@ Hidden. Settings › System › Storage brings it back.	Masqué. Paramètres ›
 Check if your games can launch? Takes a moment, changes nothing.	Envie de voir s'ils vont démarrer ? Ça prend un moment et ne change rien.
 Check	Vérifier
 Looking at your games{s}	Examen de tes jeux{s}
+{n} of 1 game · {s}	{n} sur 1 jeu · {s}
 {n} of {n2} games · {s}	{n} jeux sur {n2} · {s}
+{n} of 1 game	{n} sur 1 jeu
 {n} of {n2} games	{n} jeux sur {n2}
 Can't read the list of systems	Impossible de lire la liste des systèmes
 The games are safe. Restart the Pocket and try again.	Tes jeux sont en sécurité. Redémarre le Pocket et réessaie.
@@ -4179,6 +4208,7 @@ Copy games into their system's folder (Settings › Games › Add games) or get 
 {n} games ready	{n} jeux prêts
 All good	Tout est bon
 First 50,000 files checked	50 000 premiers fichiers vérifiés
+{n} of 1 game ready	Jeux prêts : {n} sur 1
 {n} of {n2} games ready	{n} jeux sur {n2} prêts
 And {n} more. Fix these first, then check again.	Et {n} autres. Corrige d'abord ceux-ci, puis revérifie.
 Hide this copy	Masquer cette copie
@@ -4306,7 +4336,7 @@ Copy games with a USB cable. Windows and Linux open it by themselves; a Mac need
 USB file transfer is on. Connect a computer: your games are under Roms.	Le transfert de fichiers USB est activé. Branche un ordinateur : tes jeux sont dans Roms.
 USB file transfer didn't start. Take out what's in the USB port and try again.	Le transfert de fichiers USB n'a pas démarré. Retire ce qui est dans le port USB et réessaie.
 Your games card came out. Put it back to play: your games and saves are on it. A game that was running couldn't save after that moment.	Ta carte de jeux a été retirée. Remets-la pour jouer : tes jeux et sauvegardes sont dessus. Un jeu en cours n'a pas pu sauvegarder après ce moment.
-Games card found. While it's in, only its games show; your other games come back when you take it out.	Carte de jeux trouvée. Tant qu'elle est là, seuls ses jeux s'affichent ; tes autres jeux reviennent quand tu la retires.
+Games card found. Its games show together with the games on your first card.	Carte de jeux trouvée. Ses jeux s'affichent avec ceux de ta première carte.
 Games card in	Carte de jeux insérée
 Games load from your second SD card. To add more, pop it into a computer and copy to its roms folder.	Tes jeux sont lus depuis ta carte de jeux. Pour en ajouter, mets cette carte dans ton ordinateur et copie-les dans son dossier roms.
 A folder with ".{s}" in its name can't be used. Rename it first.	Un dossier avec « .{s} » dans son nom est inutilisable. Renomme-le d'abord.
@@ -4382,6 +4412,7 @@ Saving your game…	Sauvegarde de ton jeu…
 It saves by itself. Press A next time to carry on.	Il se sauve tout seul. La prochaine fois, appuie sur A pour continuer.
 For grown-ups	Pour les adultes
 Enter your PIN.	Saisis ton PIN.
+Too many tries. Wait 1 second.	Trop d'essais. Attends 1 seconde.
 Too many tries. Wait {n} seconds.	Trop d'essais. Attends {n} secondes.
 That's not it. Try again.	Raté. Réessaie.
 Forgot it? Put a file called {s} in the top folder of the card's ROCKNIX drive and restart.	Oublié ? Mets {s} à la racine du lecteur ROCKNIX et redémarre.
@@ -5824,3 +5855,16 @@ Add PC and indie games from portmaster.games via SD card. Press A to see how.	Me
 Couldn't unpack the runtimes.	Impossible de décompresser les runtimes.
 No Wi-Fi on this handheld: copy box art and PortMaster games from a computer.	Pas de Wi-Fi sur cet appareil : copie les jaquettes et les jeux PortMaster depuis un ordinateur.
 Couldn't install the runtime into PortMaster. Still on the card; press A to try again.	Impossible d'installer le runtime dans PortMaster. Il est toujours sur la carte SD ; appuie sur A pour réessayer.
+Pick a picture from this device	Choisir une image sur cet appareil
+Back to the automatic cover	Revenir à la jaquette automatique
+Cover updated	Jaquette mise à jour
+Cover reset	Jaquette réinitialisée
+Loading picture…	Chargement de l'image…
+No picture chosen. Your cover wasn't changed.	Aucune image choisie. La jaquette reste inchangée.
+Couldn't open that picture. Your cover wasn't changed.	Impossible d'ouvrir cette image. La jaquette reste inchangée.
+No picture picker found on this device.	Aucun sélecteur d'images trouvé sur cet appareil.
+A game is running. Quit it first to change the cover.	Un jeu est en cours. Quitte-le d'abord pour changer la jaquette.
+That game isn't in your library anymore.	Ce jeu n'est plus dans ta bibliothèque.
+That picture is over 8 MB. Pick a smaller one.	Cette image dépasse 8 Mo. Choisis-en une plus petite.
+Couldn't read that picture. Pick a PNG or JPEG.	Impossible de lire cette image. Choisis un PNG ou un JPEG.
+That picture is too large. Pick a smaller resolution.	La résolution de cette image est trop grande. Choisis-en une plus petite.

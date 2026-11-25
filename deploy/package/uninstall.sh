@@ -79,7 +79,7 @@ fi
 # between its two marker lines goes, the rest of mako's config stays as it is.
 if grep -q '^# BEGIN pocket-ui' "$MAKO" 2>/dev/null; then
   sed '/^# BEGIN pocket-ui/,/^# END pocket-ui/d' "$MAKO" >"$MAKO.new" && mv -f "$MAKO.new" "$MAKO" || die "cannot clean $MAKO"
-  makoctl mode -r pocket-ui >/dev/null 2>&1
+  makoctl mode -r pocket-ui -r pocket-ui-game-volume >/dev/null 2>&1
   makoctl reload >/dev/null 2>&1
   ok "ROCKNIX's volume box is back everywhere (pocket-ui's lines gone from $MAKO)"
 fi

@@ -16,7 +16,7 @@ PATTERN = re.compile(r'\b(?:read|read_to_string|read_to_end|read_exact|read_at|r
 COVERAGE = {
     'kids.rs': ['kids-config', 'kids-ledger'], 'library_meta.rs': ['library-meta'],
     'pad_bindings.rs': ['controllers'], 'emu_choice.rs': ['emu-choice'], 'system_cfg.rs': ['system-cfg'],
-    'core_options.rs': ['core-options'], 'battery_history.rs': ['battery-history'], 'battery_games.rs': ['battery-games'],
+    'core_options.rs': ['core-options'], 'battery_history.rs': ['battery-history'], 'battery_games.rs': ['battery-games'], 'battery_curve.rs': ['battery-curve'],
     'achievements/account.rs': ['ra-account'], 'achievements/mastery.rs': ['ra-mastery'],
     'achievements/offline.rs': ['ra-pending', 'ra-offline'], 'ports.rs': ['port-catalog', 'port-installed'],
     'cheat_pack.rs': ['cheat-pack'], 'cheat_download.rs': ['cheat-pack'], 'update/cheats.rs': ['cheat-download'],
@@ -74,6 +74,10 @@ COVERAGE = {
 # Private parsers can use the identical policy from tests/common/data_faults.rs
 # in their own module. Keep their test identity explicit so removal fails too.
 UNIT_COVERAGE = {
+    'low_battery.rs': [
+        ('src/low_battery.rs', 'reads_the_level_and_the_charger_from_sysfs'),
+        ('src/low_battery.rs', 'r36s_does_not_switch_off_when_critical_percent_disagrees_with_voltage'),
+    ],
     'background_io.rs': [
         ('src/background_io.rs', 'file_source_rule_background_reads_have_the_same_bytes_and_errors'),
         ('src/background_io.rs', 'r36s_readers_a_cancelled_job_cannot_read_seek_walk_or_stat'),

@@ -120,6 +120,9 @@ PYARTIFACT
         mkdir -p releases/dev/cores && cp -a "$core_source/cores/." releases/dev/cores/ || exit 1;
       fi; true'
     scp -q "$BUILD/pocket-ui" "$BUILD/pocket-core" "$BUILD/pocket-splash" "$SOURCE_ROOT/deploy/portmaster-setup.sh" "$HOST:/storage/pocket-ui/releases/dev/"
+    # The Chinese font files next to the programs (scripts/shipped-fonts.sh), from this tree (an artifact has none): 3.8 MB.
+    ssh "$HOST" 'mkdir -p /storage/pocket-ui/releases/dev/fonts'
+    scp -q $(for f in $(sed -n 's/^FONTS="\(.*\)"$/\1/p' "$ROOT/scripts/shipped-fonts.sh"); do printf '%s ' "$ROOT/assets/fonts/$f"; done) "$HOST:/storage/pocket-ui/releases/dev/fonts/"
     scp -q "$SOURCE_ROOT/deploy/run-pocket-ui.sh" "$HOST:/storage/pocket-ui/"
     # The boot screen goes with the boot UI's drop-in, as install.sh and autostart.sh do it; never started here.
     scp -q "$SOURCE_ROOT/deploy/pocket-splash.service" "$HOST:/tmp/pocket-splash.service"
@@ -127,7 +130,7 @@ PYARTIFACT
         cmp -s /tmp/pocket-splash.service '"$SPLASH"' || { cp /tmp/pocket-splash.service '"$SPLASH"'.new && mv -f '"$SPLASH"'.new '"$SPLASH"'; }
         mkdir -p /storage/.config/system.d/sysinit.target.wants && ln -sfn ../pocket-splash.service /storage/.config/system.d/sysinit.target.wants/pocket-splash.service
         systemctl daemon-reload; fi; rm -f /tmp/pocket-splash.service'
-    ssh "$HOST" 'cd /storage/pocket-ui && chmod +x run-pocket-ui.sh releases/dev/*; rm -f update-pending;
+    ssh "$HOST" 'cd /storage/pocket-ui && chmod +x run-pocket-ui.sh releases/dev/pocket-ui releases/dev/pocket-core releases/dev/pocket-splash releases/dev/portmaster-setup.sh; rm -f update-pending;
       for f in pocket-ui pocket-core portmaster-setup.sh; do [ -L $f ] || rm -f $f; ln -sfn current/$f $f; done;
       if [ "$(readlink current)" != releases/dev ]; then [ -L current ] && ln -sfn "$(readlink current)" previous; ln -sfn releases/dev current; fi;
       if [ -f '"$DROPIN"' ]; then systemctl reset-failed essway 2>/dev/null; systemctl restart essway;

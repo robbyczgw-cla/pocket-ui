@@ -3,10 +3,11 @@
 //! (`crate::type_scale::px`) first, so the cache holds each glyph at the size it is painted at, Normal and Large side
 //! by side: switching the size draws the new size's glyphs once, nothing is thrown away or drawn again.
 //!
-//! A letter Barlow lacks comes from a second font: hangul from the Korean fonts pocket-ui ships (`korean_glyph`:
-//! Galmuri11 next to a pixel face, Noto Sans KR next to any other), any other (a Japanese name, "ファイナルファンタジーVI")
-//! from the system's Noto Sans CJK (`text_fallback`), fitted to the face's capitals and weight, and kept apart in a cache
-//! of its own of at most `FALLBACK_BYTES`. Without that font a name is written in Latin letters where that can be done (kana, hangul) and
+//! A letter Barlow lacks comes from a second font: hangul from the Korean fonts pocket-ui ships, ideographs, kana and
+//! CJK punctuation from its Chinese ones (`shipped_glyph`: Galmuri11 or Fusion Pixel next to a pixel face, Noto Sans KR or
+//! SC next to any other), anything else from the system's Noto Sans CJK (`text_fallback`), fitted to the face's capitals
+//! and weight, and kept apart in a cache of its own of at most `FALLBACK_BYTES`. Without any of them a name is written in
+//! Latin letters where that can be done (kana, hangul) and
 //! the letters nothing can say are left out (`latinise`): never "?" and never an empty box.
 
 use std::collections::{HashMap, HashSet};
@@ -82,6 +83,9 @@ pub struct Text {
     more_bytes: usize,
     /// The fallback font's file (`text_fallback::path`), opened the first time a letter needs it.
     fallback_path: Option<PathBuf>,
+    /// Ideographs and kana from the Chinese font files pocket-ui ships (`text_fallback::cjk`): false only in tests of a
+    /// card without them (`without_own_cjk`).
+    own_cjk: bool,
     /// Not tried yet; tried: the font and its fit to the title face and the body face, or `None` without one.
     fallback: Option<Option<(Arc<Fallback>, [Fit; 2])>>,
     /// The glyphs a thread draws ahead of time (`prewarm`), taken in at the first glyph the cache lacks.
@@ -242,35 +246,50 @@ fn fallback_glyph(fallback: &mut Option<Option<(Arc<Fallback>, [Fit; 2])>>, path
     font.raster(ch, px, fits[face.slot()])
 }
 
-/// `ch` from the Korean font pocket-ui ships (`text_fallback::korean`) for `font`, the face it stands in for (painted at
-/// `scale` times the size, its pixel `grid` ems: `raster`'s); `None` for a letter that is not Korean or that the font
-/// lacks (then the system's CJK font is asked). A pixel face gets Galmuri11 on a whole number of the screen's pixels
-/// (`step`), each Galmuri pixel as big as the face's own or the step smaller, so both read as one grid; the syllable
-/// stands on the baseline and goes down by whole Galmuri pixels to half of what it stands taller than the capitals (one
-/// pixel next to Departure Mono's eight-pixel capitals). Any other face gets Noto Sans KR fitted like the system's font
-/// (`fits`: its ideographs as high as the capitals and a sixth, centred on them, as bold as the face).
+/// `ch` from a font pocket-ui ships for `font`, the face it stands in for (painted at `scale` times the size, its pixel
+/// `grid` ems: `raster`'s): hangul from the Korean ones (`text_fallback::korean`), ideographs, kana and CJK punctuation
+/// from the Chinese ones (`text_fallback::cjk`, files on the card); `None` for any other letter or one they lack (then
+/// the system's CJK font is asked). A pixel face gets the pixel font (Galmuri11, Fusion Pixel 12px) on a whole number of
+/// the screen's pixels (`step`), each of its pixels as big as the face's own or the step smaller, so both read as one
+/// grid; the letter stands on the baseline and goes down by whole pixels to half of what it stands taller than the
+/// capitals (one pixel next to Departure Mono's eight-pixel capitals). Any other face gets Noto Sans KR or SC fitted like
+/// the system's font (`fits`: its ideographs as high as the capitals and a sixth, centred on them, as bold as the face).
 #[allow(clippy::too_many_arguments)]
-fn korean_glyph(font: &Font, scale: f32, grid: f32, tight: Option<u32>, step: u32, title: &Font, body: &Font, scales: [f32; 2], slot: usize, px: u32, ch: char) -> Option<Glyph> {
-    use crate::text_fallback::{korean, korean_has, KOREAN_PIXEL_ROWS};
-    if !korean_has(ch) {
+fn shipped_glyph(font: &Font, scale: f32, grid: f32, tight: Option<u32>, step: u32, title: &Font, body: &Font, scales: [f32; 2], slot: usize, px: u32, ch: char, own_cjk: bool) -> Option<Glyph> {
+    use crate::text_fallback::{cjk, cjk_has, korean, korean_has, CJK_PIXEL_DROP, KOREAN_PIXEL_ROWS};
+    let korean_letter = korean_has(ch);
+    if !korean_letter && !(own_cjk && cjk_has(ch)) {
         return None;
     }
+    let sans = if korean_letter { None } else { Some(cjk(false)?) };
     if grid > 0.0 {
-        let sized = px as f32 * scale;
-        let sized = match tight {
-            Some(step) => on_screen_grid(sized, grid, step),
-            None => on_grid(sized, grid),
-        };
-        let own = (sized * grid).round().max(1.0) as u32;
-        let step = step.max(1);
-        let n = (own / step * step).max(step);
-        let cap = font.metrics('H', sized).height as i32;
-        let over = (KOREAN_PIXEL_ROWS * n as i32 - cap).max(0);
-        let rise = -(over / 2 / n as i32) * n as i32;
-        return korean(true).raster_pixels(ch, n, rise);
+        let pixel = if korean_letter { None } else { cjk(true).filter(|f| f.has(ch)) };
+        if korean_letter || pixel.is_some() {
+            let sized = px as f32 * scale;
+            let sized = match tight {
+                Some(step) => on_screen_grid(sized, grid, step),
+                None => on_grid(sized, grid),
+            };
+            let own = (sized * grid).round().max(1.0) as u32;
+            let step = step.max(1);
+            let n = (own / step * step).max(step);
+            let cap = font.metrics('H', sized).height as i32;
+            let over = (KOREAN_PIXEL_ROWS * n as i32 - cap).max(0);
+            let rise = -(over / 2 / n as i32) * n as i32;
+            return match pixel {
+                // Fusion Pixel's letters stand a pixel lower than Galmuri's: up by it, on the same line as hangul.
+                Some(f) => f.raster_pixels(ch, n, rise + CJK_PIXEL_DROP * n as i32),
+                None => korean(true).raster_pixels(ch, n, rise),
+            };
+        }
     }
-    let sans = korean(false);
-    sans.raster(ch, px, fits(sans, title, body, scales)[slot])
+    match sans {
+        Some(sans) => sans.raster(ch, px, fits(&sans, title, body, scales)[slot]),
+        None => {
+            let sans = korean(false);
+            sans.raster(ch, px, fits(sans, title, body, scales)[slot])
+        }
+    }
 }
 
 /// The fallback font in `path` and its fit to the two faces, `None` without one (`text_fallback::open`).
@@ -324,13 +343,44 @@ fn words(s: &str) -> impl Iterator<Item = &str> {
 }
 
 /// Where `wrap` may end a line in `s`: each unit with what goes before it when it follows another on the same line.
-/// Every language of the interface (Korean too) breaks between words, a space between two (`words`); a word wider than
-/// the line alone is cut between letters (`Text::pieces`), which is right for hangul as well. The one place that says
-/// so: Japanese and Chinese, which have no spaces, will give one unit per letter with nothing between, kept with the
-/// marks that must not start a line (。、」) or end one (「) as kinsoku has it, without a change to `wrap` itself.
-fn line_units(s: &str) -> impl Iterator<Item = (&'static str, &str)> {
-    words(s).map(|w| (" ", w))
+/// Between words, a space between two (`words`); inside a word of Chinese or Japanese, which have no spaces, before and
+/// after every ideograph and kana ("" between), kept with the marks that must not start a line (。，、」） and the small
+/// kana) or end one (「（) as kinsoku has it, and Latin letters in such a word ("按A键", "Wi-Fi设置") stay together. A unit
+/// wider than the line alone is cut between letters (`Text::pieces`), which is right for hangul as well. Every painter
+/// that breaks lines itself takes its units from here, never `split_whitespace` (a Chinese note ran past the screen's
+/// edge on the Updates page, 24.11.2026).
+pub fn line_units(s: &str) -> Vec<(&'static str, &str)> {
+    let mut out = Vec::new();
+    for w in words(s) {
+        let mut glue = " ";
+        let mut from = 0;
+        let mut prev: Option<char> = None;
+        for (i, ch) in w.char_indices() {
+            if let Some(p) = prev {
+                if cjk_break(p, ch) {
+                    out.push((glue, &w[from..i]));
+                    glue = "";
+                    from = i;
+                }
+            }
+            prev = Some(ch);
+        }
+        out.push((glue, &w[from..]));
+    }
+    out
 }
+
+/// Whether a line may end between `a` and `b` of one word (`line_units`): next to an ideograph or kana, unless kinsoku
+/// keeps them together.
+pub fn cjk_break(a: char, b: char) -> bool {
+    let wide = |c: char| matches!(c as u32, 0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0xF900..=0xFAFF | 0x3040..=0x30FF | 0x31F0..=0x31FF | 0x3000..=0x303F | 0xFF01..=0xFF60);
+    (wide(a) || wide(b)) && !NO_LINE_START.contains(b) && !NO_LINE_END.contains(a)
+}
+
+/// Kinsoku: marks a line never starts with (closing punctuation, the iteration and length marks, small kana) and ones it
+/// never ends with (opening brackets).
+const NO_LINE_START: &str = "、。，．：；！？）」』】〉》〕］｝〜ー…‥・ゝゞヽヾ々ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ％,.:;!?)]}%\u{2019}\u{201D}";
+const NO_LINE_END: &str = "（「『【〈《〔［｛([{\u{2018}\u{201C}";
 
 impl Text {
     fn with_faces(title: Font, body: Font, themed: [bool; 2], fallback_path: Option<PathBuf>) -> Self {
@@ -357,6 +407,7 @@ impl Text {
             more: Vec::new(),
             more_bytes: 0,
             fallback_path,
+            own_cjk: true,
             fallback: None,
             warm: None,
             warm_names: None,
@@ -472,6 +523,14 @@ impl Text {
         self
     }
 
+    /// The same faces as on a card without the Chinese font files (`text_fallback::cjk`): ideographs and kana only from
+    /// the fallback font, else in Latin letters or left out (`latinise`). For the tests.
+    pub fn without_own_cjk(mut self) -> Self {
+        self.own_cjk = false;
+        let path = self.fallback_path.clone();
+        self.with_fallback(path)
+    }
+
     fn glyph(&mut self, face: Face, px: u32, ch: char) -> &Glyph {
         self.sync();
         let key = (face, px, ch);
@@ -484,7 +543,7 @@ impl Text {
             self.take_warm();
         }
         // One lookup for a glyph in the cache, as before the fallback font; the fields apart for the one that isn't.
-        let Text { cache, title, body, scale, grid, lcd, tight, step, base, fallback_path, fallback, more, more_bytes, drawn, .. } = self;
+        let Text { cache, title, body, scale, grid, lcd, tight, step, base, fallback_path, fallback, more, more_bytes, drawn, own_cjk, .. } = self;
         cache.entry(key).or_insert_with(|| {
             *drawn += 1;
             let (font, k, g, l, n) = match face {
@@ -496,9 +555,9 @@ impl Text {
             if let Some(glyph) = crate::button_prompts::raster(ch, px, font.metrics('H', px as f32 * k).height as f32) {
                 return glyph;
             }
-            // A letter the face lacks: Korean from the font pocket-ui ships, else the system's CJK font's, if it has one.
+            // A letter the face lacks: Korean or Chinese from the fonts pocket-ui ships, else the system's CJK font's, if it has one.
             if font.lookup_glyph_index(ch) == 0 && ch != '?' {
-                let korean = korean_glyph(font, k, g, n, *step, title, body, *scale, face.slot(), px, ch);
+                let korean = shipped_glyph(font, k, g, n, *step, title, body, *scale, face.slot(), px, ch, *own_cjk);
                 if let Some(glyph) = korean.or_else(|| fallback_glyph(fallback, fallback_path.as_deref(), title, body, *scale, face, px, ch)) {
                     *more_bytes += glyph_bytes(&glyph);
                     more.push(key);
@@ -617,9 +676,10 @@ impl Text {
             }
         }
         let path = self.fallback_path.clone();
+        let own_cjk = self.own_cjk;
         let names: Vec<String> = names.into_iter().filter(|n| !n.is_ascii()).map(str::to_string).collect();
-        // Without the system's CJK font only Korean names have letters to draw ahead (`korean_glyph`).
-        if names.is_empty() || path.is_none() && !names.iter().any(|n| n.chars().any(crate::text_fallback::korean_has)) {
+        // Without the system's CJK font only names with letters of the shipped fonts have any to draw ahead (`shipped_glyph`).
+        if names.is_empty() || path.is_none() && !names.iter().any(|n| n.chars().any(|c| crate::text_fallback::korean_has(c) || own_cjk && crate::text_fallback::cjk_has(c))) {
             return;
         }
         self.sync();
@@ -640,8 +700,8 @@ impl Text {
             for &(face, px) in &sizes {
                 let (main, i) = if face == Face::Title { (&title, 0) } else { (&body, 1) };
                 for &ch in letters.iter().filter(|&&ch| main.lookup_glyph_index(ch) == 0) {
-                    // As `glyph` draws it: Korean from the shipped font, the rest from the system's.
-                    let korean = korean_glyph(main, scale[i], grid[i], tight[i].then_some(step), step, &title, &body, scale, i, px, ch);
+                    // As `glyph` draws it: Korean and Chinese from the shipped fonts, the rest from the system's.
+                    let korean = shipped_glyph(main, scale[i], grid[i], tight[i].then_some(step), step, &title, &body, scale, i, px, ch, own_cjk);
                     if let Some(glyph) = korean.or_else(|| font.as_ref().and_then(|(font, fits)| font.raster(ch, px, fits[i]))) {
                         out.push(((face, px, ch), glyph));
                     }
@@ -780,7 +840,7 @@ impl Text {
             return *known;
         }
         let own = self.title.lookup_glyph_index(ch) != 0 && self.body.lookup_glyph_index(ch) != 0;
-        let has = own || crate::text_fallback::korean_has(ch) || {
+        let has = own || crate::text_fallback::korean_has(ch) || self.own_cjk && crate::text_fallback::cjk_has(ch) || {
             let Text { fallback, fallback_path, title, body, scale, .. } = self;
             fallback.get_or_insert_with(|| open_fallback(fallback_path.as_deref(), title, body, *scale)).as_ref().is_some_and(|(f, _)| f.has(ch))
         };
@@ -830,17 +890,18 @@ impl Text {
         self.width_raw(face, px, s)
     }
 
-    /// How far `s`'s Korean letters reach above those of Latin text ("Hd") at the same size, in pixels; 0 for a string
-    /// without them. Hangul stands taller than a capital: a line placed close under another by Latin heights ran into
-    /// it in Korean (pause menu's save notice under the game's name, Large text, 22.11.2026). `s` as given, not translated.
-    pub fn korean_rise(&mut self, face: Face, px: u32, s: &str) -> i32 {
+    /// How far `s`'s Korean, Chinese and Japanese letters reach above those of Latin text ("Hd") at the same size, in
+    /// pixels; 0 for a string without them. Hangul and ideographs stand taller than a capital: a line placed close under
+    /// another by Latin heights ran into it in Korean (pause menu's save notice under the game's name, Large text,
+    /// 22.11.2026). `s` as given, not translated.
+    pub fn cjk_rise(&mut self, face: Face, px: u32, s: &str) -> i32 {
         let px = crate::type_scale::px(px);
         let mut rise = |ch: char| {
             let m = &self.glyph(face, px, ch).0;
             m.height as i32 + m.ymin
         };
         let latin = rise('H').max(rise('d'));
-        s.chars().filter(|ch| crate::text_fallback::is_korean(*ch)).map(&mut rise).max().map_or(0, |k| (k - latin).max(0))
+        s.chars().filter(|ch| crate::text_fallback::is_korean(*ch) || crate::text_fallback::is_cjk(*ch)).map(&mut rise).max().map_or(0, |k| (k - latin).max(0))
     }
 
     fn width_raw(&mut self, face: Face, px: u32, s: &str) -> i32 {
@@ -1014,32 +1075,49 @@ impl Text {
         let s = self.translated(s);
         let translated = !self.raw && !matches!(s, crate::i18n::Tr::Same(_));
         let mut lines: Vec<String> = Vec::new();
+        // What stood between each line and the one before it in `s`: a space between words, nothing between hanzi.
+        let mut starts: Vec<&'static str> = Vec::new();
         let mut line = String::new();
+        let mut start = "";
         for (glue, word) in line_units(&s) {
             let candidate = if line.is_empty() { word.to_string() } else { format!("{line}{glue}{word}") };
             if self.width_raw(face, px, &candidate) <= max {
+                if line.is_empty() {
+                    start = glue;
+                }
                 line = candidate;
                 continue;
             }
             if !line.is_empty() {
                 lines.push(std::mem::take(&mut line));
+                starts.push(start);
             }
+            start = glue;
             // A word wider than the line on its own (a folder's path, larger text) is broken into pieces that fit,
             // after a "/", ".", "-" or "_" where it has one; only then is it measured alone.
             let mut pieces = self.pieces(face, px, word, max);
             line = pieces.pop().unwrap_or_default();
-            lines.extend(pieces);
+            for piece in pieces {
+                lines.push(piece);
+                starts.push(std::mem::replace(&mut start, ""));
+            }
         }
         if !line.is_empty() {
             lines.push(line);
+            starts.push(start);
         }
+        // A last line of one unit (`line_units`: a word, or one hanzi) takes the unit before it along, joined as it was in
+        // `s`. Chinese is many units without a space: "新连接。" is no widow, and the line before it is never split at a
+        // space far back (24.11.2026: "最近玩 self-hosted" stood alone over the rest of a Chinese sentence).
         if let (true, [.., prev, last]) = (no_widow, lines.as_mut_slice()) {
-            if !last.contains(' ') {
-                if let Some((head, word)) = prev.rsplit_once(' ') {
-                    let moved = format!("{word} {last}");
-                    if self.width_raw(face, px, &moved) <= max {
-                        *prev = head.to_string();
-                        *last = moved;
+            if line_units(last).len() == 1 {
+                let units = line_units(prev);
+                if let [_, .., (glue, word)] = units.as_slice() {
+                    let joined = format!("{word}{}{last}", starts.last().copied().unwrap_or(" "));
+                    if self.width_raw(face, px, &joined) <= max {
+                        let head = prev[..prev.len() - word.len() - glue.len()].to_string();
+                        *prev = head;
+                        *last = joined;
                     }
                 }
             }
@@ -1177,12 +1255,12 @@ impl Text {
         size
     }
 
-    /// Whether every word of `s` (as the interface's language has it) fits into `max` pixels at `px` on its own, so that
-    /// `wrap` breaks it only between words.
+    /// Whether every word of `s` (as the interface's language has it; in Chinese every letter, `line_units`) fits into
+    /// `max` pixels at `px` on its own, so that `wrap` breaks it only between words.
     pub fn words_fit(&mut self, face: Face, px: u32, s: &str, max: i32) -> bool {
         let scaled = crate::type_scale::px(px);
         let s = self.translated(s).to_string();
-        let fits = words(&s).all(|w| self.width_raw(face, scaled, w) <= max);
+        let fits = line_units(&s).iter().all(|(_, w)| self.width_raw(face, scaled, w) <= max);
         fits
     }
 
@@ -1711,8 +1789,8 @@ mod tests {
     fn korean_letters_rise_above_latin_ones_and_latin_text_has_no_rise() {
         let mut text = Text::builtin();
         for px in [24, 32, 40] {
-            assert!(text.korean_rise(Face::Body, px, "SD 카드 저장 실패") > 0, "{px}");
-            assert_eq!(text.korean_rise(Face::Body, px, "Couldn't save to the SD card. Écran, Ñ"), 0, "{px}");
+            assert!(text.cjk_rise(Face::Body, px, "SD 카드 저장 실패") > 0, "{px}");
+            assert_eq!(text.cjk_rise(Face::Body, px, "Couldn't save to the SD card. Écran, Ñ"), 0, "{px}");
         }
     }
 
@@ -1795,7 +1873,7 @@ mod tests {
     /// no face has is no longer a question mark either (snapshot: "Also known as Nintendo GameCube, ????????????").
     #[test]
     fn a_character_the_font_lacks_is_left_out_or_written_in_latin_never_a_box_or_a_question_mark() {
-        let mut t = Text::builtin().with_fallback(None);
+        let mut t = Text::builtin().with_fallback(None).without_own_cjk();
         for face in [Face::Body, Face::Title] {
             assert!(!t.has_glyph(face, '✓') && !t.has_glyph(face, 'ド'), "the test needs characters Barlow lacks");
             assert_eq!(t.width(face, 30, "A✓B\u{200b}"), t.width(face, 30, "AB"), "a mark: nothing, no box");
@@ -1899,10 +1977,12 @@ mod tests {
         buf
     }
 
+    /// A card without the Chinese font files and without a system CJK font (pocket-ui's own fonts are files since
+    /// Chinese, 24.11.2026; the Brick had neither before).
     #[test]
-    fn without_the_fallback_font_a_japanese_name_is_written_in_latin_letters_never_as_question_marks() {
+    fn without_any_cjk_font_a_japanese_name_is_written_in_latin_letters_never_as_question_marks() {
         for path in [Some(PathBuf::from("/nonexistent/NotoSansCJKsc-Regular.otf")), None] {
-            let mut t = Text::builtin().with_fallback(path.clone());
+            let mut t = Text::builtin().with_fallback(path.clone()).without_own_cjk();
             for face in [Face::Body, Face::Title] {
                 // Kana and hangul as Latin letters: the same pixels as the Latin text itself, and not "?" for each.
                 for (name, latin) in [
@@ -1926,7 +2006,7 @@ mod tests {
                 assert!(pixels(&mut t, face, 30, "마리오 카트") != pixels(&mut t, face, 30, "Mario Kateu"));
             }
             // Kana only: nothing to draw ahead without the system's font (the Korean lines above did use the cache).
-            let mut t = Text::builtin().with_fallback(path.clone());
+            let mut t = Text::builtin().with_fallback(path.clone()).without_own_cjk();
             t.prewarm_names(["スーパーマリオワールド"]);
             t.finish_prewarm();
             assert_eq!(t.fallback_cache(), (0, 0), "nothing drawn ahead either");
@@ -1935,7 +2015,7 @@ mod tests {
 
     #[test]
     fn a_string_every_face_can_draw_is_painted_as_it_is_with_no_copy() {
-        let mut t = Text::builtin().with_fallback(None);
+        let mut t = Text::builtin().with_fallback(None).without_own_cjk();
         for s in ["Super Mario World", "Pokémon Rubis ñandú ÄÖÜ", "1–4 players · ‹ Original ›"] {
             assert!(matches!(t.translated(s), crate::i18n::Tr::Same(_)), "{s}");
         }
@@ -2286,7 +2366,7 @@ mod tests {
         }
     }
 
-    /// The Korean letters next to the face's own (`korean_glyph`): on the same baseline (down at most a sixth of a
+    /// The Korean letters next to the face's own (`shipped_glyph`): on the same baseline (down at most a sixth of a
     /// capital, as Noto Sans KR's syllables and Galmuri's pixel do), at least as tall as the capitals (Pixelify's 10.5 screen pixels on 640x480 meet Galmuri's 11),
     /// at most half again (Galmuri's 11 pixels next to Pixelify's 7). In Retro every Galmuri pixel is the same whole
     /// number of the screen's pixels, no grey edge, on 640x480 (2 canvas pixels to one) as on a native screen.
@@ -2336,6 +2416,138 @@ mod tests {
         assert!(t.fallback_cache().1 < syllables.len() / 3, "emptied on the way: {:?}", t.fallback_cache());
         let mut fresh = Text::builtin();
         assert_eq!(ink(&mut t, Face::Title, 50, "가나"), ink(&mut fresh, Face::Title, 50, "가나"), "drawn again the same");
+    }
+
+    /// Chinese lines of the kind the interface says, and a Japanese game's name: the Chinese fonts' tests.
+    pub(crate) const CHINESE_SAMPLES: [&str; 5] = ["设置", "按 A 继续游戏", "存档栏位 3 · 今天 11:41", "屏幕亮度和声音（大字）", "ファイナルファンタジーVI"];
+
+    /// Hanzi and kana without any CJK font on the system (the Brick, the Android app, a desktop: `builtin` has none):
+    /// every letter of a Chinese line and of a Japanese name is painted from the shipped fonts, in Barlow and in both of
+    /// Retro's letters, never written in Latin letters, never a box or a gap.
+    #[test]
+    fn hanzi_and_kana_are_painted_from_the_shipped_fonts_in_every_style_without_a_system_font() {
+        use crate::text_fallback::is_cjk;
+        for (style, letters) in font_style::ROW {
+            let _style = font_style::for_this_thread(style, letters);
+            let mut t = Text::builtin().with_fallback(Some(PathBuf::from("/nonexistent/NotoSansCJKsc-Regular.otf"))).pinned_to(style);
+            for face in [Face::Body, Face::Title, Face::Narrow] {
+                for px in [21, 28, 37, 50, 67] {
+                    for s in CHINESE_SAMPLES {
+                        assert_eq!(&*t.drawable(crate::i18n::Tr::Same(s)), s, "{style:?}: {s} is painted as it is, not in Latin letters");
+                        for ch in s.chars().filter(|c| is_cjk(*c) && !c.is_whitespace() && *c != '\u{3000}') {
+                            let (x0, _, x1, _) = ink(&mut t, face, px, &ch.to_string());
+                            assert!(x1 > x0, "{style:?} {letters:?} {face:?} {px} px: {ch} has ink");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The ideographs next to the face's own (`shipped_glyph`), as hangul: on the baseline, as tall as the capitals and
+    /// up to 60 % more; in Retro Fusion Pixel on whole screen pixels, 11 of its pixels high like Galmuri's syllables, and
+    /// as high as hangul on the same line.
+    #[test]
+    fn hanzi_stand_on_the_baseline_a_little_taller_than_the_capitals_and_level_with_hangul_in_every_style() {
+        for (style, letters) in font_style::ROW {
+            let _style = font_style::for_this_thread(style, letters);
+            for panel in [(1280, 960), (640, 480)] {
+                crate::scaled_layout::set_step((1280, 960), panel);
+                let step = crate::scaled_layout::step() as usize;
+                let mut t = Text::builtin().pinned_to(style);
+                for face in [Face::Body, Face::Title] {
+                    for px in [21, 28, 30, 37, 44, 50, 67, 96] {
+                        let cap = ink(&mut t, face, px, "H");
+                        let zh = ink(&mut t, face, px, "国");
+                        let (ch, zh_h) = (cap.3 - cap.1, zh.3 - zh.1);
+                        let at = format!("{style:?} {letters:?} {face:?} {px} px on {panel:?}: 国 {zh:?} next to H {cap:?}");
+                        assert!(zh_h >= ch && zh_h * 5 <= ch * 8, "{at}: as high as the capitals and up to 60 % more");
+                        assert!(zh.3 >= cap.3 && (zh.3 - cap.3) * 6 <= ch.max(6), "{at}: on the baseline");
+                        if style == FontStyle::Retro {
+                            let ko = ink(&mut t, face, px, "한");
+                            assert_eq!((zh.1, zh.3), (ko.1, ko.3), "{at}: level with 한 {ko:?}");
+                            let (m, bitmap) = t.glyph(face, px, '国').clone();
+                            assert!(bitmap.iter().all(|&v| v == 0 || v == 255), "{at}: grey edges");
+                            let n = m.height / crate::text_fallback::KOREAN_PIXEL_ROWS as usize;
+                            assert!(n >= step && n % step == 0 && m.height % n == 0, "{at}: a Fusion pixel of {n} canvas pixels");
+                        }
+                    }
+                }
+            }
+        }
+        crate::scaled_layout::set_step((1280, 960), (1280, 960));
+    }
+
+    /// Chinese has no spaces: a line breaks between any two hanzi, never before 。，、）」 nor after （「 (kinsoku), Latin
+    /// letters in it stay whole, every line within the room and nothing lost; `title_px` counts a hanzi as a word.
+    #[test]
+    fn a_chinese_line_wraps_between_hanzi_but_not_before_closing_marks_or_after_opening_ones() {
+        let mut t = Text::builtin();
+        t.set_translate(false);
+        let s = "无法连接到无线网络。请检查密码（区分大小写），然后按A重试。";
+        for room in [120, 160, 200, 260, 330] {
+            let lines = t.wrap(Face::Body, 28, s, room);
+            assert!(lines.len() >= 2, "{room}: {lines:?}");
+            assert_eq!(lines.concat(), s, "{room}: nothing lost");
+            for l in &lines {
+                assert!(t.width(Face::Body, 28, l) <= room, "{room}: {l} within the room");
+                let (first, last) = (l.chars().next().unwrap(), l.chars().last().unwrap());
+                assert!(!NO_LINE_START.contains(first), "{room}: {l} starts with {first}");
+                assert!(!NO_LINE_END.contains(last), "{room}: {l} ends with {last}");
+            }
+        }
+        let units: Vec<&str> = line_units("连接Wi-Fi后按（A）键。").into_iter().map(|(_, u)| u).collect();
+        assert_eq!(units, ["连", "接", "Wi-Fi", "后", "按", "（A）", "键。"]);
+        assert_eq!(line_units("Game Boy 游戏").iter().map(|&(g, u)| format!("{g}{u}")).collect::<String>(), " Game Boy 游戏");
+        let one = t.width(Face::Title, 44, "设") + 2;
+        assert!(t.words_fit(Face::Title, 44, "设置菜单", one), "every hanzi fits on its own");
+        // A sentence's last line of several hanzi is no widow: the line before keeps its hanzi, and a one-hanzi last line
+        // takes the hanzi before it, without a space (24.11.2026: "最近玩 self-hosted" stood alone on the first line).
+        let prose = "最近玩 self-hosted 过的游戏。正在下载更新存储卡剩余空间不足请重新连接。";
+        let squeeze = |l: &str| l.replace(' ', "");
+        for room in [300, 360, 420, 520, 640] {
+            let lines = t.wrap_prose(Face::Body, 24, prose, room);
+            assert_eq!(lines.iter().map(|l| squeeze(l)).collect::<String>(), squeeze(prose), "{room}: nothing lost: {lines:?}");
+            assert!(lines.iter().all(|l| t.width(Face::Body, 24, l) <= room), "{room}: {lines:?}");
+            if room >= t.width(Face::Body, 24, "最近玩 self-hosted 过的游戏") {
+                assert_ne!(lines[0], "最近玩 self-hosted", "{room}: the first line keeps what fits: {lines:?}");
+            }
+            assert!(lines.last().unwrap().chars().count() >= 2, "{room}: a lone hanzi: {lines:?}");
+        }
+    }
+
+    /// Every painter that breaks lines by itself takes its units from `line_units`: one that split at spaces and measured
+    /// the pieces left a Chinese note whole, past the screen's edge (Updates page, 24.11.2026). A loop over
+    /// `split_whitespace()` (or `split(' ')`) with a width measured within the next lines is that mistake again. The
+    /// manual's own pages are English and stay as they are.
+    #[test]
+    fn no_painter_breaks_lines_at_spaces_by_itself() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut found = Vec::new();
+        let mut dirs = vec![root.clone()];
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    dirs.push(path);
+                    continue;
+                }
+                let name = path.strip_prefix(&root).unwrap().to_string_lossy().to_string();
+                if !name.ends_with(".rs") || name.ends_with("_tests.rs") || name == "manual.rs" {
+                    continue;
+                }
+                let src = std::fs::read_to_string(&path).unwrap();
+                let src = src.split("#[cfg(test)]").next().unwrap_or("");
+                let lines: Vec<&str> = src.lines().collect();
+                for (i, l) in lines.iter().enumerate() {
+                    let splits = l.contains("split_whitespace()") || l.contains("split(' ')");
+                    if splits && l.trim_start().starts_with("for ") && lines[i..(i + 4).min(lines.len())].iter().any(|n| n.contains("width")) {
+                        found.push(format!("src/{name}:{}: {}", i + 1, l.trim()));
+                    }
+                }
+            }
+        }
+        assert!(found.is_empty(), "lines broken at spaces by hand (take text::line_units):\n{}", found.join("\n"));
     }
 
     /// Korean breaks between words as the other languages do; a word wider than the line alone between syllables,

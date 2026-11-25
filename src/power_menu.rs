@@ -176,7 +176,7 @@ pub fn battery_now() -> BatteryLine {
     let percent = crate::status_corner::status().battery.map(|b| b.percent);
     let now = crate::recents::now_secs();
     let history = crate::battery_history::view();
-    let est = crate::battery_estimate::estimate(history.recent(now, crate::battery_history::KEEP), now);
+    let est = crate::battery_estimate::estimate_with(history.recent(now, crate::battery_history::KEEP), now, crate::battery_history::curve().as_ref());
     battery_line(percent, crate::battery_history::loaded(), est.as_ref())
 }
 
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn the_battery_line_says_something_understandable_also_without_data() {
-        let left = Estimate::Left { per_hour: 12.0, secs: 4 * 3600 + 20 * 60, over: 1800 };
+        let left = Estimate::Left { per_hour: 12.0, secs: 4 * 3600 + 20 * 60, over: 1800, curve: false };
         assert_eq!(
             battery_line(Some(73), true, Some(&left)),
             BatteryLine {
@@ -263,7 +263,7 @@ mod tests {
         let s = crate::battery::Sample { t: 0, capacity: 50, charging: false, full: false, mv: 0, ma: 0, temp: None, tag: 0 };
         for est in [
             None,
-            Some(Estimate::Left { per_hour: 0.5, secs: 90_000, over: 1800 }),
+            Some(Estimate::Left { per_hour: 0.5, secs: 90_000, over: 1800, curve: false }),
             Some(Estimate::Charging { full_in: Some(2400), per_hour: 30.0 }),
             Some(Estimate::Charging { full_in: None, per_hour: 30.0 }),
             Some(Estimate::Full),

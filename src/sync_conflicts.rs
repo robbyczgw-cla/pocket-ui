@@ -563,6 +563,7 @@ pub fn card_line(groups: &[&Group]) -> Option<String> {
     }
     // Whole sentences, so that each has its line in the German table.
     Some(match (first.kind, first.versions().len()) {
+        (_, 1) => "1 version to review.".to_string(),
         (Kind::Card, 2) => "Two versions of the memory card. Choose one…".to_string(),
         (Kind::Card, n) => format!("{n} versions of the memory card. Choose one…"),
         (Kind::State, 2) => "Two versions of a save state. Choose one…".to_string(),
@@ -772,6 +773,14 @@ mod tests {
         let groups = find(&all_roots(l), l);
         assert_eq!(groups.len(), 1);
         groups.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn a_conflict_with_only_one_copy_left_uses_the_singular() {
+        let (_t, l) = tmp("one-copy");
+        let mut group = conflict(&l);
+        group.current = None;
+        assert_eq!(card_line(&[&group]).as_deref(), Some("1 version to review."));
     }
 
     #[test]

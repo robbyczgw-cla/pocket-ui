@@ -31,9 +31,8 @@ Android, use Android's built-in Extra dim under Accessibility instead.
 
 ### Where the sound goes
 
-On Anbernic H700 handhelds running ROCKNIX, games stay silent cleanly at 0% volume (including N64). Mid-range volume
-steps are also louder than in 0.4.0 while keeping max and 0% identical; older speaker levels adjust automatically on
-first boot after updating without touching custom hardware tweaks.
+On Anbernic H700 handhelds running ROCKNIX, releasing a volume key during a game shows the new percentage briefly.
+The speaker reaches ROCKNIX's speaker level at 100%, and games stay silent at 0%, including N64.
 
 The small label next to the Volume bar reports where audio is actually going **right now**, checked in the background
 when you open Quick settings and refreshed every few seconds (briefly showing "…", or "Output unknown" if the OS doesn't
@@ -92,7 +91,7 @@ Sleep works in two stages, both configurable under Settings → System → **Sle
   instead. When **Off**, no wake alarm is ever scheduled.
 - **Low battery:** at 5% on battery, a brief alert appears on the shelf and in pocket-core games. At 2%, your Pocket
   saves the running game and powers off cleanly, even from light sleep, so progress is never lost to a dead battery.
-  Skipped while charging.
+  Skipped while charging. On an R36S, a reading of 2% or less at 3.30 V or higher is ignored by this safeguard.
 - If an OS sleep block prevents suspend, the screen stays dark (press any button to wake); pressing Power still suspends
   manually.
 - If suspend fails, the screen stays dark and retries after 4, 8, 16, then every 30 minutes.

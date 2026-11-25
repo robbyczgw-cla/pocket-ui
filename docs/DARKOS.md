@@ -111,6 +111,22 @@ are untouched. The firmware's sleep hook can restart ogage after wake without br
 | HOME + Power | no power event while the UI owns the key | same short/held power behavior |
 | HOME + L3 / R3 | speaker / Bluetooth toggle | nothing |
 
+**RetroArch's HOME shortcuts.** A game in dArkOS's own command (Runs on → dArkOS) whose command starts dArkOS's RetroArch
+(`/usr/local/bin/retroarch` or `retroarch32`, also as `%EMULATOR%`) gets pocket-ui's HOME shortcuts, as on ROCKNIX: HOME + R1
+save, L1 load, R2 fast-forward, L2 held rewind, A screenshot, Y the FPS, X RetroArch's menu, START quit (twice: dArkOS's
+`quit_press_twice`). Before the start pocket-ui writes them, with the game's Options → Shortcuts (Kids Mode, Easy), into
+`/tmp/pocket-ui-darkos/retroarch-shortcuts.cfg` (`ra_hotkeys::prepare_darkos`), and host-launch.py puts
+`--appendconfig=<that file>` behind the program in dArkOS's command template. dArkOS's `~ark/.config/retroarch/retroarch.cfg`
+is never written. The hotkey button is pocket-ui's HOME, numbered from the pad's key bitmap the way RetroArch's udev driver
+does: F (BTN_MODE, 10) on the RK3566 `retrogame_joypad`, FN (708, 16) on an R36S pad that has it, else R3 (707, 15). dArkOS's own
+hotkey (Select on the RG353M) does nothing in these games then. HOME + A is RetroArch's screenshot into pocket-ui's Screenshots
+(`storage/roms/screenshots`), since pocket-fb cannot read the screen dArkOS's RetroArch draws on; rewind is enabled while its
+shortcut is on (dArkOS ships it off). Without the pad's autoconfig or HOME key there is no file and dArkOS's hotkeys stay.
+Emulator scripts (`amiga.sh`, `coco.sh`, standalone emulators) are not changed. RetroArch keeps only the last `--appendconfig`, so dArkOS's
+own files stay in front of ours in one `a|b` list: an `--appendconfig` in the ES command, and the wrapper's
+`retroarch.cfg.ext` for an external pad (RK3566, more than 7 input nodes, a second joystick: the wrapper's own test).
+Not checked on a device.
+
 **Over the game.** pocket-fb runs here without `--gl`, so pocket-core's picture is the CPU copy (`soft_screen`) and no GPU draws
 the overlay. The copy blends the same pieces in itself (`soft_hud`). The H700's quiet game display (docs/H700-VOLUME.md) does
 not apply here, although the boards use the H700 profile's rows (`mako_osd::quiet_for`). Shown: the volume or brightness bar when ogage changes a level
@@ -180,6 +196,10 @@ EmulationStation shows only "Please wait…" while a port runs, so a port that s
 jump back to the list. start.sh therefore shows the reason itself: on the console (tty1), with `setfont` and `printf` like
 dArkOS's own scripts and PortMaster, for 15 s: the reason, what to do, the last lines of `start.log`, `pocket-fb.log` and
 `pocket-ui.log`, and "Send a photo of this screen." It needs no program of ours, so it also works when `bin/` cannot be run.
+The launcher allows about 20 seconds for the Bridge's Wayland and IPC sockets. `start.log` reports which sockets
+have appeared after five seconds and at the deadline. `pocket-fb.log` starts fresh on every attempt and timestamps the
+framebuffer setup, display handover and socket setup. On dArkOS RK3326 boards the bridge reads fbdev geometry and writes frames at the displayed offset with `pwrite`. This
+uses neither framebuffer mapping nor display-control ioctls. The log brackets the first frame write.
 It appears when a check fails (missing or non-executable program, refused board, wrong screen size, a view that cannot be
 built), when pocket-ui is not in its view, when pocket-ui ends with an error or within 4 s, and (from `pocket-ui.sh`) when
 start.sh never ran. start.sh is run by `sh`, so it needs neither the executable bit nor a clean first line.

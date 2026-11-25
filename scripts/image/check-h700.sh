@@ -461,7 +461,7 @@ check "names the model: $DT_MODEL" 'grep -q "for the $DT_MODEL: SD card image" "
 check "says which card fits which Pocket 6 layout (stick on top: -rp6; D-pad on top: -rp6-top-dpad) and the Nova's" \
   'grep -q "left stick above the D-pad takes the -rp6 card" "$R" && grep -q "D-pad on top the" "$R" && grep -q -- "-rp6-top-dpad card" "$R" && grep -q -- "Nova the -nova card" "$R"'
 check "says how it starts without flashing: Volume Down, Retroid's \"UEFI\", Start; Secure Boot off" \
-  'grep -q "Nothing needs flashing" "$R" && grep -q "Hold Volume Down and press Power" "$R" && grep -q "Pick \"UEFI\"" "$R" && grep -q "Secure Boot" "$R"'
+  'grep -q "without flashing anything" "$R" && grep -q "Hold Volume Down and press Power" "$R" && grep -q "Pick \"UEFI\"" "$R" && grep -q "Secure Boot" "$R"'
 check "says it is untested that way, and the ABL and OpenABL ways still work; never flashes" \
   'grep -q "nobody has started this card that way yet" "$R" && grep -q "Set device model" "$R" && grep -q "OpenABL" "$R" && grep -q "does not flash a boot helper" "$R"'
 check "scopes UFS isolation to the bundled boot entries and explains the fallback and internal ROCKNIX" \
@@ -608,6 +608,14 @@ if LC_ALL=C grep -a -q dsperate "$S/pocket-ui/releases/$V/pocket-ui"; then
   check "DSperate core, matching source and notices are intact" \
     'python3 -I /repo/scripts/dsperate-files.py --check "$S/pocket-ui/releases/$V/cores"'
   python3 -I /repo/scripts/image/ds-checks.py "$S/pocket-ui/releases/$V/cores" "$V" >>"$W/lists/storage.expected"
+  sort -u -o "$W/lists/storage.expected" "$W/lists/storage.expected"
+fi
+# 25.11.2026: the font files every package carries (scripts/shipped-fonts.sh, as scripts/image/build.sh puts them in), byte for
+# byte; the 0.7.1 cards failed "exactly the expected files" because this list did not know the fonts/ folder
+SHIPPED_FONTS=$(sed -n 's/^FONTS="\(.*\)"$/\1/p' /repo/scripts/shipped-fonts.sh 2>/dev/null)
+if [ -n "$SHIPPED_FONTS" ]; then
+  check "the shipped font files are assets/fonts', byte for byte" 'sh /repo/scripts/shipped-fonts.sh --check "$S/pocket-ui/releases/$V"'
+  { echo "755 0:0 d ./pocket-ui/releases/$V/fonts"; for f in $SHIPPED_FONTS; do echo "644 0:0 f ./pocket-ui/releases/$V/fonts/$f"; done; } >>"$W/lists/storage.expected"
   sort -u -o "$W/lists/storage.expected" "$W/lists/storage.expected"
 fi
 check "exactly the expected files, owners and modes" 'same "$W/lists/storage" "$W/lists/storage.expected"' ||

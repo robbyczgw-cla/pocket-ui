@@ -1977,7 +1977,8 @@ fn settings_licences_lists_every_core_with_licence_source_and_patches_and_goes_b
     for needle in ["slam.mp3", "florn", "freesound.org/s/454468/", "creativecommons.org/licenses/by/3.0/", changes] {
         assert!(words.contains(needle), "{needle}: {words}");
     }
-    for lang in pocket_ui::i18n::Lang::ALL.into_iter().filter(|lang| *lang != pocket_ui::i18n::Lang::En) {
+    // Every complete language says it in its own words (one still being translated paints English).
+    for lang in pocket_ui::i18n::Lang::ALL.into_iter().filter(|lang| *lang != pocket_ui::i18n::Lang::En && lang.complete()) {
         assert_ne!(pocket_ui::i18n::tr_in(lang, changes), changes, "{lang:?}");
     }
     // Translated labels (checked without switching the process-wide language under parallel tests).

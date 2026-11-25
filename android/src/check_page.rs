@@ -217,16 +217,14 @@ impl Ui {
             }
             Level::Running => {
                 let room = self.check_buttons(c, text, room, &[("Stop", Action::Press(Button::South), false)]);
-                let (done, total, system) = self.check.page.as_ref().map(|p| p.progress.clone()).unwrap_or_default();
+                let page = self.check.page.as_ref();
+                let (done, total) = page.map_or((0, 0), |p| (p.progress.0, p.progress.1));
                 let ticks = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() / 400 % 3) as usize;
                 let head = tr(&format!("Looking at your games{}", ".".repeat(1 + ticks)));
-                let line = if total == 0 {
-                    tr("Reading your folders. Nothing is changed.")
-                } else if system.is_empty() {
-                    tr(&format!("{done} of {total} games"))
-                } else {
-                    tr(&format!("{done} of {total} games · {system}"))
-                };
+                let line = page.filter(|_| total > 0).map_or_else(
+                    || tr("Reading your folders. Nothing is changed."),
+                    |p| tr(&p.progress_label()),
+                );
                 let bar_h = self.d(8.0);
                 let bar_y = room.bottom - bar_h - self.d(12.0);
                 self.empty_page(c, text, Room { bottom: bar_y - self.d(8.0), ..room }, Art::Search, &head, &line, None);
@@ -294,7 +292,7 @@ impl Ui {
             return;
         }
         let size = self.sp(15.0);
-        let line = tr(&format!("{} of {} games ready", report.ready, report.total));
+        let line = tr(&report.ready_label());
         let base = room.top + size as i32;
         text.draw(c, Face::Body, size, room.margin, base, pal().dust, &line);
         self.target(Area::new(room.margin, room.top, c.w - 2 * room.margin, size as i32 + self.d(4.0)), &line, Action::Label);

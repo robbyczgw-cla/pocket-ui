@@ -816,11 +816,12 @@ Shelf look (`Medium::of`):
   2026-10-28, when a cabinet of a few games looked empty), the Shelf look's own scale on its shelf; scaled by nearest
   pixel, so they stay pixel art.
   A cardboard box's front is its printed cover edge to edge: one pixel of card round it (`card_edge`), the tuck flap's
-  fold and rubbed corners over the cover (`box_wear`). Its spine is its system's printed spine, the same on every box of
-  the system (`spine_print`: the US Super Nintendo's grey with a dark band, the NES's black box, the Game Boy's and the
-  Game Boy Advance's white with their band); a US Nintendo 64 box's spine is its own art, so it is printed in its cover's
-  colour (taken without the cover's red strip) with the red block and its white logo square at the top (`n64_badge`,
-  no logo; the owner, 2026-10-30, after the real boxes); the
+  fold and rubbed corners over the cover (`box_wear`). Its spine carries its system's printed band, the same on every box of
+  the system (`spine_print`); the Super Nintendo's, Game Boy's and Game Boy Advance's spine under it is in the cover's
+  colour (taken without the system's printed strip; printed white and grey on every box as the real ones, they made a
+  shelf a white or grey wall, the owner on the R36S, 2026-11-24), the NES's box black; a US Nintendo 64 box's spine is
+  its own art, so it is printed in its cover's colour (taken without the cover's red strip) with the red block and its
+  white logo square at the top (`n64_badge`, no logo; the owner, 2026-10-30, after the real boxes); the
   cartridges inside take their system's plastic (`cabinet_art::plastic`: Game Boy grey, GBA indigo-grey, N64
   charcoal…); cases are drawn in their own colours. Every template pixel is solid or empty (the decoder reads
   half-transparent as empty).

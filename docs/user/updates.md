@@ -7,7 +7,7 @@ Your games, saves and settings stay completely untouched. On the TrimUI Brick, u
 updated files are staged smoothly before the menu opens.
 
 1. Open Settings → System → **Updates**; it checks automatically.
-2. When a new release is ready, the pocket-ui row shows it ("0.2.0, 0.2.1 available") and adds **Install pocket-ui …**.
+2. When a new release is ready, the pocket-ui row shows it ("0.7.1 available") and adds **Install pocket-ui …**.
    Press A.
 3. pocket-ui downloads, verifies the signature and checksum, installs and restarts automatically ("Installed.
    Restarting…").
@@ -33,7 +33,7 @@ HTTPS fails and it explains: "The clock looks wrong, so the update server can't 
 
 ## No Wi-Fi? Update from the card
 
-No Wi-Fi on your handheld (RG28XX, R36S and clones), or Wi-Fi turned off? Update offline using a single zip file; your
+No Wi-Fi on your handheld (RG28XX, RG35XX 2024 or R36S), or Wi-Fi turned off? Update offline using a single zip file; your
 games, saves and settings stay safe just like an online update:
 
 1. Grab the matching offline update zip from [pocketui.xyz/install](https://pocketui.xyz/install):
@@ -42,7 +42,7 @@ games, saves and settings stay safe just like an online update:
    - `pocket-ui-update-<version>-darkos.zip` for pocket-ui beta for dArkOS
    Keep it zipped; don't unpack it.
 2. Power off, plug the SD card into your computer and drop the zip straight onto the visible partition:
-   - **RG28XX:** the **GAMES** drive ([The GAMES drive](games-drive.md))
+   - **RG28XX and RG35XX 2024:** the **GAMES** drive ([The GAMES drive](games-drive.md))
    - **Other pocket-ui OS cards:** the small first partition, or your TF2 games card (like on R36S)
    - **TrimUI Brick:** the root of the card, right beside the `pocket-ui` folder
    - **dArkOS:** the **EASYROMS** partition
@@ -70,7 +70,7 @@ accepts it.
 
 ## The hint on the shelf
 
-When a new release drops, your shelf notifies you once shortly after boot (Wi-Fi required): "pocket-ui 0.3.0 is ready.
+When a new release drops, your shelf notifies you once shortly after boot (Wi-Fi required): "pocket-ui 0.7.1 is ready.
 Your games and settings stay." Press **A** to jump to Settings → System → Updates, or **B** to dismiss. Once dismissed,
 that version won't nag again until the next release, and it never interrupts a game, first start, Kids Mode or dev
 builds. A tiny amber dot stays on Settings → System → Updates until you install.
@@ -87,7 +87,7 @@ again** still works anytime.
 ![Settings → System with the Updates row and the installed version](pictures/updates.webp)
 
 Opening Updates checks automatically (unless auto-check is Off) and displays your installed **pocket-ui** version plus
-any newer release ("0.2.0, 0.2.1 available"), followed by:
+any newer release ("0.7.1 available"), followed by:
 
 | Action | What it does |
 |---|---|

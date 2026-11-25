@@ -20,9 +20,10 @@ use super::App;
 static SAVER: OnceLock<Option<Saver>> = OnceLock::new();
 
 /// Whether HOME + A is pocket-ui's in a running game: not pocket-core's (its own frame, its own toast), not an app
-/// (PC streaming, a tool).
+/// (PC streaming, a tool), not a dArkOS port game in dArkOS's command (pocket-fb cannot read the screen it has, and its
+/// RetroArch takes the shot itself, `ra_hotkeys::prepare_darkos`).
 pub(crate) fn applies(emulator: &str) -> bool {
-    emulator != "pocket-core" && emulator != pocket_ui::moonlight::EMULATOR && emulator != pocket_ui::tools::EMULATOR
+    emulator != "pocket-core" && emulator != pocket_ui::moonlight::EMULATOR && emulator != pocket_ui::tools::EMULATOR && emulator != "darkos"
 }
 
 /// Whether HOME + A takes the picture in this game: in RetroArch games as Options → Shortcuts → Screenshot says (as in
@@ -130,6 +131,7 @@ mod tests {
         // RetroArch's own screenshot key is off (`ra_hotkeys`): its files would not be in the gallery.
         assert!(applies("retroarch"), "HOME + A in a RetroArch game is pocket-ui's");
         assert!(!applies(pocket_ui::moonlight::EMULATOR) && !applies(pocket_ui::tools::EMULATOR), "apps have no screenshot");
+        assert!(!applies("darkos"), "dArkOS's RetroArch takes HOME + A there");
     }
 
     /// Options → Shortcuts → Screenshot off is off in RetroArch games as in pocket-core's; Kids Mode has no shortcuts.

@@ -35,6 +35,7 @@ status-file page identifiers belong in `skip.txt`, and the literal hostname `poc
 | `assets/i18n/fr.tsv` | `English<TAB>French` (language code `fr`, shown as "Français"; "tu", « guillemets » and `? ! : ; %` after a no-break space U+00A0, which `Text::wrap` never breaks at), the same lines and placeholders; any `fr` locale starts it. `brick-de.tsv`, `brick-es.tsv`, `brick-pt.tsv` and `brick-fr.tsv` hold the few lines only the Brick build adds |
 | `assets/i18n/it.tsv` | `English<TAB>Italian` (language code `it`, shown as "Italiano"; "tu"), the same lines and placeholders; any `it` locale starts it. `brick-it.tsv` holds its Brick-only lines |
 | `assets/i18n/ko.tsv` | `English<TAB>Korean` (language code `ko`, shown as "한국어"), started empty: `Lang::Ko` is on the row with `complete: false`, so every line it lacks is English and the checks that want every line in every language (`Lang::complete`, `SHIPPED` in `src/i18n.rs`) leave it out until it is translated; set `complete: true` then: the completeness checks (`shipped` in `src/i18n.rs`) and the Korean text-fit matrix (`tests/text_size.rs`, with `ko.tsv`'s lines; `KO_PLACEHOLDER_MATRIX=1` runs it with placeholder lines before) take it by themselves. Until then it is not offered (`Lang::offered`: not on the Language row, the welcome's pills or Android's first start, and a Korean system or phone starts in English); `POCKETUI_LANG_PREVIEW=1` or `POCKETUI_I18N_TABLE=ko:<file>` show it. `brick-ko.tsv` for its Brick-only lines |
+| `assets/i18n/zh.tsv` | `English<TAB>Simplified Chinese` (language code `zh`, shown as "简体中文"), started empty like `ko.tsv` (`Lang::Zh`, `complete: false`): not offered until it is complete, and only where the Chinese font files are (`Lang::paintable`); `POCKETUI_LANG_PREVIEW=1` or `POCKETUI_I18N_TABLE=zh:<file>` show it, `ZH_PLACEHOLDER_MATRIX=1` runs the text-fit matrix with placeholder lines. A `zh_CN`, `zh_SG` or `zh-Hans` system starts in it; `zh_TW`, `zh_HK`, `zh_MO` and `zh-Hant` (Traditional Chinese) start in English. `brick-zh.tsv` for its Brick-only lines |
 | `assets/i18n/keep.txt` | Strings shown in English on purpose: names, brands, addresses; `re:` lines are patterns (`^` `$` `.*`, `\d` digits, `\` for a literal character) |
 | `assets/i18n/skip.txt` | Strings the extraction script finds that are never painted on their own: log lines, keys of other programs' files, pieces of longer strings the table translates whole |
 | `scripts/i18n-extract.py` | Lists the strings of `src/` that read like words for a person and the ones without a German line (`--stub`: as table lines to fill in; `--summary`: only the numbers; `--check`: exit 1 if one is missing, and a warning for lines `de.tsv` has and `es.tsv`/`pt.tsv`/`fr.tsv`/`it.tsv` lack; `--stale`: table lines whose English the source no longer has) |
@@ -87,7 +88,7 @@ patterns, 6-9 µs, once per painter (`i18n::Cache`). The table is compiled in; w
 thread (1.2-1.3 ms), so the first frame doesn't wait for it. The Mini V2 is slower; measure there before relying on
 these numbers.
 
-## Korean letters (and later Japanese and Chinese)
+## Korean and Chinese letters
 
 Barlow, Departure Mono and Pixelify have no hangul. `src/text_fallback.rs` ships two Korean fonts, compiled in and read with
 ttf-parser one glyph at a time (never loaded whole through fontdue): **Galmuri11** for the Retro style (both letter sets:
@@ -97,6 +98,17 @@ syllables of KS X 1001, the jamo and a few marks by `scripts/korean-fonts.py` (4
 before the system's CJK font, so it looks the same on every handheld; a syllable outside the set falls back to the system
 font, else to Latin letters (`latinise`). Their glyphs share the fallback cache's limit (`FALLBACK_BYTES`, 8 MB).
 
-Lines break between words (`line_units` in `src/text.rs`), and a word wider than the line between letters. Japanese and
-Chinese need a break between any two letters with kinsoku (no line starting with 。、」 or ending with 「): that goes into
-`line_units`, and their fonts next to the Korean ones by Unicode block (`is_korean`).
+Ideographs, kana, CJK punctuation and full-width forms (`is_cjk`) come from two Chinese fonts: **Fusion Pixel Font 12px**
+(Simplified Chinese forms) for Retro, on the same pixel grid and line as Galmuri, and **Noto Sans SC** for Barlow, cut to
+GB 2312's 6,763 hanzi, JIS X 0208's 6,355 kanji, the kana and the marks by `scripts/cjk-fonts.py` (1.5 + 2.3 MB). Too big
+to compile into each of the three programs, they are **files** next to the programs (`fonts/` in a release's folder, the
+Brick's `app/fonts`, Android's files folder; `text_fallback::shipped_dir`, `POCKETUI_FONTS_DIR` to point elsewhere or
+`off`), put there by `scripts/shipped-fonts.sh` in every package (app archive, install zip, card install, SD image, Brick
+card, `dev.sh deploy`). They paint the Chinese interface and every Japanese or Chinese game name on every handheld, the
+Brick too (before, Latin letters there). Chinese is offered only where the files are (`Lang::paintable`); a card without
+them gets English, and names written in Latin letters as before. Tests of that case use `Text::without_own_cjk`.
+
+Lines break between words (`line_units` in `src/text.rs`), and a word wider than the line between letters. Inside a word of
+Chinese or Japanese a line breaks between any two ideographs or kana, with kinsoku (no line starting with 。，、」） or a
+small kana, none ending with 「（): `zh.tsv` needs no spaces between words, and wants none. Latin letters in such a word
+("Wi-Fi设置") stay together; keep a space around key names ("按 A 继续"), as the other tables do.

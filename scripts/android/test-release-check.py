@@ -43,7 +43,7 @@ def make_apk(path, *, align=16384, skew=0, extra=None, source=True, core_hash_ok
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         for name in ["classes.dex", "AndroidManifest.xml", "assets/licences/LICENSE", "assets/licences/NOTICE.md", "assets/licences/ANDROID-CORES.md",
                      "assets/licences/RUST-LICENSES.txt", "assets/licences/PLAYER-RUST-LICENSES.txt", "assets/licences/SOURCE-OFFER.txt",
-                     "assets/core-channel.url"]:
+                     "assets/core-channel.url", "assets/fonts/FusionPixel12-zh_hans-CJK.otf", "assets/fonts/NotoSansSC-Regular-CJK.otf"]:
             z.writestr(name, b"x")
         if licences:
             z.writestr("assets/licences/CORES.tsv", cid + "\tgba\tMPL-2.0\thttps://x\t" + "a" * 40 + "\tapk\t\n")
@@ -217,6 +217,12 @@ def main():
                     zout.writestr(item, zin.read(item.filename))
         rc, out = audit(d / "nooffer2.apk")
         expect("an APK without the written source offer is refused", rc == 1 and "SOURCE-OFFER.txt is missing" in out)
+        with zipfile.ZipFile(d / "good.apk") as zin, zipfile.ZipFile(d / "nofonts.apk", "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                if not item.filename.startswith("assets/fonts/"):
+                    zout.writestr(item, zin.read(item.filename))
+        rc, out = audit(d / "nofonts.apk")
+        expect("an APK without the Chinese font files is refused", rc == 1 and "NotoSansSC-Regular-CJK.otf" in out)
         rc, out = audit(d / "good.apk", "--max-bytes", "100")
         expect("an APK over the size limit is refused", rc == 1 and "size" in out)
         # Since 0.5.x every core of the lock is in the APK (release-check.sh passes --lock): one left out, or one

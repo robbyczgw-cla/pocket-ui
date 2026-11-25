@@ -77,9 +77,10 @@ fn library(dir: &Path) {
     std::fs::write(dir.join("es_systems.cfg"), cfg).unwrap();
 }
 
-/// The strings `state` paints (last frame), with the fallback font `font` (None: no CJK font at all).
-fn visible(tmp: &Path, stub: Option<&Stub>, state: &str, font: Option<&Path>) -> Vec<String> {
-    let name = format!("{}-{}", state.replace([':', '/'], "-"), if font.is_some() { "font" } else { "none" });
+/// The strings `state` paints (last frame), with the system's fallback font `font` (None: none) and with pocket-ui's own
+/// Chinese font files (`own`; false: a card without them, `POCKETUI_FONTS_DIR=off`).
+fn visible(tmp: &Path, stub: Option<&Stub>, state: &str, font: Option<&Path>, own: bool) -> Vec<String> {
+    let name = format!("{}-{}-{}", state.replace([':', '/'], "-"), if font.is_some() { "font" } else { "none" }, if own { "own" } else { "bare" });
     let data = tmp.join(format!("data-{name}"));
     std::fs::create_dir_all(&data).unwrap();
     std::fs::write(data.join("settings.json"), r#"{"onboarded": true}"#).unwrap();
@@ -94,6 +95,7 @@ fn visible(tmp: &Path, stub: Option<&Stub>, state: &str, font: Option<&Path>) ->
         .env("POCKETUI_LANG", "en")
         .env("POCKETUI_VISIBLE_TEXT", &text)
         .env("POCKETUI_CJK_FONT", font.map_or("off".into(), |f| f.as_os_str().to_owned()))
+        .env("POCKETUI_FONTS_DIR", if own { pocket_ui_fonts() } else { "off".into() })
         .env("POCKETUI_ES_SYSTEMS", tmp.join("es_systems.cfg"))
         .env("POCKETUI_DATA", &data)
         .output()
@@ -102,11 +104,16 @@ fn visible(tmp: &Path, stub: Option<&Stub>, state: &str, font: Option<&Path>) ->
     std::fs::read_to_string(&text).unwrap_or_default().lines().map(str::to_string).collect()
 }
 
-/// The letters of `strings` that would be painted as "?" or nothing: a letter or digit that no embedded face and not
-/// the fallback font (`font`) has.
-fn unpaintable(strings: &[String], font: Option<&Path>) -> Vec<String> {
+/// pocket-ui's own font files (`assets/fonts`, as `text_fallback::shipped_dir` finds them on the build computer).
+fn pocket_ui_fonts() -> std::ffi::OsString {
+    Path::new(&Root).join("assets/fonts").into_os_string()
+}
+
+/// The letters of `strings` that would be painted as "?" or nothing: a letter or digit that no embedded face, not
+/// pocket-ui's own Chinese fonts (when `own`) and not the fallback font (`font`) has.
+fn unpaintable(strings: &[String], font: Option<&Path>, own: bool) -> Vec<String> {
     let fallback = font.and_then(pocket_ui::text_fallback::open);
-    let covered = |c: char| pocket_ui::latinise::base_covers(c) || fallback.as_ref().is_some_and(|f| f.has(c));
+    let covered = |c: char| (pocket_ui::latinise::base_covers(c) && (own || !pocket_ui::text_fallback::is_cjk(c))) || fallback.as_ref().is_some_and(|f| f.has(c));
     strings
         .iter()
         .filter(|s| s.chars().any(|c| c.is_alphanumeric() && !covered(c)))
@@ -126,15 +133,19 @@ fn no_console_page_paints_a_letter_no_font_has() {
     let japanese = ["gamecube", "wonderswan"];
     for c in pocket_ui::consoles::all() {
         for state in [format!("console:{}", c.id), format!("console:{}:sources", c.id)] {
-            let strings = visible(&tmp, stub.as_ref(), &state, None);
+            let strings = visible(&tmp, stub.as_ref(), &state, None, false);
             assert!(!strings.is_empty(), "{state}: nothing painted");
-            problems.extend(unpaintable(&strings, None).into_iter().map(|p| format!("{state} (no font): {p}")));
+            problems.extend(unpaintable(&strings, None, false).into_iter().map(|p| format!("{state} (no font): {p}")));
         }
+    }
+    for id in japanese {
+        let strings = visible(&tmp, stub.as_ref(), &format!("console:{id}"), None, true);
+        problems.extend(unpaintable(&strings, None, true).into_iter().map(|p| format!("console:{id} (own fonts): {p}")));
     }
     if let Some(font) = font() {
         for id in japanese {
-            let strings = visible(&tmp, stub.as_ref(), &format!("console:{id}"), Some(&font));
-            problems.extend(unpaintable(&strings, Some(&font)).into_iter().map(|p| format!("console:{id} (font): {p}")));
+            let strings = visible(&tmp, stub.as_ref(), &format!("console:{id}"), Some(&font), true);
+            problems.extend(unpaintable(&strings, Some(&font), true).into_iter().map(|p| format!("console:{id} (font): {p}")));
         }
     } else {
         eprintln!("SKIPPED the half with Noto Sans CJK (set POCKETUI_TEST_CJK_FONT to ROCKNIX's NotoSansCJKsc-Regular.otf)");
@@ -143,18 +154,21 @@ fn no_console_page_paints_a_letter_no_font_has() {
     assert!(problems.is_empty(), "{} problems:\n{}", problems.len(), problems.join("\n"));
 }
 
-/// The GameCube's page says nothing about a Japanese name without a font, and "Nintendo GameCube" still stands there.
+/// The GameCube's page says nothing about a Japanese name without any CJK font, and "Nintendo GameCube" still stands
+/// there; with pocket-ui's own fonts (every handheld since Chinese, the Brick too) the Japanese name is written as it is.
 #[test]
 fn the_gamecube_page_has_no_question_marks_where_its_japanese_name_was() {
     let tmp_guard = tempfile::tempdir().unwrap();
     let tmp = tmp_guard.path().to_path_buf();
     library(&tmp);
     let stub = wayland(&tmp);
-    let strings = visible(&tmp, stub.as_ref(), "console:gamecube", None);
+    let strings = visible(&tmp, stub.as_ref(), "console:gamecube", None, false);
     let line = strings.iter().find(|s| s.starts_with("Also known as")).unwrap_or_else(|| panic!("no 'Also known as' line in {strings:?}"));
     assert!(line.contains("Nintendo GameCube") && !line.contains('?') && !line.contains("ニンテンドー"), "{line:?}");
-    let wonder = visible(&tmp, stub.as_ref(), "console:wonderswan", None);
+    let wonder = visible(&tmp, stub.as_ref(), "console:wonderswan", None, false);
     assert!(wonder.iter().all(|s| !s.contains("ワンダー") && !s.contains('?')), "{wonder:?}");
+    let own = visible(&tmp, stub.as_ref(), "console:gamecube", None, true);
+    assert!(own.iter().any(|s| s.contains("ニンテンドー")), "the own fonts write it: {own:?}");
 }
 
 /// The cards of the games with Japanese and Korean metadata: the box and the info page (Split), the shelf's names
@@ -174,21 +188,28 @@ fn cards_of_japanese_and_korean_games_paint_no_letter_no_font_has() {
     }
     let mut problems = Vec::new();
     let mut shown = std::collections::BTreeMap::new();
+    let mut own = std::collections::BTreeMap::new();
     for state in &states {
-        let strings = visible(&tmp, stub.as_ref(), state, None);
-        problems.extend(unpaintable(&strings, None).into_iter().map(|p| format!("{state} (no font): {p}")));
+        let strings = visible(&tmp, stub.as_ref(), state, None, false);
+        problems.extend(unpaintable(&strings, None, false).into_iter().map(|p| format!("{state} (no font): {p}")));
         shown.insert(state.clone(), strings);
+        let strings = visible(&tmp, stub.as_ref(), state, None, true);
+        problems.extend(unpaintable(&strings, None, true).into_iter().map(|p| format!("{state} (own fonts): {p}")));
+        own.insert(state.clone(), strings);
         if let Some(font) = &font {
-            let strings = visible(&tmp, stub.as_ref(), state, Some(font));
-            problems.extend(unpaintable(&strings, Some(font)).into_iter().map(|p| format!("{state} (font): {p}")));
+            let strings = visible(&tmp, stub.as_ref(), state, Some(font), true);
+            problems.extend(unpaintable(&strings, Some(font), true).into_iter().map(|p| format!("{state} (font): {p}")));
         }
     }
     drop(stub);
     assert!(problems.is_empty(), "{} problems:\n{}", problems.len(), problems.join("\n"));
-    // Something stands where the Japanese name was: its Latin letters, not a gap.
+    // Something stands where the Japanese name was: its Latin letters without any CJK font, not a gap; with
+    // pocket-ui's own fonts the name as written.
     for state in ["curator:card:snes:ファイナル", "info:split:snes:ファイナル"] {
         let card = &shown[state];
         assert!(card.iter().any(|s| s.contains("Fainarufantajii")), "{state}: the name in Latin letters: {card:?}");
+        let card = &own[state];
+        assert!(card.iter().any(|s| s.contains("ファイナル")) && card.iter().all(|s| !s.contains("Fainarufantajii")), "{state}: the name as written: {card:?}");
     }
     // The Korean card is Korean even without a system font: pocket-ui ships hangul (`text_fallback::korean`), so its
     // name and its description are painted as written, never in Latin letters (until 21.11.2026: "Jeldaui Jeonseol").
@@ -236,4 +257,7 @@ fn the_welcome_offers_korean_only_when_it_is_complete_or_previewed() {
     // Korean is complete (switched on 2026-11): offered to everyone; before, only to a developer's preview.
     assert_eq!(plain.contains("한국어"), pocket_ui::i18n::Lang::Ko.complete(), "Korean is offered exactly when its translation is complete: {plain}");
     assert!(preview.contains("한국어"), "a developer's preview shows it: {preview}");
+    // Chinese is being translated (24.11.2026): not offered yet, a developer's preview shows its name in its own letters.
+    assert_eq!(plain.contains("简体中文"), pocket_ui::i18n::Lang::Zh.complete(), "{plain}");
+    assert!(preview.contains("简体中文"), "a developer's preview shows it: {preview}");
 }

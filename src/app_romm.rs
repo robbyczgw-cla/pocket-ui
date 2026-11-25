@@ -516,7 +516,10 @@ impl App {
             (None, None, None) => ("Not paired".to_string(), pal().dust),
         };
         let status = self.text.fit(Face::Title, 44, &status, width);
-        self.text.draw(c, Face::Title, 44, left, y0 + 64, colour, &status);
+        // Hanzi and hangul stand taller than capitals: down by the difference, clear of the "Status" label (`Text::cjk_rise`).
+        let shown = self.text.translated(&status).to_string();
+        let rise = self.text.cjk_rise(Face::Title, 44, &shown);
+        self.text.draw(c, Face::Title, 44, left, y0 + 64 + rise, colour, &status);
         let mut y = y0 - 10 + panel_h + if short { 30 } else { 44 };
         let mut lines: Vec<(String, u32)> = Vec::new();
         if let Some(e) = &page.error {

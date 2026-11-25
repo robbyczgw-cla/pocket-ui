@@ -15,6 +15,11 @@ fn main() {
     let built = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     println!("cargo:rustc-env=POCKETUI_BUILD_UNIX={built}");
     println!("cargo:rerun-if-changed=src/log_shim.c");
+    // The shims' hash for src/achievements/ffi.rs's compile-time check, as the root build.rs hands it over.
+    let fnv = |h: u64, bytes: &[u8]| bytes.iter().fold(h, |h, b| (h ^ *b as u64).wrapping_mul(0x100000001b3));
+    let read = |p: &str| std::fs::read(p).unwrap_or_else(|e| panic!("{p}: {e}"));
+    let shims = fnv(fnv(0xcbf29ce484222325, &read("../src/log_shim.c")), &read("../src/rc_shim.c"));
+    println!("cargo:rustc-env=POCKETUI_C_SHIMS={shims:016x}");
     cc::Build::new().file("../src/log_shim.c").warnings(true).compile("pocket_log_shim");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") { return; }
 

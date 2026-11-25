@@ -101,7 +101,7 @@ saves from another handheld read "Played: Not here yet" until you play here).
 |---|---|
 | Pokémon Red, Blue, Yellow, Gold, Silver, Crystal, Ruby, Sapphire, Emerald, FireRed, LeafGreen | USA and Europe in English |
 | Super Metroid, Metroid: Zero Mission, Zelda: A Link to the Past, Link's Awakening DX, Oracle of Ages, Oracle of Seasons, The Minish Cap, Ocarina of Time | USA |
-| Super Mario World, Super Mario All-Stars + Super Mario World, Super Mario 64, Mario Kart 64, Star Fox 64, Paper Mario, Zelda: Majora's Mask, Donkey Kong Country 1–3 | USA |
+| Super Mario World, Super Mario All-Stars + Super Mario World, Super Mario 64, Mario Kart 64, Star Fox 64, Paper Mario, Zelda: Majora's Mask, Donkey Kong Country 1 to 3 | USA |
 | Diddy Kong Racing | USA, Europe |
 | Pokémon Diamond, Pearl, Platinum, HeartGold, SoulSilver, Black, White, Black 2, White 2 | USA and Europe in English |
 | Golden Sun, Golden Sun: The Lost Age | USA and Europe in English |
@@ -214,9 +214,9 @@ Playing highlighted; picking any status (including Not started) clears the promp
 
 ## My rating
 
-Rate any game 1–5 stars under **Y → My rating** (all the way left clears back to "Not rated"). Feeds into
+Rate any game 1 to 5 stars under **Y → My rating** (all the way left clears back to "Not rated"). Feeds into
 [Lens](curator.md#lens) filtering, **Best rated first** sorting, plus [Just Play](curator.md#just-play) and
-[Echoes](curator.md#echoes) taste weights (5 stars = strong boost like a Favourite, 4 = mild boost, 3 = neutral, 1–2 =
+[Echoes](curator.md#echoes) taste weights (5 stars = strong boost like a Favourite, 4 = mild boost, 3 = neutral, 1 or 2 =
 discourage similar picks).
 
 ## Wrong game? Choose another

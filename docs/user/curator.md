@@ -92,7 +92,7 @@ How it picks (first match wins):
 3. Unplayed games in your collection.
 4. Completed or Dropped games, only if nothing else remains (play time alone never marks a game finished).
 
-It skips the very last game you played while other candidates exist in tiers 1–3, merges multi-console copies to your
+It skips the very last game you played while other candidates exist in tiers 1 to 3, merges multi-console copies to your
 preferred version, and never picks hidden games. Unplayed games on demanding consoles ("not every game runs smoothly",
 like PS2/GameCube/Wii) appear one-fifth as often so a casual press won't drop you into a slow boot, though games you've
 already started or starred aren't throttled. Missing files or unavailable emulators are skipped cleanly without changing

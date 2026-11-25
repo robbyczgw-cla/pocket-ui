@@ -78,7 +78,9 @@ fn from_json(
     let mut total = 0u64;
     for asset in &assets.assets {
         let parts: Vec<_> = asset.path.split('/').collect();
-        if parts.len() < 2 || (!matches!(parts[0], "cores" | "bios-data" | "port-data") && !HELPERS.contains(&asset.path.as_str()))
+        // fonts/: the Chinese font files (scripts/shipped-fonts.sh), accepted as parts from 0.8 on so that a later update can
+        // leave them out of the app archive; until then they come inside it.
+        if parts.len() < 2 || (!matches!(parts[0], "cores" | "bios-data" | "port-data" | "fonts") && !HELPERS.contains(&asset.path.as_str()))
             || parts.iter().any(|p| p.is_empty() || *p == "." || *p == ".." || p.contains(['\\', '\n', '\r', '\0']))
             || !paths.insert(&asset.path) || asset.size > UNPACKED_LIMIT || asset.package.size > ASSET_LIMIT || asset.package.size == 0
             || asset.sha256.len() != 64 || !asset.sha256.bytes().all(|b| b.is_ascii_hexdigit()) { return Err(INVALID.into()); }
@@ -256,9 +258,11 @@ mod tests {
         std::fs::write(card.join("app/RELEASE"), b"old").unwrap();
         let a = package(&dir.join("a"), "cores/a.so", b"core A");
         let b = package(&dir.join("b"), "bios-data/b.dat", b"data B");
+        let c = package(&dir.join("c"), "fonts/c.otf", b"font C");
         let json = serde_json::json!({"format":1, "assets":[
             {"path":"cores/a.so", "size":6, "sha256":store::sha256_hex(b"core A"), "package":a},
-            {"path":"bios-data/b.dat", "size":6, "sha256":store::sha256_hex(b"data B"), "package":b}
+            {"path":"bios-data/b.dat", "size":6, "sha256":store::sha256_hex(b"data B"), "package":b},
+            {"path":"fonts/c.otf", "size":6, "sha256":store::sha256_hex(b"font C"), "package":c}
         ]});
         let curl = dir.join("curl");
         crate::testutil::write_executable(&curl, format!(r#"#!/bin/sh
@@ -279,6 +283,7 @@ cp "${{url#file://}}" "$out"
         plan.stage(&staging, &Cancel::new()).unwrap();
         assert_eq!(std::fs::read(staging.join("cores/a.so")).unwrap(), b"core A");
         assert_eq!(std::fs::read(staging.join("bios-data/b.dat")).unwrap(), b"data B");
+        assert_eq!(std::fs::read(staging.join("fonts/c.otf")).unwrap(), b"font C", "a font file is a part too");
         assert_eq!(std::fs::read(card.join("app/RELEASE")).unwrap(), b"old");
     }
     /// Alex, 20.11. (Brick update to 0.6.0): "Connecting to update server" flashed for every small part. The real parts path

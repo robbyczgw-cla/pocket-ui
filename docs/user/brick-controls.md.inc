@@ -1,7 +1,6 @@
 # Controls
 
-Button names follow what is printed on the Mini V2: **A is the right face button, B the bottom
-one.** pocket-ui uses A to confirm and B to go back. The hints at the bottom of each screen
+**A is the right face button, B the bottom one.** pocket-ui uses A to confirm and B to go back. The hints at the bottom of each screen
 show the buttons that screen uses.
 
 By default on the Brick, **F1 saves to the current slot** and **F2 loads that slot** while a game runs on
@@ -14,8 +13,6 @@ the next time you start a game.
 
 Settings → Controls → Lights & buttons → **Mute slider** chooses Mutes or Does nothing.
 Does nothing ignores the slider and releases its mute; the remembered volume stays the same.
-
-![The Mini V2's controls: the D-pad and the left stick on the left, A, B, X and Y and the right stick on the right, SELECT and START at the top corners, HOME and BACK at the bottom corners, L1, L2, R1 and R2 on the shoulders.](pocket-ui:controls)
 
 **Used to an Xbox controller?** Settings → Controls → Buttons → [**Button layout**](settings-sound.md#button-layout) set to **Xbox**
 puts A at the bottom and B on the right in every menu of pocket-ui; games keep their own ([Button layout](#button-layout)).
@@ -83,8 +80,7 @@ In the list:
 | SELECT | The order of the games: Name, Last played first, Most played first, Best rated first, Oldest first, Shortest first ([Lens](curator.md#lens)). |
 | B | Back. The Lens keeps its picks and order until pocket-ui restarts. |
 
-On a game's card, Down moves onto the Curator rows (Echoes, Versions, Stickers) and A opens them; on the touch
-screen, tap a row to select it and tap it again to open it. On the Echoes page
+On a game's card, Down moves onto the Curator rows (Echoes, Versions, Stickers) and A opens them. On the Echoes page
 A plays and X opens the card; on the Versions page A plays and Y makes a version the preferred one. The card's
 other buttons are in [Your library](library.md#opening-a-card); Y there also sets your [rating](library.md#my-rating) (Left /
 Right on the My rating row). On a card opened by X on [Just Play](curator.md#just-play), D-pad Right picks another game.
@@ -102,9 +98,6 @@ Right on the My rating row). On a card opened by X on [Just Play](curator.md#jus
 | Y | The review of this month or year | - |
 | B | Back | Back (to History, when it was opened from there) |
 
-On the touch screen, tap a game to select it and again to open its card; tap the left or right
-part of the chart (of a review card) for the one before or after. A tap on Week, Month or Year opens it.
-
 ## Button layout
 
 Settings → Controls → Buttons → [**Button layout**](settings-sound.md#button-layout) chooses which face button plays A, B, X and Y:
@@ -114,29 +107,26 @@ Settings → Controls → Buttons → [**Button layout**](settings-sound.md#butt
 | **Nintendo** (the default) | right | bottom | top | left |
 | **Xbox** | bottom | right | left | top |
 
-It applies at once, everywhere in pocket-ui (the pause menu and quick settings included), on the Pocket's buttons and
+It applies at once, everywhere in pocket-ui (the pause menu and quick settings included), on the handheld's buttons and
 on a connected controller alike. The hints at the bottom of every
 screen, the pills you can tap and this manual use the letters of the layout you chose.
 
 What it does not change:
 
-- **Games.** A game keeps the console's own layout; Options → Controls changes it per game, and the shortcuts with HOME
-  use the printed buttons. (GameCube games have their own **Button layout (GameCube)** in
-  [Options](options-big.md).)
-- **Safe mode.** It follows the device’s printed layout (Xbox on Odin 2 Mini/Portal, Nintendo elsewhere)
-  ([Safe mode](safe-mode.md#safe-mode)). If you lose your way after a switch, Left/Right on the Button layout row
-  switches back; in safe mode, **Reset pocket-ui settings…** does too.
-- The D-pad, the shoulder buttons, START, SELECT and HOME, and taps on the touch screen.
+- **Games.** A game keeps the console's own layout; Options → Controls changes it per game, and the shortcuts with MENU
+  use the printed buttons.
+- If you lose your way after a switch, Left/Right on the Button layout row switches back.
+- The D-pad, the shoulder buttons, START, SELECT and MENU.
 
 ## With a Bluetooth controller
 
 A paired controller (Settings → Connections → [Bluetooth](bluetooth.md)) works in the menus as soon as it is connected,
 without a restart. pocket-ui goes by where a button sits, not by what is printed on it: the **right** face button
-confirms and the **bottom** one goes back, as on the Pocket. On an Xbox controller that is B to confirm and A to go
+confirms and the **bottom** one goes back, as on the handheld. On an Xbox controller that is B to confirm and A to go
 back; on a PlayStation controller Circle and Cross. With [Button layout](settings-sound.md#button-layout) on **Xbox** it is
-the other way round, on the Pocket and on every controller: the bottom button confirms (an Xbox controller's A, a
-PlayStation controller's Cross) and the right one goes back. D-pad, sticks, shoulder buttons, START and SELECT work as on
-the Pocket.
+the other way round, on the handheld and on every controller: the bottom button confirms (an Xbox controller's A, a
+PlayStation controller's Cross) and the right one goes back. D-pad, shoulder buttons, START and SELECT work as on
+the handheld.
 
 Several controllers can be connected at once, and any of them moves through the menus. They don't get in each other's
 way: when one holds a direction to scroll, another one pressing and letting go of the same direction doesn't stop it,
@@ -145,33 +135,29 @@ see [Playing together](#playing-together).
 
 ## Playing together
 
-Games on pocket-ui's own host take up to four players. The Pocket's own buttons are Player 1, the first controller you
+Games on pocket-ui's own host take up to four players. The handheld's own buttons are Player 1, the first controller you
 connect is Player 2, the next one Player 3, and so on. When a controller connects or goes away during a game, a short
 message says so, for example "DualSense connected, Player 2". **Players** in the pause menu changes who is who, including
 making a controller Player 1 (see [Players](pause-menu.md#players)).
 
-- HOME, the shortcuts and the pause menu work on every controller. To quit with SELECT + START, hold both on one
+- MENU (a controller's Home button), the shortcuts and the pause menu work on every controller. To quit with SELECT + START, hold both on one
   controller.
 - Every player's buttons do what Options → Controls sets for the game.
-- Rumble goes to each player's own controller; the Pocket's buttons have the Pocket's motor.
-
-RetroArch numbers the controllers itself: normally the Pocket is Player 1 and connected controllers follow in the order
-RetroArch finds them. Change it in RetroArch's own menu, under Settings, then Input. The other emulators (PlayStation 2,
-GameCube, Wii, 3DS and the rest) have their own controller settings, which pocket-ui leaves as ROCKNIX set them up.
+- Rumble goes to each player's own controller; the handheld's own buttons have its own motor.
 
 ## In a game
 
 **Button layout does not reach the game.** The buttons that go to the game, the shortcuts below and Options → Controls
-use the Pocket's buttons as printed (A on the right) whatever [Button layout](settings-sound.md#button-layout) says; only
+use the handheld's buttons as printed (A on the right) whatever [Button layout](settings-sound.md#button-layout) says; only
 pocket-ui's own screens, the pause menu and quick settings among them, follow it. To play a game with A and B swapped,
 use Options → Controls for that game.
 
 | Button | What it does |
 |---|---|
-| HOME, tapped | Pause the game and open the pause menu. |
-| HOME + SELECT | Pause the game and open [Recent games](playing.md#recent-games). |
-| HOME + A | Take a [screenshot](playing.md#screenshots) of the game. Not a tap: the pause menu does not open. |
-| HOME + another button | Not a tap. On pocket-ui's own host these are the shortcuts below; in RetroArch games they stay RetroArch shortcuts. |
+| MENU, tapped | Pause the game and open the pause menu. |
+| MENU + SELECT | Pause the game and open [Recent games](playing.md#recent-games). |
+| MENU + A | Take a [screenshot](playing.md#screenshots) of the game. Not a tap: the pause menu does not open. |
+| MENU + another button | Not a tap. These are the shortcuts below. |
 | SELECT + START, held for 1 second | Quit a game on pocket-ui's own host. It saves the moment first, whatever Settings → Playing → [Continue where I quit](settings-playing.md#continue-where-i-quit) says. |
 | All other buttons | Go to the game. On pocket-ui's own host you can change what each one presses (Options → Controls). |
 
@@ -179,31 +165,27 @@ Shortcuts on pocket-ui's own host (each can be switched off in Options → Short
 
 | Buttons | What it does |
 |---|---|
-| HOME + R1 | Save to the selected slot. |
-| HOME + L1 | Load the selected slot. |
-| HOME + Left / Right | Previous / next save slot. |
-| HOME + R2 | Fast-forward on / off. |
-| Hold HOME + L2 | Rewind while held (only when Rewind is on under Speed, rumble, fan). |
-| HOME + Y | [Over the game](pause-menu.md#over-the-game): the next of Off, FPS, FPS + sensors and Pixel Path, until you quit. |
-| HOME + A | [Screenshot](playing.md#screenshots): a picture of the game, saved to the SD card. "Screenshot saved" shows for a moment. Always the button printed A, whatever [Button layout](settings-sound.md#button-layout) says. |
+| MENU + R1 | Save to the selected slot. |
+| MENU + L1 | Load the selected slot. |
+| MENU + Left / Right | Previous / next save slot. |
+| MENU + R2 | Fast-forward on / off. |
+| Hold MENU + L2 | Rewind while held (only when Rewind is on under Speed, rumble, fan). |
+| MENU + Y | [Over the game](pause-menu.md#over-the-game): the next of Off, FPS, FPS + sensors and Pixel Path, until you quit. |
+| MENU + A | [Screenshot](playing.md#screenshots): a picture of the game, saved to the SD card. "Screenshot saved" shows for a moment. Always the button printed A, whatever [Button layout](settings-sound.md#button-layout) says. |
 
-HOME + A also works in the games of the standalone emulators (PlayStation 2, GameCube, Wii, 3DS) and in PortMaster
-ports, where pocket-ui takes the picture of the screen; there it cannot be switched off and nothing shows over the game
-(see [Screenshots](playing.md#screenshots)). RetroArch has screenshot keys of its own.
+MENU + A also works in PortMaster ports, where pocket-ui takes the picture of the screen; there it cannot be switched
+off and nothing shows over the game (see [Screenshots](playing.md#screenshots)).
 
-While HOME is held, the game gets no buttons. See [Options](options.md#shortcuts).
-
-<!-- TODO: list RetroArch's HOME shortcuts on ROCKNIX, and say whether SELECT + START quits
-     RetroArch games too. Until then, use the pause menu's Quit. -->
+While MENU is held, the game gets no buttons. See [Options](options.md#shortcuts).
 
 ## In the pause menu
 
 | Button | What it does |
 |---|---|
 | D-pad Up / Down | Move. The menu wraps: Up from Continue is Quit. |
-| D-pad Left / Right | On Save or Load: choose the save slot (not with RetroArch, which has one save). |
+| D-pad Left / Right | On Save or Load: choose the save slot. |
 | A | Choose. On **Quit**: end the game, keeping the moment or not as Settings → Playing → [Continue where I quit](settings-playing.md#continue-where-i-quit) says. |
-| B or HOME | Back to the game. In the quick settings opened from this menu: back to this menu. |
+| B or MENU | Back to the game. In the quick settings opened from this menu: back to this menu. |
 | START | Open the [quick settings](quick-settings.md) (brightness, volume, fan); B there comes back to this menu. |
 | SELECT | Open Recent games; B there comes back to this menu. |
 
@@ -220,7 +202,7 @@ controller the player, B goes back.
 | L1 / R1 | First / last game. |
 | A | Continue the selected game where a moment is waiting, else play it. In a game: back to it (the running game) or switch to another one. |
 | Y | Star or unstar the selected game. |
-| B, SELECT or HOME | Close the switcher. |
+| B, SELECT or MENU | Close the switcher. |
 
 ## In Options
 
@@ -234,10 +216,5 @@ In **Options** of the pause menu and its pages:
 | A | Open a group, or step to the next value. |
 | B | Back one level. |
 
-The buttons in Settings and its pages, during setup, on the touch screen and for power and volume are on the next page,
+The buttons in Settings and its pages, during setup and for power and volume are on the next page,
 [Controls in Settings, setup and on the touch screen](controls-settings.md).
-
-On experimental **AYN Odin 2 Mini** and **Odin 2 Portal**, the default menu layout is **Xbox** (A bottom,
-B right, X left, Y top), matching the printed letters. The original Odin 2 defaults to Nintendo. A saved choice
-wins. Safe mode follows the device’s printed layout. Games keep their positional controls: the screenshot
-shortcut is HOME + the right face button (printed B on Mini/Portal), regardless of the menu layout.

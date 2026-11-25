@@ -236,6 +236,10 @@ and are unchanged.
   pill over a pocket-core game; a dark screen gets none); at ≤ 2 % in two readings in a row (one stray reading of
   the gauge is no reason) `Sleep` runs the power-off path (`shut_down_for`: "Battery empty. Saving…", the game saves
   and quits, `resume.json`, `systemctl poweroff`), from Awake or Light, or right after a suspend under way returns.
+- On the R36S profile, a reading of ≤ 2 % at 3.30 V or higher breaks that sequence. The guard reads the battery's
+  `voltage_now`, falling back to the RK817's `voltage_avg`. Both the stock and ROCKNIX open-circuit tables place
+  3.30 V between 10 % and 15 %. An R36S V22 on ROCKNIX 20261101 reported 3.598 V at 48 % under a 375 mA load.
+  With no readable voltage, the guard uses the reported percentage.
 - External power stops all of it: battery `status` Charging, Full or Not charging, or any non-battery supply in
   `/sys/class/power_supply` with `online` = 1. So `no-autosuspend` on the charger overnight keeps the device up.
 - Not covered: a charger too weak to keep up while plugged (it counts as external power).
@@ -395,10 +399,14 @@ would suspend without saving the game, as the power key would.
   (logind's), pocket-ui does nothing with it.
 - **Not handled:** the power key pressed while the lid is closed wakes the Pocket with the lid shut (Screen off after
   and Sleep after send it back to sleep, 2 + 2 minutes by default).
+- **A swivel is no lid** (`Model::lid_turns_screen`, the Anbernic RG Rotate, experimental, no card yet): its hall sensor
+  ("Hall Swivel" on `gpio-keys-system`) reports `SW_LID` 1 when the screen is swivelled, a normal way to play. The
+  inhibitor still covers `handle-lid-switch`, but `on_lid` only logs it: no sleep, no dark screen, no wake. Turning the
+  panel is the system's (the T618 card's `lid-rotate` service sets sway's transform); touch mapping when turned is open.
 
 Tests (`sleep::tests`): closing sleeps by default and turns only the screen off when set so, a second close changes
 nothing, opening wakes; a dark screen goes to deep sleep on closing; right after waking a close still sleeps; without
-the inhibitor nothing happens; the Mini V2's inhibitor stays `handle-power-key`. `pad::lid_tests`: the evdev stream
+the inhibitor nothing happens; the Mini V2's inhibitor stays `handle-power-key`; the RG Rotate's swivel neither sleeps nor darkens. `pad::lid_tests`: the evdev stream
 (`SW_LID` 1, a report, a headphone switch, `SW_LID` 0) reads as closed and opened.
 
 ## Device test plan (Mini V2, 2026-10-22)

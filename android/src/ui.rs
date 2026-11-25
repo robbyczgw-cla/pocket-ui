@@ -1878,7 +1878,12 @@ impl Ui {
                 }
                 if self.rediscover_row() {
                     let n = self.rediscover_games().len();
-                    rows.push(row("Rediscover", &if n == 0 { tr("None yet") } else { tr(&format!("{n} games")) }));
+                    let count = match n {
+                        0 => tr("None yet"),
+                        1 => tr("1 game"),
+                        n => tr(&format!("{n} games")),
+                    };
+                    rows.push(row("Rediscover", &count));
                 }
                 rows.push(row("Show games", ""));
                 rows

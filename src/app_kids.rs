@@ -1207,7 +1207,7 @@ impl App {
         paint_dials(self, c, dials, (430.0 * u) as i32, Some(colours), true);
         let mut lines: Vec<String> = Vec::new();
         if let Some(w) = wait {
-            lines.push(format!("Too many tries. Wait {} seconds.", w.as_secs() + 1));
+            lines.push(kids::pin_wait_message(w));
         } else if wrong > 0 {
             lines.push("That's not it. Try again.".to_string());
         }
@@ -1688,7 +1688,8 @@ fn kids_hosted(system: &str) -> bool {
 fn limit_label(minutes: Option<u32>) -> String {
     match minutes {
         None => "No limit".to_string(),
-        Some(m) if m % 60 == 0 => format!("{} hours", m / 60).replace("1 hours", "1 hour"),
+        Some(60) => "1 hour".into(),
+        Some(m) if m % 60 == 0 => format!("{} hours", m / 60),
         Some(m) if m > 60 => format!("{} min", m),
         Some(m) => format!("{m} min"),
     }

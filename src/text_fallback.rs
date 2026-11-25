@@ -108,6 +108,79 @@ pub fn korean_has(ch: char) -> bool {
     is_korean(ch) && korean(false).has(ch)
 }
 
+/// The Chinese fonts pocket-ui ships for the Retro style's pixel faces (Fusion Pixel 12px, Simplified Chinese forms) and
+/// any other (Noto Sans SC Regular), cut to the 6,763 hanzi of GB 2312, the 6,355 kanji of JIS X 0208, the kana, CJK
+/// punctuation and the full-width forms (`scripts/cjk-fonts.py`, 1.5 and 2.3 MB). Too big to be compiled into each of
+/// the three programs like the Korean ones: files next to the programs (`shipped_dir`), mapped like the system's font.
+/// They paint the Chinese interface and every ideograph and kana of a game's name, on every handheld alike: the same
+/// Noto Sans letters ROCKNIX's own font has, and pixel letters in the Retro style.
+pub const CJK_PIXEL_FILE: &str = "FusionPixel12-zh_hans-CJK.otf";
+pub const CJK_SANS_FILE: &str = "NotoSansSC-Regular-CJK.otf";
+/// Fusion Pixel's ideographs stand one of its pixels below the baseline (Galmuri's on it): how many.
+pub const CJK_PIXEL_DROP: i32 = 1;
+
+/// The folder of pocket-ui's own font files (`CJK_PIXEL_FILE`, `CJK_SANS_FILE`): `POCKETUI_FONTS_DIR` if set (empty or
+/// `off`: none, as on a card without them), else `fonts/` next to the program (a release's folder) or one folder up (the
+/// Brick's `app/`, its programs in `app/bin`), else on Android `fonts/` in the app's own files (copied there from the APK), else the source tree's `assets/fonts`
+/// (builds on the computer: tests, snapshots, the virtual device).
+pub fn shipped_dir() -> Option<PathBuf> {
+    static DIR: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let bin = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
+        let exe = bin.as_ref().map(|d| d.join("fonts"));
+        // The Brick's programs are in app/bin, its files in app/.
+        let app = bin.as_ref().and_then(|d| d.parent()).map(|d| d.join("fonts"));
+        #[cfg(target_os = "android")]
+        let android = Some(crate::platform::android::data_dir().join("fonts"));
+        #[cfg(not(target_os = "android"))]
+        let android = None;
+        // Cargo's folder when it runs this (a test, `cargo run`, nextest; a test binary reused from another copy's build
+        // folder would point into a folder that is gone), else, in a debug build only, where it was built: a release
+        // program carries no build path (scripts/check-binary-paths.sh).
+        #[cfg(debug_assertions)]
+        let built = Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+        #[cfg(not(debug_assertions))]
+        let built: Option<PathBuf> = None;
+        let source = std::env::var_os("CARGO_MANIFEST_DIR").map(PathBuf::from).or(built).map(|d| d.join("assets/fonts"));
+        pick_dir(std::env::var_os("POCKETUI_FONTS_DIR"), [exe, app, android, source], &|d| d.join(CJK_SANS_FILE).is_file())
+    })
+    .clone()
+}
+
+/// `shipped_dir` with the environment's value, the places in order and the question "are the fonts there" given.
+fn pick_dir(env: Option<std::ffi::OsString>, places: [Option<PathBuf>; 4], has_fonts: &dyn Fn(&Path) -> bool) -> Option<PathBuf> {
+    match env {
+        Some(p) if p.is_empty() || p == "off" => None,
+        Some(p) => Some(PathBuf::from(p)),
+        None => places.into_iter().flatten().find(|d| has_fonts(d)),
+    }
+}
+
+/// Whether `ch` is one of the letters the shipped Chinese fonts are asked for before the system's (`Text::glyph`): an
+/// ideograph (the unified block and extension A, the compatibility ones), a kana, CJK punctuation or a full-width form.
+pub fn is_cjk(ch: char) -> bool {
+    matches!(ch as u32, 0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0xF900..=0xFAFF | 0x3000..=0x30FF | 0x31F0..=0x31FF | 0xFF01..=0xFF60 | 0xFFE0..=0xFFE6)
+}
+
+/// The shipped Chinese font for a pixel face (`pixel`: Fusion Pixel) or any other (Noto Sans SC), opened once per process;
+/// `None` when its file is not on the card.
+pub fn cjk(pixel: bool) -> Option<Arc<Fallback>> {
+    let dir = shipped_dir()?;
+    open(&dir.join(if pixel { CJK_PIXEL_FILE } else { CJK_SANS_FILE }))
+}
+
+/// Whether the shipped Chinese fonts paint `ch` (Noto Sans SC has every letter of the pixel font and 36 rare hanzi more:
+/// those come from it in the Retro style too).
+pub fn cjk_has(ch: char) -> bool {
+    is_cjk(ch) && cjk(false).is_some_and(|f| f.has(ch))
+}
+
+/// Whether the shipped Chinese fonts are there: Chinese is offered only then (`i18n::Lang::offered`), never as lines
+/// with nothing to paint them.
+pub fn cjk_available() -> bool {
+    cjk(false).is_some() && cjk(true).is_some()
+}
+
 fn parse(data: &'static [u8]) -> Result<Fallback, String> {
     let face = Face::parse(data, 0).map_err(|e| e.to_string())?;
     Ok(Fallback { unit: 1.0 / face.units_per_em() as f32, face })
@@ -115,7 +188,9 @@ fn parse(data: &'static [u8]) -> Result<Fallback, String> {
 
 fn load(path: &Path) -> Result<Fallback, String> {
     let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
-    // SAFETY: the file is a read-only system font (squashfs on the device); nothing writes to it while it is mapped.
+    // SAFETY: the file is a read-only system font (squashfs on the device) or one of pocket-ui's own (`shipped_dir`),
+    // which an update never rewrites in place (a new release's folder, or the Brick's file renamed whole); nothing writes
+    // to it while it is mapped.
     // The mapping lives as long as the process (once per file, `open`), so the parsed face may borrow it forever.
     let map = unsafe { memmap2::Mmap::map(&file) }.map_err(|e| e.to_string())?;
     let data: &'static [u8] = Box::leak(Box::new(map));
@@ -450,6 +525,55 @@ mod tests {
         assert!(open(&not_a_font).is_none());
         let _ = std::fs::remove_file(&not_a_font);
         assert!(open(&not_a_font).is_none(), "remembered: not opened again");
+    }
+
+    #[test]
+    fn the_shipped_fonts_are_found_next_to_the_program_then_one_up_then_on_android_then_in_the_source_tree() {
+        let (exe, app, source) = (PathBuf::from("/storage/pocket-ui/current/fonts"), PathBuf::from("/mnt/SDCARD/pocket-ui/app/fonts"), PathBuf::from("/src/assets/fonts"));
+        let android = PathBuf::from("/data/x/files/fonts");
+        let places = || [Some(exe.clone()), Some(app.clone()), Some(android.clone()), Some(source.clone())];
+        assert_eq!(pick_dir(None, places(), &|_| true), Some(exe.clone()));
+        assert_eq!(pick_dir(None, places(), &|d| d != exe), Some(app.clone()), "the Brick's app/");
+        assert_eq!(pick_dir(None, places(), &|d| d == android || d == source), Some(android.clone()));
+        assert_eq!(pick_dir(None, places(), &|d| d == source), Some(source.clone()));
+        assert_eq!(pick_dir(None, places(), &|_| false), None, "a card without them: none");
+        assert_eq!(pick_dir(Some("off".into()), places(), &|_| true), None);
+        assert_eq!(pick_dir(Some("".into()), places(), &|_| true), None);
+        assert_eq!(pick_dir(Some("/x".into()), places(), &|_| false), Some(PathBuf::from("/x")));
+    }
+
+    #[test]
+    fn the_shipped_chinese_fonts_paint_the_interface_and_japanese_names_and_leave_hangul_to_the_korean_ones() {
+        assert!(cjk_available(), "assets/fonts has them");
+        for ch in "设置继续游戏存档。，：（）「」ファイナルファンタジーぁ国國".chars() {
+            assert!(cjk_has(ch), "{ch}");
+        }
+        for ch in "가힣Aé€".chars() {
+            assert!(!cjk_has(ch), "{ch}");
+        }
+        let pixel = cjk(true).unwrap();
+        // GB 2312 and JIS X 0208 whole in the sans; the pixel font lacks a few rare ones, which come from the sans.
+        assert!("设置继续游戏存档国ア".chars().all(|c| pixel.has(c)));
+    }
+
+    /// Every letter of the Chinese tables is one both shipped Chinese fonts paint (GB 2312's hanzi and the marks; the
+    /// pixel font lacks 36 rare hanzi) or one the faces have: a translator's hanzi outside them would come from another
+    /// font or not at all. Trivially true while `zh.tsv` is empty.
+    #[test]
+    fn every_letter_of_the_chinese_tables_is_in_both_shipped_fonts() {
+        let (pixel, sans) = (cjk(true).unwrap(), cjk(false).unwrap());
+        let mut missing = std::collections::BTreeSet::new();
+        for src in [include_str!("../assets/i18n/zh.tsv"), include_str!("../assets/i18n/brick-zh.tsv")] {
+            for line in src.lines().filter(|l| !l.starts_with('#')) {
+                let Some((_, zh)) = line.split_once('\t') else { continue };
+                for ch in zh.chars().filter(|c| is_cjk(*c) && *c != '\u{3000}') {
+                    if !pixel.has(ch) || !sans.has(ch) {
+                        missing.insert(ch);
+                    }
+                }
+            }
+        }
+        assert!(missing.is_empty(), "letters the shipped Chinese fonts lack (choose another word): {missing:?}");
     }
 
     #[test]

@@ -35,6 +35,7 @@ use crate::os_compat::{self, Needs, System};
 use crate::store;
 
 pub mod cheats;
+mod image_files;
 
 pub const APP_ROOT: &str = "/storage/pocket-ui";
 /// Where the initramfs looks for updates.
@@ -921,6 +922,11 @@ pub fn watch_health(root: &Path, release: &Path, started: Instant, presented: &d
                     return Health::Broken;
                 }
                 confirm_running(root);
+                if root == Path::new(APP_ROOT) && !cfg!(feature = "brick") && std::env::var_os("POCKETUI_MOCK").is_none()
+                    && !pending_is_ours(root)
+                {
+                    image_files::refresh(root, Path::new("/flash"), |act| crate::fsutil::with_writable_flash(act));
+                }
                 return Health::Confirmed;
             }
             Verdict::GiveUp => return Health::TimedOut,

@@ -1,0 +1,102 @@
+# Simplified Chinese lines the Brick build says instead (see brick-it.tsv).
+Back to NextUI	返回 NextUI
+Back to NextUI?	返回 NextUI？
+Back to NextUI. Your games, saves and settings stay as they are.	返回 NextUI。你的游戏、存档和设置会保持原样。
+Couldn't reach the update server over Tailscale. Is Tailscale on and connected?	无法通过 Tailscale 连接更新服务器。Tailscale 已开启并连接吗？
+The SD card is too full for this update: it needs {n} MB more. Nothing was changed.	SD 卡剩余空间不足，无法安装此更新：还需要 {n} MB。未做任何更改。
+The update list names no usable version. Nothing was changed.	更新列表中没有可用版本。未做任何更改。
+The update is missing {s}. Nothing was changed.	更新包缺少 {s}。未做任何更改。
+The update is not version {s} inside. Nothing was changed.	更新包内部版本不是 {s}。未做任何更改。
+The update's start script is broken. Nothing was changed.	更新包的启动脚本已损坏。未做任何更改。
+Couldn't switch to the new version: {s}. Nothing was changed.	无法切换到新版本：{s}。未做任何更改。
+No space left to unpack the download.	没有足够空间解压下载文件。
+Battery & charging	电池与充电
+Like the rest	与其他一致
+Customised	自定义
+How bright the lights glow.	灯光的亮度。
+Colour, effect and brightness of the grips, the middle and the two F keys one by one. A: open.	分别设置左右握把、中间和两个 F 键的颜色、灯效和亮度。A：打开。
+Quick save, quick load, screenshot, Recent games, the pause menu, or nothing.	快速存档、快速读档、截图、最近游玩、暂停菜单或无操作。
+The slider on the side mutes the sound, or does nothing.	侧边拨动开关可设为静音或无操作。
+Which light to set.	选择要设置的灯光。
+Its own colour, or the one above.	独立颜色，或沿用上方颜色。
+Steady, breathing, fading, pulsing or off; "Like the rest" follows the colour above.	常亮、呼吸、渐变、脉冲或关闭；“与其他一致”将沿用上方颜色。
+Its own brightness, or the one above.	独立亮度，或沿用上方亮度。
+Lights & buttons	灯光与按键
+F1/F2 are shortcuts, not game buttons.	F1/F2 是快捷键，不是游戏按键。
+Set them in Settings › Controls › Lights & buttons.	可在设置 › 按键控制 › 灯光与按键中设置。
+Shortcuts for all games; not game buttons. Choose their action here.	全局游戏快捷键，不是游戏按键。在此选择对应操作。
+Each light	单个灯光
+F1 button	F1 按键
+F2 button	F2 按键
+Mute slider	静音开关
+The Brick's lights, the F1 and F2 keys and the mute slider.	Brick 的灯光、F1 和 F2 键以及静音开关。
+Lights off	关闭灯光
+Light tactile clicks as you browse, and their strength. Game rumble is set in Options.	浏览菜单时的轻微触感反馈及强度。游戏震动可在选项中设置。
+Left grip	左握把
+Right grip	右握把
+Middle	中间
+F1 key	F1 键
+F2 key	F2 键
+Nothing	无操作
+Quick save	快速存档
+Quick load	快速读档
+Pause menu	暂停菜单
+Mutes	静音
+Does nothing	无操作
+Steady	常亮
+Breathing	呼吸
+Fading	渐变
+Pulsing	脉冲
+{s} (heavy)	{s}（高负载）
+Warm light in the menus. While a game runs, the main colour of its cover.	菜单中显示暖色灯光；游玩时自动匹配游戏封面的主色调。
+The colour of the Brick's lights.	Brick 灯光的颜色。
+The Brick's lights stay dark.	Brick 的灯光保持关闭。
+The grips, the middle and the F keys glow in the colour you pick.	握把、中间和 F 键均以你选择的颜色亮起。
+Dark while all is well. Orange breathing while it charges, green when it is full, red breathing when it runs low.	正常时熄灭。充电时橙色呼吸，充满时绿灯常亮，低电量时红色呼吸。
+That cover is not a PNG picture.	该封面不是 PNG 图片。
+No game called {s} is on the card. Send the game first, then its cover with the same name.	卡上没有名为 {s} 的游戏。请先传入游戏，再传入同名的封面图片。
+Several systems take this cover: more than one has a game with that name.	多个主机都有同名游戏，无法确定此封面的归属。
+The time zone could not be kept on the card: {s}	无法将时区保存到 SD 卡：{s}
+The system didn't take the new time zone: {s}	系统未应用新时区：{s}
+PC Engine CD needs a BIOS file in Roms/bios: syscard3.pce	PC Engine CD 需要在 Roms/bios 中放入 BIOS 文件：syscard3.pce
+Switched off after {n} min asleep to save the battery.	休眠 {n} 分钟后已自动关机以节省电量。
+Switched off after {n} min with the screen off to save the battery.	息屏 {n} 分钟后已自动关机以节省电量。
+Hue	色相
+Saturation	饱和度
+Own colour	独立颜色
+Colour cycle	色彩循环
+Slow	慢速
+Its own colour, or the one above. Own colour: pick the hue and the saturation below.	独立颜色，或沿用上方颜色。选择独立颜色后，可在下方调整色相和饱和度。
+Round the colour wheel: red, yellow, green, blue, violet and back.	沿色环循环：红、黄、绿、蓝、紫再回到红。
+From pale to full colour.	从浅淡到饱满。
+Steady, breathing, fading, pulsing, a colour cycle, the battery and charger, or off; "Like the rest" follows the colour above.	常亮、呼吸、渐变、脉冲、色彩循环、电池与充电或关闭；“与其他一致”将沿用上方颜色。
+How fast it breathes, fades, pulses or cycles.	呼吸、渐变、脉冲或色彩循环的速度。
+Not saved.	未保存。
+The emulator choice couldn't be saved on the card. Nothing was changed.	无法将模拟器选择保存到 SD 卡。未做任何更改。
+Wireless pads and headphones. Connected headphones take all audio and hand it back to the speaker on disconnect.	无线手柄和耳机。连接耳机后所有声音将通过耳机输出，断开后自动切回扬声器。
+Restart pocket-ui?	重启 pocket-ui？
+Restarts pocket-ui in seconds. Your games, saves and settings stay untouched.	几秒内重启 pocket-ui。你的游戏、存档和设置不受影响。
+New versions of pocket-ui.	pocket-ui 的新版本。
+User	用户
+(unchanged)	（未更改）
+CPU speed limits for games and menus.	游戏和菜单中的 CPU 频率上限。
+Battery saves and save states. No games, no BIOS files.	游戏内存档和即时存档。不含游戏和 BIOS 文件。
+To {s} on the SD card. Copy it to a computer too.	保存至 SD 卡的 {s}。建议也备份一份到电脑上。
+Turns the screen off and pauses the game. Power wakes it.	息屏并暂停游戏，按电源键唤醒。
+Saves your game and puts the Brick to sleep. Power wakes it straight to the pause menu.	保存游戏并让 Brick 进入休眠，按电源键可直接回到暂停菜单。
+Turns off only the screen while pausing your game. Power turns it back on.	仅关闭屏幕并暂停游戏，按电源键重新点亮。
+Saves the game. The power button wakes it.	保存游戏，按电源键唤醒。
+The power button wakes it.	按电源键唤醒。
+Back to EmulationStation	返回 EmulationStation
+Back to EmulationStation?	返回 EmulationStation？
+pocket-ui closes and EmulationStation comes back. Your games, saves and settings stay as they are.	关闭 pocket-ui 并返回 EmulationStation。你的游戏、存档和设置会保持原样。
+The starter pack isn't available on dArkOS (pocket-ui only reads dArkOS's folders). Copy games into EASYROMS instead.	dArkOS 上无法使用新手游戏包（pocket-ui 仅读取 dArkOS 的文件夹）。请直接将游戏复制到 EASYROMS。
+Set up Wi-Fi in dArkOS. pocket-ui uses the connection dArkOS makes.	请在 dArkOS 中设置 Wi-Fi，pocket-ui 会直接使用 dArkOS 的网络连接。
+Connected · {s}	已连接 · {s}
+Set up in dArkOS. Shows whether it is connected.	在 dArkOS 中设置，此处仅显示连接状态。
+The clock looks wrong. Play history and the dates on saves will be off until it is set. Set it in dArkOS.	系统时间似乎不准确，设好之前游玩记录和存档日期会有偏差。请在 dArkOS 中校准时间。
+The clock looks wrong, so the update server can't be checked. Set it in dArkOS, or wait for network time over Wi-Fi.	系统时间似乎不准确，无法检查更新服务器。请在 dArkOS 中校准，或等待 Wi-Fi 自动同步时间。
+It listens on your Wi-Fi. Set up Wi-Fi in dArkOS; Settings › Connections › Wi-Fi shows the connection.	通过 Wi-Fi 提供访问。请在 dArkOS 中设置 Wi-Fi，设置 › 网络连接 › Wi-Fi 可查看连接状态。
+Turn on to browse your library in any browser on your Wi-Fi. The URL appears here.	开启后，可在同一 Wi-Fi 下的任意浏览器中浏览游戏库。网址会显示在这里。
+Pair one in dArkOS, or plug one into the USB-C port. This handheld's own buttons show up here too.	在 dArkOS 中配对，或插入 USB-C 接口。本掌机自带的按键也会显示在这里。
+Copy games into dArkOS's EASYROMS folders (one per system), then restart pocket-ui.	将游戏复制到 dArkOS 的 EASYROMS 对应主机文件夹中，然后重启 pocket-ui。

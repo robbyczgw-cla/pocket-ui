@@ -283,14 +283,28 @@ pub fn card_works_again(dir: &Path) {
 }
 
 fn write_via_temp(path: &Path, bytes: &[u8], durable: bool, bulk: bool) -> io::Result<()> {
-    let written = write_via_temp_inner(path, bytes, durable, bulk);
+    let written = write_via_temp_inner(path, bytes, durable, bulk, |_, _| Ok(()));
     if let Err(e) = &written {
         note_refused(path, e);
     }
     written
 }
 
-fn write_via_temp_inner(path: &Path, bytes: &[u8], durable: bool, bulk: bool) -> io::Result<()> {
+/// Write an image file with its final mode and verify the temporary copy before publishing it.
+pub(crate) fn write_verified_atomic(path: &Path, bytes: &[u8], sha256: &str, mode: Option<u32>) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    write_via_temp_inner(path, bytes, true, false, |tmp, file| {
+        if let Some(mode) = mode {
+            file.set_permissions(fs::Permissions::from_mode(mode))?;
+        }
+        if crate::store::sha256_file(tmp)? != sha256 {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "image file checksum mismatch"));
+        }
+        Ok(())
+    })
+}
+
+fn write_via_temp_inner(path: &Path, bytes: &[u8], durable: bool, bulk: bool, verify: impl FnOnce(&Path, &File) -> io::Result<()>) -> io::Result<()> {
     #[cfg(test)]
     if let Some(errno) = FAIL_UNDER.lock().unwrap().iter().find(|(d, _)| path.starts_with(d)).map(|(_, e)| *e) {
         return Err(io::Error::from_raw_os_error(errno));
@@ -323,6 +337,7 @@ fn write_via_temp_inner(path: &Path, bytes: &[u8], durable: bool, bulk: bool) ->
         #[cfg(not(test))]
         write(&mut f, bytes)?;
         crash_point("written");
+        verify(&tmp, &f)?;
         if durable {
             f.sync_all()?;
             crash_point("synced");

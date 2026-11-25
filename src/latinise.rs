@@ -36,10 +36,11 @@ fn faces() -> &'static [Face<'static>] {
     })
 }
 
-/// Whether every embedded face (any style of Settings → Look) has a glyph for `ch`, or the Korean fonts pocket-ui
-/// ships do (`text_fallback::korean`: hangul is drawn in every style, with or without a system font).
+/// Whether every embedded face (any style of Settings → Look) has a glyph for `ch`, or the Korean or Chinese fonts
+/// pocket-ui ships do (`text_fallback::korean`, `text_fallback::cjk`: hangul, ideographs and kana are drawn in every
+/// style, with or without a system font).
 pub fn base_covers(ch: char) -> bool {
-    ch.is_ascii() || crate::text_fallback::korean_has(ch) || faces().iter().all(|f| f.glyph_index(ch).is_some_and(|g| g.0 != 0))
+    ch.is_ascii() || crate::text_fallback::korean_has(ch) || crate::text_fallback::cjk_has(ch) || faces().iter().all(|f| f.glyph_index(ch).is_some_and(|g| g.0 != 0))
 }
 
 /// `base_covers`, or the system's fallback font (`text_fallback::path`) has `ch`; the font is opened only for a letter
@@ -279,9 +280,10 @@ fn syllable(k: char, chars: &[char], i: &mut usize, double: &mut bool, out: &str
 mod tests {
     use super::*;
 
-    /// No font beyond ours: every non-ASCII letter that Barlow, Departure Mono and Pixelify lack is "missing".
+    /// No CJK font at all (a card without pocket-ui's Chinese font files, no system font): every non-ASCII letter that
+    /// Barlow, Departure Mono, Pixelify and the compiled-in Korean fonts lack is "missing".
     fn bare(c: char) -> bool {
-        base_covers(c)
+        base_covers(c) && !crate::text_fallback::is_cjk(c)
     }
 
     fn f(s: &str) -> String {

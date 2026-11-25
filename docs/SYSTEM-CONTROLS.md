@@ -24,28 +24,23 @@ virtual device shows a working panel although it has no backlight, radios, batte
 The OSD is a dark pill at the top centre (`src/osd.rs`): name, level bar, value. On the Brick's 1024x768 it takes the
 Plus's share of the width and sits just under the header's band, clear of the clock and a page's title (`osd::frame`). On the shelf pocket-ui draws it;
 over a pocket-core game it sends `osd Name|value|fraction|centred` into pocket-core's command FIFO and the overlay
-(`src/overlay.rs`) draws the same pill as a texture. RetroArch and the standalone emulators get no OSD (the
-changes still apply). With no game of its own running, pocket-ui still offers the line to pocket-core's FIFO: a
+(`src/overlay.rs`) draws the same pill as a texture. RetroArch and standalone emulators use ROCKNIX feedback. With no game of its own running, pocket-ui still offers the line to pocket-core's FIFO: a
 pocket-core it doesn't know of (started over SSH) covers the shelf, and the FIFO refuses at once when nobody reads
 it. A line a known pocket-core game didn't take is logged once (`osd: pocket-core didn't take …`).
-ROCKNIX draws its own box for the same keys (`input_sense` runs `mako-notify "Volume: 25%"`: black, monospace, top centre,
-over everything). `mako-notify` skips it only when EmulationStation is in front, so it used to sit on top of our display.
-`src/mako_osd.rs` hides it with a mako mode: once, a block between `# BEGIN pocket-ui` and `# END pocket-ui` is appended to
-`/storage/.config/mako/config` (`[mode=pocket-ui app-name=mako-notify]` with `invisible=1`; pocket-ui writes ROCKNIX's default with the block when the file is missing on a fresh card; `mako-notify` otherwise
-only creates it and never rewrites it), then `makoctl mode -a pocket-ui` while pocket-ui or a pocket-core game is in front,
-`-r` while RetroArch, a standalone emulator or an app is (there we draw nothing, so ROCKNIX's box stays the feedback). The mode
-lives in the daemon: if mako restarts it is off until the next game start or end. "Screenshot Saved" is hidden along with it
-while the mode is on. `deploy/package/uninstall.sh` removes the block and the mode.
+ROCKNIX's `input_sense` sends the volume percentage on key release via `mako-notify`. The configuration block
+in `/storage/.config/mako/config` hides that notification where pocket-ui draws its own OSD. On ROCKNIX H700
+during gameplay, a second mode allows just the stock volume notification and shows it for one second in a compact
+box. Other ROCKNIX devices keep the stock notifications in standalone games. The daemon keeps its modes across
+configuration reloads. `deploy/package/uninstall.sh` removes the block and both modes.
 A volume key also ends a HOME tap in a game: HOME + Vol (ROCKNIX's brightness) used to open the pause menu when
 HOME was let go.
 
 ### H700 speaker volume
 
-On the affected H616 UCM, `h700_volume::Keeper` also maps the system volume to DAC Playback Volume, caps the
-speaker at a provisional −22.04 dB (DAC 44) and uses physical switches for zero/mute. Headphones retain Line Out attenuation.
-Nonzero changes use a rate-limited DAC ramp with a persistent ALSA handle; H700 game volume overlays and hidden-shelf
-redraws are suppressed. It follows keys, quick settings and sleep/wake from a worker, preserving external edits and conditional exit
-restoration. Hardware readback is eventual, not instantaneous; no acoustic validation has been done yet.
+On the affected H616 UCM, `h700_volume::Keeper` combines the system curve with the speaker DAC target,
+from raw 44 through 25% to raw 63 at 100%. Zero and mute keep the existing codec policy. Headphones retain Line Out
+attenuation. A worker follows keys, Quick settings and sleep/wake via a rate-limited DAC ramp on a persistent ALSA
+handle. It respects external edits and conditionally restores the mixer on exit.
 See [H700-VOLUME.md](H700-VOLUME.md).
 
 ### How the volume keys reach us

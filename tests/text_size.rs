@@ -552,7 +552,7 @@ fn pages_found_overlapping_at_1024x768_keep_their_lines_apart() {
     let states = [
         "setup:extras", "setup:extras:da", "setup:play", "setup:card=lens", "tailscale:connected", "web:off", "web:waiting",
         "achievements:offline", "sys:time-wrong-wifi", "search:none:qqqq", "curator:history", "curator:history:year",
-        "battery:3:samples", "port-perf:own", "port-perf:busy", "pc-streaming:pin", "slot-undo",
+        "battery:3:samples", "battery:3:sleep", "port-perf:own", "port-perf:busy", "pc-streaming:pin", "slot-undo",
     ];
     for lang in ["en", "de", "es", "pt", "fr", "it"] {
         for state in states {
@@ -1444,6 +1444,129 @@ fn the_korean_placeholder_lines_are_korean_and_keep_their_placeholders() {
     let korean = lines.iter().filter(|(_, ko)| ko.chars().any(|c| ('가'..='힣').contains(&c))).count();
     assert!(korean * 100 >= lines.len() * 97, "{korean} of {} lines Korean", lines.len());
     let logout = lines.iter().find(|(en, _)| *en == "Press A again to log out. B keeps you signed in.").map(|(_, ko)| *ko).expect("a line of de.tsv");
+    assert!(logout.contains(" A ") && logout.contains(" B "), "the keys stay: {logout}");
+}
+
+/// Chinese while `zh.tsv` is still empty, as `korean_placeholder_table`: every line of the German table as made-up
+/// Simplified Chinese from real sentences, two hanzi for five English letters (a hanzi is a whole em, Chinese runs
+/// narrower than English), no spaces between them (Chinese has none: `line_units` breaks between any two), the
+/// placeholders, numbers, key names and names with a dash or dot kept with a space around them.
+fn chinese_placeholder_table(dir: &Path) -> PathBuf {
+    const SENTENCES: &str = "在设置中可以更改语言按任意键继续游戏没有已保存的游戏未连接到无线网络调整屏幕亮度和声音最近玩过的游戏正在下载更新\
+        存储卡剩余空间不足请重新连接控制器查看这个游戏的成就已添加到收藏请稍后再试整理书架上的封面电池电量不足安装新版本后重新启动";
+    let hanzi: Vec<char> = SENTENCES.chars().filter(|c| !c.is_whitespace()).collect();
+    let mut next = 0;
+    let keep = |w: &str| {
+        let core = w.trim_matches(|c: char| ".,:;?!()\"'".contains(c));
+        core.is_empty()
+            || core.contains(['{', '\\'])
+            || core.chars().any(|c| c.is_ascii_digit() || !c.is_alphanumeric() && c != '\'' && c != '’')
+            || core.len() > 1 && core.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+            || core == "A" || core == "B" || core == "X" || core == "Y"
+    };
+    let mut chinese = |letters: usize| {
+        let want = (letters * 2).div_ceil(5).max(1);
+        let s: String = (0..want).map(|i| hanzi[(next + i) % hanzi.len()]).collect();
+        next += want;
+        s
+    };
+    let mark = |c: char| match c {
+        '.' => "。",
+        '?' => "？",
+        '!' => "！",
+        _ => "：",
+    };
+    let mut table = String::from("# Chinese placeholder lines for the layout matrix (tests/text_size.rs), not a translation.\n");
+    let german = std::fs::read_to_string(Path::new(&ROOT).join("assets/i18n/de.tsv")).unwrap();
+    for line in german.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()) {
+        let Some((en, _)) = line.split_once('\t') else { continue };
+        let source = en.strip_prefix('!').unwrap_or(en);
+        let mut said = Vec::new();
+        for part in source.split("\\n") {
+            let mut out: Vec<String> = Vec::new();
+            let mut run = 0;
+            for w in part.split(' ') {
+                if keep(w) {
+                    if run > 0 {
+                        out.push(chinese(run));
+                        run = 0;
+                    }
+                    out.push(w.to_string());
+                } else {
+                    run += w.chars().filter(|c| c.is_alphabetic()).count();
+                    if let Some(end) = w.chars().last().filter(|c| ".?!:".contains(*c)) {
+                        out.push(chinese(run) + mark(end));
+                        run = 0;
+                    }
+                }
+            }
+            if run > 0 {
+                out.push(chinese(run));
+            }
+            // Hanzi runs side by side without a space; a kept word (a key, a number, a name) has one on each side.
+            let mut joined = String::new();
+            for w in out {
+                let cjk = |c: Option<char>| c.is_some_and(|c| ('\u{3000}'..='\u{9fff}').contains(&c) || ('\u{ff01}'..='\u{ff60}').contains(&c));
+                if !joined.is_empty() && !(cjk(joined.chars().last()) && cjk(w.chars().next())) {
+                    joined.push(' ');
+                }
+                joined += &w;
+            }
+            said.push(joined);
+        }
+        table += &format!("{en}\t{}\n", said.join("\\n"));
+    }
+    let path = dir.join("zh-placeholder.tsv");
+    std::fs::write(&path, table).unwrap();
+    path
+}
+
+/// The text-fit matrix in Simplified Chinese: hanzi from the shipped font files (Noto Sans SC in Barlow, Fusion Pixel in
+/// Retro), lines broken between hanzi, must not run into anything English doesn't (`cargo test --release --test text_size
+/// chinese -- --ignored`). With `zh.tsv`'s own lines once Chinese is complete (before, `ZH_MATRIX=1` by hand); else
+/// skipped, and `ZH_PLACEHOLDER_MATRIX=1` runs it with `chinese_placeholder_table`'s lines.
+#[test]
+#[ignore = "release check: the Chinese text-fit matrix, 640x480, 1024x768 and 720x720, Normal and Large (complete Chinese only)"]
+fn chinese_in_normal_and_large_text_nothing_overlaps_or_runs_off_the_picture() {
+    let placeholder = std::env::var_os("ZH_PLACEHOLDER_MATRIX").is_some_and(|v| v == "1");
+    // `ZH_MATRIX=1`: zh.tsv's own lines before Chinese is switched on (complete).
+    let real = std::env::var_os("ZH_MATRIX").is_some_and(|v| v == "1");
+    match korean_matrix(pocket_ui::i18n::Lang::Zh.complete() || real, placeholder) {
+        None => eprintln!("SKIPPED: Chinese is not complete yet (zh.tsv, Lang::complete); ZH_PLACEHOLDER_MATRIX=1 runs the matrix with placeholder lines"),
+        Some(false) => language_matrix("zh", "Chinese"),
+        Some(true) => {
+            let tmp = tempfile::tempdir().unwrap();
+            let table = chinese_placeholder_table(tmp.path());
+            language_matrix_with("zh", "Chinese (placeholder lines)", &[("POCKETUI_I18N_TABLE", &format!("zh:{}", table.display()))]);
+        }
+    }
+}
+
+/// The placeholder table is Chinese without spaces between hanzi, parses, and keeps the placeholders and the key names.
+#[test]
+fn the_chinese_placeholder_lines_are_chinese_and_keep_their_placeholders() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = chinese_placeholder_table(tmp.path());
+    if let Some(out) = std::env::var_os("ZH_PLACEHOLDER_OUT") {
+        std::fs::copy(&path, out).unwrap();
+    }
+    let table = std::fs::read_to_string(&path).unwrap();
+    let lines: Vec<(&str, &str)> = table.lines().filter(|l| !l.starts_with('#')).filter_map(|l| l.split_once('\t')).collect();
+    assert!(lines.len() > 3000, "{}", lines.len());
+    let holes = |s: &str| {
+        let mut h: Vec<String> = s.split('{').skip(1).filter_map(|p| p.split_once('}')).map(|(n, _)| n.to_string()).collect();
+        h.sort();
+        h
+    };
+    let han = |c: char| ('\u{4e00}'..='\u{9fff}').contains(&c);
+    for (en, zh) in &lines {
+        assert_eq!(holes(en), holes(zh), "{en:?} -> {zh:?}");
+        let chars: Vec<char> = zh.chars().collect();
+        assert!(!chars.windows(3).any(|w| han(w[0]) && w[1] == ' ' && han(w[2])), "no space between hanzi: {zh}");
+    }
+    let chinese = lines.iter().filter(|(_, zh)| zh.chars().any(han)).count();
+    assert!(chinese * 100 >= lines.len() * 97, "{chinese} of {} lines Chinese", lines.len());
+    let logout = lines.iter().find(|(en, _)| *en == "Press A again to log out. B keeps you signed in.").map(|(_, zh)| *zh).expect("a line of de.tsv");
     assert!(logout.contains(" A ") && logout.contains(" B "), "the keys stay: {logout}");
 }
 

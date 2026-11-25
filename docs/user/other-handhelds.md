@@ -101,6 +101,7 @@ All H700 models have 1 GB RAM, no touchscreen and no fan. RG40XX RGB rings stay 
    | RG34XX | `sun50i-h700-anbernic-rg34xx.dtb` |
    | RG34XX-SP | `sun50i-h700-anbernic-rg34xx-sp.dtb` (`...-sp-v2-panel.dtb` for 2026 Metallic Blue units) |
    | RG-SP | `sun50i-h700-anbernic-rg-sp.dtb` |
+   | RG CubeXX | `sun50i-h700-anbernic-rgcubexx.dtb` |
 
    Garbled or striped screen? Hold Power 10 seconds, re-flash and try the bracketed newer-panel revision `.dtb`.
 4. Boot ROCKNIX once. It expands storage, reboots and walks through its first-boot setup until ROCKNIX's menu opens.
@@ -143,13 +144,32 @@ The [pocket-ui beta for dArkOS](https://pocketui.xyz/install#darkos) needs no ex
 3. Power on and wait. The first start takes up to 10 minutes with a restart or two, so don't press anything.
 
 No Wi-Fi is needed. Updates come as one zip on your games card ([updates](updates.md)). To go back to stock, power off and put
-your original card in TF1. Black screen after 10 minutes? Newer R36S screens need one extra file; the install page explains it.
+your original card in TF1.
+
+**Black screen after 10 minutes?** Newer R36S screens need one extra file. With your original card in TF2, pocket-ui picks it
+by itself at the first start. No original card? Find your board name (for example R36S V22), printed on the board itself, so
+you may need to open the back. Then copy the matching file from the `r36s-panels` folder on the card's ROCKNIX drive into
+`overlays`, renamed to `mipi-panel.dtbo`. Delete it to go back.
+
+| Your R36S | File to try first |
+|---|---|
+| R35S V11, R36S V12 (older screen, if black) | `rg351v-v2` |
+| R36S V12 (newer screen), HL-R36H V20 and V21, R36S V21 and V22, R36XX V21 | `r36s-panel4` |
+| R36S V30 | `rg351mp-v2` |
+| R36S Y02, RG36S Y07 | `r36s_clone` |
+
+This is the closest file we found, not a promise. If the picture stays black or garbled, delete the copy and try the next
+file in the README next to them. Another board, or a clone? Then no file is known to fit, and the safe way is your original
+card in TF2.
 
 ## TrimUI Brick Pro (experimental)
 
 Runs the same TrimUI card package as the Brick and Smart Pro, adding dual sticks (L3/R3 clicks never trigger accidental
 quick-save/load; use MENU or F1/F2) and separate F1/F2 keys. Its 3.95" display uses standard font sizes; the side switch
 and LED controls stay disabled until verified, so **Lights & buttons** exposes F1/F2 assignments only.
+
+The **TrimUI Smart Pro** (1280×720, both sticks) uses the same card and is experimental too; the Smart Pro S isn't
+supported, and the card tells you so.
 
 Untested on real hardware so far; try it on a spare card and back up saves first. Send feedback via
 Settings → Help & tools → Report a problem (or grab `pocket-ui/logs` off the card if there's no picture).

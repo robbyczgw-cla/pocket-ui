@@ -117,8 +117,9 @@ black with these cards, so don't flash those. Write the card like the Mini V2 ca
 
 ### Installing OpenABL once
 
-**Risk:** OpenABL overwrites the bootloader partitions `abl_a` and `abl_b`. If flashing fails, the handheld may stop
-booting and need EDL recovery. You need a computer to write the microSD cards and keep the backup.
+**Risk:** OpenABL overwrites the bootloader partitions `abl_a` and `abl_b`. Your Android apps and data stay, but if
+flashing cuts out or goes wrong, the handheld may stop booting and need EDL recovery. Only go ahead if you accept that.
+You need a computer to write the microSD cards and keep the backup.
 
 **Where the scripts come from:** our images leave the flashing scripts off on purpose, and OpenABL's own release download
 has none either. They are in the `openabl` folder of ROCKNIX's official image. ROCKNIX's guides:

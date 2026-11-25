@@ -307,7 +307,8 @@ pub fn reboot_modes_have_bootloader(text: &str) -> bool {
 pub fn parse_charge(status: &str) -> Charge {
     match status.trim() {
         "Charging" => Charge::Charging,
-        "Full" => Charge::Full,
+        // The charger in and not charging: full, or a charge that stopped early ("40%, plugged in"), as `battery::read`.
+        "Full" | "Not charging" => Charge::Full,
         _ => Charge::Discharging,
     }
 }
@@ -1769,7 +1770,7 @@ mod tests {
                 charge: parse_charge("Not charging")
             }
             .label(),
-            "40%"
+            "40%, plugged in"
         );
     }
 

@@ -22,8 +22,9 @@ A few things stay in English even when you switch languages:
   invalid filename or a folder in the way) fall back to English.
 - **Technical details**: error output from another program or a missing library name stays verbatim, with the sentence
   around it translated.
-- **The web companion in your browser**: the settings page on your Pocket (Settings → Connections → Web companion) is
-  translated, while the browser pages stay in English.
+
+The web companion (Settings → Connections → Web companion) is translated too, and its pages in your browser follow your
+handheld's language.
 
 If a line doesn't have a translation yet, pocket-ui shows the English text rather than leaving a blank space.
 

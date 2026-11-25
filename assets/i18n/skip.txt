@@ -1009,6 +1009,9 @@ screen off
 # src/system_ctl.rs (Restart pocket-ui through `Hw::power`: never asked for, never painted)
 Only pocket-ui itself can restart pocket-ui.
 
+# src/system_ctl.rs (the kernel's power_supply status word, matched and never painted)
+Not charging
+
 # src/report.rs (the report's own files, never painted)
 Alias
 from the Store
@@ -2143,6 +2146,10 @@ saveFiles
 Games can't be deleted on this device: their folder is read only.
 # Korean: the Accept-Language header.
 Accept-Language: ko-KR,ko;q=0.9,en;q=0.7
+# Chinese: the Accept-Language header and the names of its font files (src/text_fallback.rs).
+Accept-Language: zh-CN,zh;q=0.9,en;q=0.7
+FusionPixel12-zh_hans-CJK.otf
+NotoSansSC-Regular-CJK.otf
 # src/libretro.rs: pocket-core's start steps in the first-frame log line (R36S hand test #7/#12)
 core library
 core init
@@ -2171,3 +2178,47 @@ Cut Off
 
 # src/setup.rs: the PortMaster-from-the-card page's name in the status file
 ports: from the card
+
+# src/bin/pocket_fb.rs: display startup diagnostics
+opening framebuffer
+reading variable framebuffer info
+reading fixed framebuffer info
+mapping framebuffer
+copying framebuffer contents
+framebuffer snapshot ready
+reading framebuffer mode for handover
+unblanking framebuffer (FBIOBLANK)
+setting framebuffer mode (FBIOPUT_VSCREENINFO)
+panning framebuffer (FBIOPAN_DISPLAY)
+reading framebuffer pan
+binding Wayland socket
+binding IPC socket
+both sockets ready
+# src/update/image_files.rs and src/fsutil.rs: image refresh diagnostics
+image file checksum mismatch
+
+# src/update/image_files.rs and src/fsutil.rs: image refresh diagnostics
+image target is not a regular file
+
+# src/update/image_files.rs and src/fsutil.rs: image refresh diagnostics
+image backup is not a regular file
+skipping FBIOBLANK on RK3326
+
+# src/android handheld view: choosing a game's own cover
+pickCover
+no picker outside Android
+
+# src/covers/custom_tests.rs: the name of a test picture format in an assert message
+HEIC
+
+# src/bin/pocket_fb.rs: RK3326 framebuffer diagnostics
+FBIOGET_VSCREENINFO returned
+FBIOGET_FSCREENINFO returned
+using positioned framebuffer writes without mapping or mode changes
+framebuffer mmap returned
+framebuffer mode read returned
+writing first framebuffer frame with pwrite
+framebuffer pwrite failed: {s}
+first framebuffer pwrite returned
+framebuffer handover returned
+FBIOPUT_VSCREENINFO returned: {s}

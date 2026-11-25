@@ -979,6 +979,15 @@ impl Timers {
     }
 }
 
+/// Whether pocket-ui runs its own low-battery guard (`spawn_battery_guard`): everywhere but on the Brick under NextUI,
+/// whose card owns the battery (`brick`: any Brick, `crate::device::brick`; `standalone`: the Brick's own card). The own card is
+/// pocket-ui's alone: without the guard a Brick left on ran past 2 % and 0 % until the cell gave out, the game unsaved
+/// (Alex's Brick, 23.11.2026: 2 % at 07:30, out at 3.0 V at 08:59; the same on 04.11.).
+#[cfg(feature = "brick")]
+fn battery_guard_runs(brick: bool, standalone: bool) -> bool {
+    !brick || standalone
+}
+
 /// Whether a pad event counts as someone using the device.
 /// A button press (not power or volume) within `WAKE_QUIET` of waking: swallowed.
 fn quiet_after_wake(woke_at: Option<Instant>, now: Instant, e: &PadEvent) -> bool {
@@ -1352,6 +1361,8 @@ pub struct Sleep {
     game: Option<Game>,
     /// The RK3326's RetroArch route has no reliable first game frame signal.
     rk3326: bool,
+    /// The lid switch turns the screen, it is not a lid (the RG Rotate's swivel, `Model::lid_turns_screen`): `on_lid` leaves it alone.
+    lid_turns: bool,
     retroarch_load_until: Option<Instant>,
     /// We stopped the game's processes (not the pause menu).
     stopped_game: bool,
@@ -1449,8 +1460,13 @@ impl Sleep {
         }
         #[cfg(target_os = "linux")]
         sleep.spawn_watcher();
-        if !nextui_owned {
+        if battery_guard_runs(nextui_owned, crate::brick_profile::standalone()) {
             sleep.spawn_battery_guard();
+        }
+        // The heat guard stays off on every Brick for now (`nextui_owned` is any Brick here): it has never run on the
+        // device, and its limits (80 °C in play) wait for a measurement of the CPU's real temperature in PS1 and N64 games
+        // on the Brick (decision 24.11.2026, feature-1124/BATTERY-PLAN.md), so it can't switch a game off by surprise.
+        if !nextui_owned {
             #[cfg(feature = "brick")]
             if sleep.brick_card {
                 sleep.spawn_heat_guard();
@@ -1528,6 +1544,7 @@ impl Sleep {
             state: State::Awake,
             game: None,
             rk3326: crate::device::current().model.is_some_and(|m| m.is_rk3326()),
+            lid_turns: crate::device::current().lid_turns_screen(),
             retroarch_load_until: None,
             stopped_game: false,
             menu_open: false,
@@ -1604,12 +1621,13 @@ impl Sleep {
         // Even the first reading is the thread's: nothing of this on the UI thread at start.
         let _ = std::thread::Builder::new().name("battery-guard".into()).spawn(move || {
             let dir = crate::battery::dir();
-            let mut level = crate::low_battery::read(&dir);
-            if level.is_none() {
+            if !dir.is_dir() {
                 return;
             }
+            let model = crate::device::current().model;
             let mut guard = crate::low_battery::Guard::default();
             loop {
+                let level = crate::low_battery::read_for_guard(&dir, model);
                 if let Some(alert) = guard.observe(level) {
                     if tx.send(Msg::Battery(alert)).is_err() {
                         return;
@@ -1617,7 +1635,6 @@ impl Sleep {
                     notify();
                 }
                 std::thread::sleep(crate::low_battery::EVERY);
-                level = crate::low_battery::read(&dir);
             }
         });
     }
@@ -1795,7 +1812,18 @@ impl Sleep {
     /// logind's inhibitor, which on a device with a lid covers `handle-lid-switch` too (`Inhibitor::take`); without
     /// it logind suspends on the lid by itself (ROCKNIX's `HandleLidSwitch=suspend`) and pocket-ui stays out of its
     /// way. Never reaches the UI.
+    ///
+    /// The RG Rotate's swivel (`Model::lid_turns_screen`) is no lid: turning the screen is a way to play, so it neither
+    /// sleeps nor darkens nor wakes. The panel's turn is the system's (the T618 card's `lid-rotate` service runs `swaymsg
+    /// output DSI-1 transform 90/0`); pocket-ui only logs it, and its inhibitor still keeps logind from suspending.
     fn on_lid(&mut self, closed: bool, ctx: Ctx) -> bool {
+        if self.lid_turns {
+            println!("sleep: swivel {}, the screen turns, no sleep", if closed { "closed" } else { "opened" });
+            if self.state == State::Awake {
+                self.timers.last_input = Instant::now();
+            }
+            return true;
+        }
         if !self.power_key_ours() {
             println!("sleep: lid {}, left to logind", if closed { "closed" } else { "opened" });
             return true;
@@ -2874,6 +2902,16 @@ mod sleep_child;
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    /// The Brick's own card guards the battery as every other ROCKNIX-style card does: at 2 % on battery the game is
+    /// saved and the Brick switched off. Only NextUI's card leaves it to NextUI.
+    #[cfg(feature = "brick")]
+    #[test]
+    fn the_bricks_own_card_runs_the_low_battery_guard() {
+        assert!(battery_guard_runs(true, true), "the Brick's own card: pocket-ui guards the battery");
+        assert!(!battery_guard_runs(true, false), "the Brick with NextUI's card: NextUI owns it");
+        assert!(battery_guard_runs(false, false), "every other device");
+    }
 
     fn timers(now: Instant) -> Timers {
         Timers {
@@ -4516,6 +4554,33 @@ mod tests {
         s.light(Ctx::default());
         s.on_pad(&lid(true), Ctx::default());
         assert_eq!(s.state(), State::Deep, "closed while dark: on into deep sleep");
+    }
+
+    /// The RG Rotate's swivel reports `SW_LID` (base618's "Hall Swivel"): turning the screen is a way to play, not a closed
+    /// lid. It must neither sleep nor darken, awake or dark; the lid's own handling stays on the Flip 2.
+    #[test]
+    fn the_rotates_swivel_never_sleeps_or_darkens_the_screen() {
+        for short_press in [ShortPress::Sleep, ShortPress::ScreenOff] {
+            let (_dir, mut s, file) = test_sleep("swivel-awake");
+            s.force_power_key = true;
+            s.lid_turns = true;
+            with_buttons(&mut s, short_press, Hold::Menu);
+            s.game_started(some_game());
+            assert!(s.on_pad(&lid(true), Ctx::default()), "the swivel never reaches the UI");
+            assert_eq!((s.state(), s.dark_game()), (State::Awake, false), "{short_press:?}: turned, still playing");
+            assert_ne!(level(&file), "0", "{short_press:?}: the screen stays lit");
+            assert!(s.on_pad(&lid(false), Ctx::default()));
+            assert_eq!(s.state(), State::Awake, "turned back: still playing");
+        }
+        // Dark already: turning it neither wakes the screen nor sends it on into deep sleep.
+        let (_dir, mut s, _) = test_sleep("swivel-light");
+        s.force_power_key = true;
+        s.lid_turns = true;
+        s.light(Ctx::default());
+        s.on_pad(&lid(true), Ctx::default());
+        assert_eq!(s.state(), State::Light);
+        s.on_pad(&lid(false), Ctx::default());
+        assert_eq!(s.state(), State::Light);
     }
 
     #[test]

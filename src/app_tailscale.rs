@@ -378,7 +378,10 @@ impl App {
                 )
             }
         };
-        self.text.draw(c, Face::Title, 44, left, y0 + 64, color, &status);
+        // Hanzi and hangul stand taller than capitals: down by the difference, clear of the "Status" label (`Text::cjk_rise`).
+        let shown = self.text.translated(&status).to_string();
+        let rise = self.text.cjk_rise(Face::Title, 44, &shown);
+        self.text.draw(c, Face::Title, 44, left, y0 + 64 + rise, color, &status);
 
         let mut y = y0 + if short { 102 } else { 110 } + pocket_ui::type_scale::grow(44);
         let status = snap.status.as_ref().filter(|_| snap.state() == State::Connected);

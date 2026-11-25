@@ -653,6 +653,17 @@ pub extern "system" fn Java_xyz_pocketui_app_HandheldActivity_nativeEnding(_: *m
 #[no_mangle]
 pub extern "system" fn Java_xyz_pocketui_app_HandheldActivity_nativeConfigurationChanged(_: *mut jni::sys::JNIEnv, _: jni::sys::jobject) {}
 
+/// Android's photo picker answered "Choose cover…" (`app_cover_pick`), from the UI thread or the copy's thread.
+#[no_mangle]
+pub extern "system" fn Java_xyz_pocketui_app_HandheldActivity_nativeCoverPicked(mut env: jni::JNIEnv, _: jni::objects::JObject, outcome: jni::objects::JString) {
+    let outcome: String = env.get_string(&outcome).map(Into::into).unwrap_or_else(|_| "failed".into());
+    if let Some(proxy) = PROXY.lock().unwrap_or_else(|p| p.into_inner()).clone() {
+        let _ = proxy.send_event(UserEvent::CoverPicked(outcome));
+    } else {
+        log::warn!("cover: the picker answered {outcome}, but the app isn't listening");
+    }
+}
+
 /// Only the Mobile view's direct start uses it (`launchInternal`); this view starts by path.
 #[no_mangle]
 pub extern "system" fn Java_xyz_pocketui_app_HandheldActivity_nativePrepareDocument(

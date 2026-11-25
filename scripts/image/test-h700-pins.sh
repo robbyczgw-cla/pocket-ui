@@ -204,6 +204,10 @@ bad_host=$(echo "$hosts" | grep -Ev '^[a-z][a-z0-9-]{0,23}$|^$')
   && ok "image-defaults.sh has one NAME line and sets system.hostname from it" || bad "image-defaults.sh: NAME line"
 sed "s/^NAME=pocket-ui\$/NAME=$(image_hostname rg28xx)/" deploy/image/image-defaults.sh | grep -qx 'NAME=pocket-rg28xx' && ok "the build's sed puts the model's name on the NAME line" || bad "sed does not set NAME"
 python3 -I scripts/image/test-tree-firmware.py && ok "Classic speaker labels do not hide valid firmware" || bad "firmware path parser"
+sh scripts/image/test-check-phrases.sh >"${TMPDIR:-/tmp}/pu-check-phrases.$$" 2>&1 && ok "every sentence the card checks look for is in a notes template (scripts/image/test-check-phrases.sh)" \
+  || { cat "${TMPDIR:-/tmp}/pu-check-phrases.$$" >&2; bad "scripts/image/test-check-phrases.sh"; }
+sh scripts/image/test-shipped-fonts-in-checks.sh >"${TMPDIR:-/tmp}/pu-fonts-checks.$$" 2>&1 && ok "the card checks expect the fonts build.sh ships (scripts/image/test-shipped-fonts-in-checks.sh)" \
+  || { cat "${TMPDIR:-/tmp}/pu-fonts-checks.$$" >&2; bad "scripts/image/test-shipped-fonts-in-checks.sh"; }
 sh scripts/image/test-card-texts.sh >"${TMPDIR:-/tmp}/pu-card-texts.$$" 2>&1 && ok "every card's SOURCE-OFFER, README and grub.cfg name its model and image, no other (scripts/image/test-card-texts.sh)" \
   || { cat "${TMPDIR:-/tmp}/pu-card-texts.$$" >&2; bad "scripts/image/test-card-texts.sh"; }
 rm -f "${TMPDIR:-/tmp}/pu-card-texts.$$"

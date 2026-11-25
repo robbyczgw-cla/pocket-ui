@@ -354,6 +354,8 @@ assemble() {
   [ "$(dumpe2fs -h "$P2" 2>/dev/null | sed -n 's/^Free blocks: *//p')" = "$P2_FREE_BLOCKS" ] ||
     die "the grown STORAGE has $(dumpe2fs -h "$P2" 2>/dev/null | sed -n 's/^Free blocks: *//p') free blocks, not $P2_FREE_BLOCKS (pins.sh P2_FREE_BLOCKS): work out the new room, storage-budget.sh"
   R=pocket-ui/releases/$VERSION
+  SHIPPED_FONTS=$(sed -n 's/^FONTS="\(.*\)"$/\1/p' /repo/scripts/shipped-fonts.sh)
+  [ -n "$SHIPPED_FONTS" ] || die "scripts/shipped-fonts.sh names no font files"
   UNITS=.pocket-seed/.config/system.d
   SEED=$UNITS/essway.service.d
   GAMES_UNIT=$UNITS/rocknix-automount.service.d
@@ -363,6 +365,11 @@ assemble() {
     echo "mkdir /$R"
     for f in pocket-ui pocket-core pocket-splash portmaster-setup.sh; do
       echo "write $S/storage/$f /$R/$f"
+    done
+    # The Chinese font files next to the programs (scripts/shipped-fonts.sh, src/text_fallback.rs `shipped_dir`).
+    echo "mkdir /$R/fonts"
+    for f in $SHIPPED_FONTS; do
+      echo "write /repo/assets/fonts/$f /$R/fonts/$f"
     done
     [ ! -d "$W/bin/cores" ] || sh /repo/scripts/image/gba-debugfs.sh "$W/bin/cores" "$R" "$EPOCH"
     echo "write $S/storage/run-pocket-ui.sh /pocket-ui/run-pocket-ui.sh"
@@ -415,7 +422,9 @@ assemble() {
         /.pocket-seed/.cache/usbgadget/usbgadget.conf /.pocket-seed/.ssh /.pocket-seed/.ssh/authorized_keys /.pocket-seed/.config/pocket-ui
         /.pocket-seed/.config/pocket-ui/dev-ssh"
     fi
-    for p in / /pocket-ui /pocket-ui/releases "/$R" "/$R/pocket-ui" "/$R/pocket-core" "/$R/pocket-splash" "/$R/portmaster-setup.sh" \
+    FONT_PATHS="/$R/fonts"
+    for f in $SHIPPED_FONTS; do FONT_PATHS="$FONT_PATHS /$R/fonts/$f"; done
+    for p in / /pocket-ui /pocket-ui/releases "/$R" "/$R/pocket-ui" "/$R/pocket-core" "/$R/pocket-splash" "/$R/portmaster-setup.sh" $FONT_PATHS \
       /pocket-ui/run-pocket-ui.sh /pocket-ui/current /pocket-ui/pocket-ui /pocket-ui/pocket-core \
       /pocket-ui/portmaster-setup.sh /pocket-ui/licences /.pocket-seed /.pocket-seed/.config /.pocket-seed/.config/system.d "/$SEED" \
       "/$SEED/10-pocket-ui.conf" "/$UNITS/pocket-splash.service" "/$UNITS/sysinit.target.wants" \

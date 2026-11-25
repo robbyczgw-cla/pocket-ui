@@ -62,9 +62,9 @@ public final class PlayerActivity extends Activity {
     private native void nativeRoster(String roster);
     private native void nativeControllers(boolean connected,boolean interrupted);
     private int orientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR;
-    /** As the launcher's `orientFor`: with a controller (a handheld's own counts) the game stays the long way round. UI thread. */
+    /** As the launcher's `orientFor`: with a controller (a handheld's own counts) the game stays the long way round; a square panel follows the system (`Orientation`). UI thread. */
     private void orientFor(boolean controller){
-        int wanted=controller?android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE:android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR;
+        int wanted=Orientation.wanted(controller,false,false,Orientation.squareDisplay(this));
         if(wanted!=orientation){orientation=wanted;setRequestedOrientation(wanted);}
     }
     private native void nativeZoom(float factor);
@@ -135,6 +135,7 @@ public final class PlayerActivity extends Activity {
     public String rumble(String target,String magnitude,String ms){return Rumble.play(this,target,Integer.parseInt(magnitude),Long.parseLong(ms));}
     public String volumeState(){AudioManager a=(AudioManager)getSystemService(AUDIO_SERVICE);int max=a.getStreamMaxVolume(AudioManager.STREAM_MUSIC);return (max==0?0:a.getStreamVolume(AudioManager.STREAM_MUSIC)*100/max)+","+a.isStreamMute(AudioManager.STREAM_MUSIC);}
     @Override protected void onCreate(Bundle saved) {
+        ShippedFonts.install(this); // as PocketBase: before the native code
         super.onCreate(saved); setVolumeControlStream(AudioManager.STREAM_MUSIC);
         diagnosticInput=getIntent().getBooleanExtra("diagnosticInput",false);
         orientFor("true".equals(hasGamepad()));

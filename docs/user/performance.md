@@ -22,7 +22,7 @@ they show "ROCKNIX". Read-only rows omit change arrows and show only B Back.
   it. **Battery** holds the CPU around half speed, plenty for Game Boy and NES while stretching battery life. **Max**
   locks top clocks for heavy titles, running warmer and drawing more battery.
 - **Games: fan:** controls how aggressively the fan spins in games. **Quiet** (default) kicks in at 52 °C and stays low
-  (in Burnout on PS2 it spun ~20% slower than Auto while holding 60–70 °C with zero throttling). **Very quiet** stays
+  (in Burnout on PS2 it spun ~20% slower than Auto while holding 60 to 70 °C with zero throttling). **Very quiet** stays
   silent up to 60 °C, spins as gently as possible and stops below 55 °C: warmer in the hand, nearly silent, and still
   ramps to full speed at 78 °C (opt-in so you can try it yourself). **Auto** uses the system's stock cooling curve.
   **Cool** starts at 40 °C and spins faster for cooler hands and more audible airflow. Existing saved fan choices (even
@@ -100,5 +100,4 @@ controlling it ("smooth, Quiet" / "full speed, hot" from 78 °C / stock start te
 cluster (little, big, prime) and GPU, plus battery draw ("On the charger" when plugged in). Read-only status.
 
 On Anbernic H700 handhelds, **Battery** leaves normal game CPU clocks untouched; power saving applies to menus and idle
-only so games don't lose speed. Volume pop-ups appear on the shelf and in Quick settings, staying hidden over running
-H700 games to protect their frame budget.
+only so games don't lose speed. A compact pop-up shows the new level when you release a volume key during a game.

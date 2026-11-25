@@ -24,7 +24,7 @@
 //!   picture). HOME + X stays RetroArch's menu and HOME + START its quit, as ROCKNIX set them.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::hotkeys::Enabled;
 
@@ -229,6 +229,115 @@ pub fn prepare(paths: &Paths, on: Enabled) -> std::io::Result<bool> {
     if sys.get(AUTOHOTKEYS).as_deref() != Some("0") {
         sys.set(AUTOHOTKEYS, "0")?;
     }
+    Ok(true)
+}
+
+// ---- The dArkOS port ------------------------------------------------------------------------------------------------
+//
+// The port starts dArkOS's own RetroArch through dArkOS's command (`deploy/darkos/host-launch.py`), with dArkOS's
+// `~ark/.config/retroarch/retroarch.cfg`, which stays the player's: pocket-ui never writes it. Its shortcuts go into a
+// file of the session instead (`DARKOS_SESSION` in the port's run folder, a tmpfs), which host-launch.py hands to
+// RetroArch as `--appendconfig` when dArkOS's command starts `/usr/local/bin/retroarch` (or `retroarch32`) itself.
+// - **The hotkey button** is pocket-ui's HOME on that pad, as RetroArch numbers it: the F key (BTN_MODE) of the RK3566
+//   `retrogame_joypad`; on the RK3326 `GO-Super Gamepad` the R36S family's FN (708) where the pad has it, else R3 (707),
+//   both HOME in pocket-ui (`darkos::pad_button`). dArkOS's own hotkey (Select on the RG353M) is not one then.
+// - **HOME + A** is RetroArch's screenshot, into pocket-ui's Screenshots folder: pocket-ui's own (`app_screenshot`)
+//   cannot read the screen while dArkOS's RetroArch has it. Rewind is enabled while HOME + L2 is on (dArkOS ships it off).
+// - Without the pad's autoconfig or a HOME key there is no session file: dArkOS's own hotkeys stay.
+
+/// The session file's name in the port's run folder (`DARKOS_STATE`, /tmp/pocket-ui-darkos, the same path inside and
+/// outside pocket-ui's view). host-launch.py looks for it under this name.
+pub const DARKOS_SESSION: &str = "retroarch-shortcuts.cfg";
+/// dArkOS's RetroArch autoconfigs (in ark's home, `joypad_autoconfig_dir`).
+pub const DARKOS_AUTOCONFIG: &str = ".config/retroarch/autoconfig/udev";
+
+/// The evdev codes of pocket-ui's HOME on a dArkOS pad, the preferred one first (`darkos::pad_button`, `pad::button`).
+pub fn darkos_home_codes(pad_name: &str) -> &'static [u16] {
+    if pad_name.trim() == "GO-Super Gamepad" { &[708, 707] } else { &[0x13c] }
+}
+
+/// The `/proc/bus/input/devices` block of the pad called `name`.
+fn device_block<'a>(devices: &'a str, name: &str) -> Option<&'a str> {
+    devices.split("\n\n").find(|b| b.lines().any(|l| l.strip_prefix("N: Name=").is_some_and(|n| n.trim().trim_matches('"') == name)))
+}
+
+/// RetroArch's button number for key `code` on the pad of this `/proc/bus/input/devices` block: udev_joypad.c numbers the
+/// pad's keys from BTN_JOYSTICK (0x120) upwards in code order. None when the pad has no such key. The words of the
+/// `B: KEY=` bitmap are 64 bits (dArkOS's kernels are aarch64), the last word holding codes 0 to 63.
+pub fn udev_button(block: &str, code: u16) -> Option<String> {
+    const BTN_JOYSTICK: usize = 0x120;
+    let words: Vec<u64> = block.lines().find_map(|l| l.strip_prefix("B: KEY="))?.split_whitespace().map(|w| u64::from_str_radix(w, 16).ok()).collect::<Option<_>>()?;
+    let has = |c: usize| words.len() > c / 64 && words[words.len() - 1 - c / 64] >> (c % 64) & 1 == 1;
+    let code = code as usize;
+    (code >= BTN_JOYSTICK && has(code)).then(|| (BTN_JOYSTICK..code).filter(|&c| has(c)).count().to_string())
+}
+
+/// The session's lines for dArkOS's RetroArch: the ROCKNIX set (`lines`) on pocket-ui's HOME, HOME + A RetroArch's
+/// screenshot into `screenshots`, rewind enabled while its shortcut is on.
+pub fn darkos_lines(pad: &Pad, on: Enabled, screenshots: &Path) -> Vec<(String, String)> {
+    let mut out = lines(pad, on);
+    out.retain(|(k, _)| k != "input_screenshot_btn");
+    out.push(("input_screenshot_btn".into(), btn(on.screenshot, &pad.a)));
+    for (k, v) in [
+        ("rewind_enable", if on.rewind { "true" } else { "false" }.to_string()),
+        ("screenshot_directory", screenshots.display().to_string()),
+        // dArkOS puts them beside the game, which pocket-ui shows read only and whose folder is not the gallery's.
+        ("screenshots_in_content_dir", "false".into()),
+        ("sort_screenshots_by_content_enable", "false".into()),
+    ] {
+        out.push((k.into(), v));
+    }
+    out
+}
+
+/// The files `prepare_darkos` reads and writes, so that tests can point it elsewhere.
+pub struct DarkosPaths {
+    pub input_devices: PathBuf,
+    /// dArkOS's RetroArch autoconfigs.
+    pub autoconfig: PathBuf,
+    /// The session file (in the port's run folder).
+    pub session: PathBuf,
+    /// pocket-ui's Screenshots folder as dArkOS's RetroArch sees it (outside pocket-ui's view).
+    pub screenshots: PathBuf,
+}
+
+impl DarkosPaths {
+    /// From start.sh's environment: `DARKOS_STATE`, `DARKOS_ARK_HOME` and `POCKETUI_BRICK_CARD` (the port's folder, whose
+    /// `storage` is pocket-ui's /storage). None outside the port.
+    pub fn from_env() -> Option<DarkosPaths> {
+        let var = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from);
+        let card = var("POCKETUI_BRICK_CARD")?;
+        let in_view = crate::screenshot::dir();
+        let screenshots = in_view.strip_prefix("/storage").map_or(in_view.clone(), |rest| card.join("storage").join(rest));
+        Some(DarkosPaths {
+            input_devices: PathBuf::from(INPUT_DEVICES),
+            autoconfig: var("DARKOS_ARK_HOME")?.join(DARKOS_AUTOCONFIG),
+            session: var("DARKOS_STATE")?.join(DARKOS_SESSION),
+            screenshots,
+        })
+    }
+}
+
+/// Before a game in dArkOS's command: the session file for this game's shortcuts, or none (removed) when the pad has no
+/// autoconfig or no HOME key. dArkOS's `retroarch.cfg` is not read or written. Returns whether there is one.
+pub fn prepare_darkos(paths: &DarkosPaths, on: Enabled) -> std::io::Result<bool> {
+    let devices = std::fs::read_to_string(&paths.input_devices).unwrap_or_default();
+    let pad = controller_name(&devices).and_then(|name| {
+        let autoconfig = std::fs::read_to_string(paths.autoconfig.join(format!("{name}.cfg"))).ok()?;
+        let block = device_block(&devices, &name)?;
+        let hotkey = darkos_home_codes(&name).iter().find_map(|c| udev_button(block, *c))?;
+        Some(Pad { hotkey, ..Pad::from_autoconfig(&autoconfig) })
+    });
+    let Some(pad) = pad else {
+        match std::fs::remove_file(&paths.session) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
+            _ => return Ok(false),
+        }
+    };
+    let text = with_lines("# pocket-ui: this game's HOME shortcuts, for this session only (ra_hotkeys::prepare_darkos)\n", &darkos_lines(&pad, on, &paths.screenshots));
+    crate::fsutil::write_atomic(&paths.session, text.as_bytes())?;
+    // RetroArch does not make the folder it saves into (on the card: every user may write there).
+    let _ = std::fs::create_dir_all(&paths.screenshots);
     Ok(true)
 }
 
@@ -474,6 +583,125 @@ input_enable_hotkey_btn = "8"
                 assert_eq!(std::fs::read_to_string(&ra).unwrap(), expected);
                 assert!(!sys.exists(), "ROCKNIX still manages the hotkeys");
             }
+        }
+    }
+
+    /// dArkOS's `retrogame_joypad.cfg` (RG353M image v08272026), the lines that matter here: no hotkey of its own (dArkOS
+    /// sets Select in its `retroarch.cfg`).
+    const DARKOS_RK3566: &str = "# ArkOS\ninput_device = \"retrogame_joypad\"\ninput_up_btn = \"13\"\ninput_a_btn = \"1\"\ninput_b_btn = \"0\"\ninput_x_btn = \"2\"\ninput_y_btn = \"3\"\ninput_l_btn = \"4\"\ninput_r_btn = \"5\"\ninput_l2_btn = \"6\"\ninput_r2_btn = \"7\"\ninput_l3_btn = \"11\"\ninput_r3_btn = \"12\"\ninput_select_btn = \"8\"\ninput_start_btn = \"9\"\n";
+
+    /// A `/proc/bus/input/devices` block for a pad with these key codes (64-bit words, as on dArkOS's aarch64 kernels).
+    fn block(name: &str, handlers: &str, codes: &[u16]) -> String {
+        let mut words = vec![0u64; 12];
+        for c in codes {
+            words[*c as usize / 64] |= 1 << (c % 64);
+        }
+        while words.len() > 1 && words.last() == Some(&0) {
+            words.pop();
+        }
+        let key: Vec<String> = words.iter().rev().map(|w| format!("{w:x}")).collect();
+        format!("I: Bus=0019 Vendor=484b Product=1101 Version=0100\nN: Name=\"{name}\"\nP: Phys=\nH: Handlers={handlers}\nB: EV=b\nB: KEY={}\nB: ABS=3f\n", key.join(" "))
+    }
+
+    const RK3566_KEYS: &[u16] = &[304, 305, 307, 308, 310, 311, 312, 313, 314, 315, 316, 317, 318, 544, 545, 546, 547];
+    const RK3326_KEYS: &[u16] = &[114, 115, 304, 305, 307, 308, 310, 311, 312, 313, 544, 545, 546, 547, 704, 705, 706, 707];
+
+    /// RetroArch's numbers from the pad's key bitmap agree with dArkOS's own autoconfigs: RK3566 Select 8, Start 9, R3
+    /// 12, up 13, so the F key (BTN_MODE) is 10; RK3326 Select 12 and R3 15 (`es_input.cfg.rg351mp`), the R36S's FN 16
+    /// (dArkOSRE-R36's `input_menu_toggle_btn`). The pad's volume keys (below BTN_JOYSTICK) do not count.
+    #[test]
+    fn udev_numbers_match_darkos_autoconfigs() {
+        let rk3566 = block("retrogame_joypad", "event2 js0", RK3566_KEYS);
+        let n = |b: &str, c| udev_button(b, c);
+        assert_eq!((n(&rk3566, 314), n(&rk3566, 315), n(&rk3566, 316), n(&rk3566, 318), n(&rk3566, 544)), (Some("8".into()), Some("9".into()), Some("10".into()), Some("12".into()), Some("13".into())));
+        let rk3326 = block("GO-Super Gamepad", "event3 js0", RK3326_KEYS);
+        assert_eq!((n(&rk3326, 704), n(&rk3326, 707), n(&rk3326, 708)), (Some("12".into()), Some("15".into()), None));
+        let r36s = block("GO-Super Gamepad", "event3 js0", &[RK3326_KEYS, &[708]].concat());
+        assert_eq!(n(&r36s, 708), Some("16".into()));
+        assert_eq!(n(&rk3326, 114), None, "a key below the pad buttons is no RetroArch button number of ours");
+        assert_eq!(udev_button("N: Name=\"x\"\nB: KEY=zz\n", 316), None);
+    }
+
+    fn darkos_setup(dir: &crate::testutil::TestDir, devices: &str, autoconfig: Option<(&str, &str)>) -> DarkosPaths {
+        let paths = DarkosPaths { input_devices: dir.join("devices"), autoconfig: dir.join("udev"), session: dir.join("run").join(DARKOS_SESSION), screenshots: dir.join("card/storage/roms/screenshots") };
+        std::fs::create_dir_all(&paths.autoconfig).unwrap();
+        std::fs::create_dir_all(dir.join("run")).unwrap();
+        std::fs::write(&paths.input_devices, devices).unwrap();
+        if let Some((name, text)) = autoconfig {
+            std::fs::write(paths.autoconfig.join(format!("{name}.cfg")), text).unwrap();
+        }
+        paths
+    }
+
+    /// The dArkOS session file holds pocket-ui's combos on pocket-ui's HOME: HOME + R1 save, L1 load, R2 fast-forward,
+    /// L2 rewind (enabled), A RetroArch's screenshot into the Screenshots folder, Y the FPS. dArkOS's own retroarch.cfg
+    /// is not part of it and is never touched.
+    #[test]
+    fn darkos_session_has_pocket_uis_combos_on_home() {
+        let dir = crate::testutil::TestDir::new("ra-hotkeys-darkos");
+        let devices = format!("N: Name=\"rk805 pwrkey\"\nH: Handlers=kbd event0\nB: KEY=100000 0 0 0\n\n{}", block("retrogame_joypad", "event2 js0", RK3566_KEYS));
+        let paths = darkos_setup(&dir, &devices, Some(("retrogame_joypad", DARKOS_RK3566)));
+        let darkos_cfg = dir.join("ark-retroarch.cfg");
+        let darkos_text = "input_enable_hotkey_btn = \"8\"\ninput_save_state_btn = \"5\"\nrewind_enable = \"false\"\nscreenshots_in_content_dir = \"true\"\n";
+        std::fs::write(&darkos_cfg, darkos_text).unwrap();
+        assert!(prepare_darkos(&paths, on()).unwrap());
+        let cfg = std::fs::read_to_string(&paths.session).unwrap();
+        let v = |k| value(&cfg, k).unwrap_or_else(|| panic!("no {k}: {cfg}")).to_string();
+        assert_eq!(v("input_enable_hotkey_btn"), "10", "HOME (the F key, BTN_MODE), not dArkOS's Select");
+        assert_eq!(v("input_save_state_btn"), "5", "HOME + R1 saves");
+        assert_eq!(v("input_load_state_btn"), "4", "HOME + L1 loads");
+        assert_eq!(v("input_toggle_fast_forward_btn"), "7", "HOME + R2 fast-forward");
+        assert_eq!(v("input_rewind_btn"), "6", "hold HOME + L2 rewinds");
+        assert_eq!(v("rewind_enable"), "true");
+        assert_eq!(v("input_screenshot_btn"), "1", "HOME + A screenshot");
+        assert_eq!(v("screenshot_directory"), dir.join("card/storage/roms/screenshots").display().to_string());
+        assert_eq!(v("screenshots_in_content_dir"), "false");
+        assert!(dir.join("card/storage/roms/screenshots").is_dir(), "RetroArch finds the folder");
+        assert_eq!(v("input_fps_toggle_btn"), "3", "HOME + Y");
+        assert_eq!(v("input_pause_toggle_btn"), NEVER_BTN, "nothing else on A");
+        assert_eq!(std::fs::read_to_string(&darkos_cfg).unwrap(), darkos_text, "dArkOS's own file stays as it was");
+        // The R36S: FN is HOME where the pad has it, else R3.
+        for (keys, home) in [(RK3326_KEYS.to_vec(), "15"), ([RK3326_KEYS, &[708]].concat(), "16")] {
+            let paths = darkos_setup(&dir, &block("GO-Super Gamepad", "event3 js0", &keys), Some(("GO-Super Gamepad", "input_r_btn = \"5\"\ninput_select_btn = \"12\"\n")));
+            assert!(prepare_darkos(&paths, on()).unwrap());
+            assert_eq!(value(&std::fs::read_to_string(&paths.session).unwrap(), "input_enable_hotkey_btn"), Some(home));
+        }
+    }
+
+    /// Switched off in Options → Shortcuts (or Kids Mode): off in dArkOS's RetroArch too, never "nul", and no rewind.
+    #[test]
+    fn darkos_switched_off_combos_stay_off() {
+        let dir = crate::testutil::TestDir::new("ra-hotkeys-darkos-off");
+        let paths = darkos_setup(&dir, &block("retrogame_joypad", "event2 js0", RK3566_KEYS), Some(("retrogame_joypad", DARKOS_RK3566)));
+        for off in [Enabled::none(), Enabled { save: false, load: false, fast_forward: false, rewind: false, over_game: false, screenshot: false, ..on() }] {
+            assert!(prepare_darkos(&paths, off).unwrap());
+            let cfg = std::fs::read_to_string(&paths.session).unwrap();
+            for key in ["input_save_state", "input_load_state", "input_toggle_fast_forward", "input_rewind", "input_fps_toggle", "input_screenshot"] {
+                assert_eq!(value(&cfg, &format!("{key}_btn")), Some(NEVER_BTN), "{key}: {cfg}");
+            }
+            assert_eq!(value(&cfg, "rewind_enable"), Some("false"));
+            assert_eq!(value(&cfg, "input_enable_hotkey_btn"), Some("10"));
+        }
+        let cfg = { prepare_darkos(&paths, Enabled { load: false, ..on() }).unwrap(); std::fs::read_to_string(&paths.session).unwrap() };
+        assert_eq!((value(&cfg, "input_load_state_btn"), value(&cfg, "input_save_state_btn")), (Some(NEVER_BTN), Some("5")), "one off, the rest on");
+    }
+
+    /// No autoconfig, no pad, no HOME key or garbage: no session file (an old one goes), dArkOS's hotkeys stay.
+    #[test]
+    fn darkos_without_a_known_pad_leaves_dark_os_hotkeys_alone() {
+        let dir = crate::testutil::TestDir::new("ra-hotkeys-darkos-none");
+        let no_home: Vec<u16> = RK3566_KEYS.iter().copied().filter(|c| *c != 316).collect();
+        for (devices, autoconfig) in [
+            (block("retrogame_joypad", "event2 js0", RK3566_KEYS), None),
+            (String::new(), Some(("retrogame_joypad", DARKOS_RK3566))),
+            (block("retrogame_joypad", "event2 js0", &no_home), Some(("retrogame_joypad", DARKOS_RK3566))),
+            ("N: Name=\"retrogame_joypad\"\nH: Handlers=js0\nB: KEY=not hex\n".to_string(), Some(("retrogame_joypad", DARKOS_RK3566))),
+        ] {
+            let paths = darkos_setup(&dir, &devices, autoconfig);
+            std::fs::write(&paths.session, "stale").unwrap();
+            assert!(!prepare_darkos(&paths, on()).unwrap());
+            assert!(!paths.session.exists());
+            std::fs::remove_dir_all(&paths.autoconfig).unwrap();
         }
     }
 
