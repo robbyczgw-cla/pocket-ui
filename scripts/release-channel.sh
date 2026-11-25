@@ -7,6 +7,7 @@
 #     --repo        the public GitHub repository whose release v<version> will hold the files
 #     --version     plain X.Y.Z; brick alone also accepts X.Y.Z.W hotfixes (default: from --in)
 #     --ds-core     pinned portable DSperate build folder (binary, licences, full source and recipe)
+#     --hakux       pinned hakuX build folder (Xbox core, licences and source information)
 #     --gba-core    pinned ARM64 gpSP build folder (licence and corresponding source included)
 #     --in          the artefacts (default release-out/): bin/pocket-ui and bin/pocket-core (or a ready
 #                   pocket-ui-<v>-aarch64.tar.gz), optional pocket-ui-<v>-rocknix-install.zip,
@@ -43,6 +44,7 @@ KEY=${POCKETUI_SIGNING_KEY:-$HOME/.config/pocket-ui/store-signing.key}
 NOTES=
 DS_CORE_DIR=
 GBA_CORE_DIR=
+HAKUX_DIR=
 NOTES_FILE=
 PREVIOUS=
 OS_TAR=
@@ -61,6 +63,7 @@ while [ $# -gt 0 ]; do
     --repo) REPO=$2; shift ;;
     --version) VERSION=$2; shift ;;
     --ds-core) DS_CORE_DIR=$2; shift ;;
+    --hakux) HAKUX_DIR=$2; shift ;;
     --gba-core) GBA_CORE_DIR=$2; shift ;;
     --in) IN=$2; shift ;;
     --out) OUT=$2; shift ;;
@@ -220,6 +223,10 @@ else
     python3 -I "$ROOT/scripts/dsperate-files.py" "$DS_CORE_DIR" "$S/cores"
     case " $FILES " in *" cores "*) ;; *) FILES="$FILES cores";; esac
   fi
+  if [ -n "$HAKUX_DIR" ]; then
+    sh "$ROOT/scripts/hakux-files.sh" "$HAKUX_DIR" "$S/hakux"
+    FILES="$FILES hakux"
+  fi
   EPOCH=${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || echo 315532800)}
   # The same bytes for the same files: fixed order, owner and time (GNU tar; another tar packs without them).
   if tar --version 2>/dev/null | grep -q GNU; then
@@ -247,6 +254,10 @@ if [ -n "$DS_CORE_DIR" ]; then
   (cd "$X/.expected-ds" && find . -type f) | while IFS= read -r f; do
     cmp -s "$X/.expected-ds/$f" "$X/cores/$f" || die "the app archive lacks the verified DSperate, licence or source: $f"
   done
+fi
+if [ -n "$HAKUX_DIR" ]; then
+  sh "$ROOT/scripts/hakux-files.sh" "$HAKUX_DIR" "$X/.expected-hakux"
+  diff -qr "$X/.expected-hakux" "$X/hakux" || die "the app archive lacks the verified hakuX bundle"
 fi
 # Old binaries can still be packaged for rollback. A player with the DSperate
 # route must carry its verified core, even when a ready archive was supplied.

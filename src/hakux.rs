@@ -44,6 +44,97 @@ fn installed_in(dir: &Path, retroarch: &Path) -> bool {
     dir.join(CORE_FILE).is_file() && dir.join(INFO_FILE).is_file() && retroarch.exists()
 }
 
+/// These ROCKNIX Snapdragon handhelds have Vulkan 1.3 through Turnip and enough RAM for hakuX.
+pub fn supported(device: &crate::device::Device) -> bool {
+    use crate::device::Model;
+    device.is_sm8550() || matches!(device.model, Some(Model::MiniV1 | Model::MiniV2 | Model::Pocket5 | Model::Flip2))
+}
+
+/// A running ROCKNIX release can carry hakuX in its app archive. The updater in the previous
+/// version already extracts it here. Publish it beside the releases so rollback and pruning keep it.
+#[cfg(target_os = "linux")]
+pub fn seed_running_release(root: &Path) -> std::io::Result<()> {
+    if !supported(crate::device::current()) { return Ok(()); }
+    let exe = std::env::current_exe()?;
+    let Some(release) = exe.parent().filter(|p| p.parent() == Some(root.join("releases").as_path())) else {
+        return Ok(());
+    };
+    seed_bundle(&release.join("hakux"), root)
+}
+
+#[cfg(target_os = "linux")]
+fn seed_bundle(source: &Path, root: &Path) -> std::io::Result<()> {
+    use std::fs;
+    use std::io::{self, Read};
+    use std::os::unix::ffi::OsStrExt;
+
+    fn version(dir: &Path) -> Option<String> {
+        let info = fs::read_to_string(dir.join(INFO_FILE)).ok()?;
+        info.lines().find_map(|line| {
+            let (key, value) = line.split_once('=')?;
+            (key.trim() == "display_version").then(|| value.trim().trim_matches('"').to_string())
+        })
+    }
+
+    fn usable(dir: &Path) -> bool {
+        let mut header = [0; 4];
+        fs::File::open(dir.join(CORE_FILE)).and_then(|mut f| f.read_exact(&mut header)).is_ok()
+            && header == *b"\x7fELF"
+            && dir.join(INFO_FILE).is_file()
+    }
+
+    fn sums_match(dir: &Path, sums: &Path) -> bool {
+        Command::new("sha256sum").arg("-c").arg(sums).current_dir(dir)
+            .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null())
+            .status().is_ok_and(|s| s.success())
+    }
+
+    if !source.is_dir() { return Ok(()); }
+    let target = root.join("hakux");
+    let current = version(&target);
+    let bundled = version(source).ok_or_else(|| io::Error::other("hakuX bundle has no version"))?;
+    let old_sums = target.join("SHA256SUMS");
+    let sums = source.join("SHA256SUMS");
+    let older = current.as_deref().is_some_and(|v| crate::update::newer(&bundled, v));
+    let same = current.as_deref() == Some(bundled.as_str());
+    if !older && usable(&target) {
+        // Check listed checksums on an actual upgrade, including older installs whose installer
+        // removed SHA256SUMS. Preserve an unversioned/manual core when its files are usable.
+        let pending = root.join("update-pending").is_file();
+        if !pending || if old_sums.is_file() { sums_match(&target, &old_sums) }
+            else { !same || sums_match(&target, &sums) } {
+            return Ok(());
+        }
+    }
+    if !usable(source) || !sums_match(source, &sums) {
+        return Err(io::Error::other("hakuX bundle failed its checksum"));
+    }
+    let stage = root.join(format!(".hakux-seed-{}", std::process::id()));
+    if stage.is_dir() { fs::remove_dir_all(&stage)?; }
+    fs::create_dir(&stage)?;
+    let result = (|| {
+        let status = Command::new("cp").arg("-a").arg(source.join(".")).arg(&stage).status()?;
+        if !status.success() { return Err(io::Error::other("could not copy hakuX bundle")); }
+        crate::fsutil::sync_tree(&stage)?;
+        if !target.exists() {
+            crate::fsutil::rename_no_replace(&stage, &target)?;
+        } else {
+            // Exchange whole directories on STORAGE (ext4). Power loss leaves the old or the
+            // new bundle in place, including its matching core info and licence files.
+            let from = std::ffi::CString::new(stage.as_os_str().as_bytes())?;
+            let to = std::ffi::CString::new(target.as_os_str().as_bytes())?;
+            // SAFETY: the two paths are NUL-terminated and outlive the syscall.
+            let rc = unsafe { libc::syscall(libc::SYS_renameat2, libc::AT_FDCWD, from.as_ptr(),
+                libc::AT_FDCWD, to.as_ptr(), libc::RENAME_EXCHANGE) };
+            if rc != 0 { return Err(io::Error::last_os_error()); }
+        }
+        crate::fsutil::sync_dir(root);
+        Ok(())
+    })();
+    if stage.is_dir() { let _ = fs::remove_dir_all(&stage); }
+    result
+}
+
 /// Whether the core's `.info` says it has save states (RetroArch's own source for it: its menu and run-ahead read the same key).
 pub fn states_supported(info: &str) -> bool {
     info.lines().any(|l| {
@@ -363,6 +454,84 @@ pub fn state_file(dir: &Path, base: &str, slot: i32) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn xbox_is_only_offered_on_the_snapdragon_handhelds_that_can_run_it() {
+        for model in ["mini", "miniv2", "rp5", "flip2", "rp6", "odin2mini"] {
+            assert!(supported(&crate::device::from_override(model)), "{model}");
+        }
+        for model in ["rg35xx-plus", "r36s", "rg353m", "rg-ds-plus", "Retroid Pocket Classic", "generic"] {
+            assert!(!supported(&crate::device::from_override(model)), "{model}");
+        }
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn xbox_is_unavailable_on_trimui_and_darkos() {
+        use crate::device::{self, Model};
+        use crate::brick_profile::Board;
+        // The own card names its board through POCKETUI_DEVICE. The pak identifies it by the
+        // panel instead. Once identified, both use the same capability check.
+        let root = crate::testutil::TestDir::new("hakux-trimui");
+        for (key, board, framebuffer) in [("brick", Board::Brick, "1024,1536"), ("smartpro", Board::SmartPro, "1280,1440")] {
+            let device = device::from_override(key);
+            assert_eq!(device.model, Some(Model::Brick(board)));
+            assert!(!supported(&device));
+            std::fs::create_dir_all(root.join("usr/trimui/bin")).unwrap();
+            std::fs::create_dir_all(root.join("mnt/SDCARD/.system")).unwrap();
+            std::fs::create_dir_all(root.join("sys/class/graphics/fb0")).unwrap();
+            std::fs::write(root.join("usr/trimui/bin/MainUI"), board.name()).unwrap();
+            std::fs::write(root.join("sys/class/graphics/fb0/virtual_size"), framebuffer).unwrap();
+            let device = device::read(&root);
+            assert_eq!(device.model, Some(Model::Brick(board)));
+            assert!(!supported(&device));
+        }
+        for key in ["darkos-r36s", "darkos-rg353m"] {
+            let device = device::from_override(key);
+            assert!(device.model.is_some(), "{key}");
+            assert!(!supported(&device), "{key}");
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn running_update_seeds_missing_and_repairs_old_or_damaged_xbox_core() {
+        use std::fs;
+        let root = crate::testutil::TestDir::new("hakux-seed");
+        let source = root.join("releases/next/hakux");
+        fs::create_dir_all(source.join("licenses")).unwrap();
+        let core = b"\x7fELF bundled";
+        let info = b"display_version = \"1.3.0\"\n";
+        fs::write(source.join(CORE_FILE), core).unwrap();
+        fs::write(source.join(INFO_FILE), info).unwrap();
+        fs::write(source.join("licenses/COPYING"), b"licence").unwrap();
+        fs::write(source.join("SHA256SUMS"), format!("{}  ./{}\n{}  ./{}\n",
+            crate::signed_data::sha256_hex(core), CORE_FILE, crate::signed_data::sha256_hex(info), INFO_FILE)).unwrap();
+        fs::write(root.join("update-pending"), b"next").unwrap();
+
+        let target = root.join("hakux");
+        seed_bundle(&source, &root).unwrap();
+        assert_eq!(fs::read(target.join(CORE_FILE)).unwrap(), core);
+        assert!(target.join("licenses/COPYING").is_file());
+
+        fs::write(target.join("owner-marker"), b"keep").unwrap();
+        seed_bundle(&source, &root).unwrap();
+        seed_bundle(&root.join("releases/without-xbox/hakux"), &root).unwrap();
+        assert!(target.join("owner-marker").is_file());
+
+        fs::write(target.join(CORE_FILE), b"\x7fELF truncated").unwrap();
+        seed_bundle(&source, &root).unwrap();
+        assert_eq!(fs::read(target.join(CORE_FILE)).unwrap(), core);
+
+        fs::remove_file(target.join("SHA256SUMS")).unwrap();
+        fs::write(target.join(INFO_FILE), b"display_version = \"1.4.0\"").unwrap();
+        fs::write(target.join(CORE_FILE), b"\x7fELF newer").unwrap();
+        seed_bundle(&source, &root).unwrap();
+        assert_eq!(fs::read(target.join(CORE_FILE)).unwrap(), b"\x7fELF newer");
+        fs::write(target.join(INFO_FILE), b"display_version = \"1.2.0\"").unwrap();
+        seed_bundle(&source, &root).unwrap();
+        assert_eq!(fs::read(target.join(CORE_FILE)).unwrap(), core);
+    }
 
     #[test]
     fn file_source_rule_hakux_settings() {

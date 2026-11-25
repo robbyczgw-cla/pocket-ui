@@ -81,7 +81,7 @@ src/auto_off.rs	4	auto-off
 src/background_io.rs	12	unit:file_source_rule_background_reads_have_the_same_bytes_and_errors,unit:r36s_readers_a_cancelled_job_cannot_read_seek_walk_or_stat
 src/backup.rs	11	backup
 src/backup_saves.rs	19	backup-saves
-src/battery.rs	1	UNASSIGNED
+src/battery.rs	6	UNASSIGNED
 src/battery_curve.rs	1	battery-curve
 src/battery_games.rs	1	battery-games
 src/battery_history.rs	9	battery-history
@@ -153,7 +153,7 @@ src/gamelist.rs	3	gamelist
 src/games_card.rs	3	UNASSIGNED
 src/h700_gba.rs	6	unit:file_source_rule_gba_state_headers
 src/h700_volume.rs	4	unit:file_source_rule_h700_ucm
-src/hakux.rs	2	unit:file_source_rule_hakux_settings
+src/hakux.rs	4	unit:file_source_rule_hakux_settings
 src/heat.rs	5	UNASSIGNED
 src/hostsys.rs	8	scummvm-ini
 src/hw_render.rs	2	unit:file_source_rule_retroarch_option_files
@@ -176,7 +176,7 @@ src/library_sync.rs	6	library-sync-own,library-sync-foreign,library-history-own,
 src/library_systems.rs	2	systems
 src/libretro.rs	5	sram-file,sram-oversize,rtc-file,core-resume-raw,core-resume-compressed
 src/logs.rs	18	boot-state,kernel-log,sensors-log
-src/low_battery.rs	4	unit:reads_the_level_and_the_charger_from_sysfs,unit:r36s_does_not_switch_off_when_critical_percent_disagrees_with_voltage
+src/low_battery.rs	3	unit:reads_the_level_and_the_charger_from_sysfs,unit:r36s_does_not_switch_off_when_critical_percent_disagrees_with_voltage
 src/main.rs	17	UNASSIGNED
 src/mako_osd.rs	1	unit:file_source_rule_notification_config
 src/manual_time.rs	1	UNASSIGNED
@@ -257,7 +257,7 @@ src/switcher.rs	6	UNASSIGNED
 src/sync.rs	11	sync-prefs,sync-config
 src/sync_conflicts.rs	6	sync-conflict
 src/system_cfg.rs	12	system-cfg
-src/system_ctl.rs	19	unit:file_source_rule_real_hardware_preferences
+src/system_ctl.rs	20	unit:file_source_rule_real_hardware_preferences
 src/systems_grid.rs	1	UNASSIGNED
 src/tailscale.rs	6	tailscale-prefs
 src/text.rs	1	installed-title-font,installed-body-font

@@ -4,8 +4,8 @@
 //! The history behind the page (48 hours, one sample a minute, kept over restarts) is
 //! `battery_history`; what it means in time (time left, full in, the draw of a system) is
 //! `battery_estimate`. The sign of `current_now` differs between fuel gauges (the Mini V2's reads
-//! positive on battery and negative while charging), so the charging state comes from `status`, never
-//! from the sign.
+//! positive on battery and negative while charging). The charging state comes from `status` and
+//! the system power supplies, never from the sign.
 //!
 //! What the Mini V2 exposes in `/sys/class/power_supply/battery` (checked on the device, 22 Oct 2026):
 //! `capacity` (whole percent), `status`, `voltage_now` (µV), `current_now` (µA), `temp` (0.1 °C),
@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 
 use crate::battery_estimate::{Draw, Estimate};
 use crate::gfx::Canvas;
+use crate::system_ctl::{Charge, parse_charge};
 use crate::text::{Face, Text};
 
 pub use crate::battery_history::{GAP, KEEP};
@@ -30,6 +31,47 @@ pub const FULL_FROM: u8 = 95;
 /// The battery's directory in sysfs; `POCKETUI_BATTERY` points somewhere else (tests, the virtual device).
 pub fn dir() -> PathBuf {
     PathBuf::from(std::env::var("POCKETUI_BATTERY").unwrap_or_else(|_| "/sys/class/power_supply/battery".into()))
+}
+
+/// A power supply belonging to an attached device, such as a gamepad.
+pub(crate) fn peripheral_supply(dir: &Path) -> bool {
+    let name = dir.file_name().unwrap_or_default().to_string_lossy();
+    name.starts_with("ps-controller")
+        || name.starts_with("hid-")
+        || std::fs::read_to_string(dir.join("scope")).is_ok_and(|scope| scope.trim() == "Device")
+}
+
+/// The device battery's state, checked against the system's input supplies.
+pub(crate) fn read_charge(dir: &Path) -> Charge {
+    let status = std::fs::read_to_string(dir.join("status")).unwrap_or_default();
+    let charge = parse_charge(&status);
+    let mut has_online_file = false;
+
+    let supplies = dir.parent().and_then(|parent| std::fs::read_dir(parent).ok());
+    for entry in supplies.into_iter().flatten().flatten() {
+        let supply = entry.path();
+        if supply == dir
+            || !std::fs::read_to_string(supply.join("type")).is_ok_and(|kind| kind.trim() != "Battery")
+            || peripheral_supply(&supply)
+        {
+            continue;
+        }
+
+        match std::fs::read_to_string(supply.join("online")) {
+            Ok(value) => {
+                has_online_file = true;
+                // ROCKNIX 20261001's SMB5 exports the raw USB plug-in bit (BIT(4)).
+                let value = value.trim();
+                if value == "1" || (value == "16" && entry.file_name() == "pm8150b-charger") {
+                    return if charge == Charge::Charging { Charge::Charging } else { Charge::Full };
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => has_online_file = true,
+        }
+    }
+
+    if has_online_file { Charge::Discharging } else { charge }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -107,14 +149,12 @@ pub fn read(dir: &Path, t: u64) -> Option<Sample> {
     let get = |name: &str| std::fs::read_to_string(dir.join(name)).ok().map(|s| s.trim().to_string());
     let num = |name: &str| get(name).and_then(|s| s.parse::<i64>().ok());
     let capacity = num("capacity")?.clamp(0, 100) as u8;
-    let status = get("status").unwrap_or_default();
+    let charge = read_charge(dir);
     Some(Sample {
         t,
         capacity,
-        charging: status == "Charging",
-        // "Not charging": the charger is in and not charging (the RG35XX Plus at 100 %, a charge that stopped early), as
-        // `low_battery` reads it. Not "on battery": 18 hours of it once made a day without drain.
-        full: matches!(status.as_str(), "Full" | "Not charging"),
+        charging: charge == Charge::Charging,
+        full: charge == Charge::Full,
         mv: num("voltage_now").map_or(0, |uv| (uv / 1000).clamp(0, u16::MAX as i64) as u16),
         ma: num("current_now").map_or(0, |ua| (ua / 1000).clamp(i32::MIN as i64, i32::MAX as i64) as i32),
         temp: num("temp").map(|t| t.clamp(i16::MIN as i64 + 1, i16::MAX as i64) as i16),

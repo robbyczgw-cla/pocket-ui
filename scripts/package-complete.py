@@ -103,8 +103,13 @@ def need_files(cores, have, where, problems):
             problems.append(f'{core}: {len(missing)} of {len(NEEDS[core])} system files missing in {where}: ' + ', '.join(missing))
 
 
+def rocknix_xbox_files(pkg):
+    return ['ROCKNIX hakuX bundle in package: ' + name for name in sorted(pkg.files)
+            if 'hakux' in Path(name).parts or Path(name).name == 'hakux_libretro.so']
+
+
 def check_brick(pkg):
-    problems = []
+    problems = rocknix_xbox_files(pkg)
     cores = pkg.cores(r'(.*?app/)cores/([^/]+)_libretro\.so')
     if not cores:
         return ['no app/cores/*_libretro.so: not a Brick card or update'], []
@@ -140,7 +145,7 @@ DARKOS_HOST = ('ppsspp', 'flycast', 'mupen64plus_next')
 
 
 def check_darkos(pkg):
-    problems = []
+    problems = rocknix_xbox_files(pkg)
     cores = pkg.cores(r'(.*?bin/)cores/([^/]+)_libretro\.so')
     if not cores:
         return ['no bin/cores/*_libretro.so: not a dArkOS port'], []

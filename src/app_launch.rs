@@ -211,6 +211,13 @@ fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, 
     }
     let hosted = Player::of(&game.system, &game.emulator, &game.core) == Player::Hosted;
     let (system, path, emulator, core) = (&game.system, &game.path, &game.emulator, &game.core);
+    #[cfg(target_os = "linux")]
+    if system == "xbox" && !pocket_ui::proc::mock() && !pocket_ui::hakux::supported(pocket_ui::device::current()) {
+        return (Outcome::Empty("Xbox games need a stronger handheld, like the Retroid Pocket 5 or Mini V2.".into()), fan(false));
+    }
+    if emulator == "hakux" && !pocket_ui::proc::mock() && !pocket_ui::hakux::installed() {
+        return (Outcome::Empty("hakuX is missing. Install a pocket-ui update to play Xbox games.".into()), fan(false));
+    }
     // A RomM game's first start: its download, unless it is on the card (`app_romm`). What went wrong is the start's note.
     if let Some(r) = romm {
         if let Err(f) = r.run(path) { return (Outcome::Empty(f.words()), fan(false)); }

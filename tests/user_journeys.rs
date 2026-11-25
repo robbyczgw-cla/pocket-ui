@@ -2988,7 +2988,8 @@ true
         ui.send("home");
         let menu = ui.sees("Quit");
         assert!(menu.contains("Halo - Combat Evolved") && menu.contains("Continue"), "{menu}");
-        assert!(menu.contains("handles its own saves"), "a guest emulator's menu says that saves are its own: {menu}");
+        // 0.7.2 (6be6d605c): Xbox stays on hakuX inside RetroArch (no silent xemu); its menu says save states are not there yet.
+        assert!(menu.contains("No save states for Xbox games yet"), "the Xbox menu says how saving works: {menu}");
         // The menu takes buttons once it has settled (a loaded host got the presses too early).
         std::thread::sleep(Duration::from_millis(600));
         // The guest's menu wraps: Up from Continue is Quit (Down ×8 came back to Continue in this four-row menu).

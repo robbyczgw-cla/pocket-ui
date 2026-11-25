@@ -17,9 +17,11 @@ DIR=$2
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 mkdir -p "$DIR/licenses"
 SO=$HAKUX_DIR/lib/libretro/hakux_libretro.so
+[ -s "$SO" ] || SO=$HAKUX_DIR/lib/libretro/hakux-lr_libretro.so   # hakuX-lr release archives (renamed below)
 [ -s "$SO" ] || SO=$HAKUX_DIR/hakux_libretro.so
 [ -s "$SO" ] || bad "no hakux_libretro.so in $HAKUX_DIR"
 LICS=$HAKUX_DIR/share/licenses/hakux
+[ -d "$LICS" ] || LICS=$HAKUX_DIR/share/licenses/hakux-lr
 [ -d "$LICS" ] || LICS=$HAKUX_DIR/licenses
 [ -s "$LICS/COPYING" ] || bad "the core's licence texts are missing ($LICS/COPYING)"
 install -m 755 "$SO" "$DIR/hakux_libretro.so"
@@ -29,5 +31,6 @@ for P in "$ROOT"/deploy/hakux/patches/*.patch; do   # none while the core is a P
   mkdir -p "$DIR/patches" && install -m 644 "$P" "$DIR/patches/"
 done
 [ ! -s "$HAKUX_DIR/BUILD-INFO" ] || install -m 644 "$HAKUX_DIR/BUILD-INFO" "$DIR/"
-cp "$LICS/"* "$DIR/licenses/" && chmod 644 "$DIR/licenses/"*
+cp -R "$LICS/." "$DIR/licenses/"   # hakuX-lr has a folder in it (dsp-jit/: the Rust crates' licences)
+find "$DIR/licenses" -type d -exec chmod 755 {} + && find "$DIR/licenses" -type f -exec chmod 644 {} +
 (cd "$DIR" && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum >SHA256SUMS)

@@ -8,19 +8,22 @@ The spike that preceded this (the port of hakuX PR #9 booted Jade Empire in Retr
 
 - **Core**: `hakux_libretro.so` and `hakux_libretro.info` in `/storage/pocket-ui/hakux/` (not in ROCKNIX's libretro folder,
   not in a release folder: an update of pocket-ui leaves them alone), with `licenses/` and `SOURCE.txt`.
-  Built from [hakuX-Linux](https://github.com/robbyczgw-cla/hakuX-Linux), branch `linux-1.3.0`, at
-  `035ec48acde326b017a3f6cd4bc888e1633172df`, unpatched: hakuX 1.3.0 by rfandango with the Linux/libretro port by portare-ch
-  (hakuX PR #9) and our fixes (among them the audio relaunch fix, for Jade Empire's silence after its relaunch into the game),
-  with the fork's own tools in an aarch64 container (`scripts/build-hakux-core.sh`). Needs glibc 2.38 at most, Vulkan 1.3 (Turnip on the Mini V2).
-- **Attribution**: *Xbox: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), built from
-  hakuX-Linux linux-1.3.0 at 035ec48.* In `NOTICE.md` (on the device in `/storage/pocket-ui/licences`, Settings → Help & tools → About), `docs/LICENCES.md`
+  The [hakuX-lr](https://github.com/portare-ch/hakuX-lr) 0.38.0 release core by portare-ch (based on hakuX by rfandango), asset
+  `hakux-lr-0.38.0-aarch64.tar.gz` of release `linux-v0.38.0`, built by the project's CI from
+  `dbc8b167782a84d20c41be7feb9d0f19e5f9a4a8`, unpatched and only renamed to `hakux_libretro.so` (our audio relaunch fix for Jade
+  Empire is upstream there). `scripts/hakux-files.sh` takes the unpacked archive. Needs glibc 2.38 at most, Vulkan 1.2 (Turnip on
+  the Mini V2). It writes its own dashboard into the console disk (`hdd/Partition2`) and may rewrite `hdd/eeprom.bin`.
+  `scripts/build-hakux-core.sh` still builds the former 1.3.0 core from the hakuX-Linux fork.
+- **Attribution**: *Xbox: hakuX-lr 0.38.0 by portare-ch (PortareOS), based on hakuX by rfandango (GPL-3.0), release
+  linux-v0.38.0 at dbc8b16.* In `NOTICE.md` (on the device in `/storage/pocket-ui/licences`, Settings → Help & tools → About), `docs/LICENCES.md`
   section 5.2, and the manual. The core is GPL-3.0-or-later and loaded by RetroArch, a separate GPL-3.0-or-later program;
   pocket-ui never loads it. Whoever ships the core ships `SOURCE.txt` (commit, link, checksums) and `licenses/`.
 
 ## How it starts
 
-`hostsys::default_emulator("xbox")` returns `("hakux", "hakux")` once the core, its `.info` and `/usr/bin/retroarch` are there
-(`hakux::installed`), so the shelf's Xbox games use it; the player can still pick xemu on the Runs on page.
+`hostsys::default_emulator("xbox")` returns `("hakux", "hakux")`. The launcher checks for the core, its `.info` and
+`/usr/bin/retroarch` before starting. If hakuX is missing, the shelf tells the player how to get it. Players can choose xemu on
+the Runs on page.
 `standalone::launch` calls `hakux::prepare`: the folders, hakuX's core options (written once) and the appendconfig
 `<data>/hakux/pocket-ui.cfg`, rewritten at every start with a free UDP port for RetroArch's network commands. `main.rs`
 `spawn_game` then runs
@@ -112,15 +115,15 @@ measured: the Odin 2 Mini and the pause menu's Continue with this core.
 `scripts/build-hakux-core.sh` builds the package from the fork's commit (`HAKUX_REPO` can point at a local clone) plus any patches in `deploy/hakux/patches/` (none today; applied
 with `git am`, committer and date fixed, so a patched commit has the same id everywhere) inside the fork's own Debian image on an
 aarch64 Docker host (`HAKUX_BUILD_HOST`, an Apple-silicon Mac), with the fork's pinned dependencies cached in `~/hakux-core-deps`
-there; `scripts/hakux-files.sh DIR DEST` copies everything that must travel with the core (both packages use it, so they cannot
-drift):
+there. The package builders use `scripts/hakux-files.sh DIR DEST` to copy the same bundle:
 `hakux_libretro.so`, the `.info` of `deploy/hakux/` (the one a test pins to "no save states"), `SOURCE.txt`, `BUILD-INFO`, our `patches/` and
 the core's `licenses/`, with its own `SHA256SUMS`. `scripts/make-install-zip.sh --hakux DIR` puts that into the package as
-`hakux/` for the SSH and ports install, `deploy/package/install.sh` checks the sums and installs it to `/storage/pocket-ui/hakux`
-(tested in `deploy/package/test-package.sh`); `scripts/make-fat-install.sh --hakux DIR` puts the same files into the card seed as
-`pocket-ui/hakux/`, which the card hook copies to the same place (tested in `deploy/fat/test-hook.sh`). Without `--hakux` a
-package has no Xbox core and Xbox games stay with xemu. **The SD-card image build (`scripts/image/build.sh`) does not carry the
-core yet.**
+`hakux/` for the SSH and ports install. The installer checks the sums and copies the bundle into the new release folder.
+`scripts/make-fat-install.sh --hakux DIR` puts it in the same release folder in the card seed. The signed app update
+(`scripts/release-channel.sh --hakux DIR`) also uses that layout, including when the update comes from an offline ZIP.
+When the new app starts, it seeds the shared hakuX folder if the core is missing, older or damaged. App rollbacks and updates
+without a bundle leave the shared folder in place. Xbox saves are in the separate data directory.
+**The SD-card image build (`scripts/image/build.sh`) does not carry the core yet.**
 
 ## Known limits and open points
 

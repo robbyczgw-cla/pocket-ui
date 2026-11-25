@@ -419,10 +419,10 @@ fn roms_of(bios_dir: &Path) -> &Path {
 
 /// The emulator and core that play a game pocket-core doesn't (or can't), when es_systems.cfg's default can't:
 /// without the official PICO-8, start_pico8.sh has nothing to start, so RetroArch's fake08 does; Xbox games go to hakuX
-/// once its core is installed. None: the default.
+/// even when its core still needs to be installed. None: the default.
 pub fn default_emulator(system: &str, bios_dir: &Path) -> Option<(&'static str, &'static str)> {
-    // Xbox: ROCKNIX's xemu doesn't run on this hardware; with the hakuX core installed (`hakux`) it plays, in RetroArch.
-    if system == "xbox" && crate::hakux::installed() {
+    // Xbox uses hakuX by default. Launch preparation checks whether it is installed.
+    if system == "xbox" {
         return Some(("hakux", "hakux"));
     }
     let o = find(system)?.official.as_ref()?;
@@ -818,6 +818,27 @@ impl HostSystem {
 mod tests {
     use super::*;
     use crate::testutil::TestDir;
+
+    #[test]
+    fn xbox_keeps_hakux_as_default_without_the_core() {
+        let dir = crate::testutil::TestDir::new("xbox-default");
+        let emulators = [crate::emu_choice::EsEmulator {
+            name: "xemu".into(),
+            cores: vec!["xemu-sa".into()],
+            ..Default::default()
+        }];
+        let ctx = crate::emu_choice::Ctx {
+            system: "xbox", emulators: &emulators, pocket_core: None, pocket_cores: &[],
+            file_ok: true, fell_back: false, default_override: default_emulator("xbox", &dir),
+        };
+        use crate::emu_choice::{resolve, Cfg, Runner};
+        let automatic = resolve(&ctx, &Cfg::default(), Some("Top Spin.iso"));
+        assert_eq!(automatic.runner, Runner::new("hakux", "hakux"));
+        for config in ["xbox.emulator=xemu", r#"xbox["Top Spin.iso"].emulator=xemu"#] {
+            let chosen = resolve(&ctx, &Cfg::parse(config), Some("Top Spin.iso"));
+            assert_eq!(chosen.runner, Runner::new("xemu", "xemu-sa"));
+        }
+    }
 
     #[test]
     fn an_h700_leaves_the_heavy_systems_to_rocknix() {

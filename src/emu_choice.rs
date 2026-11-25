@@ -307,6 +307,7 @@ fn chosen(ctx: &Ctx, cfg: &Cfg, emu_key: &str, core_key: &str, base: &Runner) ->
             Some(c) if ctx.pocket_core.is_some() => Some(Runner::new(POCKET_CORE, c)),
             _ => ctx.pocket(),
         },
+        Some("hakux") if ctx.default_override == Some(("hakux", "hakux")) => Some(Runner::new("hakux", "hakux")),
         Some(name) => {
             let e = emulator(ctx.emulators, name)?;
             let core = core.filter(|c| e.cores.iter().any(|x| x == c)).unwrap_or_else(|| default_core(e));
@@ -330,6 +331,7 @@ fn chosen(ctx: &Ctx, cfg: &Cfg, emu_key: &str, core_key: &str, base: &Runner) ->
             Some(c) if ctx.pocket_core.is_some() => Some(Runner::new(POCKET_CORE, c)),
             _ => ctx.pocket(),
         },
+        Some("hakux") if ctx.default_override == Some(("hakux", "hakux")) => Some(Runner::new("hakux", "hakux")),
         Some(name) => {
             let e = emulator(ctx.emulators, name)?;
             let core = core.filter(|c| e.cores.iter().any(|x| x == c)).unwrap_or_else(|| default_core(e));
@@ -491,7 +493,9 @@ pub fn installed(r: &Runner, system: &str, exists: impl Fn(&Path) -> bool) -> bo
                 .any(|d| exists(&Path::new(d).join(&so)))
         }
         // hakuX is started by pocket-ui itself: its core in pocket-ui's folder and ROCKNIX's RetroArch.
-        Kind::Standalone if r.emulator == "hakux" => exists(&crate::hakux::core_path()) && exists(Path::new(crate::hakux::RETROARCH)),
+        Kind::Standalone if r.emulator == "hakux" => exists(&crate::hakux::core_path())
+            && exists(&Path::new(crate::hakux::DIR).join(crate::hakux::INFO_FILE))
+            && exists(Path::new(crate::hakux::RETROARCH)),
         Kind::Standalone => {
             let script = match (r.emulator.as_str(), system) {
                 ("mednafen", _) => "start_mednafen.sh".to_string(),

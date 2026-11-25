@@ -159,6 +159,9 @@ ok "essway.service, start_es.sh, /storage/.config/system.d"
 
 # Room on /storage: the programs once more next to an older version, and some to spare.
 need=$(du -sk "$F" | cut -f1)
+if [ -d "$HERE/hakux" ]; then
+  need=$((need + $(du -sk "$HERE/hakux" | cut -f1)))
+fi
 need=$((need * 2 + 10240))
 free=$(df -Pk "$R/storage" 2>/dev/null | awk 'NR == 2 { print $4 }')
 [ -n "$free" ] && [ "$free" -ge "$need" ] || die "not enough room on /storage: ${free:-?} KB free, $need KB needed"
@@ -173,6 +176,13 @@ for f in pocket-ui pocket-core pocket-splash portmaster-setup.sh; do
   cp "$F/$f" "$STAGE/$f" && chmod 755 "$STAGE/$f" || die "cannot copy $f to $STAGE"
 done
 [ ! -d "$F/cores" ] || cp -r "$F/cores" "$STAGE/cores" || die "cannot copy bundled cores"
+# Like the signed app updater, pass the bundle to the new release. The first start
+# installs it if needed and only on supported hardware. The installer never replaces
+# the live Xbox folder.
+if [ -d "$HERE/hakux" ]; then
+  (cd "$HERE/hakux" && sha256sum -c SHA256SUMS >/dev/null 2>&1) || die "hakux/ does not match its SHA256SUMS: unpack the package again"
+  cp -r "$HERE/hakux" "$STAGE/hakux" || die "cannot copy bundled hakuX"
+fi
 # The Chinese font files, next to the programs (scripts/shipped-fonts.sh).
 [ ! -d "$F/fonts" ] || cp -r "$F/fonts" "$STAGE/fonts" || die "cannot copy the font files"
 for b in pocket-ui pocket-core pocket-splash; do
@@ -210,6 +220,9 @@ same_release() {
   if [ -d "$STAGE/cores" ]; then
     [ -d "$REL/cores" ] && diff -r "$STAGE/cores" "$REL/cores" >/dev/null 2>&1 || return 1
   elif [ -d "$REL/cores" ]; then return 1; fi
+  if [ -d "$STAGE/hakux" ]; then
+    diff -r "$STAGE/hakux" "$REL/hakux" >/dev/null 2>&1 || return 1
+  fi
   # A release installed before the font files came along is not the same: they are added.
   if [ -d "$STAGE/fonts" ]; then
     [ -d "$REL/fonts" ] && diff -r "$STAGE/fonts" "$REL/fonts" >/dev/null 2>&1 || return 1
@@ -229,9 +242,6 @@ same_install() {
     cmp -s "$F/10-pocket-ui.conf" "$DROPIN" && cmp -s "$F/pocket-splash.service" "$SPLASH" &&
     [ "$(readlink "$SPLASH_LINK" 2>/dev/null)" = ../pocket-splash.service ] &&
     diff -r "$LIC" "$APP/licences" >/dev/null 2>&1 || return 1
-  if [ -d "$HERE/hakux" ]; then
-    (cd "$APP/hakux" && sha256sum -c "$HERE/hakux/SHA256SUMS" >/dev/null 2>&1) || return 1
-  fi
   systemctl show -p DropInPaths --value essway 2>/dev/null | grep -q 10-pocket-ui.conf &&
     systemctl show -p Environment --value essway 2>/dev/null | grep -q POCKETUI_AS_ESSWAY=1
 }
@@ -275,15 +285,6 @@ rm -rf "$APP/licences.new"
 { mkdir -p "$APP/licences.new" && cp "$LIC/"* "$APP/licences.new/" && chmod 644 "$APP/licences.new/"* &&
   rm -rf "$APP/licences" && mv "$APP/licences.new" "$APP/licences"; } || die "cannot write the licence texts $APP/licences"
 ok "licences (/storage/pocket-ui/licences)"
-# The Xbox core (hakuX, docs/XBOX.md) when the package has it: /storage/pocket-ui/hakux, next to the releases, so an update of
-# pocket-ui leaves it alone. Checked against the package's sums first.
-if [ -d "$HERE/hakux" ]; then
-  (cd "$HERE/hakux" && sha256sum -c SHA256SUMS >/dev/null 2>&1) || die "hakux/ does not match its SHA256SUMS: unpack the package again"
-  rm -rf "$APP/hakux.new"
-  { mkdir -p "$APP/hakux.new" && cp -r "$HERE/hakux/." "$APP/hakux.new/" && rm -f "$APP/hakux.new/SHA256SUMS" &&
-    chmod 755 "$APP/hakux.new/hakux_libretro.so" && rm -rf "$APP/hakux" && mv "$APP/hakux.new" "$APP/hakux"; } || die "cannot write $APP/hakux"
-  ok "Xbox core (/storage/pocket-ui/hakux)"
-fi
 # A copy of uninstall.sh stays with the programs, for when the package folder is gone.
 cp "$HERE/uninstall.sh" "$APP/uninstall.sh" 2>/dev/null && chmod 755 "$APP/uninstall.sh"
 old=$(readlink "$APP/current" 2>/dev/null)

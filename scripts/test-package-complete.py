@@ -146,6 +146,16 @@ class DarkOS(unittest.TestCase):
             self.assertEqual(run('darkos', t)[0], 1)
 
 
+class RocknixOnly(unittest.TestCase):
+    def test_brick_card_and_darkos_port_reject_hakux(self):
+        for platform, core in [('brick', 'app/cores/gpsp_libretro.so'), ('darkos', 'app/bin/cores/gpsp_libretro.so')]:
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as t:
+                tree(t, [core, 'app/hakux/hakux_libretro.so'])
+                rc, out = run(platform, t)
+                self.assertEqual(rc, 1)
+                self.assertIn('ROCKNIX hakuX bundle', out)
+
+
 class Tree(unittest.TestCase):
     def test_unpacked_storage_tree(self):
         with tempfile.TemporaryDirectory() as t:

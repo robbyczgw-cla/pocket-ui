@@ -254,17 +254,17 @@ A few pause-menu essentials (like unbinding HOME from PS2's Analog toggle) re-ap
 
 ## Xbox
 
-*Experimental.* Place original Xbox XISO `.iso` discs inside `roms/xbox` (no BIOS or HDD image needed). Runs on
-**hakuX** inside RetroArch (bundled in `/storage/pocket-ui/hakux`; falls back to ROCKNIX's xemu if absent; switchable
-under [Runs on](options.md#runs-on)).
+*Experimental, on Snapdragon 865 and 8 Gen 2 handhelds.* Place original Xbox XISO `.iso` discs inside `roms/xbox` (no BIOS or HDD image needed). Runs on
+**hakuX** inside RetroArch. If hakuX is missing, install a current [pocket-ui update](updates.md).
+You can also choose xemu under [Runs on](options.md#runs-on).
 
 - **Pause menu (HOME):** Continue, Options, Quick settings, Quit. [Options](options-big.md#xbox-experimental) lets you
   pick Resolution (Original 480p or 2x 960p) and Screen scaling (Aspect, Fullscreen, Integer), applied on next start.
 - **Saves:** in-game saves work and store inside pocket-ui's folder (never cluttering `roms/xbox`). **Save states aren't
   supported yet**; Save, Load and Continue will appear once the core adds them.
 - Compatibility, speed and audio vary on this young port; let us know what works for you.
-- Credits: hakuX by rfandango (GPL-3.0), Linux/libretro port by portare-ch (PortareOS), built from hakuX-Linux
-  linux-1.3.0 at 035ec48. Full licence and source links live in `/storage/pocket-ui/licences/NOTICE.md`.
+- Credits: hakuX-lr 0.38.0 by portare-ch (PortareOS), based on hakuX by rfandango (GPL-3.0), release
+  linux-v0.38.0 at dbc8b16. Full licence and source links live in `/storage/pocket-ui/licences/NOTICE.md`.
 
 ## On standalone emulators
 

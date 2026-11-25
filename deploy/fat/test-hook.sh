@@ -37,7 +37,7 @@ build_tar() { # $1 = version, $2 = hakux
   echo '[Unit]' >"$T/tree/.config/system.d/pocket-splash.service"
   ln -s ../pocket-splash.service "$T/tree/.config/system.d/sysinit.target.wants/pocket-splash.service"
   if [ "${2:-}" = hakux ]; then
-    H=$T/tree/pocket-ui/hakux
+    H=$R/hakux
     mkdir -p "$H/licenses" "$H/patches"
     echo core >"$H/hakux_libretro.so"; chmod 755 "$H/hakux_libretro.so"
     echo 'savestate = "false"' >"$H/hakux_libretro.info"
@@ -105,7 +105,7 @@ check "no shell error" '! grep -qi "not found\|error\|syntax" "$T/out"'
 check "programs in releases/$V" '[ -x "$T/storage/pocket-ui/releases/$V/pocket-ui" ] && [ -x "$T/storage/pocket-ui/releases/$V/pocket-splash" ]'
 check "current and fixed links" '[ "$(readlink "$T/storage/pocket-ui/current")" = "releases/$V" ] && [ "$(readlink "$T/storage/pocket-ui/pocket-ui")" = current/pocket-ui ] && [ -x "$T/storage/pocket-ui/pocket-core" ]'
 check "licences" '[ -f "$T/storage/pocket-ui/licences/LICENSE" ]'
-check "Xbox core in pocket-ui/hakux with what must travel with it" '[ -x "$T/storage/pocket-ui/hakux/hakux_libretro.so" ] && [ -f "$T/storage/pocket-ui/hakux/hakux_libretro.info" ] && [ -f "$T/storage/pocket-ui/hakux/licenses/COPYING" ] && [ -f "$T/storage/pocket-ui/hakux/patches/0001-apu-dsp-preference-per-apu-state.patch" ] && [ -f "$T/storage/pocket-ui/hakux/SHA256SUMS" ]'
+check "Xbox bundle beside the app with what must travel with it" '[ -x "$T/storage/pocket-ui/current/hakux/hakux_libretro.so" ] && [ -f "$T/storage/pocket-ui/current/hakux/hakux_libretro.info" ] && [ -f "$T/storage/pocket-ui/current/hakux/licenses/COPYING" ] && [ -f "$T/storage/pocket-ui/current/hakux/patches/0001-apu-dsp-preference-per-apu-state.patch" ] && [ -f "$T/storage/pocket-ui/current/hakux/SHA256SUMS" ]'
 check "drop-in, boot screen unit and its link" '[ -f "$T/storage/.config/system.d/essway.service.d/10-pocket-ui.conf" ] && [ "$(readlink "$T/storage/.config/system.d/sysinit.target.wants/pocket-splash.service")" = ../pocket-splash.service ]'
 check "existing settings and saves untouched" '[ "$(cat "$T/storage/.config/emuelec/settings")" = keep ] && [ "$(cat "$T/storage/roms/gba/game.srm")" = save ]'
 check "no staging or running marker left" '[ ! -e "$T/storage/.pocket-ui-stage" ] && [ ! -e "$T/storage/.pocket-ui-install-running" ]'
@@ -250,8 +250,8 @@ if [ -n "${POCKETUI_FAT_DIR:-}" ]; then
   boot
   check "installed: programs, links, drop-in; hook and tar gone" '[ -x "$T/storage/pocket-ui/current/pocket-ui" ] && [ -x "$T/storage/pocket-ui/pocket-core" ] && [ -f "$T/storage/.config/system.d/essway.service.d/10-pocket-ui.conf" ] && [ ! -e "$T/flash/mount-storage.sh" ] && [ ! -e "$T/flash/pocket-ui-seed.tar.gz" ]'
   # make-fat-install.sh --hakux (the card zip): the Xbox core has to arrive as in the SSH package.
-  if tar -tzf "$POCKETUI_FAT_DIR/pocket-ui-seed.tar.gz" | grep -qx './pocket-ui/hakux/hakux_libretro.so'; then
-    check "Xbox core from the tar (--hakux): installed, with its licences" '[ -x "$T/storage/pocket-ui/hakux/hakux_libretro.so" ] && [ -f "$T/storage/pocket-ui/hakux/licenses/COPYING" ] && (cd "$T/storage/pocket-ui/hakux" && sha256sum -c SHA256SUMS >/dev/null)'
+  if tar -tzf "$POCKETUI_FAT_DIR/pocket-ui-seed.tar.gz" | grep -q '^./pocket-ui/releases/[^/]*/hakux/hakux_libretro.so$'; then
+    check "Xbox core from the tar (--hakux): installed, with its licences" '[ -x "$T/storage/pocket-ui/current/hakux/hakux_libretro.so" ] && [ -f "$T/storage/pocket-ui/current/hakux/licenses/COPYING" ] && (cd "$T/storage/pocket-ui/current/hakux" && sha256sum -c SHA256SUMS >/dev/null)'
   fi
 fi
 

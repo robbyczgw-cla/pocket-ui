@@ -303,6 +303,11 @@ src/backup_saves.rs	1	match e.metadata() {
 src/backup_saves.rs	1	return b.read(&mut y).is_ok_and(|m| m == 0);
 src/backup_saves.rs	1	to.symlink_metadata().is_ok_and(|m| !m.is_file() || seconds(&m) + SAME_TIME >= item.modified)
 src/battery.rs	1	let get = |name: &str| std::fs::read_to_string(dir.join(name)).ok().map(|s| s.trim().to_string());
+src/battery.rs	1	let status = std::fs::read_to_string(dir.join("status")).unwrap_or_default();
+src/battery.rs	1	let supplies = dir.parent().and_then(|parent| std::fs::read_dir(parent).ok());
+src/battery.rs	1	match std::fs::read_to_string(supply.join("online")) {
+src/battery.rs	1	|| !std::fs::read_to_string(supply.join("type")).is_ok_and(|kind| kind.trim() != "Battery")
+src/battery.rs	1	|| std::fs::read_to_string(dir.join("scope")).is_ok_and(|scope| scope.trim() == "Device")
 src/battery_curve.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(FILE)).unwrap_or_default()
 src/battery_games.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(FILE)).unwrap_or_default()
 src/battery_history.rs	1	Some(_) => std::fs::read(&bak).map_err(|e| e.to_string()).and_then(|b| History::parse(&b)).is_err(),
@@ -713,6 +718,8 @@ src/h700_volume.rs	1	if let Some(io) = Real::open() {
 src/h700_volume.rs	1	if open(&mut ctl, c"hw:Codec".as_ptr(), 0) < 0 || ctl.is_null() {
 src/h700_volume.rs	1	native: native::Controls::open()?,
 src/h700_volume.rs	1	std::fs::read_to_string(path).ok().is_some_and(|s| affected_ucm(&s))
+src/hakux.rs	1	fs::File::open(dir.join(CORE_FILE)).and_then(|mut f| f.read_exact(&mut header)).is_ok()
+src/hakux.rs	1	let info = fs::read_to_string(dir.join(INFO_FILE)).ok()?;
 src/hakux.rs	1	let text = std::fs::read_to_string(cfg).unwrap_or_default();
 src/hakux.rs	1	std::fs::read_to_string(info).is_ok_and(|i| states_supported(&i))
 src/heat.rs	1	let k = std::fs::read_to_string(zone.join(format!("trip_point_{i}_type"))).ok()?;
@@ -817,9 +824,8 @@ src/logs.rs	1	let size = fs::metadata(&path).map_or(0, |m| m.len());
 src/logs.rs	1	let text = fs::read_to_string(logs.join(STATE_FILE)).ok()?;
 src/logs.rs	1	match f.read(&mut buf) {
 src/logs.rs	1	self.file = OpenOptions::new().create(true).append(true).open(&self.path).ok();
-src/low_battery.rs	1	let get = |p: &Path| std::fs::read_to_string(p).ok().map(|s| s.trim().to_string());
+src/low_battery.rs	1	let capacity = std::fs::read_to_string(dir.join("capacity")).ok()?;
 src/low_battery.rs	1	let level = read(dir)?;
-src/low_battery.rs	1	std::fs::read_dir(supplies).into_iter().flatten().flatten().any(|e| {
 src/low_battery.rs	1	std::fs::read_to_string(dir.join(name)).ok()
 src/main.rs	1	(image::load_png(std::path::Path::new(&preview)), t)
 src/main.rs	1	app.earlier_snapshot(state, args.get(2).and_then(|p| image::load_image(std::path::Path::new(p))));
@@ -1293,20 +1299,21 @@ src/system_cfg.rs	1	std::fs::read_to_string(&self.path).unwrap_or_default()
 src/system_cfg.rs	1	std::fs::read_to_string(lock).is_ok_and(|t| t.trim().is_empty())
 src/system_ctl.rs	1	.any(|d| read(&d.path().join("reboot_modes")).is_some_and(|t| reboot_modes_have_bootloader(&t)))
 src/system_ctl.rs	1	.find_map(|file| std::fs::read_to_string(state.join(file)).ok().and_then(|s| s.trim().parse::<u32>().ok()).filter(|v| *v <= 100))?;
-src/system_ctl.rs	1	charge: parse_charge(&read(&d.join("status")).unwrap_or_default()),
 src/system_ctl.rs	1	entries.into_iter().find(|p| read(&p.join("type")).as_deref() == Some(kind)).map(|p| {
+src/system_ctl.rs	1	if crate::battery::peripheral_supply(&d) || read(&d.join("type")).is_some_and(|kind| kind != "Battery") {
 src/system_ctl.rs	1	let Ok(dir) = std::fs::read_dir(self.root.join("sys/class/reboot-mode")) else {
 src/system_ctl.rs	1	let adapter = std::fs::read_dir(self.root.join("sys/class/bluetooth"))
 src/system_ctl.rs	1	let blocked = |f: &str| read(&p.join(f)).as_deref() == Some("1");
 src/system_ctl.rs	1	let cfg = std::fs::read_to_string(root.join("storage/.config/system/configs/system.cfg")).unwrap_or_default();
 src/system_ctl.rs	1	let max: u32 = read(&d.join("max_brightness"))?.parse().ok()?;
-src/system_ctl.rs	1	let mut dirs: Vec<PathBuf> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).collect();
+src/system_ctl.rs	1	let mut dirs: Vec<PathBuf> = std::fs::read_dir(&dir).ok()?.flatten().map(|e| e.path()).collect();
 src/system_ctl.rs	1	let mut dirs: Vec<PathBuf> = std::fs::read_dir(self.root.join("sys/class/backlight"))
 src/system_ctl.rs	1	let mut entries: Vec<PathBuf> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).collect();
 src/system_ctl.rs	1	let percent: u8 = read(&d.join("capacity"))?.parse().ok()?;
 src/system_ctl.rs	1	let raw: u32 = read(&dir.join("brightness"))?.parse().ok()?;
 src/system_ctl.rs	1	read(&self.root.join("proc/cmdline")).is_some_and(|c| c.split_whitespace().any(|a| a == "nodtbo"))
 src/system_ctl.rs	1	return read(&self.root.join("storage/.config/pocket-ui/timezone")).is_some_and(|v| !v.trim().is_empty());
+src/system_ctl.rs	1	std::fs::read_link(&d).map(|target| dir.join(target)).unwrap_or(d)
 src/system_ctl.rs	1	std::fs::read_to_string(p).ok().map(|s| s.trim().to_string())
 src/system_ctl.rs	1	std::fs::read_to_string(self.root.join("usr/share/zoneinfo").join(name)).ok()
 src/system_ctl.rs	1	std::fs::read_to_string(self.zoneinfo.join(name)).ok()

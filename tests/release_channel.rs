@@ -99,6 +99,33 @@ fn sha(path: &Path) -> String {
 }
 
 #[test]
+fn app_update_carries_the_xbox_core_and_its_source_and_licences() {
+    let tmp = Tmp::new("hakux");
+    let inp = release_out(&tmp.0);
+    let (key, public) = throwaway_key(&tmp.0);
+    let bundle = tmp.0.join("core");
+    std::fs::create_dir_all(bundle.join("licenses")).unwrap();
+    let core = fake_program(183, "hakuX");
+    std::fs::write(bundle.join("hakux_libretro.so"), &core).unwrap();
+    std::fs::write(bundle.join("licenses/COPYING"), "licence").unwrap();
+    std::fs::write(bundle.join("BUILD-INFO"), "hakuX 1.3.0").unwrap();
+
+    let (out, site) = build(&tmp.0, &inp, &key, &["--hakux", s(&bundle)]);
+    assert!(out.status.success(), "{}", text(&out));
+    let app = signed_list(&site, &public).app.unwrap();
+    let tarball = site.join(format!("github/pocket-ui-{VERSION}-aarch64.tar.gz"));
+    assert_eq!(app.sha256, sha(&tarball));
+    let unpacked = tmp.0.join("unpacked");
+    pocket_ui::untar::unpack(&std::fs::read(&tarball).unwrap(), &unpacked).unwrap();
+    let staged = unpacked.join("hakux");
+    assert_eq!(std::fs::read(staged.join("hakux_libretro.so")).unwrap(), core);
+    for item in ["hakux_libretro.info", "licenses/COPYING", "SOURCE.txt", "BUILD-INFO", "SHA256SUMS"] {
+        assert!(staged.join(item).is_file(), "{item}");
+    }
+    assert!(Command::new("sha256sum").args(["--check", "SHA256SUMS"]).current_dir(staged).output().unwrap().status.success());
+}
+
+#[test]
 fn builds_a_signed_list_that_names_the_files_of_the_github_release() {
     let tmp = Tmp::new("build");
     let inp = release_out(&tmp.0);

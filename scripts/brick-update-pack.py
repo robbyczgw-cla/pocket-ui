@@ -87,11 +87,14 @@ def optional_cheats(app, release, channel, optional=None):
 def prepare(app, release, channel, github, version, optional=None, platform='brick', mirror=None):
     if app.resolve() in release.resolve().parents or app.resolve() in channel.resolve().parents:
         raise ValueError('output must be outside the input app')
+    paths = sorted(app.rglob('*'))
+    if any('hakux' in p.relative_to(app).parts or p.name == 'hakux_libretro.so' for p in paths):
+        raise ValueError(f'{platform} update contains the ROCKNIX hakuX bundle')
     release.mkdir(parents=True, exist_ok=True)
     (channel / 'assets').mkdir(parents=True, exist_ok=True)
     cheats = optional_cheats(app, release, channel, optional)
     assets, regular = [], []
-    for path in sorted(app.rglob('*')):
+    for path in paths:
         relative = path.relative_to(app)
         if relative.as_posix() in ('cores/cht.pack', 'database/cheats-download.json'):
             if path.is_symlink():

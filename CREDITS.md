@@ -11,8 +11,8 @@
   loads an article's lead when a card is opened and names the article and the licence under the text.
 - [PortMaster](https://portmaster.games) for the ports catalogue.
 - ARMSX2, Dolphin and Azahar, the standalone emulators for PlayStation 2, GameCube and Wii, and 3DS.
-- [hakuX](https://github.com/rfandango/hakuX) by rfandango, with the Linux/libretro port by portare-ch, for Xbox
-  (experimental); pocket-ui ships a core built from [hakuX-Linux](https://github.com/robbyczgw-cla/hakuX-Linux)
+- [hakuX-lr](https://github.com/portare-ch/hakuX-lr) by portare-ch (PortareOS), based on [hakuX](https://github.com/rfandango/hakuX)
+  by rfandango, for Xbox (experimental); pocket-ui ships its 0.38.0 release core
   (GPL-3.0-or-later, see [NOTICE.md](NOTICE.md)).
 - [RetroAchievements](https://retroachievements.org) and its rcheevos library (MIT), in `vendor/rcheevos`.
 - Retroid's [u-boot for the Pocket devices](https://github.com/RetroidPocket/u-boot), used by the dual-boot setup.

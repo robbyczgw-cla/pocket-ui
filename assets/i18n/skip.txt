@@ -2222,3 +2222,8 @@ framebuffer pwrite failed: {s}
 first framebuffer pwrite returned
 framebuffer handover returned
 FBIOPUT_VSCREENINFO returned: {s}
+
+# hakuX update diagnostics, written to the startup log
+hakuX bundle failed its checksum
+could not copy hakuX bundle
+hakuX bundle has no version

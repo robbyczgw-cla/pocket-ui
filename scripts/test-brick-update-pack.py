@@ -15,6 +15,18 @@ spec.loader.exec_module(pack)
 
 
 class Packaging(unittest.TestCase):
+    def test_rocknix_xbox_bundle_is_refused_in_brick_and_darkos_updates(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            app = root / 'app'
+            (app / 'cores').mkdir(parents=True)
+            (app / 'cores/core.so').write_bytes(b'core')
+            (app / 'hakux').mkdir()
+            (app / 'hakux/hakux_libretro.so').write_bytes(b'Xbox core')
+            for platform in ('brick', 'darkos'):
+                with self.subTest(platform=platform), self.assertRaisesRegex(ValueError, 'hakuX'):
+                    pack.prepare(app, root / 'release', root / 'channel', 'https://example.org/release', '1', platform=platform)
+
     def test_regular_update_excludes_cores_and_packages_are_stable(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

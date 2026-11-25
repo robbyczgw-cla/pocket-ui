@@ -237,13 +237,19 @@ for SH in $SHELLS; do
   check "$SH: boot screen: never started by the install" '! grep -q "pocket-splash" "$r/calls"'
   check "$SH: licences: all five texts in /storage/pocket-ui/licences, as packaged, mode 644" \
     'for f in LICENSE NOTICE.md FONTS-OFL.txt THIRD-PARTY-CRATES.md THIRD-PARTY-LICENSES.txt; do cmp -s "$T/pkg/licences/$f" "$r/$APP/licences/$f" && [ "$(stat -c %a "$r/$APP/licences/$f")" = 644 ] || exit 1; done && [ -z "$(find "$r/$APP" -name "licences.new")" ]'
-  check "$SH: Xbox core: in /storage/pocket-ui/hakux as packaged, licence texts beside it, no sums or staging left" \
-    'cmp -s "$T/pkg/hakux/hakux_libretro.so" "$r/$APP/hakux/hakux_libretro.so" && [ -x "$r/$APP/hakux/hakux_libretro.so" ] && cmp -s "$T/pkg/hakux/licenses/COPYING" "$r/$APP/hakux/licenses/COPYING" && cmp -s "$T/pkg/hakux/SOURCE.txt" "$r/$APP/hakux/SOURCE.txt" && cmp -s "$T/pkg/hakux/patches/0001-apu-dsp-preference-per-apu-state.patch" "$r/$APP/hakux/patches/0001-apu-dsp-preference-per-apu-state.patch" && [ ! -e "$r/$APP/hakux/SHA256SUMS" ] && [ ! -e "$r/$APP/hakux.new" ]'
+  check "$SH: Xbox bundle beside the app, ready for its first start" \
+    'diff -r "$T/pkg/hakux" "$r/$APP/current/hakux" && [ ! -e "$r/$APP/hakux" ]'
   check "$SH: uninstall.sh copied next to the programs" 'cmp -s "$T/pkg/uninstall.sh" "$r/$APP/uninstall.sh"'
   check "$SH: no staging folder left" '[ -z "$(find "$r/storage" -name ".pocket-ui-staging*")" ]'
   check "$SH: daemon-reload, then essway restarted" \
     'grep -n "daemon-reload" "$r/calls" | head -1 | grep -q . && grep -q "systemctl restart essway" "$r/calls" && [ "$(grep -n "daemon-reload" "$r/calls" | head -1 | cut -d: -f1)" -lt "$(grep -n "restart essway" "$r/calls" | cut -d: -f1)" ]'
   check "$SH: games untouched" '[ "$(cat "$r/storage/roms/gba/game.srm")" = save ]'
+
+  # A package reinstall must preserve a working Xbox setup beside the releases.
+  mkdir -p "$r/$APP/hakux"
+  echo owner >"$r/$APP/hakux/owner-core-marker"
+  inst --no-restart
+  check "$SH: reinstall preserves the installed Xbox setup" '[ "$(cat "$r/$APP/hakux/owner-core-marker" 2>/dev/null)" = owner ]'
 
   # Again: idempotent.
   before=$(tree | grep -v installed-by-package)

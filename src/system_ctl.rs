@@ -7,7 +7,7 @@
 //! | volume | `pactl get-sink-volume @DEFAULT_SINK@` and `get-sink-mute` to read; `volume N` sets the default sink and stores `audio.volume` |
 //! | Wi-Fi | `wifictl enable\|disable` (`rfkill unblock\|block wifi`), then `nmcli radio wifi on` if NetworkManager's own switch is off; read back from `/sys/class/rfkill` and `nmcli radio wifi`; `wifi.enabled` in system.cfg only once the radio really changed (`net_state`) |
 //! | Bluetooth | `rocknix-bluetooth enable\|disable` (starts or stops bluetooth.service and the agent, stores `controllers.bluetooth.enabled`) |
-//! | battery | `/sys/class/power_supply/battery/{capacity,status}` |
+//! | battery | `/sys/class/power_supply/`: system battery capacity and status, checked against input supplies |
 //! | time zone | `steamos-set-timezone <zone>`: `system.timezone`, `/storage/.cache/timezone`, `tz-data.service`, `timedatectl` |
 //! | network time | systemd-timesyncd; `timedatectl show` for the state, restarting the service syncs again |
 //! | date and time by hand | `clock_settime` and the RTC's `RTC_SET_TIME` (`manual_time`); network time stays on and wins later |
@@ -671,13 +671,23 @@ impl Hw for RealHw {
 
     fn battery(&self) -> Option<Battery> {
         let dir = self.root.join("sys/class/power_supply");
-        let mut dirs: Vec<PathBuf> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).collect();
+        let mut dirs: Vec<PathBuf> = std::fs::read_dir(&dir).ok()?.flatten().map(|e| e.path()).collect();
         dirs.sort();
         dirs.into_iter().find_map(|d| {
+            // The Brick's stand-in root links only the battery. Its charger is beside the real battery.
+            #[cfg(feature = "brick")]
+            let d = if self.brick_root() {
+                std::fs::read_link(&d).map(|target| dir.join(target)).unwrap_or(d)
+            } else {
+                d
+            };
             let percent: u8 = read(&d.join("capacity"))?.parse().ok()?;
+            if crate::battery::peripheral_supply(&d) || read(&d.join("type")).is_some_and(|kind| kind != "Battery") {
+                return None;
+            }
             Some(Battery {
                 percent: percent.min(100),
-                charge: parse_charge(&read(&d.join("status")).unwrap_or_default()),
+                charge: crate::battery::read_charge(&d),
             })
         })
     }
@@ -1772,6 +1782,98 @@ mod tests {
             .label(),
             "40%, plugged in"
         );
+    }
+
+    #[test]
+    fn unplugged_pocket_uses_battery_power_everywhere_even_with_a_stale_status() {
+        use crate::{auto_off, battery, battery_estimate, low_battery, status_corner};
+
+        let root = fake_root("pocket-stale-charge");
+        let supplies = "sys/class/power_supply";
+        let dir = root.join(supplies).join("battery");
+        let hw = RealHw::with_root(&root);
+        let write = |file: &str, value: &str| put(&root, &format!("{supplies}/{file}"), value);
+
+        for (file, value) in [
+            ("battery/type", "Battery"),
+            ("battery/capacity", "85"),
+            ("battery/current_now", "335000"),
+            ("battery/voltage_now", "4135000"),
+            ("pm8150b-charger/type", "USB"),
+            ("pm8150b-charger/status", "Discharging"),
+            ("pm8150b-charger/online", "0"),
+            ("tcpm-source-psy/type", "USB"),
+            ("tcpm-source-psy/online", "0"),
+            ("ps-controller-battery-test/type", "Battery"),
+            ("ps-controller-battery-test/status", "Full"),
+            ("ps-controller-battery-test/capacity", "100"),
+        ] {
+            write(file, value);
+        }
+
+        for status in ["Charging", "Full", "Not charging"] {
+            write("battery/status", status);
+            let corner = status_corner::read(&root.join("net"), &dir).battery.unwrap();
+            let sample = battery::read(&dir, 1_000_000).unwrap();
+            let estimate = battery_estimate::estimate(&[sample], sample.t);
+            let level = low_battery::read(&dir);
+            assert_eq!(
+                (corner.label(), hw.battery().unwrap().label(), battery::headline(estimate.as_ref()), level.unwrap().external_power),
+                ("85%".into(), "85%".into(), "Not enough data yet".into(), false),
+                "{status} with both supplies offline",
+            );
+            assert_eq!((sample.capacity, sample.ma, sample.mv), (85, 335, 4135));
+            assert_eq!(auto_off::decide(false, level), auto_off::Verdict::SwitchOff);
+        }
+
+        write("battery/status", "Charging");
+        write("battery/capacity", "2");
+        let model = crate::device::identify("Retroid Pocket Mini V2", b"retroidpocket,rpminiv2\0").model;
+        let level = low_battery::read_for_guard(&dir, model);
+        let mut guard = low_battery::Guard::default();
+        assert_eq!(guard.observe(level), Some(low_battery::Alert::Low(2)));
+        assert_eq!(guard.observe(level), Some(low_battery::Alert::Critical(2)));
+
+        write("battery/capacity", "85");
+        for (source, online) in [("tcpm-source-psy", "1"), ("pm8150b-charger", "16")] {
+            write(&format!("{source}/online"), online);
+            assert_eq!(status_corner::read(&root.join("net"), &dir).battery.unwrap().label(), "85%, charging");
+            assert_eq!(hw.battery().unwrap().label(), "85%, charging");
+            assert!(battery::read(&dir, 1_000_000).unwrap().charging);
+            assert!(low_battery::read(&dir).unwrap().external_power);
+            write(&format!("{source}/online"), "0");
+        }
+    }
+
+    #[test]
+    fn controller_supplies_do_not_take_over_quick_settings_or_keep_the_pocket_on() {
+        let root = fake_root("controller-power");
+        let supplies = root.join("sys/class/power_supply");
+        let battery = supplies.join("rk817-battery");
+        let hw = RealHw::with_root(&root);
+
+        for (name, kind, scope) in [
+            ("a-peripheral", "Battery", "Device"),
+            ("hid-test-battery", "USB", ""),
+            ("ps-controller-battery-test", "Battery", ""),
+            ("usb-peripheral", "USB", "Device"),
+        ] {
+            let node = supplies.join(name);
+            for (file, value) in [("type", kind), ("scope", scope), ("capacity", "100"), ("status", "Full"), ("online", "1")] {
+                put(&node, file, value);
+            }
+        }
+        assert_eq!(hw.battery(), None, "with only peripherals connected");
+
+        for (file, value) in [("type", "Battery"), ("capacity", "48"), ("voltage_avg", "3598000"), ("status", "Discharging")] {
+            put(&battery, file, value);
+        }
+        assert_eq!(hw.battery().unwrap().label(), "48%");
+        assert!(!crate::low_battery::read(&battery).unwrap().external_power);
+
+        put(&battery, "status", "Charging");
+        assert_eq!(hw.battery().unwrap().label(), "48%, charging", "peripherals do not disable the fallback");
+        assert!(crate::low_battery::read(&battery).unwrap().external_power);
     }
 
     #[test]

@@ -116,6 +116,10 @@ Settings → System → **Battery** shows your current charge, estimated runtime
   you've logged 15+ minutes on battery ("PS2 uses about 9% an hour, 3.6 W" and estimated runtime).
 - Sleep timers now live under Settings → System → [Sleep & power](#sleep--power) (linked below the graph).
 
+The display and the low-battery safeguard check the Pocket's power inputs when the system reports whether they are
+online. On models that only report the battery status, both use that status. Connected controllers have their own
+battery readings and do not affect the Pocket's battery display or shutdown.
+
 pocket-ui samples battery once a minute while running and stores 48 hours in `battery-history.bin` (~46 kB) plus
 per-game draw in `battery-games.json` for [Battery in this game](pause-menu.md#battery-in-this-game). Data flushes every
 10 minutes and on sleep/shutdown/exit (a sudden power cut can lose up to 10 minutes; damaged files auto-recover from
@@ -161,7 +165,7 @@ Settings → **Help & tools** holds this manual, the Tour, setup profiles, ROCKN
 | **First-start setup** | Re-run the welcome wizard (language, Wi-Fi on Linux, games, layout) without touching games, saves or settings. See [Getting started](getting-started.md#3-first-start) |
 | **Tools** | Launch ROCKNIX utilities: emulator menus, RetroArch, gamepad test/calibration, file manager, terminal and installed tools. See [Tools](#tools) |
 | **Report a problem** | Jumps to About with Report a problem highlighted; press A to save a diagnostic bundle into `reports` on the games share ([Report a problem](troubleshooting.md#report-a-problem)). Also available from SELECT + START held |
-| **About** | Version, base OS (e.g. "pocket-ui OS 0.7.1 · built on ROCKNIX 20261001 (SM8250)" on SD images, or ROCKNIX version on add-on installs), game count, free space, IP, battery, log paths and open-source licences (`/storage/pocket-ui/licences`). Marks experimental Retroid models ([Other handhelds](other-handhelds.md#other-retroid-devices)). Includes **Report a problem** and **Open EmulationStation…** (with warning, [Safe mode](safe-mode.md#opening-rocknixs-own-menu); omitted on TrimUI Brick) |
+| **About** | Version, base OS (e.g. "pocket-ui OS 0.7.2 · built on ROCKNIX 20261001 (SM8250)" on SD images, or ROCKNIX version on add-on installs), game count, free space, IP, battery, log paths and open-source licences (`/storage/pocket-ui/licences`). Marks experimental Retroid models ([Other handhelds](other-handhelds.md#other-retroid-devices)). Includes **Report a problem** and **Open EmulationStation…** (with warning, [Safe mode](safe-mode.md#opening-rocknixs-own-menu); omitted on TrimUI Brick) |
 
 ### How you like to play
 

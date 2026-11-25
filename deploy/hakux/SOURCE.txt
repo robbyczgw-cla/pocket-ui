@@ -1,16 +1,15 @@
 hakuX core for pocket-ui (Xbox, experimental)
 
-Program:   hakuX, an Xbox emulator by rfandango (GPL-3.0-or-later)
-Port:      Linux / libretro port by portare-ch (PortareOS), hakuX PR #9 (https://github.com/rfandango/hakuX/pull/9), on hakuX 1.3.0
-Fork:      hakuX-Linux, branch linux-1.3.0: that port on hakuX 1.3.0 plus our fixes (among them the APU's DSP preference set on every
-           new APU state, so the sound no longer stays silent after a title relaunch)
-Commit:    035ec48acde326b017a3f6cd4bc888e1633172df
-Patches:   none (our fixes are commits of the fork)
-Source:    https://github.com/robbyczgw-cla/hakuX-Linux  (git fetch https://github.com/robbyczgw-cla/hakuX-Linux.git 035ec48acde326b017a3f6cd4bc888e1633172df)
-Built by:  the fork's own tools/native/linux-build.sh in its pinned Debian image (arm64, Clang 19, glibc 2.41), run in an aarch64
-           container on an Apple Silicon Mac; see scripts/build-hakux-core.sh. STRIP=strip, JOBS=2, HAKUX_VERSION=1.3.0-private.
-Package:   hakux-1.3.0-private-aarch64.tar.gz, sha256 802be3a158dfb3928a8ee848c5a79eba6b4b93b8c1790765c026148cc70d2cbe
-Core:      hakux_libretro.so, sha256 6c1ef935b3048202fce9b3d5efa6e99b423173063106e0ee3bcd6ef738a41cb5 (needs glibc 2.38 at most)
+Program:   hakuX-lr 0.38.0, the libretro Xbox core by portare-ch (PortareOS), based on hakuX by rfandango; the combined core is
+           GPL-3.0-or-later (parts GPL-2.0-or-later, LGPL-2.1-or-later and permissive: licenses/LICENSE)
+Release:   https://github.com/portare-ch/hakuX-lr/releases/tag/linux-v0.38.0, asset hakux-lr-0.38.0-aarch64.tar.gz,
+           sha256 24dd6d3a80c551a79f11cc9b01baa39c11f03b1395222e273beaf5b4657b48f9 (built by the project's CI)
+Commit:    dbc8b167782a84d20c41be7feb9d0f19e5f9a4a8
+Source:    https://github.com/portare-ch/hakuX-lr  (git fetch https://github.com/portare-ch/hakuX-lr.git dbc8b167782a84d20c41be7feb9d0f19e5f9a4a8);
+           the pinned dependencies (FEX fork, SDL3, libslirp, dsp56300, ...) by commit in BUILD-INFO
+Patches:   none; the release binary unchanged, only renamed from hakux-lr_libretro.so to hakux_libretro.so
+Core:      hakux_libretro.so, sha256 4d86789748c905275b6e04b0ff1da0cb0e5c2b7976d647817a43eead64bbe1c2 (needs glibc 2.38 at most)
 
-The core is loaded by ROCKNIX's RetroArch (GPL-3.0-or-later), a separate program that pocket-ui starts. Licence texts of hakuX and
-of the parts built into the core (FEX, SDL3, SoftFloat, VulkanMemoryAllocator, libslirp and others) are in the "licenses" folder beside it.
+The core is loaded by ROCKNIX's RetroArch (GPL-3.0-or-later), a separate program that pocket-ui starts. Licence texts of hakuX-lr and
+of the parts built into the core (FEX, SDL3, SoftFloat, VulkanMemoryAllocator, libslirp, the Rust crates of its DSP JIT and others)
+are in the "licenses" folder beside it.

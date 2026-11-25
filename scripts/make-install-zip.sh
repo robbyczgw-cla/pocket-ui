@@ -12,7 +12,7 @@
 #     --ds-core  DIR pinned portable DSperate build (scripts/build-dsperate.sh: binary, licences, full source and recipe);
 #                needed when pocket-ui uses DSperate, which it then finds beside itself in cores/ (src/ds.rs)
 #     --hakux    DIR from `scripts/build-hakux-core.sh` (hakux_libretro.so, BUILD-INFO, licenses/): the package then carries the
-#                Xbox core (hakux/, docs/XBOX.md); without it Xbox games keep ROCKNIX's xemu
+#                Xbox core (hakux/, docs/XBOX.md); without it Xbox needs an app update carrying hakuX
 #
 # The zip holds deploy/package/install.sh and uninstall.sh, the programs, the launcher, the essway drop-in and the
 # boot screen's unit (deploy/pocket-splash.service) in
@@ -87,7 +87,7 @@ printf '%s\n' "$VERSION" >"$P/files/VERSION"
  [ ! -d cores ] || find cores -type f | LC_ALL=C sort | xargs sha256sum >>SHA256SUMS)
 install -m 755 "$ROOT/deploy/package/install.sh" "$ROOT/deploy/package/uninstall.sh" "$P/"
 install -m 644 "$ROOT/LICENSE" "$ROOT/NOTICE.md" "$P/"
-# The Xbox core (hakuX, GPL-3.0, docs/XBOX.md) with the texts that must travel with it: install.sh puts it in /storage/pocket-ui/hakux.
+# The Xbox core (hakuX, GPL-3.0, docs/XBOX.md) with the texts that must travel with it: the app seeds the installed core at first start.
 # The same files and layout as in the card install (scripts/hakux-files.sh, make-fat-install.sh --hakux).
 if [ -n "$HAKUX_DIR" ]; then
   sh "$ROOT/scripts/hakux-files.sh" "$HAKUX_DIR" "$P/hakux" || die "--hakux: the core's files could not be copied"

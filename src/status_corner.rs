@@ -306,7 +306,7 @@ pub fn parse_battery(capacity: Option<&str>, status: Option<&str>) -> Option<Bat
     Some(Battery { percent, charging: status.is_some_and(|s| s.trim() == "Charging") })
 }
 
-/// Reads Wi-Fi (`<net>/operstate`) and the battery (`<battery>/capacity`, `status`): three small sysfs files.
+/// Reads Wi-Fi, battery capacity and the charging state from sysfs.
 pub fn read(net: &Path, battery: &Path) -> Status {
     read_with_net(Some(net), battery)
 }
@@ -332,9 +332,17 @@ fn android_reading() -> crate::phone_corner::Reading {
 #[cfg(not(all(target_os = "android", feature = "handheld")))]
 fn read_files(net: Option<&Path>, battery: &Path) -> Status {
     let file = |p: PathBuf| std::fs::read_to_string(p).ok();
+    let capacity = file(battery.join("capacity"));
+    #[cfg(not(target_os = "android"))]
+    let reading = parse_battery(capacity.as_deref(), None).map(|mut reading| {
+        reading.charging = crate::battery::read_charge(battery) == crate::system_ctl::Charge::Charging;
+        reading
+    });
+    #[cfg(target_os = "android")]
+    let reading = parse_battery(capacity.as_deref(), file(battery.join("status")).as_deref());
     Status {
         wifi: net.and_then(|net| file(net.join("operstate"))).is_some_and(|s| parse_operstate(&s)),
-        battery: parse_battery(file(battery.join("capacity")).as_deref(), file(battery.join("status")).as_deref()),
+        battery: reading,
     }
 }
 

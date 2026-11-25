@@ -5,6 +5,14 @@ and versions follow [Semantic Versioning](https://semver.org/) (before 1.0, a mi
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-25
+
+### Fixed
+
+- **Xbox games run on hakuX on pocket-ui OS** (Retroid Pocket Mini V2, Pocket 5 and other handhelds with Snapdragon 865 or 8 Gen 2): the update now brings the hakuX emulator (0.38.0, hakuX-lr by portare-ch) and sets it up on the first start, also after a fresh install.
+- **A missing emulator gets a clear message:** if hakuX is missing, pocket-ui says so and tells you to install an update, instead of quietly starting a different emulator. On handhelds that are not strong enough for Xbox games, pocket-ui says so instead of starting the game. You can still choose xemu yourself under Runs on.
+- **Retroid Pocket Mini V2 shows the right battery state:** it no longer shows "Charging" without a charger connected, and at a nearly empty battery it saves and switches off safely instead of trusting a wrong charging status.
+
 ## [0.7.1] - 2026-11-25
 
 ### Added

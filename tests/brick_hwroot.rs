@@ -161,6 +161,48 @@ esac"#,
     assert!(log.contains("ifconfig wlan0 down") && log.contains("ifconfig wlan0 up") && log.contains("poweroff"), "{log}");
 }
 
+#[test]
+fn linked_brick_battery_and_its_usb_input_agree_in_quick_settings_and_the_guard() {
+    let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let d = dir.path();
+    let hw = d.join("hwroot");
+    let supplies = hw.join("sys/class/power_supply");
+    let bat = d.join("axp2202-battery");
+    std::fs::create_dir_all(&supplies).unwrap();
+    std::fs::create_dir(&bat).unwrap();
+    std::fs::write(bat.join("capacity"), "63\n").unwrap();
+    std::fs::write(bat.join("status"), "Charging\n").unwrap();
+    symlink(&bat, supplies.join("battery")).unwrap();
+
+    let real = RealHw::with_root(&hw);
+    assert_eq!(real.battery().unwrap().label(), "63%, charging");
+
+    // Quick settings can see the real input beside the battery linked from the stand-in.
+    let usb = d.join("axp2202-usb");
+    std::fs::create_dir(&usb).unwrap();
+    std::fs::write(usb.join("type"), "USB\n").unwrap();
+    std::fs::write(usb.join("online"), "0\n").unwrap();
+    let old_root = std::env::var_os("POCKETUI_HW_ROOT");
+    // SAFETY: the tests in this binary that use the hardware root hold ENV.
+    unsafe { std::env::set_var("POCKETUI_HW_ROOT", &hw) };
+    let offline = real.battery();
+    let offline_power = pocket_ui::low_battery::read(&bat).unwrap().external_power;
+    std::fs::write(usb.join("online"), "1\n").unwrap();
+    let online = real.battery();
+    let online_power = pocket_ui::low_battery::read(&bat).unwrap().external_power;
+    unsafe {
+        match old_root {
+            Some(root) => std::env::set_var("POCKETUI_HW_ROOT", root),
+            None => std::env::remove_var("POCKETUI_HW_ROOT"),
+        }
+    }
+    assert_eq!(offline.unwrap().label(), "63%");
+    assert!(!offline_power);
+    assert_eq!(online.unwrap().label(), "63%, charging");
+    assert!(online_power);
+}
+
 /// The clock page on the card: zone data and the `etc/localtime` link the start script builds in the stand-in root, the
 /// zone's name kept on the card, and network time through the two stand-ins (`timedatectl`, `systemctl restart
 /// systemd-timesyncd` over a fake ntpd).

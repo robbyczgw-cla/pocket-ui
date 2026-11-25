@@ -9688,6 +9688,12 @@ fn main() {
             app_rescue::run(data_dir);
         }
     }
+    #[cfg(target_os = "linux")]
+    if !std::env::args().any(|a| a == "--snapshot") {
+        if let Err(e) = pocket_ui::hakux::seed_running_release(std::path::Path::new(update::APP_ROOT)) {
+            eprintln!("Xbox core: {e}");
+        }
+    }
     let started = Instant::now();
     // Speed guard (scripts/latency.sh): process start, off unless POCKETUI_TRACE is set.
     pocket_ui::mark!("ui-start");

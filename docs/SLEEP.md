@@ -99,6 +99,11 @@ then does what ROCKNIX's wake hook did). Deep sleep and its wake were then measu
   a gap in the history, not a line. Settings > System > Battery shows the graph (3/6/12/24/48 h with L1/R1, green while
   charging, hatched gaps) and a time-left estimate (`src/battery_estimate.rs`) only after 20 min on battery
   without sleep and a 2-point drop; a run of samples ends at a gap, at plugging in or out, and at a jump of the gauge.
+- The Linux status corner, Quick settings, battery sampler and sleep/low-battery decisions share
+  `battery::read_charge`. System inputs with an `online` attribute take precedence over the battery status for
+  deciding whether power is connected. An online input keeps the safeguard inactive and the battery status
+  determines whether to show active charging. Without an input `online` attribute, the battery status supplies
+  both decisions. Controller supplies (device scope, HID or PS controller names) are skipped.
 - Battery per game (`src/battery_games.rs`): the sampler also adds each minute on battery to the game running at both
   ends of it (`battery_history::set_game`; same rules: no gap, no jump, not plugged in; minutes in light sleep,
   `set_asleep` from `sleep.rs`, and the stretch to the sample after a wake count for no game; every change into or out

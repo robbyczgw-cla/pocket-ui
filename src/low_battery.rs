@@ -7,8 +7,8 @@
 //! - at [`CRITICAL_AT`] % or less on battery, [`CONFIRM`] readings in a row: the game is saved and quit, the resume
 //!   note left and the device powered off, as the power menu's Power off does (`Sleep::shut_down`).
 //!
-//! On external power (charging, full, or "Not charging" with a charger in, or any USB/mains supply online) nothing
-//! happens, so a device on the charger stays up as long as it likes (`no-autosuspend` overnight on the charger).
+//! On external power nothing happens, so a device on the charger stays up as long as it likes
+//! (`no-autosuspend` overnight on the charger). The guard uses the same reading as the Battery page.
 //!
 //! The reading runs on its own thread; the UI thread only hears of a crossing.
 
@@ -86,22 +86,13 @@ impl Guard {
     }
 }
 
-/// Reads the battery in `dir` (`battery::dir()`): its capacity, and whether external power is connected (the
-/// battery's own status, or another supply next to it in /sys/class/power_supply that is online).
+/// Reads the device battery's capacity and whether it has external power.
 pub fn read(dir: &Path) -> Option<Level> {
-    let get = |p: &Path| std::fs::read_to_string(p).ok().map(|s| s.trim().to_string());
-    let percent = get(&dir.join("capacity"))?.parse::<u8>().ok().filter(|&percent| percent <= 100)?;
-    let status = get(&dir.join("status")).unwrap_or_default();
-    let charger = matches!(status.as_str(), "Charging" | "Full" | "Not charging")
-        || dir.parent().is_some_and(|supplies| {
-            std::fs::read_dir(supplies).into_iter().flatten().flatten().any(|e| {
-                let p = e.path();
-                p != dir && get(&p.join("type")).is_some_and(|t| t != "Battery") && get(&p.join("online")).as_deref() == Some("1")
-            })
-        });
+    let capacity = std::fs::read_to_string(dir.join("capacity")).ok()?;
+    let percent = capacity.trim().parse::<u8>().ok().filter(|&percent| percent <= 100)?;
     Some(Level {
         percent,
-        external_power: charger,
+        external_power: crate::battery::read_charge(dir) != crate::system_ctl::Charge::Discharging,
     })
 }
 
@@ -215,7 +206,17 @@ mod tests {
         std::fs::write(usb.join("online"), "0\n").unwrap();
         for status in ["Charging", "Full", "Not charging"] {
             std::fs::write(battery.join("status"), status).unwrap();
-            assert_eq!(read(&battery), plugged(3), "{status}");
+            assert_eq!(read(&battery), bat(3), "{status} with the charger offline");
+        }
+        std::fs::write(battery.join("status"), "Charging").unwrap();
+        for invalid in [b"".as_slice(), b"16", b"\xff"] {
+            std::fs::write(usb.join("online"), invalid).unwrap();
+            assert_eq!(read(&battery), bat(3), "invalid online value {invalid:?}");
+        }
+        std::fs::remove_file(usb.join("online")).unwrap();
+        for status in ["Charging", "Full", "Not charging"] {
+            std::fs::write(battery.join("status"), status).unwrap();
+            assert_eq!(read(&battery), plugged(3), "{status} without an online attribute");
         }
         for invalid in ["garbage", "-1", "101"] {
             std::fs::write(battery.join("capacity"), invalid).unwrap();
