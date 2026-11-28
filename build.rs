@@ -114,6 +114,32 @@ fn main() {
     build(Path::new("."));
 }
 
+include!("src/screenscraper_mask.rs");
+
+/// ScreenScraper's developer id for pocket-ui (src/screenscraper.rs, docs/SCREENSCRAPER.md): from the release tool's
+/// environment (`POCKETUI_SCREENSCRAPER_DEVID`, `POCKETUI_SCREENSCRAPER_DEVPASSWORD`, optional `POCKETUI_SCREENSCRAPER_SOFTNAME`), never from the
+/// repository. Packed with [`screenscraper_mask`] into `$OUT_DIR/screenscraper_dev.txt`, which `screenscraper::dev` includes; without both
+/// values the file is empty and the feature is not in the build (no row, no request). Never printed: not even masked in
+/// a `cargo:` line, which cargo keeps in the build's output file and shows with `-vv` (review 26.11.2026).
+fn screenscraper_dev(root: &Path) {
+    for var in ["POCKETUI_SCREENSCRAPER_DEVID", "POCKETUI_SCREENSCRAPER_DEVPASSWORD", "POCKETUI_SCREENSCRAPER_SOFTNAME"] {
+        println!("cargo:rerun-if-env-changed={var}");
+    }
+    // Run again whenever the file that includes it changes: a build folder whose last run of this script was older than
+    // that file had none, and broke the Android handheld's build on a warm target (26.11.2026).
+    println!("cargo:rerun-if-changed={}", root.join("src/screenscraper.rs").display());
+    let get = |var: &str| std::env::var(var).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty() && !v.contains('\n'));
+    let packed: String = match (get("POCKETUI_SCREENSCRAPER_DEVID"), get("POCKETUI_SCREENSCRAPER_DEVPASSWORD")) {
+        (Some(id), Some(password)) => {
+            let softname = get("POCKETUI_SCREENSCRAPER_SOFTNAME").unwrap_or_else(|| "pocket-ui".to_string());
+            screenscraper_mask(format!("{id}\n{password}\n{softname}").as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+        }
+        _ => String::new(),
+    };
+    let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("cargo sets OUT_DIR")).join("screenscraper_dev.txt");
+    std::fs::write(&out, packed).expect("write screenscraper_dev.txt");
+}
+
 /// Everything the script does, with the repository's root at `root` (paths in cargo's lines are relative to the crate).
 pub fn build(root: &Path) {
     let at = |p: &str| root.join(p);
@@ -124,6 +150,7 @@ pub fn build(root: &Path) {
     let built = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     println!("cargo:rustc-env=POCKETUI_BUILD_UNIX={built}");
     watch_library_rust(&at("src"), &at("src/bin"));
+    screenscraper_dev(root);
     // The Brick: pocket-core's own `eglGetProcAddress` (src/bin/pocket_core.rs) must be in its dynamic symbol table, so a core
     // linked against libEGL (PPSSPP's gl3stubInit) binds to it instead of the vendor's, which returns NULL for core GLES 3
     // functions (glGetStringi: SIGSEGV at the start of every PSP game, 20.11.2026). scripts/brick-make-card.sh checks it.

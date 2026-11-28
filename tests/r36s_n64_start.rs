@@ -25,6 +25,17 @@ fn loading_sample(log: &str) -> bool {
 
 #[test]
 fn report_log_has_live_n64_start_phases_even_when_the_core_never_draws() {
+    report_log_has_live_phases(&[]);
+}
+
+/// The watch thread first runs after the core's dlopen began (a busy handheld; nightly 27.11.2026 under the full suite):
+/// it still samples the stall, the start waits for it to be ready.
+#[test]
+fn a_late_n64_start_watch_still_samples_a_core_stuck_in_its_load() {
+    report_log_has_live_phases(&[("POCKET_CORE_TEST_LATE_WATCH_MS", "300")]);
+}
+
+fn report_log_has_live_phases(extra: &[(&str, &str)]) {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
     let stub = p.join("stub.c");
@@ -53,16 +64,21 @@ __attribute__((constructor)) static void stall(void) {
     let mut player = Player(Command::new(env!("CARGO_BIN_EXE_pocket-core"))
         .arg(&core).arg(&rom).args(["--system", "n64"])
         .env("POCKETUI_MOCK", "1").env("POCKETUI_DEVICE", "r36s").env("POCKET_CORE_TEST", "1")
-        .env("POCKETUI_DATA", p).env("TMPDIR", p)
+        .env("POCKETUI_DATA", p).env("TMPDIR", p).envs(extra.iter().copied())
         .stdin(Stdio::piped()).stdout(log.try_clone().unwrap()).stderr(log)
         .spawn().unwrap());
-    test_clock::wait_for(|| {
+    // The hang guard names what pocket-core wrote: which phase it was in when no loading sample came (nightly 27.11.:
+    // two misses under the full suite's load said nothing about where the start stood).
+    let end = std::time::Instant::now() + test_clock::timeout(Duration::from_secs(30));
+    loop {
         let log = std::fs::read_to_string(&log_path).unwrap();
         if let Some(status) = player.0.try_wait().unwrap() {
             panic!("pocket-core exited before the report ({status}):\n{log}");
         }
-        loading_sample(&log)
-    }, Duration::from_secs(30), "a live N64 waiting sample in the loading phase");
+        if loading_sample(&log) { break; }
+        assert!(std::time::Instant::now() < end, "no progress waiting for a live N64 waiting sample in the loading phase:\n{log}");
+        std::thread::sleep(Duration::from_millis(5));
+    }
     let source = Sources {
         root: p.join("root"), storage: p.join("storage"), battery: p.join("battery"),
         data_dir: p.to_path_buf(), live_log: p.join("live.log"), pocket_core: p.join("no-player"),

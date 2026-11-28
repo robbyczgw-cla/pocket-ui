@@ -125,7 +125,8 @@ on its edge; the player's back-gesture zones 30 dp each side.
 
 Android Sega disc support: `document_library::player_bios` discovers firmware in granted roots;
 `android/java/xyz/pocketui/app/BiosFiles.java` validates and installs private copies.
-`platform/android_hw_render.rs` owns GLES 3.x negotiation and the isolated context.
+`platform/android_hw_render.rs` owns GLES 3.x negotiation, the isolated context and the fenced texture handoff.
+`src/android_video_tests.rs` compares the shared texture and CPU capture paths through real headless EGL.
 `src/android_gles_tests.rs` exercises negotiation, disc discovery and the Android touch control policy;
 `scripts/android/test/BiosFilesTest.java` checks failed-copy preservation and exact BIOS lengths.
 Pinned core builds and source/licence evidence are described in [the Android guide](../android/README.md).

@@ -1828,6 +1828,7 @@ mod tests {
 
         write("battery/status", "Charging");
         write("battery/capacity", "2");
+        write("battery/voltage_now", "3400000");
         let model = crate::device::identify("Retroid Pocket Mini V2", b"retroidpocket,rpminiv2\0").model;
         let level = low_battery::read_for_guard(&dir, model);
         let mut guard = low_battery::Guard::default();

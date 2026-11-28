@@ -25,25 +25,20 @@ CONTROLS = ('Speaker Switch', 'DAC Playback Volume', 'DAC Playback Switch',
 TOLERANCE_DB = 1.5
 
 
-def speaker_dac(percent):
-    # See src/h700_volume.rs. Round to a hardware DAC step over 25–100%.
-    return 44 + (max(0, percent - 25) * 19 + 37) // 75
-
-
 def gain_row(percent, controls, props):
     dac = int(controls['DAC Playback Volume'])
     line = int(controls['Line Out Playback Volume'])
     soft = props['softVolumes']
-    assert len(soft) == 2 and all(0 < v <= 1.001 for v in soft), 'invalid software residual'
+    assert len(soft) == 2 and all(0 < v <= 1.0 for v in soft), 'invalid software residual'
     assert 0 <= dac <= 63 and 2 <= line <= 31, 'codec gain outside speaker limits'
     assert all(controls[n] == ('on' if n == 'Speaker Switch' else 'on,on')
                for n in ('Speaker Switch', 'DAC Playback Switch', 'Line Out Playback Switch')), 'playback switch off'
     measured = [-73.08 + dac * 1.16 - 46.5 + line * 1.5 + 20 * math.log10(v) for v in soft]
-    target_dac = speaker_dac(percent)
-    expected = -73.08 + target_dac * 1.16 + 60 * math.log10(percent / 100)
+    expected = 60 * math.log10(percent / 100)
+    unity_at_maximum = percent != 100 or (line == 31 and all(v == 1.0 for v in soft))
     return dict(percent=percent, controls=controls, soft=soft, measured_db=measured,
                 expected_db=expected, error_db=[v-expected for v in measured],
-                passed=dac == target_dac and all(abs(v-expected) <= TOLERANCE_DB for v in measured))
+                passed=dac == 63 and unity_at_maximum and all(abs(v-expected) <= TOLERANCE_DB for v in measured))
 
 
 def validate_topology(speaker, lineout, mixer):
@@ -102,16 +97,20 @@ class H700:
             executable_sha = hashlib.file_digest(f,'sha256').hexdigest()
         wp = {p:p.read_bytes() for p in Path('/storage/.local/state/wireplumber').iterdir() if p.is_file()}
         return dict(controls=controls, sink=sink, wp=wp, executable_sha256=executable_sha,
-                    topology=dict(speaker=speaker,lineout=lineout,mixer=mixer), status=status)
+                    topology=dict(speaker=speaker,lineout=lineout,mixer=mixer), status=status,
+                    initial=dict(controls=controls,volume=sink['volume'],mute=sink['mute'],
+                                 soft=self.mixer_properties()['softVolumes']))
 
     def set_volume(self, percent):
         self.run('pactl','set-sink-volume',self.sink,str(percent)+'%')
 
+    def mixer_properties(self):
+        return json.loads(self.run('pw-dump',self.node))[0]['info']['params']['Props'][0]
+
     def sample(self, percent):
         self.idle()
         assert self.run('pactl','get-default-sink') == self.sink, 'output route changed'
-        props = json.loads(self.run('pw-dump',self.node))[0]['info']['params']['Props'][0]
-        row = gain_row(percent,self.controls(),props)
+        row = gain_row(percent,self.controls(),self.mixer_properties())
         row['pcm'] = 'closed'
         return row
 
@@ -146,7 +145,7 @@ class H700:
 def probe(device, wait=time.sleep):
     before = device.snapshot()  # No mutation before a complete snapshot.
     result = dict(format=1, family='h700', timestamp=time.time(), tolerance_db=TOLERANCE_DB,
-                  executable_sha256=before['executable_sha256'], topology=before['topology'], rows=[])
+                  executable_sha256=before['executable_sha256'], topology=before['topology'], initial=before['initial'], rows=[])
     try:
         for percent in range(10,101,10):
             device.idle()

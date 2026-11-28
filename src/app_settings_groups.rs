@@ -133,6 +133,24 @@ fn brick_has(opens: Opens) -> bool {
     }
 }
 
+/// Settings → System → Home app: pocket-ui is Android's Home app now (read when this view comes to the front,
+/// `app_android::refresh_home_app`). Linux shows no such row.
+fn home_app_held() -> bool {
+    #[cfg(all(target_os = "android", feature = "handheld"))]
+    return crate::app_android::home_app_held();
+    #[cfg(not(all(target_os = "android", feature = "handheld")))]
+    false
+}
+
+/// Settings → System → Run in background: pocket-ui is off Android's battery optimisation (read when this view has the
+/// focus, `app_android::battery_exempt`). Linux shows no such row.
+fn battery_exempt() -> bool {
+    #[cfg(all(target_os = "android", feature = "handheld"))]
+    return crate::app_android::battery_exempt();
+    #[cfg(not(all(target_os = "android", feature = "handheld")))]
+    false
+}
+
 /// The pages a device may lack (`pocket_ui::device::hides`, also behind the Tour cards): the lights around the sticks;
 /// power button.
 fn device_key(opens: Opens) -> Option<&'static str> {
@@ -163,6 +181,8 @@ fn device_key(opens: Opens) -> Option<&'static str> {
         Opens::ScreenColour => "screen_colour",
         Opens::Battery => "battery",
         Opens::View => "android_view",
+        Opens::HomeApp => "android_home",
+        Opens::Background => "android_background",
         Opens::BackToEs => "darkos_es",
         Opens::Gamelist => "gamelist",
         Opens::Backup => "backup",
@@ -175,6 +195,7 @@ fn device_key(opens: Opens) -> Option<&'static str> {
         Opens::Screenshots => "screenshots",
         // Android's alone: its apps on a shelf (`device::hides_in`).
         Opens::AndroidGames => "android_games",
+        Opens::AndroidExtras => "android_extras",
         _ => return None,
     })
 }
@@ -504,6 +525,8 @@ impl App {
             Opens::ScreenColour => self.sys.look().warmth_label(),
             Opens::Tour => self.tour_list_value(),
             Opens::View => page("Handheld"),
+            Opens::HomeApp => values::on_off(home_app_held()).to_string(),
+            Opens::Background => values::on_off(battery_exempt()).to_string(),
             Opens::Sounds if i == sel && self.sound.on => format!("‹ {} ›", self.sound.label()),
             Opens::Sounds => self.sound.label(),
             Opens::Sync => page(values::on_off(self.sync.prefs.enabled)),
@@ -516,6 +539,8 @@ impl App {
             Opens::Screenshots => self.gallery_list_value(),
             // How many Android games are on the shelf: memory only (`app_android_games`).
             Opens::AndroidGames => self.android_games_list_value(),
+            // The level as Android said it last (`app_android_extras`); only ">" before the page was opened.
+            Opens::AndroidExtras => self.android_extras_list_value(),
             #[cfg(feature = "brick")]
             Opens::Leds if pocket_ui::device::brick() => page(super::app_brick_lights::list_value(&self.leds)),
             Opens::Leds => page(self.leds.summary()),
@@ -1014,7 +1039,9 @@ mod tests {
                 for s in &lines {
                     let shown = desc_lines(&mut text, s, w, hints_at);
                     assert!(!shown.iter().any(|l| l.ends_with('…')), "{size:?} {w}: {s:?} is cut: {shown:?}");
-                    assert_eq!(shown.join(" "), *s, "{size:?} {w}: {s:?} is shown whole");
+                    // Every letter in order, spaces aside: lines break at a space or between two hanzi or kana.
+                    let squeeze = |t: &str| t.replace(' ', "");
+                    assert_eq!(squeeze(&shown.concat()), squeeze(s), "{size:?} {w}: {s:?} is shown whole: {shown:?}");
                 }
             }
         }
@@ -1139,7 +1166,7 @@ mod tests {
             // Zoom in the pause menu since 0.5.1 (too prominent in Look, under Text size; a hand walk).
             ("Playing", &["On start", "Continue where I quit", "Console boot screen", "Remind me where I was", "Screen frames", "Over the game", "Zoom in the pause menu", "Performance & fan", "RetroAchievements"]),
             ("Games", &["Add games", "Box art & downloads", "Game check", "Systems on the shelf", "Shelf space", "Curator", "Screenshots", "From EmulationStation", "Android games", "RomM"]),
-            ("System", &["Back to EmulationStation", "Updates", "Language", "View", "Sleep & power", "Battery", "Time", "Storage", "Backup & reset", "Kids mode"]),
+            ("System", &["Back to EmulationStation", "Updates", "Language", "View", "Home app", "Android extras", "Sleep & power", "Battery", "Time", "Storage", "Backup & reset", "Run in background", "Kids mode"]),
             ("Help & tools", &["Manual", "Tour", "How you like to play", "First-start setup", "Tools", "Report a problem", "About"]),
         ];
         let want: Vec<(&str, Vec<&str>)> = want.iter().map(|(c, r)| (*c, r.to_vec())).collect();
@@ -1228,6 +1255,9 @@ mod tests {
         ("RomM", "the shelf's RomM games and their downloads (`app_romm`, `romm_net::AndroidNet`)"),
         ("Language", "every page; handed to the player"),
         ("View", "Android's own row"),
+        ("Home app", "Android's Home role (`app_android::ask_home_app`, `RoleManager`)"),
+        ("Android extras", "Android's settings, Shizuku and the pause menu over other emulator apps (`app_android_extras`, Extras.java)"),
+        ("Run in background", "Android's battery optimisation (`app_android::ask_battery_exempt`, `PowerManager`)"),
         ("Updates", "Android's signed list and installer (app_update_hint)"),
         ("Pocket Sync", "Pocket-to-Pocket sync with the player's saves (pocket_sync::Layout::android, app_android::pocket_sync_layout)"),
         ("Kids mode", "the shelf"),
@@ -1299,13 +1329,13 @@ mod tests {
             ("RetroAchievements", true, own(pocket_ui::achievements_page::about_in(true).into_iter().chain([pocket_ui::achievements_page::password_note_in(true)]).collect())),
             ("Manual", false, own(pocket_ui::manual::ANDROID_PAGES.iter().map(|(_, md)| *md).collect())),
             ("First start: the welcome", true, vec![pocket_ui::setup::welcome_title(true).to_string()]),
+            ("Android extras", true, own(pocket_ui::android_extras::every_line())),
             ("Tour: Big text's picture", true, pocket_ui::feature_previews::easy_to_read_rows().into_iter().map(|(name, _)| name.to_string()).collect()),
-            // The files dialog is Java with its own three languages: all of them are in the text.
-            ("The files dialog", false, vec![{
-                let java = include_str!("../android/java/xyz/pocketui/app/HandheldActivity.java");
-                let at = java.find("private void askForFiles()").expect("the dialog");
-                java[at..at + java[at..].find("onRequestPermissionsResult").unwrap()].to_string()
-            }]),
+            // "Read your games", a sheet of ours since 26.11.2026 (before: Java's dialog with its own languages).
+            ("Read your games", true, {
+                use crate::app_android_files::*;
+                own(vec![TITLE, WHAT, SAVES, WITHOUT, ALLOW, MOBILE])
+            }),
         ]
     }
 

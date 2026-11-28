@@ -1,0 +1,8 @@
+• Real box spines, labels, backs and game manuals from ScreenScraper (optional)
+• Shelves by series
+• Chinese, Vietnamese and Japanese menus
+• Pause menu over other emulator apps; save and load there with Shizuku or root
+• Volume bar, Home app and From the start in the pause menu
+• PSP and other 3D games run smoother at high resolution
+• Dreamcast in widescreen
+• Refreshed first start

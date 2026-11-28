@@ -200,6 +200,16 @@ pub fn for_system(system: &str) -> Option<&'static Console> {
     all().iter().find(|c| c.id == id)
 }
 
+/// The console's name on its page and the credits: the file's, or the name the player chose for a console sold under
+/// regional names (`region_pairs`: "Genesis" for the Mega Drive's page). A chosen name the file's starts with stays the
+/// file's fuller one ("Super Nintendo" keeps "Super Nintendo Entertainment System").
+pub fn shown_name(c: &Console) -> &str {
+    match crate::region_pairs::current(&c.id) {
+        Some(n) if !c.name.starts_with(n.long) => n.long,
+        _ => &c.name,
+    }
+}
+
 const MONTHS: [&str; 12] = [
     "January",
     "February",

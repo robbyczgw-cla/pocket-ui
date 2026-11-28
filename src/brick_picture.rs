@@ -246,6 +246,50 @@ impl Layer {
         Ok(())
     }
 
+    /// Its renderer's context (the overlay beside it on the direct way).
+    pub fn gl(&self) -> &glow::Context {
+        self.renderer.gl()
+    }
+
+    /// The settings it draws with now (`set`).
+    pub fn request(&self) -> Option<&Request> {
+        self.request.as_ref()
+    }
+
+    /// pocket-core's direct way on the Brick (`brick_gles`): a 3D core's frame from its framebuffer's texture `src` (`w`×`h` in its
+    /// corner, bottom row first when `bottom_left`), on the GPU, no CPU copy. Drawn by `draw_on`.
+    pub fn take_texture(&mut self, src: glow::Texture, w: u32, h: u32, bottom_left: bool) {
+        self.renderer.copy_texture(src, w, h, bottom_left);
+    }
+
+    /// The picture taken last (`take_texture`) drawn onto the screen (`screen`) with the settings, as `draw` does. No swap.
+    pub fn draw_on(&mut self, screen: (u32, u32)) -> Result<(), String> {
+        let Some(request) = &self.request else { return Err("no picture settings".into()) };
+        if !self.renderer.has_frame() {
+            return Err("no picture yet".into());
+        }
+        self.renderer.draw(screen.0, screen.1, request.aspect, &self.settings);
+        Ok(())
+    }
+
+    /// The picture taken last (`take_texture`) as its texture and size, for a copy on the GPU.
+    pub fn picture(&self) -> Option<(glow::Texture, u32, u32)> {
+        self.renderer.hw_texture()
+    }
+
+    /// The picture taken last, read back (XRGB8888, upright): a photo, a screenshot, a save state's picture, the window's picture
+    /// for the pause menu.
+    pub fn read_picture(&self) -> Option<Frame> {
+        self.renderer.read_frame()
+    }
+
+    /// Whether the picture taken last draws on a `screen` without anything still missing (the frame around it prepared on its
+    /// thread): drawn offscreen, nothing on the screen. The direct way takes the screen only then.
+    pub fn ready(&mut self, screen: (u32, u32)) -> bool {
+        let Some(aspect) = self.request.as_ref().map(|r| r.aspect) else { return false };
+        self.renderer.has_frame() && self.renderer.ready_offscreen(screen.0, screen.1, aspect, &self.settings)
+    }
+
     /// The last picture with the current settings at `w` by `h`, as the screen would show it (RGBA, top row first), for the pause menu's
     /// background. None without settings.
     pub fn shot(&mut self, w: u32, h: u32) -> Option<Vec<u8>> {

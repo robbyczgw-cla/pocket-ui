@@ -1,4 +1,6 @@
-//! The Android software-core picture through its production GLES compositor.
+//! Android core pictures through the production GLES compositor.
+#[path = "platform/android_hw_render.rs"]
+mod android_hw_render;
 #[path = "../android/src/player_graphics.rs"]
 mod graphics;
 #[path = "../android/src/player_video.rs"]
@@ -82,13 +84,126 @@ fn compositor() -> Option<(graphics::Graphics, crate::headless_gl::Headless, glo
 }
 
 // Keep context ownership in the compositor; a second loader only reads the same current context.
-fn read() -> Vec<u8> {
+fn current_gl() -> glow::Context {
     let lib = unsafe { libloading::Library::new("libEGL.so.1").unwrap() };
     let get: libloading::Symbol<unsafe extern "C" fn(*const std::ffi::c_char) -> *const std::ffi::c_void> = unsafe {lib.get(b"eglGetProcAddress").unwrap()};
-    let gl = unsafe { glow::Context::from_loader_function_cstr(|n| get(n.as_ptr())) };
+    unsafe { glow::Context::from_loader_function_cstr(|n| get(n.as_ptr())) }
+}
+
+fn read() -> Vec<u8> {
+    let gl = current_gl();
     let mut rgba=vec![0;32*32*4];
     unsafe {gl.read_pixels(0,0,32,32,glow::RGBA,glow::UNSIGNED_BYTE,glow::PixelPackData::Slice(&mut rgba));assert_eq!(gl.get_error(),glow::NO_ERROR);}
     rgba
+}
+
+#[test]
+fn android_shared_gles_picture_holds_across_pause_rotation_continue_and_core_switch() {
+    use graphics::GamePicture;
+    let Some((mut gfx, context, _fbo)) = compositor() else { return };
+    let gl = current_gl();
+    let dir = crate::testutil::TestDir::new("android-shared-picture");
+    let overlay = vec![0; 32 * 32];
+    let view = (0, 0, 32, 32);
+    let picture_plan = ((32, 32), view);
+    // Exercise both native size and a core reporting a visible region smaller than its framebuffer.
+    for (size, bottom_left) in [((8, 96), true), ((4, 64), false), ((4, 64), true)] {
+        let hw = android_hw_render::HwContext::for_test(8, 96, bottom_left);
+        let publish = |size: (u32, u32), lower: [f32; 3], upper: [f32; 3]| {
+            hw.core_current();
+            unsafe {
+                gl.enable(glow::SCISSOR_TEST);
+                for (y, color) in [(0, lower), (size.1 / 2, upper)] {
+                    gl.scissor(0, y as i32, size.0 as i32, (size.1 / 2) as i32);
+                    gl.clear_color(color[0], color[1], color[2], 1.0);
+                    gl.clear(glow::COLOR_BUFFER_BIT);
+                }
+                gl.disable(glow::SCISSOR_TEST);
+                // Simulate a core leaving its read selector disabled before delivering its picture.
+                gl.read_buffer(glow::NONE);
+                assert_eq!(gl.get_error(), glow::NO_ERROR, "core drew into its shared framebuffer");
+            }
+            assert!(android_hw_render::video_refresh(usize::MAX as *const _, size.0, size.1));
+            hw.picture().expect("hardware delivery")
+        };
+        let red = [1., 0., 0.];
+        let blue = [0., 0., 1.];
+        let green = [0., 1., 0.];
+        let draw = |gfx: &mut graphics::Graphics, frame: android_hw_render::Picture, rect| {
+            let frame = match gfx.variant.1 {
+                crate::video_program::Effect::SoftGlow | crate::video_program::Effect::Crt => hw.picture_for_mipmaps(frame).unwrap(),
+                _ => frame,
+            };
+            hw.frontend_current();
+            let source = GamePicture::Shared { texture: frame.texture, size: frame.size, texture_size: frame.texture_size, bottom_left: frame.bottom_left };
+            gfx.present_frame(&overlay, (32, 32), view, Some((source, rect)), true, &[], None, picture_plan);
+            hw.after_sampling();
+        };
+        let live = |gfx: &mut graphics::Graphics, frame, rect| {
+            draw(gfx, frame, rect);
+            read()
+        };
+        let picture = publish(size, red, blue);
+        gfx.shared_picture_changed();
+        let rect = Area::new(0, 0, 32, 32);
+        let before_pause = live(&mut gfx, picture, rect);
+        let (bottom, top) = if bottom_left { ([255, 0, 0], [0, 0, 255]) } else { ([0, 0, 255], [255, 0, 0]) };
+        assert_eq!(before_pause[..3], bottom);
+        assert_eq!(before_pause[31 * 32 * 4..31 * 32 * 4 + 3], top);
+        // Some cores draw a tentative pass but elect to duplicate the previous picture.
+        hw.core_current();
+        unsafe {
+            gl.clear_color(0.0, 1.0, 0.0, 1.0);
+            gl.clear(glow::COLOR_BUFFER_BIT);
+        }
+        assert!(!android_hw_render::video_refresh(std::ptr::null(), size.0, size.1));
+        assert!(hw.picture().is_none(), "the core duplicated its previous picture");
+        assert_eq!(live(&mut gfx, picture, rect), before_pause);
+        assert_eq!(hw.captures(), 0, "playing and holding a picture do not read pixels");
+
+        // Pause and the two PNG consumers must see the same colours and row order as the GPU.
+        let image = video::image(hw.capture(picture));
+        assert_eq!(hw.captures(), 1);
+        hw.frontend_current();
+        gfx.present(&overlay, (32, 32), view, Some((&image, rect)), true, &[], None, picture_plan);
+        assert_eq!(read(), before_pause);
+        use crate::video_program::{Effect, Sharpness};
+        for variant in [
+            (Sharpness::Soft, Effect::None, false),
+            (Sharpness::Crisp, Effect::SoftGlow, false),
+            (Sharpness::Crisp, Effect::Crt, false),
+        ] {
+            gfx.variant = variant;
+            let shared = live(&mut gfx, picture, rect);
+            gfx.present(&overlay, (32, 32), view, Some((&image, rect)), true, &[], None, picture_plan);
+            let captured = read();
+            assert!(shared.iter().zip(captured).all(|(a, b)| a.abs_diff(b) <= 1), "GPU crop and orientation must agree with the CPU picture for {variant:?}");
+        }
+        gfx.variant = crate::video_program::PLAIN;
+        let state = dir.join("held.moment");
+        let shot = dir.join("shot.png");
+        video::moment(&state, b"state", Some(&image)).unwrap();
+        video::png(&shot, &image).unwrap();
+        for path in [crate::slots::preview_path(&state), shot] {
+            assert_eq!(crate::image::load_png(&path).unwrap().px, image.px);
+        }
+
+        // Rotation reshapes the window's viewport. A frame from Continue replaces the bootstrap picture.
+        let rotated = Area::new(8, 0, 16, 32);
+        for (visible_size, colour) in [(size, blue), ((4, 32), red), ((8, 96), green)] {
+            let resumed = publish(visible_size, colour, colour);
+            gfx.shared_picture_changed();
+            draw(&mut gfx, resumed, rotated);
+        }
+        // No readbacks or implicit finishes between the three shared draws.
+        let after_resume = read();
+        assert_eq!(after_resume[16 * 4..16 * 4 + 3], [0, 255, 0]);
+        assert_eq!(after_resume[..3], [0, 0, 0]);
+        assert_eq!(hw.captures(), 1);
+        drop(hw);
+    }
+    drop(gfx);
+    drop(context);
 }
 
 #[test]

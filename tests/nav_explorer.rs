@@ -279,7 +279,9 @@ impl Card {
             let folder = tmp.join("roms").join(id);
             std::fs::create_dir_all(&folder).unwrap();
             for f in files {
-                std::fs::write(folder.join(f), "x").unwrap();
+                // Each game its own bytes, as real games have: two files of one checksum are one game (Game check's
+                // Same game twice).
+                std::fs::write(folder.join(f), f.as_bytes()).unwrap();
             }
             cfg += &format!(
                 "  <system><name>{id}</name><fullname>{name}</fullname><path>{}</path><extension>{exts}</extension><command>true</command></system>\n",
@@ -525,14 +527,15 @@ impl Drop for Ui {
 
 /// Rows of A that are not pressed: they end what is being explored for reasons that are no page's (the program restarts or
 /// quits, a game starts, the card is written over). Their pages are still opened when they are pages.
-// "View" (Android's handheld view): A ends this view and opens the Mobile one, as Restart pocket-ui ends the app.
-const NOT_PRESSED: &[&str] = &["Restart pocket-ui", "Power off", "Switch off", "Restart", "Quit", "Save & quit", "Leave", "Start EmulationStation", "Reset", "Erase", "Delete", "Format", "View",
+// "View" (Android's handheld view): A ends this view and opens the Mobile one, as Restart pocket-ui ends the app. "Home app":
+// A hands over to Android's own question (its role dialog), which the host can't show; the row reads Android's answer after. "Run in background" the same (its battery question).
+const NOT_PRESSED: &[&str] = &["Restart pocket-ui", "Power off", "Switch off", "Restart", "Quit", "Save & quit", "Leave", "Start EmulationStation", "Reset", "Erase", "Delete", "Format", "View", "Home app", "Run in background",
     // The same rows in Brazilian Portuguese (the explorer's pt profiles).
-    "Reiniciar pocket-ui", "Desligar", "Reiniciar", "Sair", "Salvar e sair", "Redefinir", "Excluir", "Apagar", "Formatar", "Iniciar o EmulationStation", "Exibição",
+    "Reiniciar pocket-ui", "Desligar", "Reiniciar", "Sair", "Salvar e sair", "Redefinir", "Excluir", "Apagar", "Formatar", "Iniciar o EmulationStation", "Exibição", "App de início", "Rodar em segundo plano",
     // And in French.
-    "Redémarrer pocket-ui", "Éteindre", "Redémarrer", "Quitter", "Sauver, quitter", "Réinitialiser", "Supprimer", "Effacer", "Formater", "Lancer EmulationStation", "Interface",
+    "Redémarrer pocket-ui", "Éteindre", "Redémarrer", "Quitter", "Sauver, quitter", "Réinitialiser", "Supprimer", "Effacer", "Formater", "Lancer EmulationStation", "Interface", "Appli d'accueil", "Fonctionner en arrière-plan",
     // And in Italian.
-    "Riavvia pocket-ui", "Spegni", "Riavvia", "Esci", "Salva ed esci", "Elimina", "Apri EmulationStation", "Vista"];
+    "Riavvia pocket-ui", "Spegni", "Riavvia", "Esci", "Salva ed esci", "Elimina", "Apri EmulationStation", "Vista", "App Home", "Esegui in background"];
 
 /// Unhinted keys tried once per page: a key that works there is either named or doing something no player finds.
 const OTHER_KEYS: &[&str] = &["x", "y", "l1", "r1"];
@@ -2248,6 +2251,58 @@ fn extras_rows_are_reachable_and_b_returns_from_starter_and_to_games_in_each_lan
     }
 }
 
+/// 0.8 check video on the Brick (27.11.2026): Real spines/labels/box backs/manuals switched Off, then B on that row did
+/// nothing, START neither, and the page had no way out but a restart (the hint bar said "B Back"). Every row of Box art &
+/// downloads, ScreenScraper and the rows under it included, untouched and right after a switch: B goes back to the row it
+/// was opened from, and START leaves the page too. No test pressed B anywhere but on the first row.
+#[test]
+fn b_leaves_box_art_and_downloads_from_every_row_also_after_a_switch() {
+    let profiles = vec![RG35XX_PLUS];
+    #[cfg(feature = "brick")]
+    let profiles = { let mut p = profiles; p.push(BRICK); p };
+    for profile in profiles {
+        let card = Card::new(&profile);
+        let mut ui = Ui::start(&card, &profile, true, 1, &[("POCKETUI_SCREENSCRAPER_ROW", "1")]);
+        ui.settled(&["start"]).unwrap();
+        open_category(&mut ui, "Games");
+        let parent = select_named(&mut ui, "Box art & downloads");
+        let page = ui.settled(&["a"]).unwrap();
+        let count = page.list.expect("Box art & downloads registers its list").1;
+        assert!(page.text().contains("Real manuals"), "{}: the ScreenScraper rows are on the page:\n{}", profile.name, page.text());
+        for row in 0..count {
+            // Untouched, then (on the switch rows) right after Left switched it; Left changes the row's value and opens
+            // nothing on the others.
+            for (keys, how) in [(&[][..], "untouched"), (&["left"][..], "after Left")] {
+                let mut f = ui.settled(&["a"]).unwrap();
+                assert_eq!(f.at, page.at, "{}: A opens the page again", profile.name);
+                for _ in 0..row { f = ui.settled(&["down"]).unwrap(); }
+                let name = f.focused().unwrap_or_default();
+                if !keys.is_empty() {
+                    let before = f.text();
+                    f = ui.settled(keys).unwrap();
+                    assert_eq!(f.at, page.at, "{}: Left on “{name}” stays on the page", profile.name);
+                    assert_eq!(f.focused().unwrap_or_default(), name, "{}: Left keeps the row", profile.name);
+                    let switch = name == "Pictures" || name == "ScreenScraper" || name.starts_with("Real ");
+                    assert!(!switch || f.text() != before, "{}: Left switched “{name}”", profile.name);
+                }
+                let back = ui.settled(&["b"]).unwrap();
+                assert_eq!(back.at, parent.at, "{}: B on “{name}” ({how}) leaves Box art & downloads:\n{}", profile.name, back.text());
+                assert!(back.same_row(&parent), "{}: back on its row from “{name}” ({how})", profile.name);
+            }
+            let mut f = ui.settled(&["a"]).unwrap();
+            for _ in 0..row { f = ui.settled(&["down"]).unwrap(); }
+            let name = f.focused().unwrap_or_default();
+            let out = ui.settled(&["start"]).unwrap();
+            assert_ne!(page_of(&out.at), page_of(&page.at), "{}: START on “{name}” leaves Box art & downloads", profile.name);
+            // START goes where it goes on this page; B from there comes back to Box art & downloads' row in Settings.
+            let mut g = out;
+            for _ in 0..3 { if g.at == parent.at { break; } g = ui.settled(&["b"]).unwrap(); }
+            assert_eq!(g.at, parent.at, "{}: after START on “{name}”, B comes back to Settings", profile.name);
+            assert!(g.same_row(&parent), "{}: on Box art & downloads' row", profile.name);
+        }
+    }
+}
+
 /// The same painters as the interactive walk, at a reproducible point with made-up state files.
 fn rc03_snapshot(card: &Card, profile: Profile, state: &str, env: &[(&str, &str)]) -> (Frame, PathBuf) {
     let name = state.replace(':', "-");
@@ -2833,6 +2888,67 @@ fn the_android_games_page_by_the_pad_in_every_language_and_its_empty_states() {
             assert!(back.at == list.at && back.same_row(&list), "{lang}: B back to the {row} row");
         }
     }
+}
+
+/// What `Extras.status` says on a plain Android 14 handheld: nothing given, Shizuku not installed.
+const EXTRAS_PLAIN: &str = r#"{"sdk":34,"package":"xyz.pocketui.app","secure":false,"shizuku":"missing","root":"","watch":false,"switches":{"heads_up":"off","animations":"off","awake":"off","bars":""}}"#;
+
+/// Settings → System → Android extras on the pad in every language (26.11.2026, opt-in extras): its row in System, the level
+/// Standard, Shizuku's first step with the code, every row by Down and round again, a switch without the grant says what it
+/// needs and A changes nothing, B back to the row. With the grant the same switch is Off and A asks Android. Linux has no row.
+#[test]
+fn the_android_extras_page_by_the_pad_in_every_language() {
+    let languages = [
+        ("en", "Android extras", "Standard", "1. Get Shizuku", "Needs the grant", "Off"),
+        ("de", "Android-Extras", "Standard", "1. Shizuku holen", "Braucht die Freigabe", "Aus"),
+        ("es", "Extras de Android", "Estándar", "1. Obtén Shizuku", "Necesita el permiso", "Desactivado"),
+        ("fr", "Extras Android", "Standard", "1. Obtiens Shizuku", "Autorisation requise", "Désactivé"),
+        ("it", "Extra di Android", "Standard", "1. Scarica Shizuku", "Serve il permesso", "Spento"),
+        ("pt", "Extras do Android", "Padrão", "1. Baixe o Shizuku", "Precisa da permissão", "Desligado"),
+    ];
+    for (lang, row, standard, step, needs, off) in languages {
+        let card = Card::new(&ANDROID_ODIN);
+        let mut ui = Ui::start(&card, &ANDROID_ODIN, true, 1, &[("POCKETUI_LANG", lang), (pocket_ui::android_extras::STATUS_ENV, EXTRAS_PLAIN)]);
+        ui.settled(&["start"]).unwrap();
+        open_category(&mut ui, "System");
+        let list = select_named(&mut ui, row);
+        let page = ui.settled(&["a"]).unwrap();
+        assert_eq!(page.at, "settings:Android extras", "{lang}: A on {row} opens the page");
+        let page = ui.settled(&[]).unwrap();
+        assert!(page.text().contains(standard), "{lang}: the level:\n{}", page.text());
+        assert_eq!(walk_rows(&mut ui, &page).len(), 8, "{lang}: every row by the pad (no bars row on Android 14)");
+        let shizuku = ui.settled(&["down"]).unwrap();
+        assert!(shizuku.text().contains(step), "{lang}: Shizuku's first step under the list:\n{}", shizuku.text());
+        assert!(shizuku.names_hint("a"), "{lang}: A gets Shizuku: {:?}", shizuku.hints);
+        let mut f = shizuku;
+        for _ in 0..4 {
+            f = ui.settled(&["down"]).unwrap();
+        }
+        assert!(f.text().contains(needs), "{lang}: No pop-up notifications without the grant:\n{}", f.text());
+        assert!(!f.names_hint("a"), "{lang}: no A where A changes nothing: {:?}", f.hints);
+        let same = ui.settled(&["a"]).unwrap();
+        assert!(same.at == f.at && same.text().contains(needs), "{lang}: A changed nothing:\n{}", same.text());
+        let back = ui.settled(&["b"]).unwrap();
+        assert!(back.at == list.at && back.same_row(&list), "{lang}: B back to the {row} row");
+    }
+    // With the grant the switches are Off and A is offered (the press goes to Android, which the desktop isn't).
+    let granted = EXTRAS_PLAIN.replace(r#""secure":false"#, r#""secure":true"#);
+    let card = Card::new(&ANDROID_ODIN);
+    let mut ui = Ui::start(&card, &ANDROID_ODIN, true, 1, &[(pocket_ui::android_extras::STATUS_ENV, granted.as_str())]);
+    ui.settled(&["start"]).unwrap();
+    open_category(&mut ui, "System");
+    select_named(&mut ui, "Android extras");
+    ui.settled(&["a"]).unwrap();
+    let level = ui.settled(&[]).unwrap();
+    assert!(level.text().contains("ADB grant"), "the level with the grant:\n{}", level.text());
+    let row = select_named(&mut ui, "No pop-up notifications");
+    assert!(row.text().contains(languages[0].5) && row.names_hint("a"), "with the grant: Off and A:\n{}", row.text());
+    // Linux: no such row.
+    let card = Card::new(&RG35XX_PLUS);
+    let mut ui = Ui::start(&card, &RG35XX_PLUS, true, 1, &[]);
+    ui.settled(&["start"]).unwrap();
+    let system = open_category(&mut ui, "System");
+    assert!(!walk_rows(&mut ui, &system).iter().any(|r| r == "Android extras"), "no Android extras on Linux");
 }
 
 /// Settings → Games → RomM on the pad in every language, at 640x480 (the smallest screen) and in Android's handheld view:

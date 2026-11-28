@@ -197,3 +197,52 @@ fn a_handhelds_display_lights_up_at_every_screen_size() {
         assert_eq!(lit_glass(&on, &dark, sw).0, 0, "snes {size}: nothing lights on the console");
     }
 }
+
+/// A label as ScreenScraper gives it (`support-texture`, a flat scan): pure magenta, `w` x `h`.
+fn write_label(path: &Path, w: u32, h: u32) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut out = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut out, w, h);
+        enc.set_color(png::ColorType::Rgb);
+        enc.set_depth(png::BitDepth::Eight);
+        let data: Vec<u8> = (0..w * h).flat_map(|_| [0xf0, 0x10, 0xe0]).collect();
+        enc.write_header().unwrap().write_image_data(&data).unwrap();
+    }
+    std::fs::write(path, out).unwrap();
+}
+
+/// Pixels of the launch picture that are the label's magenta (printed: a little muted, still clearly magenta).
+fn magenta(px: &[u8]) -> usize {
+    px.chunks_exact(3).filter(|p| p[0] > 170 && p[1] < 70 && p[2] > 150).count()
+}
+
+#[test]
+fn a_real_label_goes_into_the_console_and_without_one_the_start_is_as_before() {
+    // 26.11.: offline, with ScreenScraper off or before its run, everything looks exactly as it did; with the
+    // game's label on the card, the cartridge carries it into the console.
+    let w = World::new("labels");
+    let data = w.lib.join("data");
+    for (system, ms) in [("snes", 1000), ("megadrive", 1000), ("nes", 1000), ("n64", 1000), ("gba", 350), ("nds", 350)] {
+        // The Mega Drive and the DS keep the cover's art on their label (owner 26.11.2026: their real ones look plainer).
+        let real = !matches!(system, "megadrive" | "nds");
+        let before = w.frame(system, COZY, ms);
+        // Another game's label and a ScreenScraper folder: nothing of it on this one.
+        let first = std::fs::read_dir(w.lib.join("roms").join(system)).unwrap().map(|e| e.unwrap().path()).min().unwrap();
+        let other = data.join("supporttextures").join(system).join("Not On This Card (USA).png");
+        write_label(&other, 300, 150);
+        assert_eq!(w.frame(system, COZY, ms), before, "{system}: a ScreenScraper folder without this game's label changes nothing");
+        assert_eq!(magenta(&before), 0, "{system}: no magenta before");
+        let own = data.join("supporttextures").join(system).join(format!("{}.png", first.file_stem().unwrap().to_string_lossy()));
+        write_label(&own, 300, 150);
+        let with = w.frame(system, COZY, ms);
+        if real {
+            assert!(magenta(&with) > 300, "{system}: the game's own label is on the cartridge going in ({} px)", magenta(&with));
+        } else {
+            assert_eq!(with, before, "{system}: the cover's art on its label, its real label on the card or not");
+        }
+        std::fs::remove_file(&own).unwrap();
+        assert_eq!(w.frame(system, COZY, ms), before, "{system}: its label gone, the start is as before");
+        std::fs::remove_dir_all(data.join("supporttextures")).unwrap();
+    }
+}

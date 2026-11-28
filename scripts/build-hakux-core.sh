@@ -1,57 +1,45 @@
 #!/bin/sh
-# Builds the hakuX libretro core from one exact commit of the hakuX-Linux fork (branch linux-1.3.0: portare-ch's Linux/libretro port,
-# hakuX PR #9, on hakuX 1.3.0, plus our fixes) with the fork's own tooling, on an aarch64 Docker host (HAKUX_BUILD_HOST;
-# an Apple Silicon Mac with Colima does it), and leaves the package where `make-install-zip.sh` / the image build take it from:
+# Fetches the hakuX Xbox core pocket-ui ships: the hakuX-lr release asset by portare-ch (based on hakuX by rfandango,
+# GPL-3.0-or-later), built by that project's CI. Nothing is compiled here: the archive and the core are checked against the
+# sha256 sums in deploy/hakux/SOURCE.txt, the core is only renamed from hakux-lr_libretro.so to hakux_libretro.so, and the
+# result is left where `make-install-zip.sh` / `make-fat-install.sh` / `release-channel.sh --hakux DIR` take it from
+# (scripts/hakux-files.sh, docs/XBOX.md "Shipping the core"):
 #
-#   scripts/build-hakux-core.sh [out-dir]       (out-dir default: ./hakux-core)
+#   scripts/build-hakux-core.sh [out-dir] [archive]
+#     out-dir  default ./hakux-core; gets lib/libretro/hakux_libretro.so, share/licenses/hakux/, BUILD-INFO and the archive
+#     archive  a hakux-lr-<version>-aarch64.tar.gz already downloaded (checked the same way); default: download it
 #
-# Steps (docs/XBOX.md "Shipping the core"):
-#  1. a clone of the commit, any patches of ours from deploy/hakux/patches/ applied as commits with `git am` (committer = author,
-#     committer date = author date, so the patched commit has the same id on every machine; today none: our fixes, among them the
-#     APU relaunch-silence fix, are commits of the fork). linux-package.sh needs a clean git checkout: it records HEAD.
-#  2. that clone sent to the build host (~/hakux-core-build, replaced each time); the dependencies the fork pins
-#     (tools/native/linux-deps.json: FEX, glslang, ... by commit; linux-deps.py fetches and checks them) stay in ~/hakux-core-deps
-#     there, mounted where the fork expects them (build/deps), so a rebuild does not fetch them again.
-#  3. the fork's tools/native/linux-build.sh and linux-package.sh inside its image (tools/native/Dockerfile.linux: Debian
-#     stable-slim pinned by digest, Clang 19), built from that Dockerfile if the host does not have it. The image has no Vulkan
-#     loader, so CTest's libretro-smoke fails there (it needs a device); every other test must pass.
-# The package hakux-1.3.0-private-aarch64.tar.gz is unpacked into out-dir (lib/libretro/hakux_libretro.so, .info,
-# share/licenses/hakux/, BUILD-INFO). Same commit + same patches + same image = the same core, byte for byte (checked for 7068703
-# 2026-10-29: two builds and the core shipped since 2026-10-28 have one sha256, docs/XBOX.md). HAKUX_VERSION is part of the binary:
-# the core shipped for 035ec48 was built as 1.3.0-private, so that is kept to reproduce its sha256.
+# A new hakuX-lr release: update the Release, Commit and both sha256 lines of deploy/hakux/SOURCE.txt (and the docs that name
+# the version), then run this.
 set -eu
-COMMIT=035ec48acde326b017a3f6cd4bc888e1633172df   # hakuX-Linux, branch linux-1.3.0 (its head has since moved on by a README commit)
-VERSION=1.3.0-private
-HOST=${HAKUX_BUILD_HOST:?set HAKUX_BUILD_HOST to an ssh host with aarch64 Docker}
+bad() { echo "build-hakux-core: $*" >&2; exit 1; }
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+SRC=$ROOT/deploy/hakux/SOURCE.txt
 OUT=${1:-./hakux-core}
-REPO=${HAKUX_REPO:-https://github.com/robbyczgw-cla/hakuX-Linux.git}   # the fork; or a local clone of it that has the commit (git fetch origin linux-1.3.0)
-case $REPO in *://*|*@*:*) URL=$REPO ;; *) URL=file://$REPO
-  git -C "$REPO" cat-file -e "$COMMIT^{commit}" || { echo "build-hakux-core: $COMMIT is not in $REPO (git fetch origin linux-1.3.0)" >&2; exit 1; } ;; esac
-HERE=$(cd "$(dirname "$0")/.." && pwd)
-SRC=$(mktemp -d); trap 'rm -rf "$SRC"' EXIT
-# Only the commit itself (depth 1): the repository's history is large and the build does not need it.
-git init -q "$SRC/hakux"
-git -C "$SRC/hakux" fetch -q --depth 1 --upload-pack='git -c uploadpack.allowAnySHA1InWant=true upload-pack' "$URL" "$COMMIT"
-git -C "$SRC/hakux" checkout -q --detach "$COMMIT"
-for P in "$HERE"/deploy/hakux/patches/*.patch; do   # (none today: our fixes are in the fork)
-  [ -e "$P" ] || break   # our header lines before the first "From " line are not part of the mail
-  sed -n '/^From [0-9a-f]\{40\} /,$p' "$P" | GIT_COMMITTER_NAME=pocket-ui GIT_COMMITTER_EMAIL=noreply@pocket-ui.invalid \
-    git -C "$SRC/hakux" am -q --committer-date-is-author-date || { echo "build-hakux-core: $P does not apply to $COMMIT" >&2; exit 1; }
-done
-echo "build-hakux-core: source $(git -C "$SRC/hakux" rev-parse HEAD) ($COMMIT + $(ls "$HERE"/deploy/hakux/patches/*.patch 2>/dev/null | wc -l) patch(es))"
-# Docker on a Mac is not on the PATH of a non-interactive ssh shell.
-R='export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH;'
-tar -cf - -C "$SRC" hakux | ssh "$HOST" "rm -rf ~/hakux-core-build && mkdir -p ~/hakux-core-build ~/hakux-core-deps && tar -xf - -C ~/hakux-core-build --strip-components=1"
-# (the image keeps its old name hakux-pr9-linux so the Macs that have it do not rebuild it)
-ssh "$HOST" "$R cd ~/hakux-core-build && { docker image inspect hakux-pr9-linux >/dev/null 2>&1 || docker build -q -t hakux-pr9-linux -f tools/native/Dockerfile.linux tools/native; }"
-# The fork's two scripts, unchanged. linux-build.sh ends with CTest (set -e): its result is judged here, by the failed list.
-ssh "$HOST" "$R docker run --rm -v ~/hakux-core-build:/src -v ~/hakux-core-deps:/src/build/deps -e JOBS=\${JOBS:-2} \
-  -e HAKUX_VERSION=$VERSION hakux-pr9-linux sh -c 'git config --global --add safe.directory /src; \
-  python3 tools/native/linux-deps.py --dest build/deps && sh tools/native/linux-build.sh; f=build/linux/Testing/Temporary/LastTestsFailed.log; \
-  [ -s build/linux/hakux_libretro.so ] || exit 1; \
-  if [ -s \$f ] && grep -v libretro-smoke \$f | grep -q .; then echo \"build-hakux-core: tests failed:\"; cat \$f; exit 1; fi; \
-  STRIP=strip sh tools/native/linux-package.sh $VERSION'"
+# Release:   https://github.com/portare-ch/hakuX-lr/releases/tag/<tag>, asset <name>,
+#            sha256 <64 hex> (built by ...)
+TAG_URL=$(awk '$1 == "Release:" { print $2; exit }' "$SRC" | tr -d ',')
+ASSET=$(awk '$1 == "Release:" { print $4; exit }' "$SRC" | tr -d ',')
+ASSET_SHA=$(awk '$1 == "Release:" { getline; print $2; exit }' "$SRC")
+CORE_SHA=$(awk '$1 == "Core:" && $3 == "sha256" { print $4; exit }' "$SRC")
+case $TAG_URL in */releases/tag/*) ;; *) bad "no release URL in $SRC" ;; esac
+[ ${#ASSET_SHA} -eq 64 ] && [ ${#CORE_SHA} -eq 64 ] && [ -n "$ASSET" ] || bad "no asset name or sha256 in $SRC"
+URL=$(echo "$TAG_URL" | sed 's#/releases/tag/#/releases/download/#')/$ASSET
+
 mkdir -p "$OUT"
-ssh "$HOST" "cat ~/hakux-core-build/build/package/hakux-$VERSION-aarch64.tar.gz" >"$OUT/hakux-$VERSION-aarch64.tar.gz"
-tar -xzf "$OUT/hakux-$VERSION-aarch64.tar.gz" -C "$OUT" --strip-components=1
+TAR=$OUT/$ASSET
+if [ $# -ge 2 ]; then cp "$2" "$TAR"
+elif [ ! -s "$TAR" ]; then curl -fL --retry 3 -o "$TAR.part" "$URL" && mv "$TAR.part" "$TAR"; fi
+echo "$ASSET_SHA  $TAR" | sha256sum -c --quiet - || bad "$TAR is not the pinned asset (sha256 $ASSET_SHA)"
+
+TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+tar -xzf "$TAR" -C "$TMP" --strip-components=1
+[ -s "$TMP/lib/libretro/hakux-lr_libretro.so" ] || bad "no lib/libretro/hakux-lr_libretro.so in $ASSET"
+echo "$CORE_SHA  $TMP/lib/libretro/hakux-lr_libretro.so" | sha256sum -c --quiet - || bad "the core in $ASSET is not the pinned one"
+rm -rf "$OUT/lib" "$OUT/share"
+mkdir -p "$OUT/lib/libretro" "$OUT/share/licenses"
+install -m 755 "$TMP/lib/libretro/hakux-lr_libretro.so" "$OUT/lib/libretro/hakux_libretro.so"
+[ ! -f "$TMP/lib/libretro/hakux-lr_libretro.info" ] || install -m 644 "$TMP/lib/libretro/hakux-lr_libretro.info" "$OUT/upstream-hakux-lr_libretro.info"
+cp -R "$TMP/share/licenses/hakux-lr" "$OUT/share/licenses/hakux"
+[ ! -f "$TMP/BUILD-INFO" ] || install -m 644 "$TMP/BUILD-INFO" "$OUT/BUILD-INFO"
 echo "build-hakux-core: $(sha256sum "$OUT/lib/libretro/hakux_libretro.so")"

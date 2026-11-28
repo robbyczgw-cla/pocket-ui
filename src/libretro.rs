@@ -944,13 +944,20 @@ impl Core {
             let id = core_options::core_id(core_path);
             let profile = if cfg!(target_os = "android") { core_options::android_curation(&id) } else { core_options::curation(&id) };
             s.opts = OptionSet::new(profile, &saved);
+            #[cfg(feature = "brick")]
+            crate::brick_gles::core_loading(&id);
             // Linux and Android alike (Android's player has the same Resolution row, `pause_options`).
             if crate::render_scale::row_for_core(&id) {
-                s.opts.row_decides = crate::render_scale::CORE_KEYS;
+                s.opts.row_decides.extend(crate::render_scale::CORE_KEYS);
             }
             // Options → Picture → Mode 7 decides bsnes's and bsnes-hd's Mode 7 options (`mode7_hd`).
             if matches!(id.as_str(), "bsnes" | "bsnes_hd_beta") && crate::mode7_hd::here().is_some() {
-                s.opts.row_decides = crate::mode7_hd::CORE_KEYS;
+                s.opts.row_decides.extend(crate::mode7_hd::CORE_KEYS);
+            }
+            // Options → Picture → Widescreen decides Flycast's widescreen patches and hack (`dc_widescreen`): only where the
+            // start carries the row's options (a Dreamcast game), so a NAOMI or Atomiswave game keeps the Emulator switches.
+            if crate::dc_widescreen::take_row_set(&id) {
+                s.opts.row_decides.extend(crate::dc_widescreen::CORE_KEYS);
             }
             s.trace = std::env::var_os("POCKET_CORE_TRACE").is_some();
             crate::vfs::TRACE.store(s.trace, std::sync::atomic::Ordering::Relaxed);

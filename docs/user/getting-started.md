@@ -89,29 +89,40 @@ Aa** at top right). You can re-run setup later in Settings → Help & tools → 
 ![The first start: choose the language, then a few short steps](pictures/first-start.webp)
 
 1. **Your language.** Use Left/Right to choose **English**, **Deutsch**, **Español**, **Português (Brasil)**,
-   **Français**, **Italiano** or **한국어** (the screen updates live, defaulting to ROCKNIX's language; in Spanish it reads
+   **Français**, **Italiano**, **한국어**, **简体中文**, **Tiếng Việt** or **日本語** (the screen updates live, defaulting to ROCKNIX's language; in Spanish it reads
    **Bienvenido a tu Pocket**; see [Language](language.md)). Below it sit **Big text** (also toggled anywhere with L2)
    and **For a child** (toggle with Left/Right or Y to launch Kids Mode setup after your games). Press **A** ("Get
    started") from any row to continue, or **SELECT** to open this manual on the handheld (B returns).
 2. **Wi-Fi.** Pick a network and hit A to connect (if already connected, A continues). A successful connection shows
    "Connected to Home" and moves on automatically. Below the network list sit **Other network…**, **Wi-Fi country**,
-   **Time zone**, **Scan again** (or X), and **Continue** (**Continue offline** when disconnected). Time zone is guessed
+   **Time zone**, **Scan again** (or X), and **Next** (**Continue offline** when disconnected). Time zone is guessed
    automatically and shown with local time ("Vienna, 22:41"); press A to change it. Setup only prompts for a city if it
    cannot guess unambiguously (see [Time zone](#time-zone)). Handhelds without Wi-Fi show the time zone picker here
    instead.
 3. **Your games.** Shows what pocket-ui found ("Found 81 games" plus per-console counts), or how to copy games if the
-   card is empty. Choose **Continue** (or **I'll add games later**), or open **Add more…** for system folders and file
+   card is empty. Choose **Next** (or **I'll add games later**), or open **Add more…** for system folders and file
    sharing ([Add games](#5-add-games); B returns). Unrecognised folders or disc games missing files are flagged cleanly
    on their own line. **Box art** is a single toggle (**On** by default; only game names are sent while online, with
-   finer controls in [Box art & downloads](extras.md#box-art)). Nothing downloads until you leave this screen. Hidden on
-   non-Wi-Fi handhelds.
+   finer controls in [Box art & downloads](extras.md#box-art)). Under it, **Real box pictures (ScreenScraper)** brings
+   real spines, labels, box backs and manuals from ScreenScraper.fr after the box art (**Off** until you switch it on; no
+   account needed, sign in later in Box art & downloads). **A** opens its page: tick each kind on its own with **A**, with a
+   real example of the chosen one beside the list, and the line that says what is sent; **START** (Turn on) switches it on
+   with the kinds ticked, **B** (Not now) leaves it off. **Real box backs** starts unticked, so turning a box over shows
+   pocket-ui's own back with your progress ([ScreenScraper](extras.md#screenscraper)). It is the same page as the
+   [New in this version](tour.md) card after an update; A on the row while it is on switches it off. Nothing downloads
+   until you leave this screen. Both are hidden on non-Wi-Fi handhelds.
+
+   **pocket-ui for Android** follows this with **Your handheld** (part of the same step, no extra dot): **Start on the
+   shelf** makes pocket-ui your Home app, so the handheld starts on the shelf and Home in a game opens its pause menu.
+   It is **Off** until you switch it on; Android then asks once with its own question. A line below points to
+   Settings → System → **Android extras** for more. **Next** goes on to the layouts.
 4. **How your games stand.** Previews each shelf layout using your own library (or sample games on an empty card). Use
-   Left/Right to compare layouts (Easy notes "One big game at a time, simple menus."). Below the preview, move Down to
-   adjust **Style** (Barlow or [Retro](theme.md#style)), **Colours** (Cocoa or Pea when Retro is active) and
-   **Appearance** (Dark, Light or Automatic), seeing every change live. Press **A** ("Continue") from any row to keep
-   your pick and advance; B returns to your games. A quick note below reminds you that HOME opens the pause menu in
-   game, layouts can change any time in Settings → Look, and optional downloads live in Settings → Games →
-   Box art & downloads. See [Playing](playing.md#looks) for all four looks.
+   Left/Right to compare layouts (Easy notes "One big game at a time, simple menus."). Down once reaches **Order**
+   beside the layout's name (**By console**, the start, or **By series**: a shelf for each series, see
+   [Shelves by series](playing.md#shelves-by-series)); further down, adjust **Style** (Barlow or [Retro](theme.md#style)), **Colours** (Cocoa or Pea when Retro is active) and
+   **Appearance** (Dark, Light or Automatic), seeing every change live. Press **A** ("Next") from any row to keep
+   your pick and advance; B returns to your games. A quick note below reminds you that layouts can change any time in
+   Settings → Look and that optional downloads live in Settings → Games → Box art & downloads. See [Playing](playing.md#looks) for all four looks.
 5. **How cozy should it be?** Pick one preset instead of hunting through toggles: **Plain** (quick starts, no case
    sounds or extras), **Cozy** (the default: opening cases, console start animations and sounds, time-of-day lighting,
    evening TV glow, old-TV switch-on/off, stickers, printed discs and sealed new games) or **Everything** (Cozy plus
@@ -124,6 +135,12 @@ If you turned on **For a child**, Kids Mode setup (PIN, allowed games, colour, t
 layout step ([Kids mode](kids-mode.md)). Pressing B on its first page returns to normal layout setup; if the card has no
 compatible games yet, Kids Mode is skipped so you never land on an empty shelf (set it up later in Settings → System →
 Kids mode).
+
+The last page, **You're all set**, says what HOME does in a game and where **Pocket Sync** is (Settings → Connections →
+Pocket Sync), for when you have pocket-ui on a second device: the first start doesn't ask about it.
+
+No pad at hand? In **pocket-ui for Android** every key on the first start's hint bar is a button too, and on Your games
+a tap on a row selects it (a second tap does it), so the first start reaches your shelf by touch alone.
 
 If the battery dies or you reboot mid-setup, first start resumes right at the step you reached.
 
@@ -258,7 +275,10 @@ Advance or `roms/snes` for Super Nintendo. The folder names are the ones ROCKNIX
   them. Folders starting with `.` or `_` and anything two levels down are not read.
 - Each system accepts the file types ROCKNIX lists for it. Other files are ignored.
 - Names are tidied on the shelf: tags such as "(USA)" or "[!]" are hidden, a version number at the end is dropped ("Pipes.v1.02"
-  becomes "Pipes"), and "Legend of Zelda, The" becomes "The Legend of Zelda". When two games of a system would end up
+  becomes "Pipes"), and "Legend of Zelda, The" becomes "The Legend of Zelda". A release number in front from an old
+  scene set goes too ("0902 - MegaMan & Bass" and "1572-Super Metroid" show as "MegaMan & Bass" and "Super Metroid"),
+  while titles with numbers keep them ("1943 - The Battle of Midway", "2048", "007 - GoldenEye"). Underscores show as
+  spaces. Only the shown name changes: your files keep their names, so saves stay where they are. When two games of a system would end up
   with the same name, each keeps what tells it apart: "Tobu Tobu Girl (Europe)" and "Tobu Tobu Girl (World)", else the
   file type ("(ZIP)") or the folder it is in.
 - A disc game (`.cue` or `.gdi`) whose track file is missing is not on the shelf: it could not start. Add games

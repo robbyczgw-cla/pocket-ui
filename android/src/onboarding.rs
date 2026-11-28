@@ -419,6 +419,9 @@ impl Ui {
         // title as large as it can be with every word whole (a narrow column).
         let ts = text.title_px(Face::Title, self.sp(if wide { 26.0 } else { 30.0 }), title_key, body_w, self.sp(if wide { 18.0 } else { 30.0 }));
         let title_px = pocket_ui::type_scale::px(ts) as i32;
+        // A first line of hangul, hanzi or stacked Vietnamese marks ("Ảnh bìa") stands taller: down by the difference,
+        // clear of "Step n of 8" above (`Text::cjk_rise`, 0 for Latin text).
+        y += text.wrap_at_most(Face::Title, ts, &title, body_w, 3).first().map_or(0, |l| text.cjk_rise(Face::Title, ts, l));
         let title_top = y - title_px;
         if !text.words_fit(Face::Title, ts, title_key, body_w) || text.wrap(Face::Title, ts, &title, body_w).len() > 3 {
             l.faults.push("the title does not fit its column".into());

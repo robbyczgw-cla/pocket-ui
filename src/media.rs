@@ -477,9 +477,13 @@ pub fn spine(text: &mut Text, m: Medium, k: f32, look: Look, title: &str) -> Pic
     // 24 px, or 21 on a narrow label (the Game Boy's, the thin jewel case's): the two sizes the shelf has always used,
     // so a new spine finds its letters drawn already. Bigger (a case out of the shelf) at the nearest size the app
     // paints anyway, never past the label.
+    spine_with(text, m, k, look, title, spine_size(m, k))
+}
+
+/// The title size `spine` writes at for `k` times the shelf size (the photo spines write at the same).
+pub fn spine_size(m: Medium, k: f32) -> f32 {
     let (_, _, w, _) = m.template().at(m.template().spine_label, shelf_scale() * k);
-    let want = (if (w as f32 / k) < 25.0 { 21.0 } else { 24.0 }) * k;
-    spine_with(text, m, k, look, title, want)
+    (if (w as f32 / k) < 25.0 { 21.0 } else { 24.0 }) * k
 }
 
 /// The sizes a spine's title is written in: the ones the app paints anyway, so a spine made in a frame draws no
@@ -543,6 +547,162 @@ pub fn spine_with(text: &mut Text, m: Medium, k: f32, look: Look, title: &str, w
     }
     p
     })
+}
+
+// ---- real spines (ScreenScraper's `box-2D-side`, docs/SCREENSCRAPER.md) -----------------------------------------------
+
+/// The longest side a spine photo is kept at once read (`upright_spine`): the largest spine the app paints (a
+/// selected case's, a few hundred pixels long) needs no more, and a frame that makes a spine reads at most this much.
+pub const SPINE_PHOTO_EDGE: u32 = 400;
+
+/// The colour of the cardboard round a real spine photo (`photo_spine`): a dark neutral grey.
+const PHOTO_FRAME: u32 = 0x2c2c2e;
+
+/// A spine photo standing as the shelf's spines stand, its title read top to bottom: one that lies (ScreenScraper keeps
+/// the SNES's and the N64's lying, their title left to right) turned a quarter clockwise, then box-filtered to at most
+/// [`SPINE_PHOTO_EDGE`] long. None for a picture that is no spine (less than three times as long as it is thick).
+pub fn upright_spine(img: &Image) -> Option<Image> {
+    if img.w == 0 || img.h == 0 {
+        return None;
+    }
+    let (long, thick) = (img.w.max(img.h), img.w.min(img.h));
+    if long < thick * 3 {
+        return None;
+    }
+    let turned;
+    let img = if img.w > img.h {
+        // A quarter clockwise: the photo's left end goes to the top, its top to the right (where the letters' tops face).
+        let (w, h) = (img.h, img.w);
+        let mut px = vec![0u32; (w * h) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                px[(y * w + x) as usize] = img.px[((img.h - 1 - x) * img.w + y) as usize];
+            }
+        }
+        turned = Image { w, h, px };
+        &turned
+    } else {
+        img
+    };
+    if img.h <= SPINE_PHOTO_EDGE {
+        return Some(Image { w: img.w, h: img.h, px: img.px.clone() });
+    }
+    let h = SPINE_PHOTO_EDGE;
+    let w = ((img.w as u64 * h as u64).div_ceil(img.h as u64) as u32).max(1);
+    Some(resample(img, (0.0, 0.0, img.w as f32, img.h as f32), w, h))
+}
+
+/// The part `(x, y, w, h)` of `img` (in its pixels, fractions allowed) box-filtered to `tw` x `th`.
+fn resample(img: &Image, (sx, sy, sw, sh): (f32, f32, f32, f32), tw: u32, th: u32) -> Image {
+    let (tw, th) = (tw.max(1), th.max(1));
+    let mut px = Vec::with_capacity((tw * th) as usize);
+    let span = |o: f32, len: f32, n: u32, i: u32, max: u32| {
+        let a = (o + len * i as f32 / n as f32).floor().max(0.0) as u32;
+        let b = ((o + len * (i + 1) as f32 / n as f32).ceil() as u32).clamp(a + 1, max.max(a + 1));
+        (a.min(max - 1), b.min(max))
+    };
+    for ty in 0..th {
+        let (y0, y1) = span(sy, sh, th, ty, img.h);
+        for tx in 0..tw {
+            let (x0, x1) = span(sx, sw, tw, tx, img.w);
+            let (mut r, mut g, mut b, mut n) = (0u32, 0u32, 0u32, 0u32);
+            for y in y0..y1 {
+                for &p in &img.px[(y * img.w + x0) as usize..(y * img.w + x1) as usize] {
+                    r += p >> 16 & 0xff;
+                    g += p >> 8 & 0xff;
+                    b += p & 0xff;
+                    n += 1;
+                }
+            }
+            let n = n.max(1);
+            px.push((r / n) << 16 | (g / n) << 8 | b / n);
+        }
+    }
+    Image { w: tw, h: th, px }
+}
+
+/// Where a spine photo goes on a spine made at `k` times its shelf size: the printed part, band and label together,
+/// below the top a case sticker uses; on pocket-ui's own cases only the label (their band in the system's colour stays).
+pub fn spine_photo_rect(m: Medium, k: f32) -> (i32, i32, i32, i32) {
+    let t = m.template();
+    let f = shelf_scale() * k;
+    let (lx, ly, lw, lh) = t.at(t.spine_label, f);
+    match t.band {
+        // pocket-ui's own case: only its label (its band in the system's colour stays).
+        _ if m.is_generic() => (lx, ly, lw, lh),
+        Some(band) => {
+            let (bx, by, bw, bh) = t.at(band, f);
+            let (x0, y0) = (lx.min(bx), ly.min(by));
+            (x0, y0, (lx + lw).max(bx + bw) - x0, (ly + lh).max(by + bh) - y0)
+        }
+        // A plastic case whose paper insert runs the spine's whole height (DS, 3DS, PlayStation, DVD cases): from as
+        // near the top as the sides, so the case's own drawn head never stands over the real one (review 26.11.2026).
+        None => {
+            let top = lx.min(ly);
+            (lx, top, lw, ly + lh - top)
+        }
+    }
+}
+
+/// An upright spine photo fitted whole into `w` x `h` (Alex 26.11.2026: never cut, never stretched): as large as fits
+/// with its shape kept, centred, the rest of the spine in the colour of the photo's own edge (the mean of its outermost
+/// pixels), so it reads as the box's printed card. None only for an empty picture or spine.
+pub fn spine_photo_fit(img: &Image, w: i32, h: i32) -> Option<Image> {
+    if img.w == 0 || img.h == 0 || w <= 0 || h <= 0 {
+        return None;
+    }
+    let (iw, ih) = (img.w as u64, img.h as u64);
+    let (fw, fh) = if iw * h as u64 > ih * w as u64 {
+        (w as u32, ((ih * w as u64) / iw).clamp(1, h as u64) as u32)
+    } else {
+        (((iw * h as u64) / ih).clamp(1, w as u64) as u32, h as u32)
+    };
+    let body = resample(img, (0.0, 0.0, img.w as f32, img.h as f32), fw, fh);
+    let edge: Vec<u32> = (0..img.w)
+        .flat_map(|x| [img.px[x as usize], img.px[((img.h - 1) * img.w + x) as usize]])
+        .chain((0..img.h).flat_map(|y| [img.px[(y * img.w) as usize], img.px[(y * img.w + img.w - 1) as usize]]))
+        .collect();
+    let mut px = vec![average(&edge); (w * h) as usize];
+    let (ox, oy) = ((w as u32 - fw) / 2, (h as u32 - fh) / 2);
+    for y in 0..fh {
+        let dst = ((oy + y) * w as u32 + ox) as usize;
+        px[dst..dst + fw as usize].copy_from_slice(&body.px[(y * fw) as usize..((y + 1) * fw) as usize]);
+    }
+    Some(Image { w: w as u32, h: h as u32, px })
+}
+
+/// A spine with ScreenScraper's photo of the real one (`photo`, from [`upright_spine`]) in its printed part
+/// ([`spine_photo_rect`]), whole ([`spine_photo_fit`]): the case's template, edge and top as on a painted spine, the photo
+/// instead of the print, and nothing written over it (Alex 26.11.2026: the real spine has its own printed title; ours
+/// over it read as text on text; the selected game's name stands large above the shelf anyway).
+pub fn photo_spine(m: Medium, k: f32, look: Look, photo: &Image) -> Option<Pic> {
+    let (px_, py, pw, ph) = spine_photo_rect(m, k);
+    let fitted = spine_photo_fit(photo, pw, ph)?;
+    // The case round a real spine in a neutral dark grey, not the cover's colour (the owner, 26.11.2026: a red or yellow
+    // frame round a green spine has nothing to do with the box); a plastic case keeps its own plastic.
+    let look = Look { color: PHOTO_FRAME, band: PHOTO_FRAME, ..look };
+    let t = m.template();
+    let f = shelf_scale() * k;
+    let (spine, _) = m.pics();
+    let mut p = template_scaled(spine, f / t.res as f32, tint_of(m, look));
+    card_edge(&mut p, m, f);
+    p.changed();
+    for y in 0..ph.min(p.h - py) {
+        for x in 0..pw.min(p.w - px_) {
+            let (dx, dy) = (px_ + x, py + y);
+            if dx >= 0 && dy >= 0 {
+                p.px[(dy * p.w + dx) as usize] = 0xff00_0000 | fitted.px[(y * pw + x) as usize];
+            }
+        }
+    }
+    Some(p)
+}
+
+/// The mean colour of `px` (black for none).
+fn average(px: &[u32]) -> u32 {
+    let n = px.len().max(1) as u64;
+    let sum = |s: u32| px.iter().map(|&c| (c >> s & 0xff) as u64).sum::<u64>() / n;
+    (sum(16) << 16 | sum(8) << 8 | sum(0)) as u32
 }
 
 /// What a spine shows of a title, for tests/spine_names.rs: `POCKETUI_SPINE_LINES` names the file the spines made go to
@@ -718,7 +878,11 @@ fn spine_place(text: &mut Text, face: crate::text::Face, (t, split): Cand, thick
         // The whole title on two lines: a subtitle on a line of its own, without its dash.
         let lines = match split {
             Some((main, sub)) => vec![main.to_string(), sub.to_string()],
-            None => text.wrap(face, s, t, len),
+            // A short number at its end goes down with the word before it (`title_block::bind_number`).
+            None => {
+                let wrapped = text.wrap(face, s, t, len);
+                crate::title_block::bind_number(text, face, s, wrapped, len)
+            }
         };
         // Two lines of whole words: a word broken in pieces would not read.
         let whole = split.is_some() || lines.join(" ") == t.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -1000,16 +1164,17 @@ impl Game {
         Game::DRAWN.iter().position(|g| *g == self).or_else(|| Game::DRAWN.iter().position(|g| *g == stand_in))
     }
 
-    /// What a game of `system` comes on, its file `rom` (a SNES game from the USA on the American cartridge): the
-    /// system's own cartridge where one is drawn, else what its case holds (`Medium::game`).
+    /// What a game of `system` comes on, its file `rom` (a SNES game from the USA on the American cartridge, and every
+    /// SNES game when the player named the console "SNES (US console)", `region_pairs::snes_us_look`): the system's own
+    /// cartridge where one is drawn, else what its case holds (`Medium::game`).
     pub fn of(system: &str, rom: &str) -> Game {
         match system {
-            "snes" | "snesh" | "sfc" | "satellaview" | "sufami" if rom.contains("(USA") || rom.contains("(Canada") => Game::SnesUs,
+            "snes" | "snesh" | "sfc" | "satellaview" | "sufami" if rom.contains("(USA") || rom.contains("(Canada") || crate::region_pairs::snes_us_look() => Game::SnesUs,
             "gbc" | "gbch" => Game::Gbc,
             "3ds" | "n3ds" => Game::Card3ds,
             "mastersystem" | "sg-1000" | "sg1000" => Game::MasterSystem,
             "gamegear" | "ggh" => Game::GameGear,
-            "pcengine" | "tg16" | "supergrafx" => Game::HuCard,
+            "pcengine" | "tg16" | "turbografx16" | "supergrafx" => Game::HuCard,
             "neogeo" | "neogeoaes" => Game::NeoGeo,
             "ngp" | "ngpc" => Game::NeoGeoPocket,
             "wonderswan" | "wonderswancolor" => Game::WonderSwan,
@@ -1112,6 +1277,24 @@ pub fn ajar_spine(text: &mut Text, spine: Pic, system: &str, rom: &std::path::Pa
 }
 
 pub fn game_pic(text: &mut Text, g: Game, h: i32, look: Look, title: &str, cover: Option<&Image>, console: Option<&Sprite>) -> Option<Pic> {
+    game_pic_labelled(text, g, h, look, title, cover, console, None)
+}
+
+/// How much finer than its template a real label is made (`real_label::prepare`): four of its pixels a template pixel,
+/// so it is scaled down to the screen, sharp, in the game box and the launch alike.
+pub const LABEL_DETAIL: i32 = 4;
+
+/// A cartridge's or card's template size and where its label is on it (template pixels): what a real label is made to
+/// fit (`real_label::Target`, `LABEL_DETAIL` times finer). None for a disc or a UMD.
+pub fn label_cell(g: Game) -> Option<((i32, i32), (i32, i32, i32, i32))> {
+    let t = &GAME_TEMPLATES[g.drawn()?];
+    Some((t.size, t.label))
+}
+
+/// `game_pic` with the game's own label (`real_label::prepare`, the template's label size) printed in place of the
+/// cover's art: each of its pixels on one pixel of the template, so it is as coarse as the cartridge round it.
+#[allow(clippy::too_many_arguments)]
+pub fn game_pic_labelled(text: &mut Text, g: Game, h: i32, look: Look, title: &str, cover: Option<&Image>, console: Option<&Sprite>, label: Option<&Image>) -> Option<Pic> {
     let i = g.drawn()?;
     let sprite = g.pic()?;
     let f = h as f32 / GAME_TEMPLATES[i].size.1 as f32;
@@ -1125,8 +1308,19 @@ pub fn game_pic(text: &mut Text, g: Game, h: i32, look: Look, title: &str, cover
         .filter(|&i| p.px[i] != flat)
         .map(|i| (i, p.px[i]))
         .collect();
-    match cover {
-        Some(img) if img.w > 0 && img.h > 0 => {
+    let (_, _, tlw, tlh) = GAME_TEMPLATES[i].label;
+    match (label.filter(|l| l.w as i32 == tlw * LABEL_DETAIL && l.h as i32 == tlh * LABEL_DETAIL), cover) {
+        // The game's own label in its own colours, scaled to the label's place at the screen's resolution (from the
+        // label made at `LABEL_DETAIL` times the template, never from a coarser one): its shape is the place's.
+        (Some(real), _) => {
+            let fitted = real.resized(lw.max(1), lh.max(1));
+            for y in 0..lh.min(fitted.h as i32) {
+                for x in 0..lw.min(fitted.w as i32) {
+                    p.px[((ly + y) * p.w + lx + x) as usize] = 0xff00_0000 | fitted.px[(y as u32 * fitted.w + x as u32) as usize];
+                }
+            }
+        }
+        (None, Some(img)) if img.w > 0 && img.h > 0 => {
             // A label shows the artwork, not the box's printed side strip (a SNES box's black band, a GBA box's
             // silver one, a US N64 box's red one) or the margin a case's front left round it.
             // A cartridge's label is printed edge to edge: the artwork fills it, cut at its sides or top and bottom.
@@ -1450,9 +1644,23 @@ impl DiscKind {
 /// enough to read it. Without a cover the print is the cover's colour with the title above the hole. Made once per
 /// case and size (`App::box_game`, the launch's first frame), never per frame.
 pub fn disc_pic(text: &mut Text, kind: DiscKind, h: i32, look: Look, title: &str, cover: Option<&Image>) -> Pic {
+    disc_pic_labelled(text, kind, h, look, title, cover, None)
+}
+
+/// A round disc's diameter in its template's pixels: the size its real face is made at (`real_label::Target::Disc`).
+/// None for the UMD, whose label is paper on a shell.
+pub fn disc_diameter(kind: DiscKind) -> Option<i32> {
+    kind.is_round().then(|| (kind.template().edge * 2.0).round() as i32)
+}
+
+/// `disc_pic` with the disc's own face (`real_label::prepare`, a square `LABEL_DETAIL` times `disc_diameter`) as its
+/// print: the real print between the template's hub and its rim, in its own colours at the screen's resolution, cut round by the
+/// disc's own circles, so its hole and its clear hub stay; no title written on it, the real one is printed there.
+pub fn disc_pic_labelled(text: &mut Text, kind: DiscKind, h: i32, look: Look, title: &str, cover: Option<&Image>, label: Option<&Image>) -> Pic {
+    let label = label.filter(|l| kind.is_round() && disc_diameter(kind).map(|d| d * LABEL_DETAIL) == Some(l.w as i32) && l.h == l.w);
     // No box art: a burned disc. A CD-R or DVD-R's plain silver (the GameCube's mini disc and the UMD keep their
     // shape), nothing printed, the name written on it in marker.
-    let blank = look.tape && cover.is_none_or(|c| c.w == 0 || c.h == 0);
+    let blank = look.tape && label.is_none() && cover.is_none_or(|c| c.w == 0 || c.h == 0);
     let kind = if blank && !matches!(kind, DiscKind::GameCube | DiscKind::Umd) { DiscKind::Cd } else { kind };
     // Made at the size it is shown: the template's colours sampled smoothly between its pixels, every edge (the rim,
     // the hole, the print, the ring) worked out as a circle and anti-aliased, the cover and the title at full
@@ -1472,9 +1680,14 @@ pub fn disc_pic(text: &mut Text, kind: DiscKind, h: i32, look: Look, title: &str
     // How much of a pixel `d` from a centre lies inside a circle of radius `r`.
     let inside = |d: f32, r: f32| (r - d + 0.5).clamp(0.0, 1.0);
     let cover = cover.filter(|c| c.w > 0 && c.h > 0);
+    // The real face at the disc's size on the screen, its middle on the disc's.
+    let face = label.map(|l| {
+        let d = ((l.w as f32 / LABEL_DETAIL as f32) * f).round().max(1.0) as i32;
+        (l.resized(d, d), cx - d as f32 / 2.0, cy - d as f32 / 2.0)
+    });
     // The ring at the rim, in the cover's colour darkened: an eighth of the disc's radius, never more than a third of
     // the print (the GameCube's hub is large).
-    let ring = (kind.is_round() && kind.has_ring() && !blank).then(|| r_out - (r_out * 0.13).min((r_out - r_in) / 3.0)).filter(|r| r_out - r > 3.0);
+    let ring = (kind.is_round() && kind.has_ring() && !blank && label.is_none()).then(|| r_out - (r_out * 0.13).min((r_out - r_in) / 3.0)).filter(|r| r_out - r > 3.0);
     let ring_c = kind.ring().unwrap_or(mix(look.color, 0x000000, 110));
     let fitted = cover.map(|img| art::cover_fill(&trim_zones(&trim_bands(img), kind.band_zones()), bw.max(1), bh.max(1)));
     let (sw, sh) = (s.w as i32, s.h as i32);
@@ -1512,6 +1725,12 @@ pub fn disc_pic(text: &mut Text, kind: DiscKind, h: i32, look: Look, title: &str
             // A burned disc has no print: its silver all the way (a UMD's label stays, as paper).
             let printed = (pc > 0.0 && !(blank && kind.is_round())).then(|| {
                 let (ax, ay) = ((x - bx).clamp(0, bw.max(1) - 1), (y - by).clamp(0, bh.max(1) - 1));
+                // The real face here.
+                if let Some((l, ox, oy)) = &face {
+                    let (lx, ly) = ((fx - ox).floor() as i32, (fy - oy).floor() as i32);
+                    let (lx, ly) = (lx.clamp(0, l.w as i32 - 1) as u32, ly.clamp(0, l.h as i32 - 1) as u32);
+                    return l.px[(ly * l.w + lx) as usize] & 0xffffff;
+                }
                 let mut c = match &fitted {
                     Some(f) => f.px[(ay.min(f.h as i32 - 1) as u32 * f.w + ax.min(f.w as i32 - 1) as u32) as usize] & 0xffffff,
                     // Without a cover: the cover's colour, darker down the disc.
@@ -1562,6 +1781,9 @@ pub fn disc_pic(text: &mut Text, kind: DiscKind, h: i32, look: Look, title: &str
         } else if bh >= 24 && bw >= 40 {
             crate::tape_label::write_on(text, &mut p, (bx + bw / 8, by + bh / 5, bw * 3 / 4, bh * 3 / 5), title, 2);
         }
+        return p;
+    }
+    if label.is_some() {
         return p;
     }
     match (cover, ring) {
@@ -2327,6 +2549,127 @@ mod tests {
         assert!(blue.count() > (lw * lh / 2) as usize, "the spine in the cover's colour");
     }
 
+    /// ScreenScraper's spine photos (live run 26.11.2026): the SNES's and the N64's lie, title left to right; on the
+    /// shelf a spine stands with its title top to bottom. A lying photo is turned a quarter clockwise: its left end
+    /// (where the title starts) at the top.
+    #[test]
+    fn a_lying_spine_photo_stands_up_reading_top_to_bottom() {
+        let (w, h) = (300u32, 40u32);
+        let px = (0..w * h).map(|i| if i % w < 30 { 0xff0000 } else if i / w < 4 { 0x00ff00 } else { 0x202020 }).collect();
+        let up = upright_spine(&Image { w, h, px }).unwrap();
+        assert_eq!((up.w, up.h), (40, 300));
+        assert_eq!(up.px[(5 * up.w + 20) as usize], 0xff0000, "the left end on top");
+        assert_eq!(up.px[(150 * up.w + up.w - 2) as usize], 0x00ff00, "the photo's top edge on the right, where the letters' tops face");
+        // A standing one stays as it is; a long one is kept at most SPINE_PHOTO_EDGE long.
+        let tall = Image { w: 90, h: 900, px: vec![0x123456; 81_000] };
+        let kept = upright_spine(&tall).unwrap();
+        assert_eq!((kept.w, kept.h), (40, SPINE_PHOTO_EDGE));
+        assert_eq!(kept.px[0], 0x123456);
+    }
+
+    /// A square or nearly square picture is no spine (a wrong file, a box front): the painted spine stays.
+    #[test]
+    fn a_picture_that_is_no_spine_stays_off_the_shelf() {
+        assert!(upright_spine(&Image { w: 200, h: 180, px: vec![0; 36_000] }).is_none());
+        assert!(upright_spine(&Image { w: 0, h: 0, px: Vec::new() }).is_none());
+    }
+
+    /// Alex 26.11.2026 ("da überschneidet sich was"): a real spine shows whole, never cut and never stretched, and
+    /// nothing is written over it. Every case, with a photo far thinner than its spine and one far thicker: the photo's
+    /// four edges (marked in their own colours) are all on the spine, its shape is kept, the rest is the photo's edge
+    /// colour, and the case's top (where a sticker goes) stays the template's.
+    #[test]
+    fn a_real_spine_shows_whole_never_cut_or_stretched_and_nothing_over_it() {
+        let mut text = Text::new();
+        let look = Look { color: 0x2a6ab0, band: 0x7a6cb0, plastic: 0x9c99a2, tape: false };
+        // Body grey; the top quarter red, the bottom quarter blue, the left and right quarters green and yellow.
+        let photo = |w: u32, h: u32| {
+            let px = (0..w * h)
+                .map(|i| {
+                    let (x, y) = (i % w, i / w);
+                    if y < h / 4 { 0xd02020 } else if y >= h - h / 4 { 0x2020d0 } else if x < w / 4 { 0x20d020 } else if x >= w - w / 4 { 0xd0d020 } else { 0x808080 }
+                })
+                .collect();
+            Image { w, h, px }
+        };
+        for m in Medium::ALL {
+            let (rx, ry, rw, rh) = spine_photo_rect(m, 1.0);
+            for (pw, ph) in [(64u32, 1600u32), (200, 400)] {
+                let p = photo_spine(m, 1.0, look, &photo(pw, ph)).unwrap_or_else(|| panic!("{m:?}: a photo always shows"));
+                let plain = spine_with(&mut text, m, 1.0, look, "", 24.0);
+                assert_eq!((p.w, p.h), (plain.w, plain.h), "{m:?}: as big as the painted spine");
+                assert_eq!(p.get(rx + rw / 2, 0), plain.get(rx + rw / 2, 0), "{m:?}: the case's own top stays");
+                let inside = |c: u32| (ry..ry + rh).any(|y| (rx..rx + rw).any(|x| p.get(x, y) & 0xffffff == c));
+                for (c, edge) in [(0xd02020, "top"), (0x2020d0, "bottom"), (0x20d020, "left"), (0xd0d020, "right")] {
+                    assert!(inside(c), "{m:?} {pw}x{ph}: the photo's {edge} edge is on the spine, not cut off");
+                }
+                // Its shape: the drawn photo's height and width (where its edges' colours are) as the photo's.
+                let rows: Vec<i32> = (ry..ry + rh).filter(|&y| (rx..rx + rw).any(|x| matches!(p.get(x, y) & 0xffffff, 0xd02020 | 0x2020d0 | 0x20d020 | 0xd0d020 | 0x808080))).collect();
+                let cols: Vec<i32> = (rx..rx + rw).filter(|&x| (ry..ry + rh).any(|y| matches!(p.get(x, y) & 0xffffff, 0xd02020 | 0x2020d0 | 0x20d020 | 0xd0d020 | 0x808080))).collect();
+                let (dh, dw) = (rows.len() as f32, cols.len() as f32);
+                let want = pw as f32 / ph as f32;
+                assert!((dw - dh * want).abs() <= 3.0, "{m:?} {pw}x{ph}: shape kept, not stretched ({dw}x{dh} drawn for {pw}x{ph})");
+            }
+        }
+    }
+
+    /// The owner, 26.11.2026 ("Farben weird"): a real spine keeps the photo's own colours (nothing tints, dulls or
+    /// palettes it; its mean colour is the photo's), and the case round it is a neutral grey, never the cover's colour.
+    #[test]
+    fn a_real_spine_keeps_its_colours_and_stands_in_a_neutral_case() {
+        let red = Look { color: 0xd02020, band: 0xe0c020, plastic: 0x333333, tape: false };
+        for m in [Medium::N64, Medium::Snes, Medium::Gba, Medium::Nes, Medium::Gb] {
+            let (rx, ry, rw, rh) = spine_photo_rect(m, 1.0);
+            // A green and blue photo of exactly the print's shape (no edge fill).
+            let (w, h) = (rw as u32 * 4, rh as u32 * 4);
+            let photo = Image { w, h, px: (0..w * h).map(|i| if (i / w) % 40 < 20 { 0x30a040 } else { 0x2050c0 }).collect() };
+            let p = photo_spine(m, 1.0, red, &photo).unwrap();
+            let mean = |px: &[u32]| {
+                let n = px.len().max(1) as u64;
+                [16, 8, 0].map(|s| px.iter().map(|&c| (c >> s & 0xff) as u64).sum::<u64>() / n)
+            };
+            let drawn: Vec<u32> = (ry..ry + rh).flat_map(|y| (rx..rx + rw).map(move |x| (x, y))).map(|(x, y)| p.get(x, y) & 0xffffff).collect();
+            let (a, b) = (mean(&drawn), mean(&photo.px));
+            assert!(a.iter().zip(b).all(|(x, y)| x.abs_diff(y) <= 4), "{m:?}: the photo's own colours ({a:?} drawn, {b:?} in the photo)");
+            // Round it (sides and top of the case): grey, no red or yellow of the cover.
+            let frame: Vec<u32> = (0..p.h).flat_map(|y| (0..p.w).map(move |x| (x, y))).filter(|&(x, y)| !(rx..rx + rw).contains(&x) || !(ry..ry + rh).contains(&y)).map(|(x, y)| p.get(x, y)).filter(|c| c >> 24 != 0).map(|c| c & 0xffffff).collect();
+            let coloured = frame.iter().filter(|&&c| {
+                let (r, g, b) = ((c >> 16 & 0xff) as i32, (c >> 8 & 0xff) as i32, (c & 0xff) as i32);
+                r.max(g).max(b) - r.min(g).min(b) > 40
+            });
+            assert!(coloured.count() * 20 < frame.len().max(1), "{m:?}: the case round a real spine is neutral, not the cover's colour");
+        }
+    }
+
+    /// Review 26.11.2026: on a DS case our drawn head (its grey cap) stood over the real spine's own head. On the plastic
+    /// cases whose insert runs the whole spine the photo starts as near the top as the sides; nothing of the template's
+    /// head shows between.
+    #[test]
+    fn a_real_spine_on_a_plastic_case_runs_its_whole_height() {
+        let look = Look { color: 0x777777, band: 0x555555, plastic: 0x333333, tape: false };
+        for m in [Medium::Ds, Medium::N3ds, Medium::Ps2, Medium::Ps1, Medium::Wii, Medium::GameCube, Medium::Umd, Medium::Xbox] {
+            let (lx, ly, _, _) = spine_label_rect(m, 1.0);
+            let (rx, ry, _, rh) = spine_photo_rect(m, 1.0);
+            assert!(ry <= lx.max(1) && ry < ly, "{m:?}: from the top ({ry}), not below the head ({ly})");
+            let photo = Image { w: 40, h: 600, px: vec![0x10c010; 24_000] };
+            let p = photo_spine(m, 1.0, look, &photo).unwrap();
+            assert!((ry..ry + rh).all(|y| p.get(rx + 2, y) & 0xffffff == 0x10c010), "{m:?}: the photo all the way");
+        }
+    }
+
+    /// No title over a real spine: the same photo with any game gives the same spine (the painted spine writes its title).
+    #[test]
+    fn a_real_spine_has_no_title_written_over_it() {
+        let look = Look { color: 0x777777, band: 0x555555, plastic: 0x333333, tape: false };
+        let photo = Image { w: 60, h: 600, px: (0..36_000).map(|i| if (i / 60) % 40 < 20 { 0xffffff } else { 0x101010 }).collect() };
+        let a = photo_spine(Medium::Gba, 1.0, look, &photo).unwrap();
+        let b = photo_spine(Medium::Gba, 1.0, Look { color: 0x123456, ..look }, &photo).unwrap();
+        let (rx, ry, rw, rh) = spine_photo_rect(Medium::Gba, 1.0);
+        assert!((ry..ry + rh).all(|y| (rx..rx + rw).all(|x| a.get(x, y) == b.get(x, y))), "the print is the photo, whatever the game");
+        let fitted = spine_photo_fit(&photo, rw, rh).unwrap();
+        assert!((0..rh).all(|y| (0..rw).all(|x| a.get(rx + x, ry + y) & 0xffffff == fitted.px[(y * rw + x) as usize])), "the photo alone, no letters");
+    }
+
     /// A SNES box's black side strip (and a case front's margin) is not put on a cartridge's label.
     #[test]
     fn a_box_side_strip_is_trimmed_off_the_label() {
@@ -2537,6 +2880,17 @@ mod tests {
         assert_eq!(lines, ["Omega Factor"]);
         // A short title stays at the size asked for.
         assert_eq!(spine_fit(&mut text, "F-Zero", thick, len, 30.0), (vec!["F-Zero".to_string()], 30, crate::text::Face::Title));
+        // A short number at the end never stands alone on the second line (the lead's review 26.11.2026: "Super Mario
+        // Bros." over a lone "3" on the 640 x 480 shelf).
+        for (title, room) in [("Super Mario Bros. 3", "Super Mario Bros."), ("Final Fantasy VI", "Final Fantasy")] {
+            for px in [21u32, 24, 30] {
+                let l = text.width(crate::text::Face::Title, px, room) + 4;
+                let (lines, ..) = spine_fit(&mut text, title, 200, l, px as f32 / 0.7);
+                if lines.len() == 2 {
+                    assert!(lines[1].contains(' '), "{title} at {px}: {lines:?}");
+                }
+            }
+        }
         // Only a title too long for anything is cut, at the least size.
         let (lines, px, _) = spine_fit(&mut text, "Supercalifragilistic Expialidocious Adventures", 30, 80, 30.0);
         assert!(lines[0].ends_with('…') && px == 16, "{lines:?} {px}");

@@ -57,6 +57,7 @@ pub struct Candidates {
 
 /// `<data>/frames/<system>/<rom stem>.png`.
 pub fn frame_path(data_dir: &Path, system: &str, rom: &Path) -> PathBuf {
+    let system = crate::region_pairs::own_system(system, rom);
     // Same stem rule as the box art (`covers::cover_path`); a name that is not a plain file name can't leave the folder.
     let stem = rom.file_stem().and_then(|s| s.to_str()).filter(|s| !s.is_empty() && *s != "..").unwrap_or("unknown");
     data_dir.join(FRAMES_DIR).join(system).join(format!("{stem}.png"))

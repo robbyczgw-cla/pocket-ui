@@ -256,7 +256,7 @@ fn visible(lib: &Path, stub: &Option<Stub>, (size, device): (&str, &str), state:
 /// shows its…" and showed none of the three lines under the rows (a note on two lines beside its pills took the one line
 /// kept for them; the Brick's Normal is a few pixels larger, `type_scale::brick_base`). The unit tests paint without the
 /// Brick's sizes, the share tests measure pictures, not words. On the Plus, the Brick and the Smart Pro, in Barlow and
-/// Retro: the look's line whole, what MENU (HOME) does in a game and where the look changes later.
+/// Retro: the look's line whole and where the look changes later; what MENU (HOME) does in a game on the last page.
 #[test]
 fn the_first_start_says_all_of_it_on_the_brick() {
     let (_tmp, stub, lib) = setup();
@@ -270,10 +270,13 @@ fn the_first_start_says_all_of_it_on_the_brick() {
                 bad.push(format!("{what}: the Shelf's line {blurb:?}"));
             }
             let all = seen.join(" ");
-            for want in ["opens the menu: save, load, quit.", "Change the look any time in Settings › Look."] {
-                if !all.contains(want) {
-                    bad.push(format!("{what}: missing \"{want}\" (painted: {seen:?})"));
-                }
+            if !all.contains("Change the look any time in Settings › Look.") {
+                bad.push(format!("{what}: missing where the look changes later (painted: {seen:?})"));
+            }
+            // What MENU (HOME) does in a game: on the last page, once (26.11.: the look said it too).
+            let done = visible(&lib, &stub, screen, "setup:first-done", look).join(" ");
+            if !done.contains("opens the menu: save, load, quit.") || all.contains("opens the menu: save, load, quit.") {
+                bad.push(format!("{what}: HOME's line not once on the last page (last page: {done}; look: {all})"));
             }
         }
     }

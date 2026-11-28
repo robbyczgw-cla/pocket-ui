@@ -84,6 +84,8 @@ pub fn playlist(system: &str) -> Option<&'static str> {
 pub mod custom;
 
 pub fn cover_path(data_dir: &Path, system: &str, rom: &Path) -> PathBuf {
+    // A game in another folder of a merged shelf keeps its folder's covers (`covers/genesis/`, `region_pairs`).
+    let system = crate::region_pairs::own_system(system, rom);
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
     data_dir.join("covers").join(system).join(format!("{stem}.png"))
 }

@@ -40,7 +40,7 @@ pub fn pick(systems: &[System], hidden: &[String], recents: &[Recent], has_cover
     if shown.is_empty() {
         return demo();
     }
-    let in_library = |system: &str, path: &Path| shown.iter().any(|s| s.name == system && s.games.iter().any(|g| g.path == path));
+    let in_library = |system: &str, path: &Path| shown.iter().any(|s| crate::region_pairs::same_shelf(&s.name, &system) && s.games.iter().any(|g| g.path == path));
     let played: Vec<&Recent> = recents.iter().filter(|r| in_library(&r.system, &r.path)).collect();
     let all: Vec<(&System, &Game)> = shown.iter().flat_map(|s| s.games.iter().map(move |g| (s, g))).collect();
     let as_recent = |s: &System, g: &Game| Recent { system: s.name.clone(), name: g.name.clone(), path: g.path.clone(), last_played: 0, play_secs: 0, frozen: None };
@@ -73,6 +73,7 @@ fn demo() -> Sample {
                     game(&title, &format!("/pocket-ui-sample/{id}/{title}"))
                 })
                 .collect(),
+            parts: Vec::new(),
         })
         .collect();
     let first = &systems[0].games[0];
@@ -103,6 +104,7 @@ mod tests {
             core: None,
             emulators: Vec::new(),
             games: games.iter().map(|g| game(g, &format!("/storage/roms/{id}/{g}.rom"))).collect(),
+            parts: Vec::new(),
         }
     }
 

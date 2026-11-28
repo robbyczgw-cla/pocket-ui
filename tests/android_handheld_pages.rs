@@ -22,8 +22,13 @@ struct Card {
 
 impl Card {
     fn new() -> Card {
+        Card::with("dark")
+    }
+
+    /// A card whose settings say `appearance` ("dark" or "light").
+    fn with(appearance: &str) -> Card {
         let dir = tempfile::Builder::new().prefix("pui-ahp-").tempdir().unwrap();
-        let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.path().to_str().unwrap(), "dark"]).stdout(std::process::Stdio::null()).status().unwrap();
+        let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW).args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), dir.path().to_str().unwrap(), appearance]).stdout(std::process::Stdio::null()).status().unwrap();
         assert!(ok.success());
         let stub = (cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|w| w.is_empty())).then(|| {
             let child = Command::new("python3").args(["-I", &format!("{ROOT}/scripts/wayland-stub.py"), dir.path().join("wl").to_str().unwrap()]).spawn().unwrap();
@@ -49,6 +54,12 @@ impl Card {
     }
 
     fn paint(&self, state: &str, android: bool, lang: &str) -> String {
+        self.paint_with_hits(state, android, lang, None)
+    }
+
+    /// [`Card::paint`], and what a finger can tap written to `hits` (`POCKETUI_HITS_OUT`, set for this child only: two
+    /// tests at once must not write into each other's file).
+    fn paint_with_hits(&self, state: &str, android: bool, lang: &str, hits: Option<&std::path::Path>) -> String {
         let tmp = self.dir.path();
         let (png, words) = (tmp.join("shot.png"), tmp.join("words.tsv"));
         let _ = std::fs::remove_file(&words);
@@ -58,6 +69,9 @@ impl Card {
         }
         if android {
             cmd.env("POCKETUI_ANDROID_PROFILE", "1");
+        }
+        if let Some(hits) = hits {
+            cmd.env("POCKETUI_HITS_OUT", hits);
         }
         let out = cmd
             .args(["--snapshot", state, png.to_str().unwrap()])
@@ -238,4 +252,61 @@ fn the_card_offers_choose_cover_on_android_and_reset_once_one_is_chosen() {
     std::fs::write(&chosen, png).unwrap();
     let android = whole(true);
     assert!(sees(&android, "Choose cover…") && sees(&android, "Reset to automatic"), "a chosen cover can be reset: {android}");
+}
+
+/// "Read your games" (26.11.2026): Android's files dialog is a sheet of pocket-ui's own now, over the page, in the menus'
+/// language, with its two ways in the hint bar. `POCKETUI_TEST_SHOTS=<dir>` keeps the pictures to look at.
+#[test]
+fn read_your_games_is_a_pocket_ui_sheet_in_the_menus_language() {
+    // Dark and light (Sol/lead 26.11.: the sheet looked at in both).
+    let light = Card::with("light");
+    for lang in ["en", "de"] {
+        let page = light.paint("android-files", true, lang);
+        assert!(sees(&page, if lang == "en" { "Read your games" } else { "Deine Spiele lesen" }), "light {lang}: {page}");
+        if let Some(dir) = std::env::var_os("POCKETUI_TEST_SHOTS") {
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::copy(light.dir.path().join("shot.png"), std::path::Path::new(&dir).join(format!("read-your-games-{lang}-light.png")));
+        }
+    }
+    let card = Card::new();
+    for (lang, want) in [("en", ["Read your games", "Allow access", "Mobile view", "pocket-ui saves"]), ("de", ["Deine Spiele lesen", "Zugriff erlauben", "Mobil-Oberfläche", "pocket-ui saves"])] {
+        let page = card.paint("android-files", true, lang);
+        for w in want {
+            assert!(sees(&page, w), "{lang}: {w} is missing: {page}");
+        }
+        if let Some(dir) = std::env::var_os("POCKETUI_TEST_SHOTS") {
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::copy(card.dir.path().join("shot.png"), std::path::Path::new(&dir).join(format!("read-your-games-{lang}.png")));
+        }
+    }
+    // A finger gets out too (Sol P1-1): the two ways are the only targets, the pills at the bottom, nothing of the page
+    // behind (a tap there must never start a game).
+    let hits = card.dir.path().join("hits.txt");
+    card.paint_with_hits("android-files", true, "en", Some(&hits));
+    let targets = std::fs::read_to_string(&hits).expect("the sheet's targets");
+    let kinds: Vec<&str> = targets.lines().map(|l| l.splitn(5, ' ').nth(4).unwrap_or("")).collect();
+    assert_eq!(kinds.len(), 2, "only the two ways: {targets}");
+    assert!(kinds.contains(&"Button(East)") && kinds.contains(&"Button(North)"), "A and X: {targets}");
+    // Without the sheet asked for, the same program paints none of it.
+    let shelf = card.paint("home", true, "en");
+    assert!(!sees(&shelf, "Read your games"), "{shelf}");
+}
+
+/// Sol P1-1 (26.11.2026): on Android a finger alone gets through the first start. Every step of it, the look step
+/// included (the App paints that one itself, `previewing`), offers its A pill to tap; on Linux the same steps don't.
+#[test]
+fn every_first_start_step_offers_its_a_pill_to_a_finger_on_android() {
+    let card = Card::new();
+    let hits = card.dir.path().join("hits.txt");
+    let targets = |state: &str, android: bool| {
+        let _ = std::fs::remove_file(&hits);
+        card.paint_with_hits(state, android, "en", Some(&hits));
+        std::fs::read_to_string(&hits).unwrap_or_default()
+    };
+    for step in ["setup:welcome", "setup:first-games", "setup:first-look", "setup:first-cozy"] {
+        let found = targets(step, true);
+        assert!(found.lines().any(|l| l.ends_with("Button(East)")), "{step}: no A to tap on Android:\n{found}");
+    }
+    let linux = targets("setup:welcome", false);
+    assert!(!linux.lines().any(|l| l.ends_with("Button(East)")), "the Linux welcome stays pad only:\n{linux}");
 }

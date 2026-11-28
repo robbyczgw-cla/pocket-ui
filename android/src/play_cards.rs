@@ -285,3 +285,20 @@ pub fn recovery_note(core: &str, resume: pocket_ui::libretro::Resume) -> Option<
     (core == "ppsspp" && resume == pocket_ui::libretro::Resume::Failed)
         .then_some("This PSP moment could not be loaded safely. It is kept under Load; your in-game save is safe.")
 }
+
+/// The short note over the game joins its lines (already translated) into one message: every line before the next one
+/// ends as a sentence, so "…started fresh" and "The moment…" don't run together (night QA 27.11.2026). Chinese and
+/// Japanese end theirs with their own full stop and need no space.
+pub fn note_sentences(lines: &[String]) -> String {
+    let cjk = matches!(pocket_ui::i18n::current(), pocket_ui::i18n::Lang::Zh | pocket_ui::i18n::Lang::Ja);
+    let lines: Vec<&str> = lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+    let mut out = String::new();
+    for (n, line) in lines.iter().enumerate() {
+        out.push_str(line);
+        if n + 1 == lines.len() { break; }
+        let ended = line.ends_with(['.', '!', '?', '…', '。', '！', '？']);
+        if !ended { out.push(if cjk { '。' } else { '.' }); }
+        if !(cjk && out.ends_with(['。', '！', '？'])) { out.push(' '); }
+    }
+    out
+}

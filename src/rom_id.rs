@@ -326,6 +326,21 @@ pub fn known(data_dir: &Path, games: &[(String, PathBuf)]) -> Names {
     out
 }
 
+/// The checksums the cache has for `games`, by path (`crc`, `alt`): what Game check compares to find one game in two
+/// files under different names (`game_check::twins`). Nothing is read but the cache and each file's size and time, so a
+/// file changed since its line was written has none.
+pub fn cached_sums(data_dir: &Path, games: &[PathBuf]) -> HashMap<PathBuf, (u32, Option<u32>)> {
+    let cache = Cache::load(data_dir);
+    if cache.is_empty() {
+        return HashMap::new();
+    }
+    games
+        .iter()
+        .filter(|g| cache.files.contains_key(*g))
+        .filter_map(|g| cache.valid(g, stamp(g).ok()?)?.map(|s| (g.clone(), (s.crc, s.alt))))
+        .collect()
+}
+
 /// What a [`run_until`] did.
 #[derive(Debug, Default)]
 pub struct Identified {

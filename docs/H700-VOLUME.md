@@ -23,9 +23,12 @@ keeps these settings and the PCM/audio pacing path intact; it adds no digital bo
 
 ## Gain, mute and routing
 
-The speaker DAC uses raw 44 through 25%, then adds headroom linearly in dB up to ROCKNIX's raw 63 at
-100%. Each raw step is 1.16 dB. PipeWire applies its existing `60*log10(percent/100)` dB curve through
-Line Out and the software residual, following [PulseAudio's cubic conversion](https://github.com/pulseaudio/pulseaudio/blob/master/src/pulse/volume.c).
+For every nonzero speaker level the DAC targets raw 63 (0 dB). PipeWire applies one volume curve through Line
+Out and the software residual, following [PulseAudio's cubic conversion](https://github.com/pulseaudio/pulseaudio/blob/master/src/pulse/volume.c).
+At 50% the target is −18.06 dB. The previous pocket-ui curve added −15.08 dB of DAC attenuation there, for
+−33.14 dB in total. Anbernic RG28XX Stock V1.1.3 uses DAC 63 and Line Out 31, with its menu PCM applying
+−14.60 dB at step 5 of 10. The single ROCKNIX curve closes most of that difference at midpoint. Its 100%
+target is still 63/31 with a unity software residual. The Keeper adds no digital gain above unity.
 At zero percent the observed Line Out hardware mute keeps playback silent while the codec stays clocked.
 
 The RG35XX Plus's actual DAPM graph connects `Speaker <- LINEOUT <- Line Out Ramp Controller`. The
@@ -40,8 +43,8 @@ signals at 50%, source peak -39.99 dBFS, exited successfully with the PCM hardwa
 No high-level listening or analog recording was performed.
 
 Every H700 release now requires the [silent real-device volume curve](DEVICE-TESTS.md#silent-release-volume-curve)
-through `scripts/device-check.sh --volume`. Its amixer/DAPM capture establishes the serial path and its ten
-readbacks include PipeWire's actual software residual; ±1.5 dB is the gain tolerance. A closed PCM and no
+through `scripts/device-check.sh --volume`. Its amixer/DAPM capture establishes the serial path. It records the starting mixer and sink state, then checks
+DAC 63 and the total gain at ten levels (±1.5 dB), including exact hardware and software unity at 100%. A closed PCM and no
 audio streams keep the measurement silent. `scripts/release-check.sh` verifies fresh evidence from the exact
 release binary and exact restoration. The unit fake is also bound to the recorded topology fixture rather
 than to the old documentation assumption. Brick/Retroid profiles remain TODO, not inferred from H700.
@@ -99,8 +102,8 @@ threads, and no helper is launched for individual ramp steps.
 
 Unchanged volume/mute/route wishes cause no writes, even when someone uses `amixer`. An external edit of an owned
 control yields ownership until a new deliberate volume/mute request. Routing may always turn the speaker off and
-reduce an unsafe speaker gain, but never undo a user's hardware mute. At startup, the active speaker ramps from the saved DAC gain at raw 44 or higher. If ROCKNIX has reset the DAC
-to 63, the worker first restores the former raw 44 reference before ramping into the extra headroom. The sink percentage
+reduce an unsafe speaker gain, but never undo a user's hardware mute. At startup, the active speaker ramps from a saved DAC gain of raw 44 or higher toward unity. When ROCKNIX
+already set raw 63 the Keeper leaves it there. The sink percentage
 stays at its saved value. A lower DAC readback waits for a deliberate volume change, except for the one-time 0.4.0
 migration. That migration still recognizes raw gain within one step of the historical curve with all playback switches on.
 Its existing `<data>/h700-volume-041` marker records completion, and diagnostic ceilings disable the migration.

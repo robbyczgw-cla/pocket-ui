@@ -24,14 +24,17 @@ fn wanted() -> bool {
 
 impl App {
     fn frozen_game(&self, r: &pocket_ui::recents::Recent) -> Option<frozen::Game> {
-        let sys = self.systems.iter().find(|s| s.name == r.system)?;
+        let sys = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &r.system))?;
         let (emulator, core) = self.route(sys, Some(&r.path), Path::new(host_bin()).exists());
-        Some(frozen::Game { system: r.system.clone(), path: r.path.clone(), emulator, core, mark: r.frozen.clone() })
+        Some(frozen::Game { system: sys.own_id(&r.path).to_string(), path: r.path.clone(), emulator, core, mark: r.frozen.clone() })
     }
 
     /// The other installed games of this system with its file name, hidden ones too: they share its states.
     pub(crate) fn same_name_games(&self, system: &str, path: &Path) -> Vec<PathBuf> {
-        let shown = self.systems.iter().filter(|s| s.name == system).flat_map(|s| s.games.iter()).map(|g| g.path.as_path());
+        // On a merged shelf only the games of the same folder's system share its states (`region_pairs`).
+        let system = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, system)).map_or(system, |s| s.own_id(path));
+        let shown = self.systems.iter().filter(|s| pocket_ui::region_pairs::same_shelf(&s.name, system))
+            .flat_map(|s| s.games.iter().filter(move |g| s.own_id(&g.path) == system)).map(|g| g.path.as_path());
         // Asked only for a hidden game of this name; a system that can't be told counts as this one, the safe side.
         let in_system = |p: &Path| {
             let all = pocket_ui::library::all_systems(&self.es_systems).unwrap_or_default();

@@ -116,6 +116,11 @@ pub fn korean_has(ch: char) -> bool {
 /// Noto Sans letters ROCKNIX's own font has, and pixel letters in the Retro style.
 pub const CJK_PIXEL_FILE: &str = "FusionPixel12-zh_hans-CJK.otf";
 pub const CJK_SANS_FILE: &str = "NotoSansSC-Regular-CJK.otf";
+/// The Japanese pair: the same fonts in their Japanese letter forms (直, 骨, 角 are drawn otherwise in Japan), cut to
+/// JIS X 0208's kanji, the kana and the marks (`scripts/cjk-fonts.py --ja`, 1.0 and 1.4 MB). Asked first while the
+/// interface is Japanese (`Text` swaps them when the language changes); a hanzi they lack comes from the Chinese pair.
+pub const CJK_JA_PIXEL_FILE: &str = "FusionPixel12-ja-CJK.otf";
+pub const CJK_JA_SANS_FILE: &str = "NotoSansJP-Regular-CJK.otf";
 /// Fusion Pixel's ideographs stand one of its pixels below the baseline (Galmuri's on it): how many.
 pub const CJK_PIXEL_DROP: i32 = 1;
 
@@ -167,6 +172,22 @@ pub fn is_cjk(ch: char) -> bool {
 pub fn cjk(pixel: bool) -> Option<Arc<Fallback>> {
     let dir = shipped_dir()?;
     open(&dir.join(if pixel { CJK_PIXEL_FILE } else { CJK_SANS_FILE }))
+}
+
+/// The shipped Japanese font for a pixel face or any other, `None` when its file is not on the card.
+pub fn cjk_ja(pixel: bool) -> Option<Arc<Fallback>> {
+    let dir = shipped_dir()?;
+    open(&dir.join(if pixel { CJK_JA_PIXEL_FILE } else { CJK_JA_SANS_FILE }))
+}
+
+/// The font `ch` comes from: in a Japanese interface (`ja`) the Japanese file when it has `ch`, else the Chinese one.
+pub fn cjk_font(pixel: bool, ja: bool, ch: char) -> Option<Arc<Fallback>> {
+    ja.then(|| cjk_ja(pixel)).flatten().filter(|f| f.has(ch)).or_else(|| cjk(pixel))
+}
+
+/// Whether the Japanese files are there too: Japanese is offered only then.
+pub fn cjk_ja_available() -> bool {
+    cjk_available() && cjk_ja(false).is_some() && cjk_ja(true).is_some()
 }
 
 /// Whether the shipped Chinese fonts paint `ch` (Noto Sans SC has every letter of the pixel font and 36 rare hanzi more:
@@ -574,6 +595,24 @@ mod tests {
             }
         }
         assert!(missing.is_empty(), "letters the shipped Chinese fonts lack (choose another word): {missing:?}");
+    }
+
+    /// The Japanese pair has JIS X 0208's kanji in their Japanese forms; in a Japanese interface a kanji comes from it
+    /// (直 is drawn otherwise in Japan than in China), a hanzi it lacks (们, Simplified only) from the Chinese pair.
+    #[test]
+    fn a_japanese_interface_takes_the_japanese_letter_forms_and_the_chinese_pair_for_the_rest() {
+        assert!(cjk_ja_available(), "assets/fonts has them");
+        let (ja, zh) = (cjk_ja(false).unwrap(), cjk(false).unwrap());
+        for ch in "直骨角設定ファイナル".chars() {
+            assert!(ja.has(ch), "{ch}");
+        }
+        assert!(!ja.has('们') && zh.has('们'));
+        let fit = Fit::PLAIN;
+        assert_ne!(ja.raster('直', 64, fit).unwrap().1, zh.raster('直', 64, fit).unwrap().1, "Japanese and Chinese forms differ");
+        assert!(Arc::ptr_eq(&cjk_font(false, true, '直').unwrap(), &ja));
+        assert!(Arc::ptr_eq(&cjk_font(false, true, '们').unwrap(), &zh), "a hanzi the Japanese file lacks");
+        assert!(Arc::ptr_eq(&cjk_font(false, false, '直').unwrap(), &zh), "any other interface: the Chinese pair");
+        assert!(cjk_font(true, true, '直').is_some_and(|f| f.has('直')));
     }
 
     #[test]

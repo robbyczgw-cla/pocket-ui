@@ -56,6 +56,9 @@ impl App {
             sound: self.sound,
             haptics: pocket_ui::rumble::menu_haptics(),
             leds: self.leds,
+            screenscraper: self.screenscraper.row.on,
+            screenscraper_show: self.screenscraper.row.show,
+            shelf_order: self.series.order,
         }
     }
 
@@ -117,6 +120,23 @@ impl App {
             self.leds.save(&self.data_dir);
             leds::apply_in_background(Job::Choice(self.leds));
         }
+        // As Box art & downloads › ScreenScraper does it: kept; On starts the run on its rules (after the box art, online,
+        // Pictures on), Off stops it (`app_screenscraper`).
+        // Which pictures first (Real spines, labels, box backs, manuals, as the rows under it): a run that the On below
+        // starts fetches only those.
+        if s.screenscraper_show != self.screenscraper.row.show {
+            self.screenscraper_pictures_switched(s.screenscraper_show);
+        }
+        if s.screenscraper != self.screenscraper.row.on {
+            self.screenscraper_switched(s.screenscraper);
+        }
+        // As Settings › Look › Layout › Order does it (`take_order` in main.rs): at once, kept.
+        if s.shelf_order != self.series.order {
+            self.series.order = s.shelf_order;
+            self.look_previews = None;
+            settings = true;
+            self.rebuild();
+        }
         if settings {
             self.save_settings();
         }
@@ -162,6 +182,11 @@ impl App {
                 self.switches(),
                 self.tour.later.clone(),
             ));
+            // The shelf's touch targets go with it: a tap on its START hint that lands before the cards' first frame must
+            // not become the Real box pictures card's START (Sol 27.11.2026).
+            self.hits.clear();
+            // And a finger already down drops its gesture: its lift is not a tap on the cards.
+            self.touch_rec.reset();
             self.request_redraw();
         }
     }
@@ -207,7 +232,9 @@ impl App {
     /// `--snapshot tour[:<basic id>[:<keys>]]`: Settings → Tour at that card (the first without one), then the keys
     /// (d down, u up, a, b, r R1, l L1); `--snapshot tour-new:<id>[,<id>...]`: "New in this version" with those cards.
     pub(crate) fn tour_snapshot(&mut self, state: &str) -> bool {
-        if let Some(ids) = state.strip_prefix("tour-new:") {
+        if let Some(rest) = state.strip_prefix("tour-new:") {
+            // `tour-new:<ids>[:<keys>]`, the keys as below (s START).
+            let (ids, keys) = rest.split_once(':').unwrap_or((rest, ""));
             let list = ids.split(',').filter_map(features::by_id).collect();
             self.tour.cards = Some(Cards::new(
                 Mode::New {
@@ -217,6 +244,22 @@ impl App {
                 self.switches(),
                 self.tour.later.clone(),
             ));
+            // On the cards only: a snapshot keeps settings and downloads as they are (Sol 27.11.2026).
+            if let Some(cards) = self.tour.cards.as_mut() {
+                for k in keys.chars() {
+                    let b = match k {
+                        'd' => Button::Down,
+                        'u' => Button::Up,
+                        'a' => Button::East,
+                        'b' => Button::South,
+                        's' => Button::Start,
+                        _ => continue,
+                    };
+                    if matches!(cards.press(b), Out::Done | Out::Back) {
+                        break;
+                    }
+                }
+            }
             return true;
         }
         let Some(rest) = state.strip_prefix("tour").filter(|r| r.is_empty() || r.starts_with(':')) else {

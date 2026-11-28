@@ -241,13 +241,30 @@ and are unchanged.
   pill over a pocket-core game; a dark screen gets none); at ≤ 2 % in two readings in a row (one stray reading of
   the gauge is no reason) `Sleep` runs the power-off path (`shut_down_for`: "Battery empty. Saving…", the game saves
   and quits, `resume.json`, `systemctl poweroff`), from Awake or Light, or right after a suspend under way returns.
-- On the R36S profile, a reading of ≤ 2 % at 3.30 V or higher breaks that sequence. The guard reads the battery's
-  `voltage_now`, falling back to the RK817's `voltage_avg`. Both the stock and ROCKNIX open-circuit tables place
-  3.30 V between 10 % and 15 %. An R36S V22 on ROCKNIX 20261101 reported 3.598 V at 48 % under a 375 mA load.
-  With no readable voltage, the guard uses the reported percentage.
+- A reading of ≤ 2 % at 3.70 V or higher is ignored by the guard and breaks the shutdown sequence. The guard reads
+  the battery's `voltage_now`, then tries `voltage_avg` if needed. It accepts Linux's µV and legacy mV values.
+  With no usable voltage it uses the reported percentage.
+  - TrimUI Brick (AXP2202) and RG35XX Plus (AXP717) on battery, 23–24 November 2026: at ≤ 2 % the highest
+    logged readings were 3.425 V and 3.427 V respectively. The Plus drew 423 mA at 3.427 V. The RG35XX SP
+    shares the Plus's upstream battery node and its 4.20 V design maximum.
+  - Retroid Pocket Mini V2 (qcom-fg): ROCKNIX specifies 3.60 V as the design minimum. A device history
+    from 14 November 2026 had 25 % at 3.683–3.684 V under a 271–274 mA load.
+  - R36S (RK817): the profile uses 3.30 V. Both the stock and ROCKNIX open-circuit tables place that
+    voltage between 10 % and 15 %. An R36S V22 on ROCKNIX 20261101 reported 3.598 V at 48 % under a 375 mA load.
 - External power stops all of it: battery `status` Charging, Full or Not charging, or any non-battery supply in
   `/sys/class/power_supply` with `online` = 1. So `no-autosuspend` on the charger overnight keeps the device up.
 - Not covered: a charger too weak to keep up while plugged (it counts as external power).
+- Android's player (26.11.2026, `android/src/player_battery.rs`): the same `Guard` on a thread of the `:player` process,
+  fed every 30 s from Android's sticky battery broadcast (`PlayerActivity.batteryLevel`: percent and `EXTRA_PLUGGED`,
+  `low_battery::parse_android`), a fresh guard for each game. At ≤ 5 % pocket-core's pill over the game says "Battery
+  low (5%). At 2% the game is saved and closed."; at ≤ 2 % twice in a row "Battery empty. Saving…" for a frame, then
+  Save & quit's way back to the shelf (an app can't switch the handheld off; Android does at 0 %, the game then saved).
+  A save that fails keeps the game open with the failure said. The GL thread only takes the news (`low_battery::News`,
+  one atomic swap a frame); a charger plugged in before it was taken drops it. A dark screen gets nothing: the game is
+  saved and paused there already (`nativeSuspend`).
+- Android's Handheld view (the shelf) runs no guard of its own (`shelf_battery_guard_runs`, 26.11.2026): it would say
+  "the Pocket switches off" and try a power-off an app can't do, and Android 15 denies apps the battery's sysfs anyway
+  (read as the app in the emulator: Permission denied). Android warns on the shelf itself.
 
 ### Volume at 0 after waking: cause
 ROCKNIX's `/usr/lib/systemd/system-sleep/sleep post` does:

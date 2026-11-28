@@ -52,7 +52,7 @@ impl App {
         let Some(run) = self.running.as_ref().filter(|_| fast_switch::enabled()) else { return false };
         let (Some(pgid), true) = (run.pgid, run.hosted()) else { return false };
         let host = std::path::Path::new(host_bin()).exists();
-        let route = |system: &str, path: &PathBuf| self.systems.iter().find(|s| s.name == system).map(|s| self.route(s, Some(path), host));
+        let route = |system: &str, path: &PathBuf| self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system)).map(|s| self.route(s, Some(path), host));
         let (Some((_, old_core)), Some((new_emu, new_core))) = (route(&run.system, &run.path), route(&target.0, &target.2)) else { return false };
         let old = Game { emulator: &run.emulator, core: &old_core, system: &run.system, rom: &run.path };
         let new = Game { emulator: &new_emu, core: &new_core, system: &target.0, rom: &target.2 };
@@ -79,7 +79,7 @@ impl App {
         let host = std::path::Path::new(host_bin()).exists();
         let hand_over = self.running.as_ref().filter(|r| fast_switch::enabled() && r.hosted()).and_then(|r| {
             let pgid = r.pgid?;
-            let (_, core) = self.systems.iter().find(|s| s.name == r.system).map(|s| self.route(s, Some(&r.path), host))?;
+            let (_, core) = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &r.system)).map(|s| self.route(s, Some(&r.path), host))?;
             fast_switch::may_hand_over(&core, &r.system).then_some(Asked { pgid, core, next_game: false })
         });
         if !control::pocket_core(if hand_over.is_some() { fast_switch::QUIT_FOR_SWITCH } else { "quit" }) {

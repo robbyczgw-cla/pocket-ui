@@ -48,6 +48,9 @@ pub enum Item {
     Search,
     /// "Crate" on Home while Shelf space is on (`shelf_space`, `with_crate`): the games not on the shelf (`app_crate`).
     Crate,
+    /// A series' shelf on Home in place of the systems while Home is by series (index into the App's series shelves,
+    /// `app_series`): A opens its games, X its card.
+    Series(usize),
 }
 
 impl Item {
@@ -174,7 +177,7 @@ pub fn toggle_hidden(hidden: &mut Vec<String>, id: &str, with_games: &[&str]) ->
 /// For a smart shelf or sticker, `starred` says whether it is pinned to Home.
 pub fn hints(selected: Option<Item>, home: bool, starred: bool, system_page: bool) -> Vec<(&'static str, &'static str)> {
     let action = match selected {
-        Some(Item::System(_) | Item::Favorites | Item::Crate | Item::Search | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover) => "Open",
+        Some(Item::System(_) | Item::Series(_) | Item::Favorites | Item::Crate | Item::Search | Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover) => "Open",
         Some(Item::Streaming) => "Start",
         _ => "Play",
     };
@@ -184,6 +187,11 @@ pub fn hints(selected: Option<Item>, home: bool, starred: bool, system_page: boo
     } else {
         // HOME opens the quick settings on Home and the shelf (`quick::Sys`).
         hints.push(("HOME", "Quick settings"));
+    }
+    // A series' card (`app_series`): early, so it stays among the four the bar shows (Sol's review 26.11.2026: last, it
+    // gave way to SELECT).
+    if let Some(Item::Series(_)) = selected {
+        hints.push(("X", "Details"));
     }
     if let Some(Item::JustPlay) = selected {
         // X shows the game A would start, with the reason, before it starts (`App::curator_just_play_card`).
@@ -465,6 +473,12 @@ mod tests {
         }
         assert!(hints(Some(Item::System(0)), true, false, true).contains(&("X", "Details")), "a system with a fact sheet");
         assert!(!hints(Some(Item::System(0)), true, false, false).iter().any(|h| h.0 == "X"), "a system without one (Ports)");
+        // Neon's review 26.11.2026: a series said "A Play" and had no X; it opens (its games) and X shows its card.
+        for page in [false, true] {
+            // What the bar shows (four at most, `kit::top_hints`), not only what the list holds.
+            let h = crate::kit::top_hints(&hints(Some(Item::Series(0)), true, false, page), crate::kit::MAX_HINTS);
+            assert!(h.contains(&("A", "Open")) && h.contains(&("X", "Details")), "{h:?}");
+        }
         for selected in [None, Some(Item::Favorites), Some(Item::Streaming)] {
             assert!(!hints(selected, true, false, true).iter().any(|h| h.0 == "X"), "{selected:?}");
         }

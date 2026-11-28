@@ -165,7 +165,7 @@ impl App {
             self.theme = Theme::Big;
             self.rebuild();
         }
-        if let Some(s) = system.filter(|_| look != "big").and_then(|id| self.systems.iter().position(|s| s.name == id)) {
+        if let Some(s) = system.filter(|_| look != "big").and_then(|id| self.systems.iter().position(|s| pocket_ui::region_pairs::same_shelf(&s.name, &id))) {
             self.screen = Screen::Games(s);
             self.rebuild();
         }
@@ -263,7 +263,7 @@ impl App {
             self.theme = Theme::Big;
             self.rebuild();
         }
-        let Some(s) = self.systems.iter().position(|sys| sys.name == system) else { return println!("search-start no system {system}") };
+        let Some(s) = self.systems.iter().position(|sys| pocket_ui::region_pairs::same_shelf(&sys.name, &system)) else { return println!("search-start no system {system}") };
         self.screen = Screen::Games(s);
         self.rebuild();
         self.cabinet.inline = false;
@@ -310,7 +310,7 @@ impl App {
             self.rebuild();
         }
         // `:<system>`: that system's games (Easy keeps Home, as `bench-shelf`).
-        if let Some(s) = system.filter(|_| look != "big").and_then(|id| self.systems.iter().position(|s| s.name == id)) {
+        if let Some(s) = system.filter(|_| look != "big").and_then(|id| self.systems.iter().position(|s| pocket_ui::region_pairs::same_shelf(&s.name, &id))) {
             self.screen = Screen::Games(s);
             self.rebuild();
         }

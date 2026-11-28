@@ -1,0 +1,102 @@
+# Vietnamese lines the Brick build says instead (see brick-it.tsv).
+Back to NextUI	Về NextUI
+Back to NextUI?	Về NextUI?
+Back to NextUI. Your games, saves and settings stay as they are.	Về NextUI. Game, dữ liệu lưu và cài đặt của bạn giữ nguyên.
+Couldn't reach the update server over Tailscale. Is Tailscale on and connected?	Không thể kết nối máy chủ cập nhật qua Tailscale. Tailscale đã bật và kết nối chưa?
+The SD card is too full for this update: it needs {n} MB more. Nothing was changed.	Thẻ SD không đủ chỗ cho bản cập nhật này: cần thêm {n} MB. Chưa có gì thay đổi.
+The update list names no usable version. Nothing was changed.	Danh sách cập nhật không có phiên bản nào dùng được. Chưa có gì thay đổi.
+The update is missing {s}. Nothing was changed.	Bản cập nhật bị thiếu {s}. Chưa có gì thay đổi.
+The update is not version {s} inside. Nothing was changed.	Bên trong bản cập nhật không phải phiên bản {s}. Chưa có gì thay đổi.
+The update's start script is broken. Nothing was changed.	Tệp khởi chạy của bản cập nhật bị lỗi. Chưa có gì thay đổi.
+Couldn't switch to the new version: {s}. Nothing was changed.	Không thể chuyển sang phiên bản mới: {s}. Chưa có gì thay đổi.
+No space left to unpack the download.	Không còn chỗ trống để giải nén tệp tải về.
+Battery & charging	Pin & sạc
+Like the rest	Giống các đèn khác
+Customised	Tùy chỉnh
+How bright the lights glow.	Độ sáng của đèn.
+Colour, effect and brightness of the grips, the middle and the two F keys one by one. A: open.	Chỉnh riêng màu, hiệu ứng và độ sáng cho tay cầm, đèn giữa và hai phím F. A: mở.
+Quick save, quick load, screenshot, Recent games, the pause menu, or nothing.	Lưu nhanh, tải nhanh, ảnh chụp màn hình, Chơi gần đây, menu tạm dừng hoặc không làm gì.
+The slider on the side mutes the sound, or does nothing.	Thanh gạt bên cạnh tắt tiếng hoặc không làm gì.
+Which light to set.	Chọn đèn cần chỉnh.
+Its own colour, or the one above.	Màu riêng hoặc theo màu ở trên.
+Steady, breathing, fading, pulsing or off; "Like the rest" follows the colour above.	Sáng đều, nhịp thở, mờ dần, nhấp nháy hoặc tắt; "Giống các đèn khác" theo màu ở trên.
+Its own brightness, or the one above.	Độ sáng riêng hoặc theo độ sáng ở trên.
+Lights & buttons	Đèn & nút
+F1/F2 are shortcuts, not game buttons.	F1/F2 là phím tắt, không phải nút trong game.
+Set them in Settings › Controls › Lights & buttons.	Đặt trong Cài đặt › Điều khiển › Đèn & nút.
+Shortcuts for all games; not game buttons. Choose their action here.	Phím tắt cho mọi game, không phải nút trong game. Chọn tác vụ tại đây.
+Each light	Từng đèn
+F1 button	Nút F1
+F2 button	Nút F2
+Mute slider	Thanh gạt tắt tiếng
+The Brick's lights, the F1 and F2 keys and the mute slider.	Đèn của Brick, hai phím F1, F2 và thanh gạt tắt tiếng.
+Lights off	Tắt đèn
+Light tactile clicks as you browse, and their strength. Game rumble is set in Options.	Rung nhẹ khi di chuyển trong menu và mức độ rung. Rung trong game chỉnh ở Tùy chọn.
+Left grip	Tay trái
+Right grip	Tay phải
+Middle	Ở giữa
+F1 key	Phím F1
+F2 key	Phím F2
+Nothing	Không
+Quick save	Lưu nhanh
+Quick load	Tải nhanh
+Pause menu	Menu tạm dừng
+Mutes	Tắt tiếng
+Does nothing	Không làm gì
+Steady	Sáng đều
+Breathing	Nhịp thở
+Fading	Mờ dần
+Pulsing	Nhấp nháy
+{s} (heavy)	{s} (nặng)
+Warm light in the menus. While a game runs, the main colour of its cover.	Ánh sáng ấm trong menu. Khi chơi game, theo màu chủ đạo của ảnh bìa.
+The colour of the Brick's lights.	Màu của các đèn trên Brick.
+The Brick's lights stay dark.	Các đèn trên Brick luôn tắt.
+The grips, the middle and the F keys glow in the colour you pick.	Tay cầm, đèn giữa và các phím F phát sáng theo màu bạn chọn.
+Dark while all is well. Orange breathing while it charges, green when it is full, red breathing when it runs low.	Tắt khi bình thường. Nhịp thở cam khi đang sạc, xanh lá khi đầy, nhịp thở đỏ khi pin yếu.
+That cover is not a PNG picture.	Ảnh bìa này không phải tệp PNG.
+No game called {s} is on the card. Send the game first, then its cover with the same name.	Không có game tên {s} trên thẻ. Hãy gửi game trước, rồi gửi ảnh bìa cùng tên.
+Several systems take this cover: more than one has a game with that name.	Nhiều hệ máy nhận ảnh bìa này: có hơn một hệ máy chứa game cùng tên.
+The time zone could not be kept on the card: {s}	Không thể lưu múi giờ lên thẻ: {s}
+The system didn't take the new time zone: {s}	Hệ thống không nhận múi giờ mới: {s}
+PC Engine CD needs a BIOS file in Roms/bios: syscard3.pce	PC Engine CD cần tệp BIOS trong Roms/bios: syscard3.pce
+Switched off after {n} min asleep to save the battery.	Đã tắt nguồn sau {n} phút ngủ để tiết kiệm pin.
+Switched off after {n} min with the screen off to save the battery.	Đã tắt nguồn sau {n} phút tắt màn hình để tiết kiệm pin.
+Hue	Sắc độ
+Saturation	Độ bão hòa
+Own colour	Màu riêng
+Colour cycle	Đổi màu liên tục
+Slow	Chậm
+Its own colour, or the one above. Own colour: pick the hue and the saturation below.	Màu riêng hoặc theo màu ở trên. Màu riêng: chọn sắc độ và độ bão hòa bên dưới.
+Round the colour wheel: red, yellow, green, blue, violet and back.	Quay vòng bảng màu: đỏ, vàng, xanh lá, xanh dương, tím rồi lặp lại.
+From pale to full colour.	Từ nhạt đến đậm.
+Steady, breathing, fading, pulsing, a colour cycle, the battery and charger, or off; "Like the rest" follows the colour above.	Sáng đều, nhịp thở, mờ dần, nhấp nháy, đổi màu liên tục, pin và sạc hoặc tắt; "Giống các đèn khác" theo màu ở trên.
+How fast it breathes, fades, pulses or cycles.	Tốc độ nhịp thở, mờ dần, nhấp nháy hoặc đổi màu.
+Not saved.	Chưa lưu.
+The emulator choice couldn't be saved on the card. Nothing was changed.	Không thể lưu lựa chọn trình giả lập lên thẻ. Chưa có gì thay đổi.
+Wireless pads and headphones. Connected headphones take all audio and hand it back to the speaker on disconnect.	Tay cầm và tai nghe không dây. Tai nghe đang kết nối sẽ phát toàn bộ âm thanh và trả về loa ngoài khi ngắt kết nối.
+Restart pocket-ui?	Khởi động lại pocket-ui?
+Restarts pocket-ui in seconds. Your games, saves and settings stay untouched.	Khởi động lại pocket-ui trong vài giây. Game, dữ liệu lưu và cài đặt của bạn giữ nguyên.
+New versions of pocket-ui.	Phiên bản mới của pocket-ui.
+User	Người dùng
+(unchanged)	(không đổi)
+CPU speed limits for games and menus.	Giới hạn tốc độ CPU cho game và menu.
+Battery saves and save states. No games, no BIOS files.	Dữ liệu lưu trong game và lưu trạng thái. Không gồm game và tệp BIOS.
+To {s} on the SD card. Copy it to a computer too.	Vào {s} trên thẻ SD. Hãy chép thêm một bản sang máy tính.
+Turns the screen off and pauses the game. Power wakes it.	Tắt màn hình và tạm dừng game. Nhấn nút nguồn để bật lại.
+Saves your game and puts the Brick to sleep. Power wakes it straight to the pause menu.	Lưu game và đưa Brick vào chế độ ngủ. Nhấn nút nguồn để mở lại ngay menu tạm dừng.
+Turns off only the screen while pausing your game. Power turns it back on.	Chỉ tắt màn hình và tạm dừng game. Nhấn nút nguồn để bật lại.
+Saves the game. The power button wakes it.	Lưu game. Nhấn nút nguồn để bật lại.
+The power button wakes it.	Nhấn nút nguồn để bật lại.
+Back to EmulationStation	Về EmulationStation
+Back to EmulationStation?	Về EmulationStation?
+pocket-ui closes and EmulationStation comes back. Your games, saves and settings stay as they are.	pocket-ui sẽ đóng và quay về EmulationStation. Game, dữ liệu lưu và cài đặt của bạn giữ nguyên.
+The starter pack isn't available on dArkOS (pocket-ui only reads dArkOS's folders). Copy games into EASYROMS instead.	Gói khởi đầu không có trên dArkOS (pocket-ui chỉ đọc thư mục của dArkOS). Hãy chép game vào EASYROMS.
+Set up Wi-Fi in dArkOS. pocket-ui uses the connection dArkOS makes.	Thiết lập Wi-Fi trong dArkOS. pocket-ui dùng kết nối do dArkOS tạo.
+Connected · {s}	Đã kết nối · {s}
+Set up in dArkOS. Shows whether it is connected.	Thiết lập trong dArkOS. Hiển thị trạng thái kết nối.
+The clock looks wrong. Play history and the dates on saves will be off until it is set. Set it in dArkOS.	Đồng hồ có vẻ bị sai. Lịch sử chơi và ngày lưu game sẽ lệch cho đến khi chỉnh lại. Hãy chỉnh trong dArkOS.
+The clock looks wrong, so the update server can't be checked. Set it in dArkOS, or wait for network time over Wi-Fi.	Đồng hồ có vẻ bị sai nên không thể kiểm tra máy chủ cập nhật. Hãy chỉnh trong dArkOS hoặc đợi giờ mạng qua Wi-Fi.
+It listens on your Wi-Fi. Set up Wi-Fi in dArkOS; Settings › Connections › Wi-Fi shows the connection.	Lắng nghe trên mạng Wi-Fi của bạn. Thiết lập Wi-Fi trong dArkOS; Cài đặt › Kết nối › Wi-Fi hiển thị trạng thái kết nối.
+Turn on to browse your library in any browser on your Wi-Fi. The URL appears here.	Bật để duyệt thư viện trên mọi trình duyệt cùng mạng Wi-Fi. Địa chỉ URL sẽ hiện tại đây.
+Pair one in dArkOS, or plug one into the USB-C port. This handheld's own buttons show up here too.	Ghép đôi trong dArkOS hoặc cắm vào cổng USB-C. Các nút của máy cầm tay này cũng hiện ở đây.
+Copy games into dArkOS's EASYROMS folders (one per system), then restart pocket-ui.	Chép game vào các thư mục EASYROMS của dArkOS (mỗi hệ máy một thư mục), rồi khởi động lại pocket-ui.

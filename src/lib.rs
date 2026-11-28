@@ -17,6 +17,8 @@ pub mod fps_line;
 pub mod render_scale;
 /// Options → Picture → Mode 7 for the Super Nintendo, the same on Linux and in Android's player (`mode7_hd`).
 pub mod mode7_hd;
+/// Options → Picture → Widescreen for the Dreamcast (Flycast), the same on Linux and in Android's player (`dc_widescreen`).
+pub mod dc_widescreen;
 /// Earlier's on/off and its starting value per console, the same on Linux and in Android's player (`timeline` uses it).
 pub mod timeline_policy;
 pub mod frame_clock;
@@ -31,6 +33,10 @@ pub mod signed_data;
 pub mod update_channel;
 
 pub mod update_page;
+/// Android's media volume steps: the handheld view's row and the player's volume keys (`android_controls`, android/src/player.rs).
+pub mod volume_steps;
+/// Waking an Android handheld in a game: the game goes on, as on Linux (android/src/player.rs).
+pub mod android_wake;
 #[cfg(any(target_os = "android", test))]
 #[path = "platform/android_pcm.rs"]
 mod android_pcm;

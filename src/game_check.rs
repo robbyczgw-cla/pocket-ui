@@ -279,6 +279,28 @@ pub trait Files {
     fn shown(&self, path: &Path) -> String;
     /// A game's bytes, open for reading with seeking; None when they can't be read.
     fn open(&self, path: &Path) -> Option<Box<dyn crate::document_check::ReadSeek>>;
+    /// Whether the game has saves or save states (`web::saves::files_of`): a version with them is never offered for hiding.
+    fn has_saves(&self, _system: &str, _path: &Path) -> bool {
+        false
+    }
+    /// The names of the files in a zip, from its directory; empty for any other file.
+    fn inside(&self, _path: &Path) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+/// What the check knows of the games beyond their files, for [`twins`]: the names the checksums or serials gave
+/// (`rom_id::known`), the checksums the card has (`rom_id::cached_sums`; neither reads a game) and the games the player
+/// has something of (play time, a favourite, a rating or note: `library_meta`, `favorites`, `recents`). Empty: a version
+/// is found by its file name alone, and only saves beside it or its states count as the player's.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Versions {
+    pub names: HashMap<PathBuf, String>,
+    pub sums: HashMap<PathBuf, (u32, Option<u32>)>,
+    pub played: HashSet<PathBuf>,
+    /// The systems' own ROM folders (`check` adds the catalog's): the files right in any of them are one folder for
+    /// [`twins`], so a shelf that shows two systems' folders as one (Genesis and Mega Drive) finds a game in both.
+    pub roots: HashSet<PathBuf>,
 }
 
 /// Disc images and their kin: they may begin with a zero megabyte and still run (Sonic Adventure 2's `.cdi`), so the zeros
@@ -400,6 +422,18 @@ impl Files for Disk<'_> {
     fn open(&self, path: &Path) -> Option<Box<dyn crate::document_check::ReadSeek>> {
         std::fs::File::open(path).ok().map(|f| Box::new(f) as Box<dyn crate::document_check::ReadSeek>)
     }
+
+    fn has_saves(&self, system: &str, path: &Path) -> bool {
+        let roots = crate::web::files::Roots { roms: self.roms.to_path_buf(), ..Default::default() };
+        !crate::web::saves::files_of(&roots, system, path, false).is_empty()
+    }
+
+    fn inside(&self, path: &Path) -> Vec<String> {
+        if extension(path) != "zip" {
+            return Vec::new();
+        }
+        crate::archive::listing(path, |_| false).ok().flatten().map_or(Vec::new(), |l| l.entries.into_iter().map(|(name, _)| name).collect())
+    }
 }
 
 #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
@@ -424,12 +458,16 @@ pub struct Input {
     /// An H700 handheld or the RG DS Plus (`device::Model::small_chip`): a stray folder of a system it has no emulator
     /// for needs a stronger handheld.
     pub h700: bool,
+    /// Names, checksums and the player's games, to find one game in several versions ([`Versions`]).
+    pub versions: Versions,
 }
 
 /// Collects the findings and how far the work has come.
 #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 struct Run<'a> {
     input: &'a Input,
+    /// `input.versions` with the catalog's folders as `roots`.
+    versions: Versions,
     disk: Disk<'a>,
     stop: &'a AtomicBool,
     progress: &'a mut dyn FnMut(usize, usize, &str),
@@ -444,7 +482,9 @@ struct Run<'a> {
 #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
 pub fn check(input: &Input, stop: &AtomicBool, progress: &mut dyn FnMut(usize, usize, &str)) -> Option<Report> {
     let total = input.shelf.iter().map(|(_, g)| g.len()).sum();
-    let mut run = Run { input, disk: Disk { roms: &input.roms }, stop, progress, done: 0, total, found: Findings::default(), blocked_systems: HashSet::new(), blocked_games: HashSet::new() };
+    let mut versions = input.versions.clone();
+    versions.roots.extend(input.catalog.iter().map(|s| s.path.clone()));
+    let mut run = Run { input, versions, disk: Disk { roms: &input.roms }, stop, progress, done: 0, total, found: Findings::default(), blocked_systems: HashSet::new(), blocked_games: HashSet::new() };
     run.bios()?;
     run.games()?;
     run.folders()?;
@@ -637,7 +677,7 @@ impl Run<'_> {
                 }
                 Some(())
             };
-            check_system(&mut self.found, &self.disk, &HANDHELD, &info, games, &mut self.blocked_games, &mut between)?;
+            check_system(&mut self.found, &self.disk, &HANDHELD, &info, games, &self.versions, &mut self.blocked_games, &mut between)?;
         }
         Some(())
     }
@@ -783,9 +823,10 @@ impl Run<'_> {
     }
 }
 
-/// One system's games on the shelf: empty files, zips that won't start, the same file twice. `between` comes before each
+/// One system's games on the shelf: empty files, zips that won't start, the same game twice. `between` comes before each
 /// game; None from it stops the check.
-pub fn check_system(found: &mut Findings, files: &dyn Files, words: &Words, info: &SysInfo, games: &[PathBuf], blocked: &mut HashSet<PathBuf>, between: &mut dyn FnMut(usize) -> Option<()>) -> Option<()> {
+#[allow(clippy::too_many_arguments)]
+pub fn check_system(found: &mut Findings, files: &dyn Files, words: &Words, info: &SysInfo, games: &[PathBuf], versions: &Versions, blocked: &mut HashSet<PathBuf>, between: &mut dyn FnMut(usize) -> Option<()>) -> Option<()> {
     let id = info.id.as_str();
     let wanted: Vec<&str> = info.extensions.iter().map(String::as_str).filter(|e| !matches!(*e, "zip" | "7z")).collect();
     let cartridge = crate::rom_id::dat_name(id).is_some();
@@ -831,46 +872,287 @@ pub fn check_system(found: &mut Findings, files: &dyn Files, words: &Words, info
             }
         }
     }
-    twins(found, files, words, info, &sizes);
+    twins(found, files, words, info, &sizes, versions);
     Some(())
 }
 
-/// The same file twice on a system's shelf: the same name but for "(1)" or "- Copy", either as the same size or as
-/// two file types. Tags count, so two regions of a game are two games; nothing is hashed.
-fn twins(found: &mut Findings, files: &dyn Files, words: &Words, info: &SysInfo, sizes: &[(&PathBuf, u64)]) {
-    // Per folder: two games of the same name in folders of their own are two games.
-    let mut by_name: HashMap<(Option<PathBuf>, String), Vec<(&PathBuf, u64)>> = HashMap::new();
-    for (path, len) in sizes {
-        let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-        by_name.entry((path.parent().map(Path::to_path_buf), without_copy_mark(&stem).to_lowercase())).or_default().push((path, *len));
+/// The same game twice on a system's shelf, in one folder (games of one name in folders of their own are games of their
+/// own: a "Kids" or "Hacks" folder is the player's choice; the folders of systems one shelf shows together, `roots`,
+/// are one):
+/// * a copy: the same name but for "(1)" or "- Copy", as the same size or as two file types;
+/// * one checksum under two names (`rom_id`'s cache: a zip's from its directory, a loose cartridge's read once);
+/// * the same game in another version: another region, revision, dump or file type, "Legend of Zelda, The" for "The
+///   Legend of Zelda", "0457-Chrono Trigger (US)" for "Chrono Trigger (USA)", by the name its checksum gave or by its
+///   file name ([`version_title`]). A hack, a fan translation, a beta or a Japanese release is a game of its own.
+///
+/// The one that stays is the one the player has something of (saves, states, play time, a favourite), then the one
+/// without a copy mark, Europe or World before USA before the rest ([`region_rank`]), the newest revision, a dump the
+/// checksum list knows, the shortest path. A version the player has something of is never offered for hiding: what
+/// they played is never parted from its game. Nothing is hashed here.
+fn twins(found: &mut Findings, files: &dyn Files, words: &Words, info: &SysInfo, sizes: &[(&PathBuf, u64)], versions: &Versions) {
+    let stem_of = |p: &Path| p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let copy_marked = |p: &Path| {
+        let stem = stem_of(p);
+        without_copy_mark(&stem).len() != stem.len()
+    };
+    // The folder a game is compared in: its own, or for a game right in a system's folder that of every system on this
+    // shelf (Genesis and Mega Drive on one shelf are one folder; "Kids" stays a folder of its own).
+    let folder = |p: &Path| -> Option<PathBuf> {
+        let dir = p.parent()?;
+        Some(if versions.roots.contains(dir) { PathBuf::new() } else { dir.to_path_buf() })
+    };
+    let n = sizes.len();
+    let mut parent: Vec<usize> = (0..n).collect();
+    fn root(parent: &mut [usize], mut i: usize) -> usize {
+        while parent[i] != i {
+            parent[i] = parent[parent[i]];
+            i = parent[i];
+        }
+        i
     }
-    let mut groups: Vec<Vec<(&PathBuf, u64)>> = by_name.into_values().filter(|g| g.len() > 1).collect();
-    groups.sort_by_key(|g| g[0].0.clone());
-    for mut group in groups {
-        // The one without a copy mark stays, then the shortest path.
-        group.sort_by_cached_key(|(p, _)| {
-            let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-            (without_copy_mark(&stem).len() != stem.len(), p.as_os_str().len(), (*p).clone())
-        });
-        let (first, first_len) = group[0];
-        for (path, len) in &group[1..] {
+    fn join(parent: &mut [usize], a: usize, b: usize) {
+        let (ra, rb) = (root(parent, a), root(parent, b));
+        if ra != rb {
+            parent[ra.max(rb)] = ra.min(rb);
+        }
+    }
+    // Copies: per folder and name without the copy mark; the one without a mark (then the shortest path) is the
+    // original, and a copy of the same type but another size is something else.
+    let mut by_name: HashMap<(Option<PathBuf>, String), Vec<usize>> = HashMap::new();
+    for (i, (path, _)) in sizes.iter().enumerate() {
+        by_name.entry((folder(path), without_copy_mark(&stem_of(path)).to_lowercase())).or_default().push(i);
+    }
+    for group in by_name.values().filter(|g| g.len() > 1) {
+        let mut group = group.clone();
+        group.sort_by_cached_key(|&i| (copy_marked(sizes[i].0), sizes[i].0.as_os_str().len(), sizes[i].0.clone()));
+        let (first, first_len) = sizes[group[0]];
+        for &i in &group[1..] {
+            let (path, len) = sizes[i];
             let same_type = path.extension().map(|e| e.to_ascii_lowercase()) == first.extension().map(|e| e.to_ascii_lowercase());
-            if same_type && *len != first_len {
+            if !(same_type && len != first_len) {
+                join(&mut parent, group[0], i);
+            }
+        }
+    }
+    // One checksum, and one title: the file's and the one its checksum gave. A copy goes by the rule above alone, and a
+    // zip whose game is a hack or translation inside is no version of anything.
+    #[derive(Hash, PartialEq, Eq)]
+    enum Key {
+        Sum(u32),
+        Title(String),
+    }
+    let by_titles = titles_tell(&info.id);
+    let titles = |i: usize, look_inside: bool| -> Vec<String> {
+        let path = sizes[i].0;
+        let inner_edition = || files.inside(path).iter().any(|f| version_title(&stem_of(Path::new(f))).is_none());
+        if !by_titles || copy_marked(path) || (look_inside && inner_edition()) {
+            return Vec::new();
+        }
+        let mut out: Vec<String> = version_title(&stem_of(path)).into_iter().collect();
+        out.extend(versions.names.get(path).and_then(|n| version_title(n)));
+        out
+    };
+    let mut by_title: HashMap<(Option<PathBuf>, String), Vec<usize>> = HashMap::new();
+    for (i, (path, _)) in sizes.iter().enumerate() {
+        for t in titles(i, false) {
+            by_title.entry((folder(path), t)).or_default().push(i);
+        }
+    }
+    // Only the zips that would join another game have their directory read.
+    let suspects: HashSet<usize> = by_title.values().filter(|g| g.len() > 1).flatten().copied().collect();
+    let mut by_key: HashMap<(Option<PathBuf>, Key), usize> = HashMap::new();
+    for (i, (path, _)) in sizes.iter().enumerate() {
+        let path: &Path = path;
+        let mut keys: Vec<Key> = Vec::new();
+        if let Some((crc, alt)) = versions.sums.get(path) {
+            keys.push(Key::Sum(*crc));
+            keys.extend(alt.map(Key::Sum));
+        }
+        keys.extend(titles(i, suspects.contains(&i)).into_iter().map(Key::Title));
+        for key in keys {
+            match by_key.entry((folder(path), key)) {
+                std::collections::hash_map::Entry::Occupied(e) => join(&mut parent, *e.get(), i),
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert(i);
+                }
+            }
+        }
+    }
+    let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
+    for i in 0..n {
+        let r = root(&mut parent, i);
+        groups.entry(r).or_default().push(i);
+    }
+    let mut groups: Vec<Vec<usize>> = groups.into_values().filter(|g| g.len() > 1).collect();
+    groups.sort_by_key(|g| sizes[g[0]].0.clone());
+    for group in groups {
+        let played = |i: usize| versions.played.contains(sizes[i].0) || files.has_saves(&info.id, sizes[i].0);
+        let mut ranked: Vec<(bool, usize)> = group.iter().map(|&i| (played(i), i)).collect();
+        ranked.sort_by_cached_key(|&(played, i)| {
+            let path = sizes[i].0;
+            let named = versions.names.get(path);
+            let name = named.cloned().unwrap_or_else(|| stem_of(path));
+            (!played, copy_marked(path), region_rank(&name), std::cmp::Reverse(revision(&name)), named.is_none(), path.as_os_str().len(), path.to_path_buf())
+        });
+        let first = sizes[ranked[0].1].0;
+        for &(played, i) in &ranked[1..] {
+            if played {
                 continue;
             }
-            let name = file_of(path);
+            let path = sizes[i].0;
             let (kept, place) = (files.shown(first), Some(files.shown(path)));
             found.add(Finding {
                 group: Group::Twice,
                 what: format!("Same game twice: {kept} is the same game."),
                 todo: words.twin_todo.into(),
-                name,
+                name: file_of(path),
                 system: (words.short)(info),
                 place,
-                fix: words.twin_hides.then(|| Fix::Hide((*path).clone())),
+                fix: words.twin_hides.then(|| Fix::Hide(path.clone())),
             });
         }
     }
+}
+
+/// The tags of a name: what stands in round or square brackets, without them.
+fn tags_of(name: &str) -> Vec<String> {
+    let (mut out, mut tag, mut depth) = (Vec::new(), String::new(), 0);
+    for ch in name.chars() {
+        match ch {
+            '(' | '[' => {
+                if depth > 0 {
+                    tag.push(ch);
+                }
+                depth += 1;
+            }
+            ')' | ']' if depth > 0 => {
+                depth -= 1;
+                if depth == 0 {
+                    out.push(std::mem::take(&mut tag).trim().to_string());
+                } else {
+                    tag.push(ch);
+                }
+            }
+            _ if depth > 0 => tag.push(ch),
+            _ => {}
+        }
+    }
+    out
+}
+
+/// A tag that makes a file a game of its own rather than a version: a hack, a patch, a fan translation ("T+Eng",
+/// "[T-Ger]"), a restoration, a beta or demo, a randomizer, or a named mod with its own version number ("Emerald Rogue
+/// v2.2.0", "Retro Track Grand Prix v2.1"). GoodTools' "[h1]" (hack) and "[t1]" (trainer) count as well.
+fn own_edition(tag: &str) -> bool {
+    const MARKS: &[&str] = &["hack", "patch", "restor", "translat", "t+", "t-", "beta", "proto", "demo", "sample", "kiosk", "randomiz", "kaizo", "remaster", "remix", "redux", "fan "];
+    let t = tag.to_lowercase();
+    if MARKS.iter().any(|m| t.contains(m)) {
+        return true;
+    }
+    let mut c = t.chars();
+    if matches!(c.next(), Some('h' | 't')) && c.next().is_some_and(|d| d.is_ascii_digit()) {
+        return true;
+    }
+    let words: Vec<&str> = t.split_whitespace().collect();
+    words.len() > 1 && words.iter().any(|w| w.strip_prefix('v').is_some_and(|v| v.starts_with(|d: char| d.is_ascii_digit())))
+}
+
+/// The regions of a name's tags, lowercased: "(USA, Europe)" → usa, europe; GoodTools' "(UE)" counts too.
+fn regions_of(name: &str) -> Vec<String> {
+    const REGIONS: &[&str] = &[
+        "world", "europe", "usa", "japan", "australia", "germany", "france", "spain", "italy", "uk", "netherlands", "sweden", "scandinavia", "brazil", "canada", "korea", "china", "taiwan", "asia",
+        "hong kong", "w", "e", "u", "j", "ue", "eu", "us", "ju", "jue", "g", "f", "s", "i", "k", "a", "b",
+    ];
+    tags_of(name)
+        .iter()
+        .flat_map(|t| {
+            let parts: Vec<String> = t.split(',').map(|p| p.trim().to_lowercase()).collect();
+            if parts.iter().all(|p| REGIONS.contains(&p.as_str())) { parts } else { Vec::new() }
+        })
+        .collect()
+}
+
+/// Which version stays when nothing else decides: 0 Europe or the whole world, 1 USA, 2 another region, 3 none named.
+fn region_rank(name: &str) -> u8 {
+    let rank = |r: &str| match r {
+        "world" | "europe" | "w" | "e" | "ue" | "eu" | "jue" | "germany" | "g" | "uk" | "france" | "f" | "spain" | "s" | "italy" | "i" | "netherlands" | "sweden" | "scandinavia" => 0,
+        "usa" | "u" | "us" | "ju" | "canada" | "australia" | "a" => 1,
+        _ => 2,
+    };
+    regions_of(name).iter().map(|r| rank(r)).min().unwrap_or(3)
+}
+
+/// A name's revision: "(Rev 2)" 2000, "(Rev A)" 1000, "(V1.1)" 1001, "(v1.02)" 1002; none 0.
+fn revision(name: &str) -> u32 {
+    tags_of(name)
+        .iter()
+        .filter_map(|t| {
+            let t = t.to_lowercase();
+            if let Some(r) = t.strip_prefix("rev ") {
+                let r = r.trim();
+                return r.parse::<u32>().ok().or_else(|| (r.len() == 1).then(|| r.bytes().next().map(|b| u32::from(b.saturating_sub(b'a')) + 1)).flatten()).map(|n| n * 1000);
+            }
+            let v = t.strip_prefix('v')?;
+            let (major, minor) = v.split_once('.').unwrap_or((v, "0"));
+            Some(major.parse::<u32>().ok()? * 1000 + minor.parse::<u32>().ok()?)
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+/// The title two versions of a game share: the name without tags, release number, version and article, "&" read as
+/// "and", Roman numbers as digits, accents, spaces and punctuation left out ("Legend of Zelda, The - A Link to the Past
+/// (USA)" and "Zelda - A Link to the Past" are not one; "Street Fighter II Turbo" and "0925-Street Fighter 2 Turbo (US)"
+/// are). None for a hack, translation or the like ([`own_edition`]). A Japanese release gets its own title: a fan
+/// translation of it often has no tag at all, and is played for being another game.
+pub(crate) fn version_title(stem: &str) -> Option<String> {
+    let tags = tags_of(stem);
+    if tags.iter().any(|t| own_edition(t)) {
+        return None;
+    }
+    // "(Disc 2)", "(Side B)": a part of the game, not a version of it.
+    let part: String = tags
+        .iter()
+        .map(|t| t.to_lowercase())
+        .filter(|t| ["disc", "disk", "cd", "side", "tape", "part"].iter().any(|w| t.strip_prefix(w).is_some_and(|r| r.starts_with([' ', '-']) || r.starts_with(|c: char| c.is_ascii_digit()))))
+        .map(|t| t.chars().filter(|c| c.is_alphanumeric()).collect::<String>())
+        .collect();
+    let regions = regions_of(stem);
+    let asian = !regions.is_empty() && regions.iter().all(|r| matches!(r.as_str(), "japan" | "j" | "korea" | "k" | "china" | "taiwan" | "asia" | "hong kong"));
+    let fold = |c: char| match c {
+        'à' | 'á' | 'â' | 'ä' | 'ã' | 'å' => 'a',
+        'è' | 'é' | 'ê' | 'ë' => 'e',
+        'ì' | 'í' | 'î' | 'ï' => 'i',
+        'ò' | 'ó' | 'ô' | 'ö' | 'õ' => 'o',
+        'ù' | 'ú' | 'û' | 'ü' => 'u',
+        'ñ' => 'n',
+        'ç' => 'c',
+        c => c,
+    };
+    let plain: String = crate::library::display_name(stem).to_lowercase().replace('&', " and ").chars().map(fold).collect();
+    let words: Vec<&str> = plain.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    let roman = |w: &str| match w {
+        "ii" => "2", "iii" => "3", "iv" => "4", "v" => "5", "vi" => "6", "vii" => "7", "viii" => "8", "ix" => "9",
+        w => w,
+    }
+    .to_string();
+    let skip = usize::from(words.first().is_some_and(|w| matches!(*w, "the" | "a" | "an")) && words.len() > 1);
+    let title: String = words[skip..].iter().map(|w| roman(w)).collect();
+    (!title.is_empty()).then(|| format!("{title}{}{part}", if asian { "#asia" } else { "" }))
+}
+
+/// Systems whose files are named after what they are, so a title says which game: not arcade sets ("sf2ce.zip" is a
+/// set, its clones share its ROMs), folders per game, ports, carts and the like (`hostsys::folders_are_games`).
+fn titles_tell(system: &str) -> bool {
+    const NOT: &[&str] = &[
+        "arcade", "mame", "fbn", "fbneo", "cps1", "cps2", "cps3", "neogeo", "neocd", "naomi", "atomiswave", "daphne", "model2", "model3", "ports", "pico-8", "scummvm", "j2me", "easyrpg", "doom",
+        "tic-80", "lowres-nx", "wasm4", "openbor", "solarus", "heroic", "steam", "windows", "moonlight", "dos", "pc",
+    ];
+    #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
+    let folders = crate::hostsys::folders_are_games(system);
+    #[cfg(all(target_os = "android", not(feature = "handheld")))]
+    let folders = false;
+    !NOT.contains(&system) && !folders
 }
 
 /// CRC-32 of a file, chunk by chunk. Outer None: stopped; inner None: can't be read.
@@ -912,11 +1194,13 @@ pub(crate) fn file_of(path: &Path) -> String {
     name
 }
 
-/// A game's file name without what a copy adds: "Game (1)", "Game - Copy", "Game - Kopie", "Game copy 2".
+/// A game's file name without what a copy adds: "Game (1)", "Game - Copy", "Game - Kopie", "Game copy 2". A number of
+/// four digits or one glued to the name is no copy's: old scene sets end names with their own ("(US)(4858)").
 pub fn without_copy_mark(stem: &str) -> &str {
     let mut s = stem.trim_end();
     if let Some(open) = s.strip_suffix(')').and_then(|b| b.rfind('(')) {
-        if s[open + 1..s.len() - 1].chars().all(|c| c.is_ascii_digit()) && open + 2 < s.len() {
+        let number = &s[open + 1..s.len() - 1];
+        if !number.is_empty() && number.len() <= 3 && number.chars().all(|c| c.is_ascii_digit()) && s[..open].ends_with(' ') {
             s = s[..open].trim_end();
         }
     } else if let Some((body, last)) = s.rsplit_once(' ') {
@@ -1132,7 +1416,7 @@ mod tests {
                 .map(|s| (s.id.clone(), scan(s)))
                 .filter(|(_, g)| !g.is_empty())
                 .collect();
-            Input { catalog: self.catalog.clone(), shelf, bios_dir: self.roms().join("bios"), roms: self.roms(), h700 }
+            Input { catalog: self.catalog.clone(), shelf, bios_dir: self.roms().join("bios"), roms: self.roms(), h700, versions: Versions::default() }
         }
 
         fn report(&self) -> Report {
@@ -1258,7 +1542,7 @@ mod tests {
         let r = c.report();
         assert_eq!((r.total, r.ready, r.findings.len()), (0, 0, 0));
         // No folders at all.
-        let i = Input { catalog: Vec::new(), shelf: Vec::new(), bios_dir: c.dir.join("nope/bios"), roms: c.dir.join("nope"), h700: false };
+        let i = Input { catalog: Vec::new(), shelf: Vec::new(), bios_dir: c.dir.join("nope/bios"), roms: c.dir.join("nope"), h700: false, versions: Versions::default() };
         assert_eq!(check(&i, &AtomicBool::new(false), &mut |_, _, _| {}).unwrap().findings, Vec::new());
     }
 
@@ -1468,7 +1752,7 @@ mod tests {
     }
 
     #[test]
-    fn the_same_game_twice_and_two_regions_are_two_games() {
+    fn the_same_game_twice_and_two_regions_are_one_game_in_two_versions() {
         let c = Card::new("twice");
         c.put("gba/Metroid Fusion.gba", b"same");
         let copy = c.put("gba/Metroid Fusion (1).gba", b"same");
@@ -1484,11 +1768,220 @@ mod tests {
         c.put("gba/Hack C/game.gbc", b"x");
         let r = c.report();
         let twins = only(&r, Group::Twice);
-        assert_eq!(twins.len(), 2, "{twins:?}");
+        assert_eq!(twins.len(), 3, "{twins:?}");
         let mario = twins.iter().find(|f| f.place.as_deref().is_some_and(|p| p.contains("Metroid"))).unwrap();
         assert_eq!(mario.fix, Some(Fix::Hide(copy)), "the copy goes, not the original");
         assert_eq!(mario.place.as_deref(), Some("roms/gba/Metroid Fusion (1).gba"));
+        // Two regions of one game are two versions of it: the one for the whole world stays.
+        let tobu = twins.iter().find(|f| f.place.as_deref().is_some_and(|p| p.contains("Tobu"))).unwrap();
+        assert_eq!(tobu.place.as_deref(), Some("roms/gba/Tobu (Europe).gba"), "{tobu:?}");
+        assert_eq!(tobu.what, "Same game twice: roms/gba/Tobu (World).gba is the same game.");
         assert_eq!(r.ready, r.total, "a second copy stops nothing");
+    }
+
+    /// The doubles of a real card (pocket, 25.11.2026: 182 top games copied beside a set already there) that Game check
+    /// let through because only "(1)" and "- Copy" counted: other regions and revisions, the old set's release numbers,
+    /// "Title, The", "&" for "and", Roman numbers, a zip beside the loose file. Each pair is one game; the copy that
+    /// stays is the one played, else Europe before USA, else the newest revision.
+    #[test]
+    fn versions_of_one_game_are_found_and_the_best_stays() {
+        let c = Card::new("versions");
+        let pairs: [(&str, &str); 10] = [
+            ("snes/0457-Chrono Trigger (US).smc", "snes/Chrono Trigger (Europe).sfc"),
+            ("snes/Legend of Zelda, The - A Link to the Past (USA).smc", "snes/The Legend of Zelda - A Link to the Past (Europe).sfc"),
+            ("snes/Teenage Mutant Ninja Turtles IV - Turtles in Time (USA).smc", "snes/1013-Teenage Mutant Ninja Turtles 4 - Turtles in Time (E)(4858).smc"),
+            ("gba/Mario and Luigi - Superstar Saga (USA).gba", "gba/Mario & Luigi - Superstar Saga (Europe) (En,Fr,De,Es,It).7z"),
+            ("gba/Pokemon - Fire Red Version (USA).7z", "gba/Pokemon - FireRed Version (USA, Europe) (Rev 1).gba"),
+            ("gba/Metroid - Zero Mission (U) [!].gba", "gba/Metroid - Zero Mission (Europe) (En,Fr,De,Es,It).7z"),
+            ("snes/Mega Man X 3.smc", "snes/Mega Man X3 (E).zip"),
+            ("snes/Super Mariokart (U).smc", "snes/Super Mario Kart (Europe).sfc"),
+            ("snes/Rock n' Roll Racing (USA).sfc", "snes/Rock 'N' Roll Racing (E).smc"),
+            ("gba/Star Fox (USA) (Rev 1).gba", "gba/Star Fox (USA) (Rev 2).gba"),
+        ];
+        for (i, (goes, stays)) in pairs.iter().enumerate() {
+            let body = if goes.ends_with(".zip") { crate::archive::tests::zip_of(&[("x.sfc", format!("game {i}").as_bytes())]) } else { format!("go {i}").into_bytes() };
+            c.put(goes, &body);
+            let body = if stays.ends_with(".zip") { crate::archive::tests::zip_of(&[("x.sfc", format!("game {i}!").as_bytes())]) } else { format!("stay {i}").into_bytes() };
+            c.put(stays, &body);
+        }
+        let r = c.report();
+        let twins = only(&r, Group::Twice);
+        let mut offered: Vec<&str> = twins.iter().filter_map(|f| f.place.as_deref()).collect();
+        offered.sort();
+        // The first of each pair goes (Mega Man X 3 names no region, its zip is Europe's).
+        let mut want: Vec<String> = pairs.iter().map(|(goes, _)| format!("roms/{goes}")).collect();
+        want.sort();
+        assert_eq!(offered, want, "{twins:#?}");
+        for f in &twins {
+            assert!(f.what.starts_with("Same game twice: roms/"), "{f:?}");
+            assert!(matches!(&f.fix, Some(Fix::Hide(p)) if f.place.as_deref().is_some_and(|s| p.ends_with(s.trim_start_matches("roms/")))), "{f:?}");
+        }
+    }
+
+    /// What is never called the same game: hacks, fan translations (also when only the file inside the zip says so),
+    /// restorations, betas, a mod with its own version, Japanese releases, two parts of one game, and copies in a folder of
+    /// their own. Different games stay different.
+    #[test]
+    fn hacks_translations_japanese_releases_and_parts_are_games_of_their_own() {
+        let c = Card::new("editions");
+        for f in [
+            "gba/Final Fantasy VI Advance (Europe).gba",
+            "gba/Final Fantasy VI Advance [Restored].gba",
+            "gba/Pokemon (Emerald Rogue v2.2.0 EX).gba",
+            "gba/Pokemon (Order and Chaos Remastered v06252024).gba",
+            "gba/Pokemon - Ruby Version (USA).gba",
+            "gba/Pokemon - Ruby Version (USA) [T+Ger].gba",
+            "gba/Pokemon - Sapphire Version (USA).gba",
+            "gba/Kirby (Beta).gba",
+            "gba/Kirby (USA).gba",
+            "snes/Tales of Phantasia (Japan).sfc",
+            "snes/Tales of Phantasia.sfc",
+            "snes/Demon's Crest (USA).sfc",
+            "psx/Final Fantasy VII (Europe) (Disc 1).chd",
+            "psx/Final Fantasy VII (Europe) (Disc 2).chd",
+            "gba/Kids/Kirby (USA).gba",
+        ] {
+            c.put(f, f.as_bytes());
+        }
+        c.put("snes/Demon's Crest.zip", &crate::archive::tests::zip_of(&[("Demon's Crest (U) [T+Por1.1_Hexagon].smc", b"translated")]));
+        let r = c.report();
+        assert!(only(&r, Group::Twice).is_empty(), "{:#?}", only(&r, Group::Twice));
+    }
+
+    /// The player's progress never parts from its game: a version with a save beside it, a state, play time or a star stays,
+    /// even when another version would rank higher, and when two versions were both played neither is offered.
+    #[test]
+    fn a_played_version_stays_and_two_played_versions_are_both_kept() {
+        let c = Card::new("played");
+        let usa = c.put("gba/Advance Wars (USA).gba", b"usa");
+        c.put("gba/Advance Wars (USA).srm", b"save");
+        let europe = c.put("gba/Advance Wars (Europe).gba", b"europe");
+        let gs_eu = c.put("gba/Golden Sun (Europe).gba", b"eu");
+        let gs_us = c.put("gba/Golden Sun (USA).gba", b"us");
+        let k_eu = c.put("gba/Kirby (Europe).gba", b"eu");
+        c.put("gba/Kirby (Europe).sav", b"save");
+        let k_us = c.put("gba/Kirby (USA).gba", b"us");
+        let mut input = c.input(false);
+        input.versions.played.insert(gs_us.clone());
+        input.versions.played.insert(k_us.clone());
+        let r = check(&input, &AtomicBool::new(false), &mut |_, _, _| {}).unwrap();
+        let twins = only(&r, Group::Twice);
+        assert_eq!(twins.len(), 2, "{twins:#?}");
+        let aw = twins.iter().find(|f| f.name.contains("Advance Wars")).unwrap();
+        assert_eq!(aw.fix, Some(Fix::Hide(europe)), "the USA copy has the save: {aw:?}");
+        assert!(aw.what.contains("Advance Wars (USA).gba"), "{aw:?}");
+        let gs = twins.iter().find(|f| f.name.contains("Golden Sun")).unwrap();
+        assert_eq!(gs.fix, Some(Fix::Hide(gs_eu)), "play time keeps the USA copy: {gs:?}");
+        assert!(!twins.iter().any(|f| f.fix == Some(Fix::Hide(k_eu.clone())) || f.fix == Some(Fix::Hide(k_us.clone()))), "both Kirbys were played");
+        assert!(!twins.iter().any(|f| f.fix == Some(Fix::Hide(usa.clone()))));
+    }
+
+    /// One checksum under two names, and two names the checksum list gives one title (`Versions`, from `rom_id`'s cache):
+    /// "Secrets of Mana 1" is Secret of Mana. A checksum alone joins nothing across folders.
+    #[test]
+    fn a_checksum_or_its_list_name_finds_one_game_under_two_file_names() {
+        let c = Card::new("sums");
+        let a = c.put("snes/0863-Secret of Mana (US).smc", b"a");
+        let b = c.put("snes/Secrets of Mana 1.smc", b"b");
+        let x = c.put("gba/Pokemom Gaia Version.gba", b"x");
+        let y = c.put("gba/pokemon-gaia.gba", b"y");
+        let z = c.put("gba/Kids/Gaia.gba", b"z");
+        let mut input = c.input(false);
+        // The Kids folder's copy is on the shelf too (`library::scan` reads one level of folders).
+        input.shelf.iter_mut().find(|(id, _)| id == "gba").unwrap().1.push(z.clone());
+        input.versions.names.insert(a.clone(), "Secret of Mana (USA)".into());
+        input.versions.names.insert(b.clone(), "Secret of Mana (USA)".into());
+        for p in [&x, &y, &z] {
+            input.versions.sums.insert(p.to_path_buf(), (0xB946_5C5A, None));
+        }
+        let r = check(&input, &AtomicBool::new(false), &mut |_, _, _| {}).unwrap();
+        let mut hidden: Vec<PathBuf> = only(&r, Group::Twice).iter().filter_map(|f| f.fix.as_ref().map(|Fix::Hide(p)| p.clone())).collect();
+        hidden.sort();
+        assert_eq!(hidden.len(), 2, "{hidden:?}");
+        assert!(hidden.contains(&b) || hidden.contains(&a), "{hidden:?}");
+        assert!(hidden.contains(&x) || hidden.contains(&y), "{hidden:?}");
+        assert!(!hidden.contains(&z), "the Kids folder's copy is the player's own choice");
+    }
+
+    /// One shelf for two systems' folders (Genesis and Mega Drive, `region_pairs`): Sonic in both is one game twice, as in
+    /// one folder; a copy in a folder of its own beside them stays the player's choice.
+    #[test]
+    fn a_game_in_two_systems_folders_of_one_shelf_is_the_same_game_twice() {
+        let c = Card::new("pairs");
+        let mut input = c.input(false);
+        let genesis = c.roms().join("genesis");
+        std::fs::create_dir_all(&genesis).unwrap();
+        input.catalog.push(sys(&c.roms(), "genesis", "Genesis", &["md", "gen", "zip"]));
+        let us = c.put("genesis/Sonic the Hedgehog (USA).md", b"us");
+        let eu = c.put("megadrive/Sonic the Hedgehog (Europe).md", b"eu");
+        let kids = c.put("megadrive/Kids/Sonic the Hedgehog (Europe).md", b"eu");
+        input.shelf.push(("megadrive".into(), vec![us.clone(), eu.clone(), kids.clone()]));
+        let r = check(&input, &AtomicBool::new(false), &mut |_, _, _| {}).unwrap();
+        let hidden: Vec<&Fix> = only(&r, Group::Twice).iter().filter_map(|f| f.fix.as_ref()).collect();
+        assert_eq!(hidden, [&Fix::Hide(us)], "the USA one in genesis goes, Europe stays, Kids is its own");
+    }
+
+    /// The shelves `library` really joins (`region_pairs`: Genesis into Mega Drive, Super Famicom into Super Nintendo), read
+    /// from an es_systems.cfg as the App reads them: a game in both systems' folders is the same game twice, the played
+    /// version stays wherever it is, and a Kids folder stays the player's own.
+    #[test]
+    fn region_pair_shelves_find_a_game_in_both_systems_folders() {
+        let c = Card::new("region-pairs");
+        let roms = c.roms();
+        let mut cfg = String::from("<systemList>");
+        for (id, exts) in [("megadrive", ".md .gen .zip"), ("genesis", ".md .gen .zip"), ("snes", ".sfc .smc .zip"), ("sfc", ".sfc .smc .zip")] {
+            std::fs::create_dir_all(roms.join(id)).unwrap();
+            cfg += &format!("<system><name>{id}</name><fullname>{id}</fullname><path>{}</path><extension>{exts}</extension></system>", roms.join(id).display());
+        }
+        cfg += "</systemList>";
+        let es = c.dir.join("es_systems.cfg");
+        std::fs::write(&es, cfg).unwrap();
+        c.put("megadrive/Sonic the Hedgehog (Europe).md", b"eu");
+        let sonic_us = c.put("genesis/Sonic the Hedgehog (USA).md", b"us");
+        c.put("genesis/Kids/Sonic the Hedgehog (USA).md", b"us");
+        c.put("snes/Super Metroid (Europe).sfc", b"eu");
+        let metroid_us = c.put("sfc/Super Metroid (Japan, USA).sfc", b"us");
+        let chrono_eu = c.put("snes/Chrono Trigger (Europe).sfc", b"eu");
+        c.put("sfc/Chrono Trigger (USA).sfc", b"us");
+        c.put("sfc/Chrono Trigger (USA).srm", b"save");
+        let systems = crate::library::load(&es).unwrap();
+        let names: Vec<&str> = systems.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names.len(), 2, "two shelves: {names:?}");
+        let shelf = systems.iter().map(|s| (s.name.clone(), s.games.iter().map(|g| g.path.clone()).collect())).collect();
+        let input = Input { catalog: crate::library::all_systems(&es).unwrap(), shelf, bios_dir: roms.join("bios"), roms: roms.clone(), h700: false, versions: Versions::default() };
+        let r = check(&input, &AtomicBool::new(false), &mut |_, _, _| {}).unwrap();
+        let mut hidden: Vec<PathBuf> = only(&r, Group::Twice).iter().filter_map(|f| f.fix.as_ref().map(|Fix::Hide(p)| p.clone())).collect();
+        hidden.sort();
+        let mut want = vec![sonic_us, metroid_us, chrono_eu];
+        want.sort();
+        assert_eq!(hidden, want, "{:#?}", only(&r, Group::Twice));
+    }
+
+    #[test]
+    fn version_titles_regions_and_revisions_read_like_a_player_would() {
+        for (a, b) in [
+            ("Street Fighter II Turbo", "0925-Street Fighter 2 Turbo (US)"),
+            ("Legend of Zelda, The - The Minish Cap (U)", "The Legend of Zelda - The Minish Cap (Europe) (En,Fr,De,Es,It)"),
+            ("Pokémon - Emerald Version (U)", "Pokemon - Emerald Version (USA, Europe)"),
+            ("Super Ghouls'n Ghosts (USA)", "0031 Super Ghouls 'N Ghosts"),
+            ("Mario Kart - Double Dash!! (USA).nkit", "Mario Kart Double Dash (Europe)"),
+        ] {
+            assert_eq!(version_title(a), version_title(b), "{a} / {b}");
+            assert!(version_title(a).is_some());
+        }
+        for (a, b) in [("Zelda - A Link to the Past", "Legend of Zelda, The - A Link to the Past"), ("Tetris (Japan)", "Tetris (World)"), ("Pokemon - Red Version", "Pokemon - Blue Version")] {
+            assert_ne!(version_title(a), version_title(b), "{a} / {b}");
+        }
+        for edition in ["Mario Kart Double Dash (Retro Track Grand Prix v2.1)", "Pokemom Gaia Version (Already Patched)", "Earthbound (T+Ger)", "Zelda [h1]", "Metroid (Beta)"] {
+            assert_eq!(version_title(edition), None, "{edition}");
+        }
+        assert!(region_rank("Game (USA, Europe)") < region_rank("Game (USA)"));
+        assert!(region_rank("Game (USA)") < region_rank("Game (Japan)"));
+        assert!(region_rank("Game (Japan)") < region_rank("Game"));
+        assert_eq!(region_rank("Game (UE) [!]"), 0);
+        assert!(revision("Game (USA) (Rev 2)") > revision("Game (USA) (Rev 1)"));
+        assert!(revision("Game (U) (V1.1)") > revision("Game (U)"));
+        assert!(revision("Game (Rev B)") > revision("Game (Rev A)"));
     }
 
     #[test]
@@ -1508,6 +2001,9 @@ mod tests {
             ("Game (USA)", "Game (USA)"),
             ("Street Fighter 2", "Street Fighter 2"),
             ("Pokémon - Kopie", "Pokémon"),
+            ("Game (12)", "Game"),
+            ("Teenage Mutant Ninja Turtles 4 (US)(4858)", "Teenage Mutant Ninja Turtles 4 (US)(4858)"),
+            ("Game (2048)", "Game (2048)"),
         ] {
             assert_eq!(without_copy_mark(with), without, "{with}");
         }

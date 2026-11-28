@@ -316,7 +316,10 @@ impl App {
         let (small, step) = (NU_SMALL - 2, pocket_ui::type_scale::line(NU_SMALL - 2, if c.h < 768 { 4 } else { 8 }));
         let base = |row: i32| y + 12 + step * (row + 1) - 6;
         if let Some(progress) = test.hold(now) {
-            self.text.draw(c, Face::Title, 40, px, base(0) + 2, pal().chalk, "Keep holding to leave");
+            // Stacked Vietnamese marks (and hangul, hanzi) stand taller: down by the difference, clear of the frame.
+            let shown = self.text.translated("Keep holding to leave").to_string();
+            let rise = self.text.cjk_rise(Face::Title, 40, &shown);
+            self.text.draw(c, Face::Title, 40, px, base(0) + 2 + rise, pal().chalk, "Keep holding to leave");
             let bar_h = 22;
             let bar_y = y + h - bar_h - 20;
             pocket_ui::retro::pill(c, px, bar_y, inner, bar_h, bar_h / 2, pal().spine);
@@ -330,7 +333,8 @@ impl App {
             // the hints beside it.
             let title_px = (24..=40).rev().step_by(2).find(|p| self.text.width(Face::Title, *p, "Press a button") <= left_w).unwrap_or(24);
             let title = self.text.fit(Face::Title, title_px, "Press a button", left_w);
-            self.text.draw(c, Face::Title, title_px, px, base(0) + 2, pal().chalk, &title);
+            let rise = self.text.cjk_rise(Face::Title, title_px, &title);
+            self.text.draw(c, Face::Title, title_px, px, base(0) + 2 + rise, pal().chalk, &title);
             for (i, line) in self.idle_hints(right_w).iter().enumerate() {
                 self.text.draw(c, Face::Body, small, right_x, base(i as i32), pal().quiet, line);
             }

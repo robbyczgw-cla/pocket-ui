@@ -136,7 +136,7 @@ fn the_pages_with_most_at_the_bottom_keep_clear_of_the_bar_in_large_german_and_s
     let states: Vec<String> = std::fs::read_to_string(Path::new(&ROOT).join("tests/layout-risk-states.txt")).unwrap()
         .lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string)
         // And the other pages of the Settings family found running into the bar there (13.11.2026).
-        .chain(["sync:on", "sync:open", "battery:3:samples", "report:es"].map(str::to_string)).collect();
+        .chain(["sync:on", "sync:open", "battery:3:samples", "battery:3:reset:samples", "battery:reset-ask", "report:es"].map(str::to_string)).collect();
     let mut jobs = Vec::new();
     for &size in &[(640, 480), (1024, 768), (1240, 1080)] {
         for state in &states {

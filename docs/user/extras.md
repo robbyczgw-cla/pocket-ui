@@ -4,11 +4,65 @@ Settings → Games → **Box art & downloads** is home to every optional downloa
 forced. Pick a row with Up/Down, check the action on the right and description below, press A to run, or B to return to
 Games.
 
-**Box art**, **Pictures** and **Starter pack** appear on every handheld; **PortMaster games** appears on ROCKNIX and
+**Box art**, **Pictures** and **Starter pack** appear on every handheld, **ScreenScraper** on handhelds with Wi-Fi; **PortMaster games** appears on ROCKNIX and
 TrimUI; **Cheats** appears on TrimUI (ROCKNIX includes cheats built in). Offline, downloads show **Needs Wi-Fi**, while
 already-downloaded pictures and cheats keep working offline. No account needed.
 
 For fast-forward, rewind, rumble and fan during play, see [Options](options.md#speed-rumble-fan).
+
+## ScreenScraper
+
+**ScreenScraper** (right under Pictures) brings the rest of each game's box from
+[ScreenScraper.fr](https://www.screenscraper.fr): the real **spine** for your shelf, the **box back** and the cartridge
+**label**, and for the game's card a **description in your language**, its facts, a title screen and a screenshot.
+It starts **Off**; press A (or Left/Right) to switch it **On**.
+
+Once on, it runs quietly after the box art while you're online and not playing. It fetches spines first, then
+backs and labels, then missing fronts, title screens and screenshots. Games that already have a front cover
+can get spines, backs and labels too. For photos of the back, switch **Real box backs** on below **ScreenScraper**.
+A game you start pauses the run and it picks up afterwards. Games identified by the local No-Intro list go first.
+ScreenScraper loads pictures in the background and one after another, as a guest within a daily share. With a large
+collection this takes longer. Pictures already loaded stay on your card.
+ROM hacks and homebrew may have no match, and disc games (PlayStation, Saturn and friends) aren't looked up yet.
+
+- **On the shelf:** in Shelf and Cabinet each game with a real spine stands with it, whole, just as printed on the box.
+  Games without one keep their painted spine with the name on it.
+- **On the game's card and the back of its box:** the description in the language you chose in Settings (in English
+  when ScreenScraper has none in yours), and the genre, players, developer, publisher, release years per region
+  ("JP 1990 · US 1991") and its community rating, wherever the card had nothing for them. On the back of the box a long
+  description shows its beginning; **SELECT** opens the page with the whole text. What the card already
+  knows, and the description in your own gamelist ([Your gamelists](library-files.md#your-gamelists)), are never
+  replaced. A small line under them names ScreenScraper. They come with the same lookup as the pictures, so they cost
+  nothing of the daily limit.
+- **No account needed.** Press **X** to sign in with a free screenscraper.fr account for a higher daily limit (your
+  password stays on this handheld); X again signs out. The row shows today's lookups and the last run's result.
+- **What it sends:** only while it is on, and only to screenscraper.fr: each game's checksum (CRC-32), file size and
+  file name, and which console it is for. Without an account it asks as a guest; signed in, your account name and
+  password go along for your higher daily limit. Disc games aren't looked up, so nothing is sent for them.
+- **While it works**, the shelf shows progress through the spine pass ("Getting spines 34 of 120") where the small dot by the
+  clock usually is. Without an account it looks up to 1000 games a day; when the day's share is used, the shelf says
+  **Spines: more tomorrow** and the rest comes by itself the next day.
+- **Off** sends nothing; spines, descriptions, facts and pictures already downloaded stay on your card and keep showing.
+  Offline or before its first run, your shelf looks exactly as it always did.
+- **Game manuals:** for games ScreenScraper has the original manual of, the game's Details page has a **Game manual**
+  row. Press A to read it page by page: **L1/R1** turn the page, **A** zooms in (2x, 3x, then the whole page again),
+  the **D-pad** moves around, **B** leaves the zoom first, then goes back. It comes in your language where ScreenScraper has one. The first time
+  you open it, it downloads (a few MB, needs Wi-Fi); after that it is on your card (`manuals/`) and opens offline.
+- Pictures are kept on your card next to the box art (`boxsides/`, `boxbacks/`, `supports/` and `supporttextures/` in
+  the pocket-ui folder, `titles/` and `snaps/` beside them, the descriptions and facts in `screenscraper/facts/`) and never
+  replace a cover or picture you already have.
+
+Right under ScreenScraper, four rows pick which of its pictures and manuals you see. Each takes effect at once; Off shows exactly what
+pocket-ui draws without ScreenScraper, also for pictures already downloaded, and what is Off isn't downloaded.
+
+| Row | What it shows | Starts |
+|---|---|---|
+| **Real spines** | The real box spine on the shelf, in Shelf and Cabinet | On |
+| **Real labels** | The cartridge's real label, in the game box and as it goes into the console (Mega Drive and DS keep the cover's art) | On |
+| **Real box backs** | Turning a box over shows its real back first, with the description and facts below it. Off keeps pocket-ui's own back with your progress | Off |
+| **Real manuals** | Games with an original manual get a **Game manual** row on their Details page (above) | On |
+
+Data and media: ScreenScraper.fr (CC BY-NC-SA 4.0).
 
 ## Starter pack
 

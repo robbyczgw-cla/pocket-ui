@@ -1,6 +1,7 @@
 //! Part of the pocket-ui binary: Settings → Look → Cozy extras (`pocket_ui::cozy_extras` has the switches). A list of
 //! switches in the Settings style, one per extra you see (`Extra::PAGE_ROWS`), each On or Off, followed by the GBA
-//! console-model choice; the selected one's line
+//! console-model choice and the names of the consoles sold under regional names (`region_pairs`: Mega Drive / Genesis,
+//! SNES / Super Famicom, NES / Famicom, PC Engine / TurboGrafx-16); the selected one's line
 //! under the list, with the looks it is seen in. Playful cases and old-TV switch-on came here from Sound & feel with the
 //! tree of 2026-11-13; case sounds is a row of Screen & sound.
 //!
@@ -23,6 +24,16 @@ pub(crate) const GBA_MODEL_NAME: &str = "GBA console";
 
 fn rows() -> Vec<Extra> {
     Extra::shown()
+}
+
+/// The consoles sold under regional names, after the GBA console (`region_pairs`): Mega Drive / Genesis and the others.
+fn name_rows() -> Vec<&'static pocket_ui::region_pairs::Pair> {
+    pocket_ui::region_pairs::rows().collect()
+}
+
+/// The page's rows: the extras, the GBA console, the console names.
+fn page_len() -> usize {
+    rows().len() + 1 + name_rows().len()
 }
 
 impl App {
@@ -78,7 +89,7 @@ impl App {
     /// A key on the page: A, Left or Right switch the selected extra, used and saved at once.
     pub(crate) fn cozy_extras_input(&mut self, sel: usize, b: Button) -> Option<SettingsPage> {
         let list = rows();
-        let len = list.len() + 1;
+        let len = page_len();
         let sel = sel.min(len - 1);
         match b {
             Button::Up => return Some(SettingsPage::CozyExtras((sel + len - 1) % len)),
@@ -89,6 +100,10 @@ impl App {
         if b == CONFIRM || matches!(b, Button::Left | Button::Right) {
             if let Some(e) = list.get(sel) {
                 self.switch_extra(*e);
+            } else if let Some(pair) = sel.checked_sub(list.len() + 1).and_then(|i| name_rows().get(i).copied()) {
+                pocket_ui::region_pairs::step(pair, if b == Button::Left { -1 } else { 1 });
+                self.console_names_changed();
+                self.save_settings();
             } else {
                 pocket_ui::system_art::set_gba_model(pocket_ui::system_art::gba_model().next());
                 self.console_look_changed();
@@ -96,6 +111,14 @@ impl App {
             }
         }
         Some(SettingsPage::CozyExtras(sel))
+    }
+
+    /// A console's name changed (`region_pairs`): the shelves show it at once, the list is read again for its order, and the
+    /// launch pictures follow (the SNES's US console).
+    pub(crate) fn console_names_changed(&mut self) {
+        pocket_ui::library::name_region_pairs(&mut self.systems);
+        self.console_look_changed();
+        self.library_rescan("console names");
     }
 
     /// What was made with the old switch and is kept is made again: the cases' pictures (stickers), the box's disc.
@@ -112,8 +135,8 @@ impl App {
     }
 
     /// Where the page's switches stand: a change is what the menu sounds and haptics answer.
-    pub(crate) fn cozy_extras_mark(&self) -> (cozy_extras::Extras, pocket_ui::system_art::GbaModel) {
-        (cozy_extras::get(), pocket_ui::system_art::gba_model())
+    pub(crate) fn cozy_extras_mark(&self) -> (cozy_extras::Extras, pocket_ui::system_art::GbaModel, std::collections::BTreeMap<String, String>) {
+        (cozy_extras::get(), pocket_ui::system_art::gba_model(), pocket_ui::region_pairs::chosen())
     }
 
     pub(crate) fn paint_cozy_extras(&mut self, c: &mut Canvas, sel: usize) {
@@ -122,11 +145,14 @@ impl App {
         self.sheet_header(c, SETTINGS_NAME);
         let (top, right) = (pocket_ui::kit::header_bottom(c.h) + 12, c.w - pad);
         let list = rows();
-        let len = list.len() + 1;
+        let names = name_rows();
+        let len = page_len();
         let sel = sel.min(len - 1);
         let x = cozy_extras::get();
+        let pair_at = |i: usize| i.checked_sub(list.len() + 1).and_then(|i| names.get(i).copied());
         // The selected row's line and the looks it is seen in, under the list over the hints.
         let desc = match list.get(sel) {
+            None if pair_at(sel).is_some() => pair_at(sel).map_or("", |p| p.blurb).to_string(),
             None => "Choose the GBA console: Game Boy Advance or Game Boy Advance SP. Changes its picture everywhere and its cartridge slot at launch.".to_string(),
             // Playful cases and old-TV switch-on say what keeps them from showing (Animations, Motion), as their rows did.
             Some(e) => match e.only() {
@@ -140,7 +166,11 @@ impl App {
         for i in first..(first + visible).min(len) {
             let y = top + (i - first) as i32 * row;
             self.hits.row(Area::new(pad, y, right - pad, row), i);
-            let (label, v) = list.get(i).map_or((GBA_MODEL_NAME, pocket_ui::system_art::gba_model().label()), |e| (e.label(), pocket_ui::settings_values::on_off(x.get(*e))));
+            let (label, v) = match (list.get(i), pair_at(i)) {
+                (Some(e), _) => (e.label(), pocket_ui::settings_values::on_off(x.get(*e))),
+                (None, Some(p)) => (p.row, pocket_ui::region_pairs::name_of(p).label),
+                (None, None) => (GBA_MODEL_NAME, pocket_ui::system_art::gba_model().label()),
+            };
             let shown = if i == sel { format!("‹ {v} ›") } else { v.to_string() };
             // The name gives way to the value; both stay inside the row (German, Large text, 640x480).
             let vw = self.text.width(Face::Body, font, &shown);

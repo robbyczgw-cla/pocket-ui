@@ -1,0 +1,8 @@
+• Eigenes Cover für jedes Spiel wählen
+• Koreanische Menüs; koreanische, japanische und chinesische Spielnamen in pocket-uis eigenen Schriften
+• .7z-Spiele starten direkt
+• Dolphin-Einrichtung vor dem ersten GameCube- oder Wii-Spiel
+• Das Pausenmenü zeigt dein Spiel
+• Nintendo DS: kurz tippen tauscht die Bildschirme
+• Quadratische Bildschirme passen und folgen der Drehung des Systems
+• Mehr echte Geräusche, farbige Buchrücken, flüssigere Regale

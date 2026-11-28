@@ -6,14 +6,19 @@
 pocket-ui shows your games on a shelf, in their real boxes, and plays them with the built-in pad. It picks up where you
 quit. Everything works with the pad: the hints at the bottom of each page show the buttons it uses.
 
-This guide is in English; the menus themselves can be German, Spanish, Portuguese, French, Italian or Korean (Settings → System → **Language**).
+This guide is in English; the menus themselves can be German, Spanish, Portuguese, French, Italian, Korean, Simplified Chinese, Vietnamese or Japanese (Settings → System → **Language**).
 
 ## Your games
 
 - **Where they go:** a folder called `ROMs`, in the device's storage or on a memory card, with one folder per system inside it,
   for example `ROMs/gba` or `ROMs/psx`. pocket-ui reads every `ROMs` folder it finds and leaves your files where they are.
-- **BIOS files** go in `ROMs/bios`.
-- **Access:** at the first start pocket-ui asks Android for access to your files, so it can read those folders.
+- **BIOS files** go in `ROMs/bios`. Dreamcast's `dc_boot.bin` and `dc_flash.bin` may also be in `ROMs/bios/dc`, as many
+  handhelds keep them, so a card or folder copied over from one plays the same.
+  The Console boot screen's Game Boy files (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`) go in `ROMs/bios` too.
+- **Access:** pocket-ui needs Android's access to all files to read those folders. Until it has it, a page says what
+  for: **A** opens Android's page to allow it, **X** switches to the Mobile view, where you pick a folder instead (or
+  tap either at the bottom). Update prompts wait until this page closes. Come back with the access allowed and the
+  page is gone.
 - **Not found?** Settings → Games → **Game check** tells you which files can't start and why. Settings → Games → **Add games**
   shows the folder names.
 
@@ -33,7 +38,8 @@ This guide is in English; the menus themselves can be German, Spanish, Portugues
 A and B follow your handheld's own setting: on the Odin its Controller style (Xbox style: A at the bottom, Odin style:
 A on the right). In a game the right button is the console's A in both.
 
-The volume buttons change the volume everywhere.
+The volume buttons change the volume everywhere, with pocket-ui's own level bar at the top instead of Android's volume
+panel, on the shelf and in a game. On the shelf, HOME or START held with a volume button sets the brightness.
 
 ## Handheld or Mobile
 

@@ -143,7 +143,7 @@ pub fn core_option(core: &str, factor: u8) -> Option<(&'static str, String)> {
         // The PSP's 480x272 times this.
         "ppsspp" => Some(("ppsspp_internal_resolution", format!("{}x{}", 480 * f, 272 * f))),
         // The Dreamcast's 640x480 times this.
-        "flycast" => Some(("flycast_internal_resolution", format!("{}x{}", 640 * f, 480 * f))),
+        "flycast" => Some((FLYCAST_RESOLUTION, format!("{}x{}", 640 * f, 480 * f))),
         // The PlayStation: Enhanced Resolution draws 3D at twice the console's resolution; it has no other factor.
         "pcsx_rearmed" => Some(("pcsx_rearmed_neon_enhancement_enable", if f >= 2 { "enabled" } else { "disabled" }.to_string())),
         _ => None,
@@ -176,11 +176,15 @@ impl StartOption {
     /// over RetroArch's, which are added beneath later): a choice of the row replaces a saved value of the same key, the
     /// handheld's default goes in only where none is there.
     pub fn place<'a>(&'a self, options: &mut Vec<(&'a str, &'a str)>) {
-        if self.first {
-            options.retain(|(k, _)| *k != self.key);
-        }
-        if !options.iter().any(|(k, _)| *k == self.key) {
-            options.insert(0, (self.key, self.value.as_str()));
+        // The pinned Android Flycast declares the historical name. Set the same choice under both names.
+        let legacy = (self.key == FLYCAST_RESOLUTION).then_some(REICAST_RESOLUTION);
+        for key in std::iter::once(self.key).chain(legacy) {
+            if self.first {
+                options.retain(|(k, _)| *k != key);
+            }
+            if !options.iter().any(|(k, _)| *k == key) {
+                options.insert(0, (key, self.value.as_str()));
+            }
         }
     }
 }
@@ -198,8 +202,13 @@ pub fn row_for_core(core: &str) -> bool {
 }
 
 /// The core option keys the row decides: the Emulator page leaves them out where the row is there (one place for it).
-pub const CORE_KEYS: &[&str] =
-    &["mupen64plus-EnableNativeResFactor", "ppsspp_internal_resolution", "flycast_internal_resolution", "pcsx_rearmed_neon_enhancement_enable"];
+pub const CORE_KEYS: &[&str] = &[
+    "mupen64plus-EnableNativeResFactor", "ppsspp_internal_resolution", FLYCAST_RESOLUTION, REICAST_RESOLUTION,
+    "pcsx_rearmed_neon_enhancement_enable",
+];
+
+const FLYCAST_RESOLUTION: &str = "flycast_internal_resolution";
+const REICAST_RESOLUTION: &str = "reicast_internal_resolution";
 
 #[cfg(test)]
 mod tests {

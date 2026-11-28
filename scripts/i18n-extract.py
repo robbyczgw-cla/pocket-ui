@@ -38,7 +38,14 @@ SKIP_FILES = {"doc_checks.rs", "bin/hello_pad.rs", "bin/store_tool.rs", "manual.
               # Pocket-to-Pocket sync's tests (`#[cfg(test)]`): made-up save paths and the simulation's log, never painted.
               "pocket_sync/tests.rs", "pocket_sync/tests/sim.rs", "pocket_sync/net_tests.rs",
               # RomM: the made-up server of the tests, and the requests (headers and addresses, nothing on screen).
-              "romm_tests.rs", "romm_net.rs"}
+              "romm_tests.rs", "romm_net.rs",
+              # Regional console pairs' tests (`#[cfg(test)]`, `library::region_pairs_tests`): made-up cards, never painted.
+              "region_pairs_tests.rs",
+              # The series cards' data: names, makers and titles are painted as they are (`Text::literal`), the stories are
+              # held to a line in every table by `series_facts`' own tests.
+              "series_facts_data.rs",
+              # ScreenScraper: the fake server of the tests (made-up games, the API's French error lines), never painted.
+              "screenscraper_tests.rs"}
 # Calls whose strings are for a log, a developer or the machine.
 SKIP_CALLS = {
     "println", "eprintln", "print", "eprint", "panic", "assert", "assert_eq", "assert_ne", "debug_assert",
@@ -144,14 +151,120 @@ def lex(src):
     return out
 
 
+def requires_test(expression):
+    """Whether a cfg expression can only hold in a test build: `test`, `all(test, ..)`, `any(..)` of such (as
+    scripts/reader-inventory.py reads them). Unknown shapes are not tests."""
+    expression = expression.strip()
+    if expression == "test":
+        return True
+    m = re.fullmatch(r"(all|any)\((.*)\)", expression, re.S)
+    if not m:
+        return False
+    parts, start, depth = [], 0, 0
+    for at, c in enumerate(m.group(2)):
+        depth += (c == "(") - (c == ")")
+        if c == "," and depth == 0:
+            parts.append(m.group(2)[start:at])
+            start = at + 1
+    parts.append(m.group(2)[start:])
+    flags = [requires_test(part) for part in parts if part.strip()]
+    return any(flags) if m.group(1) == "all" else bool(flags) and all(flags)
+
+
+def test_cfg_end(tokens, i):
+    """When tokens[i] starts `#[cfg(<needs test>)]`: the index after its `]`, else 0. (25.11.2026: `#[cfg(all(test,
+    target_os = "linux"))]` modules such as src/android_video_tests.rs were read as UI text; skip.txt took their words.)"""
+    if tokens[i][:2] != ("p", "#") or [x[1] for x in tokens[i + 1:i + 4]] != ["[", "cfg", "("]:
+        return 0
+    depth, j, text = 1, i + 4, []
+    while j < len(tokens) and depth:
+        k, v = tokens[j][0], tokens[j][1]
+        if k == "p" and v == "(":
+            depth += 1
+        elif k == "p" and v == ")":
+            depth -= 1
+            if depth == 0:
+                break
+        text.append(v if k != "str" else '"x"')
+        j += 1
+    if j + 1 >= len(tokens) or tokens[j + 1][1] != "]":
+        return 0
+    return j + 2 if requires_test(" ".join(text).replace(" ( ", "(").replace(" ,", ",")) else 0
+
+
+def test_only_files(root=SRC):
+    """Source files only a test build compiles: declared as `mod x;` under a test-only cfg (also through `#[path]`), or
+    declared inside such a file. Their strings are fixtures and assert messages, never painted."""
+    decls = {}  # file -> [(declared file, gated)]
+    for d, _, names in os.walk(root):
+        for name in names:
+            if not name.endswith(".rs"):
+                continue
+            path = os.path.join(d, name)
+            with open(path, encoding="utf-8") as f:
+                tokens = lex(f.read())
+            here = os.path.dirname(path)
+            stem = os.path.splitext(name)[0]
+            sub = here if name in ("mod.rs", "lib.rs", "main.rs") else os.path.join(here, stem)
+            i = 0
+            while i < len(tokens):
+                gated, at, attr_path = False, i, None
+                while at < len(tokens) and tokens[at][:2] == ("p", "#") and at + 1 < len(tokens) and tokens[at + 1][1] == "[":
+                    end = test_cfg_end(tokens, at)
+                    if end:
+                        gated, at = True, end
+                        continue
+                    if [x[1] for x in tokens[at + 2:at + 4]] == ["path", "="] and tokens[at + 4][0] == "str":
+                        attr_path = tokens[at + 4][1]
+                    depth, at = 0, at + 1
+                    while at < len(tokens):
+                        if tokens[at][1] == "[":
+                            depth += 1
+                        elif tokens[at][1] == "]":
+                            depth -= 1
+                            if depth == 0:
+                                break
+                        at += 1
+                    at += 1
+                if at + 2 < len(tokens) and tokens[at][1] in ("pub", "mod"):
+                    k = at
+                    while k < len(tokens) and tokens[k][1] != "mod" and tokens[k][1] not in (";", "{"):
+                        k += 1
+                    if k + 2 < len(tokens) and tokens[k][1] == "mod" and tokens[k + 1][0] == "id" and tokens[k + 2][1] == ";":
+                        mod = tokens[k + 1][1]
+                        if attr_path:
+                            target = os.path.normpath(os.path.join(here, attr_path))
+                        else:
+                            target = os.path.join(sub, mod + ".rs")
+                            if not os.path.exists(target):
+                                target = os.path.join(sub, mod, "mod.rs")
+                        decls.setdefault(path, []).append((os.path.normpath(target), gated))
+                i = max(at, i) + 1
+    test_only, changed = set(), True
+    declared = {}
+    for parent, items in decls.items():
+        for target, gated in items:
+            declared.setdefault(target, []).append((parent, gated))
+    while changed:
+        changed = False
+        for target, parents in declared.items():
+            if target in test_only:
+                continue
+            if all(gated or parent in test_only for parent, gated in parents):
+                test_only.add(target)
+                changed = True
+    return {os.path.relpath(t, root) for t in test_only if t.startswith(os.path.abspath(root) + os.sep)}
+
+
 def drop_tests(tokens):
     """Leaves out `#[cfg(test)]` items (test modules and test-only functions)."""
     out, i = [], 0
     while i < len(tokens):
         t = tokens[i]
-        if t == ("p", "#", t[2]) and [x[1] for x in tokens[i + 1:i + 6]] == ["[", "cfg", "(", "test", ")"]:
+        end = test_cfg_end(tokens, i)
+        if end:
             # Skip the attribute, then the item up to its closing brace or semicolon.
-            j = i + 7
+            j = end
             depth = 0
             while j < len(tokens):
                 k, v = tokens[j][0], tokens[j][1]
@@ -210,6 +323,18 @@ def visible(s):
     if len(WORDY.findall(t)) == 0:
         return False
     if re.search(r"https?://|\.(json|cfg|sh|so|png|txt|tsv|bin|zip|7z|chd|iso|log|toml|conf|service|desktop|xml)\b|^/|^\.|^-|::|=>|==|\{:\?\}|\{\w*:\?\}", t):
+        return False
+    # A file name on its own (no space): fonts, pictures, archives (25.11.2026). In a sentence they stay text.
+    if " " not in t and re.search(r"\.(otf|ttf|heic|jpe?g|webp|gif|gz|xz|tar|img|apk|jar|ini|srm)$", t, re.I):
+        return False
+    # 25.11.2026 (gate false reds; each took a skip.txt line): a log line of key=value fields, an HTTP header with q-values,
+    # an option key of another program (bsnes_mode7_wsMode, mupen64plus-ThreadedRenderer).
+    fields = t.split()
+    if len(fields) >= 2 and all(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=\S*", f) for f in fields):
+        return False
+    if re.search(r";q=\d", t):
+        return False
+    if " " not in t and ("_" in t or re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*-[A-Za-z0-9]*[a-z][A-Z][A-Za-z0-9]*", t)):
         return False
     if re.fullmatch(r"[a-z0-9_.\-:/+@%]+", t):  # ids, keys, file names, core names
         return False
@@ -395,9 +520,10 @@ def translated(s, exact, patterns, depth=0):
 def strings(files):
     """{shown string: [file:line, ...]} of everything that reads like words for a person."""
     seen = {}
+    tests_only = test_only_files()
     for path in sorted(files):
         rel = os.path.relpath(path, SRC)
-        if rel in SKIP_FILES:
+        if rel in SKIP_FILES or rel in tests_only:
             continue
         for line, s, fmt in literals(path):
             if not visible(s):

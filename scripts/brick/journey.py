@@ -202,6 +202,23 @@ def game_frame(events, after):
                       (e['event']=='step' and e.get('detail')=='first frame'))),None)
 
 
+def route_table(path, family):
+    """{system: (emulator, core, source)} of one family of scripts/release-routes.json."""
+    table=json.loads(Path(path).read_text())
+    fam=table['families'][family]
+    routes={}
+    for g in fam.get('use',[]):
+        routes.update(table['groups'][g])
+    routes.update(fam.get('routes',{}))
+    return {s:tuple(r) for s,r in routes.items() if r is not None}
+
+
+def launch_route(log, system):
+    """(emulator, core) of the last launch line for `system` (main.rs: "launch <system> <path> (emulator E, core C)")."""
+    found=re.findall(r'^launch '+re.escape(system)+r' .*\(emulator ([^,]+), core ([^)]*)\)$',log,re.M)
+    return found[-1] if found else None
+
+
 def verify_volume_steps(values):
     # A displayed percentage changing is insufficient: the codec must follow,
     # and returning to a percentage must restore the same real attenuation.
@@ -586,6 +603,8 @@ done
         # its real manual check in the network phase.
         self.r.put(self.work+'/data/update-hint.json',b'{"off":true}\n')
         self.r.put(self.work+'/systems.cfg', ('<systemList><system><name>gb</name><fullname>Game Boy</fullname><path>'+self.work+'/.pocket-ui-test/gb</path><extension>.gb</extension><command>pocket-core</command><platform>gb</platform><theme>gb</theme></system></systemList>').encode())
+        if self.a.phase=='routes':
+            self.route_games()
         core_target=APP+'/bin/pocket-core'
         if self.a.core:
             core_target=self.work+'/pocket-core'
@@ -863,6 +882,76 @@ done
                 return f
             self.press('down')
         raise AssertionError(f'row {name!r} not reachable; focus {self.record().focused()!r}')
+
+    def route_games(self):
+        """Route starts (docs/DEVICE-TESTS.md "Emulator routes on hardware"): the card's own es_systems.cfg with every
+        table system's folder moved to this session's .pocket-ui-test, holding a link to the smallest game of the card's
+        folder under a new name (no save state, Continue moment or per-game choice of the owner's decides the route; saves
+        and states go to the session's private folders). Links only: nothing of the owner's is copied or changed."""
+        self.route_want=route_table(self.a.routes,self.a.family)
+        want=[s for s,(emu,_,_) in self.route_want.items() if emu=='pocket-core' and (not self.a.systems or s in self.a.systems.split(','))]
+        es=self.r.text('cat '+APP+'/es_systems.cfg')
+        self.route_plan={}
+        for system in want:
+            folder='/mnt/SDCARD/Roms/'+system
+            block=re.search(r'<system>(?:(?!</system>).)*<name>'+re.escape(system)+r'</name>.*?</system>',es,re.S)
+            if not block:
+                self.route_plan[system]=(None,'no such system in the card\'s es_systems.cfg'); continue
+            exts=(re.search(r'<extension>(.*?)</extension>',block.group(0),re.S) or re.search('(x)','x')).group(1).split()
+            pick=self.r.text('cd '+Q(folder)+' 2>/dev/null && ls -l | awk \'$1 ~ /^-/ && $5 > 16384 {print $5 "\t" substr($0, index($0, $9))}\' | sort -n',check=False)
+            game=None
+            for line in pick.splitlines():
+                size,_,name=line.partition('\t')
+                if any(name.endswith(e) for e in exts if e.lower() not in ('.cue','.gdi','.m3u','.ccd') and e not in ('.CUE','.GDI','.M3U','.CCD')):
+                    game=name; break
+            tracks=[]
+            if game is None:
+                # A disc sheet: the sheet under the new name, the files it names under their own beside it.
+                # (in the system's folder or one folder down, where disc games often sit with their tracks)
+                sheets=[l[2:] if l.startswith('./') else l for l in self.r.text('cd '+Q(folder)+' 2>/dev/null && find . -maxdepth 2 -type f \\( -iname "*.cue" -o -iname "*.gdi" \\) ! -name "._*"',check=False).splitlines()]
+                for sheet in sorted(sheets):
+                    text=self.r.text('cat '+Q(folder+'/'+sheet),check=False)
+                    names=re.findall(r'^\s*FILE\s+"([^"]+)"',text,re.M|re.I) if sheet.lower().endswith('.cue') else \
+                        [l.split()[4] for l in text.splitlines()[1:] if len(l.split())>=5]
+                    here=os.path.dirname(sheet)
+                    if names and all(self.r.text('[ -f '+Q(folder+'/'+os.path.join(here,n))+' ] && echo y; true').strip() for n in names):
+                        game,tracks=sheet,[os.path.join(here,n) for n in names]; break
+            if game is None:
+                self.route_plan[system]=(None,'no game (single file or complete disc sheet) in '+folder); continue
+            link=self.work+'/.pocket-ui-test/'+system+'/pocketcheck'+os.path.splitext(game)[1].lower()
+            self.r.run('mkdir -p '+Q(os.path.dirname(link))+'; ln -s '+Q(folder+'/'+game)+' '+Q(link)+''.join(
+                '; ln -s '+Q(folder+'/'+t)+' '+Q(os.path.dirname(link)+'/'+os.path.basename(t)) for t in tracks))
+            es=es.replace(block.group(0),re.sub(r'<path>.*?</path>','<path>'+self.work+'/.pocket-ui-test/'+system+'</path>',block.group(0)))
+            self.route_plan[system]=(link,game)
+        self.r.put(self.work+'/systems.cfg',es.encode())
+        self.r.put(self.work+'/data/console-settings/gb.json', b'{"rumble":"off"}\n')
+        for system in want:
+            self.r.put(self.work+'/data/console-settings/'+system+'.json', b'{"rumble":"off"}\n')
+
+    def routes(self):
+        hold=self.a.route_seconds
+        for system,(link,game) in self.route_plan.items():
+            def start(system=system,link=link,game=game):
+                if link is None:
+                    raise AssertionError(game)
+                emu,core,_=self.route_want[system]
+                mark=len(self.log())
+                before=max((e['t'] for e in self.trace()),default=0)
+                self.cmd('play '+system+' '+link)
+                self.until(lambda: game_frame(self.trace(),before),40)
+                got=launch_route(self.log()[mark:],system)
+                pid=self.r.text('for p in $(pidof pocket-core); do tr "\\000" "\\n" </proc/$p/cmdline | grep -Fq '+Q(self.work+'/.pocket-ui-test/')+' && echo $p; done; true').split()
+                loaded=sorted(set(re.findall(r'[^/\s]+_libretro\.so',self.r.text('cat /proc/'+pid[0]+'/maps',check=False)))) if pid else []
+                time.sleep(hold)
+                alive=bool(self.r.text('[ -d /proc/'+pid[0]+' ] && echo yes; true').strip()) if pid else False
+                self.r.run('[ ! -p /tmp/pocket-core.cmd ] || echo "quit nosave" >/tmp/pocket-core.cmd')
+                self.until(lambda: not self.r.text('for p in $(pidof pocket-core); do tr "\\000" "\\n" </proc/$p/cmdline | grep -Fq '+Q(self.work+'/.pocket-ui-test/')+' && echo $p; done; true').strip(),20)
+                self.metrics.setdefault('routes',{})[system]={'expected':[emu,core],'launch':got,'loaded':loaded,'game':game}
+                assert got==(emu,core),f'launch line says {got}, the table {emu}/{core}'
+                assert core+'_libretro.so' in loaded,f'pocket-core loaded {loaded}, not {core}_libretro.so'
+                assert alive,f'the game ended by itself within {hold} s'
+                return f'{emu}/{core} launched and loaded ({game}), {hold} s, quit without saving'
+            self.step('route-'+system,start)
 
     def game(self):
         self.step('01-shelf',lambda: 'scratch Game Boy cartridge on shelf')
@@ -1537,7 +1626,11 @@ def main():
     p.add_argument('--out',type=Path,required=True)
     p.add_argument('--label',required=True)
     p.add_argument('--expect-version',help='refuse before mutation if the installed release differs')
-    p.add_argument('--phase',choices=['all','first-start','perf','perf-idle','game','settings','network','controls','idle','sleep','lights'],default='all')
+    p.add_argument('--phase',choices=['all','first-start','perf','perf-idle','game','settings','network','controls','idle','sleep','lights','routes'],default='all')
+    p.add_argument('--routes',type=Path,default=Path(__file__).resolve().parents[1]/'release-routes.json',help='routes: the expected table')
+    p.add_argument('--family',default='TrimUI Brick',help='routes: the family of the table')
+    p.add_argument('--systems',help='routes: only these systems (comma separated); a session holds about 20 starts')
+    p.add_argument('--route-seconds',type=int,default=10,help='routes: how long each game runs before quit without saving')
     p.add_argument('--cycles',type=int,default=5,help='sleep: suspend/resume cycles mid-game')
     p.add_argument('--alarm-seconds',type=int,default=20,help='sleep: the RTC safety alarm (tests only)')
     p.add_argument('--physical',action='store_true',help='sleep: a person presses the power button to sleep and wake')

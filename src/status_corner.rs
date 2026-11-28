@@ -40,10 +40,8 @@ pub struct Battery {
 impl Battery {
     /// "87 %", "87 %, charging".
     pub fn label(&self) -> String {
-        // Android's handheld view says it in the player's language, as the Mobile view's corner does.
-        #[cfg(all(target_os = "android", feature = "handheld"))]
-        return format!("{}%{}", self.percent, if self.charging { format!(", {}", crate::i18n::tr("charging")) } else { String::new() });
-        #[cfg(not(all(target_os = "android", feature = "handheld")))]
+        // In English on every platform: the painter translates the whole line ("{n}%, charging" -> "{n} %, lädt"). A word
+        // translated here first left Android's handheld view with "100%, lädt", a line no table has (Neon 26.11.2026).
         format!("{}%{}", self.percent, if self.charging { ", charging" } else { "" })
     }
 }
@@ -580,6 +578,14 @@ mod tests {
         assert_eq!(pill.layout(&offline, widths).unwrap().0.len(), 2);
         // Nothing known: no pill at all, and a heading may run to the edge.
         assert_eq!(pill.layout(&Corner::default(), widths), None);
+    }
+
+    /// Neon 26.11.2026: Android's handheld view showed "100%, lädt" (its label translated "charging" alone, so no table
+    /// line matched the whole). The label is English on every platform and reads in the player's language when painted.
+    #[test]
+    fn the_battery_line_reads_in_the_players_language_with_its_space() {
+        let label = Battery { percent: 100, charging: true }.label();
+        assert_eq!(crate::i18n::tr_in(crate::i18n::Lang::De, &label), "100 %, lädt");
     }
 
     #[test]

@@ -52,7 +52,7 @@ touch them:
 
 With Save selected, press **Left/Right** to choose the slot (the number appears next to it, as
 "‹ 3 ›"). With Load selected, **Left/Right** walks through what can be loaded: Where I quit, Before load
-(only while there is one), then slots 1 to 8, and last **From the start** (pocket-ui's own host). Load starts on Where I quit
+(only while there is one), then slots 1 to 8, and last **From the start** (pocket-ui's own host, also in pocket-ui for Android's pause menu of a game started from the Handheld view). Load starts on Where I quit
 when there is one.
 
 - **Where I quit** ("Where I quit · today 14:02" under the picture): the moment you left the game, which the next start
@@ -61,7 +61,7 @@ when there is one.
 - **Before load** keeps what you were playing just before a Load replaced it, so a Load you did
   not mean can be undone: Load, then Load again and pick "Before load". It lasts until you quit.
   A Quit after a Load saves the game as it is then (Where I quit); Before load is not kept after that.
-- **From the start** (pocket-ui's own host) begins the game again and does nothing else. Its own saves stay, and so does the
+- **From the start** (pocket-ui's own host and pocket-ui for Android) begins the game again and does nothing else. Its own saves stay, and so does the
   moment on the card until the next Save & quit replaces it (the line beside it says so); Before load, Earlier and the other
   slots work as always.
 

@@ -551,21 +551,87 @@ function systemsFor(name, systems) {
   return systems.filter((s) => s.extensions.some((e) => lower.endsWith("." + e) && lower.length > e.length + 1));
 }
 
-function uploadXhr(url, file, row) {
+// Game files, saves and states go in pieces, each read into memory first and sent as its own request: Chrome on
+// Android can't send a large file from the phone's file picker in one go (it breaks off at once; 25.11.2026, a
+// 1.62 GB PS2 disc).
+const PIECE = 8 * 1024 * 1024;
+const PIECE_TRIES = 8;
+
+function pause(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/// One request with bytes (or none): `{ ok, status, body }`, status 0 when nothing came back.
+function postBytes(url, data, onprogress) {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
     xhr.setRequestHeader("X-CSRF-Token", S.csrf || "");
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
-    xhr.upload.onprogress = (e) => { if (e.lengthComputable) row.bar.value = e.loaded / e.total; };
+    if (onprogress) xhr.upload.onprogress = (e) => onprogress(e.loaded);
     xhr.onload = () => {
       let b = {};
       try { b = JSON.parse(xhr.responseText); } catch (e) { /* not JSON */ }
-      resolve({ ok: xhr.status === 200, status: xhr.status, body: b });
+      resolve({ ok: xhr.status === 200, status: xhr.status, body: b || {} });
     };
-    xhr.onerror = () => resolve({ ok: false, status: 0, body: { error: t("The connection dropped. Nothing was kept.") } });
-    xhr.send(file);
+    xhr.onerror = () => resolve({ ok: false, status: 0, body: {} });
+    xhr.onabort = xhr.onerror;
+    xhr.send(data === undefined ? null : data);
   });
+}
+
+/// Whether the Pocket still answers at all (after a piece got no answer).
+async function pocketAnswers() {
+  try {
+    const r = await fetch("/api/session", { credentials: "same-origin", cache: "no-store" });
+    return r.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+/// Sends `file` in pieces (`startPath`, by default `/api/upload/start`; then `/api/upload/part`): each piece is read here
+/// first, sent, and sent again from where the Pocket stands when the connection broke off. Answers like one whole
+/// upload. A save or state put back starts at `/api/saves/upload/start` (saves.js).
+async function uploadPieces(q, file, row, startPath) {
+  const start = await postBytes((startPath || "/api/upload/start") + "?" + new URLSearchParams(Object.assign({ size: file.size }, q)));
+  if (start.status === 0) return { ok: false, status: 0, body: { error: t("The Pocket did not answer. Nothing was sent.") } };
+  if (!start.ok) return start;
+  const id = start.body.id;
+  const piece = start.body.piece || PIECE;
+  const total = file.size || 1;
+  const cancel = () => postBytes("/api/upload/cancel?" + new URLSearchParams({ id }));
+  let at = 0;
+  let tries = 0;
+  for (;;) {
+    let data;
+    try {
+      data = await file.slice(at, Math.min(file.size, at + piece)).arrayBuffer();
+    } catch (e) {
+      await cancel();
+      return { ok: false, status: 0, body: { error: t("This browser could not read the file. Nothing was kept.") } };
+    }
+    const from = at;
+    const r = await postBytes("/api/upload/part?" + new URLSearchParams({ id, offset: from }), data, (n) => { row.bar.value = Math.min(1, (from + n) / total); });
+    // The last piece: the file is in place, the answer is the whole upload's (a piece before it says `received`).
+    if (r.ok && typeof r.body.received !== "number") return r;
+    // The bar follows what the Pocket confirmed, also where the browser reports no progress while it sends (Alex's
+    // 1.62 GB upload on 25.11. arrived with the bar standing still).
+    if (r.ok) { at = r.body.received; tries = 0; row.bar.value = Math.min(1, at / total); continue; }
+    // Cut off or at the wrong place: on from what the Pocket has.
+    if (typeof r.body.received === "number" && ++tries <= PIECE_TRIES) { at = r.body.received; continue; }
+    // No answer (or the Pocket was busy): the same piece again after a moment; the Pocket answers with where it stands
+    // if it got it after all.
+    if (r.status === 0 || r.status === 503) {
+      if (++tries <= PIECE_TRIES) { await pause(Math.min(15000, 1000 * 2 ** (tries - 1))); continue; }
+      // Given up: "dropped" only while the Pocket still answers, else it is gone.
+      const there = await pocketAnswers();
+      if (there) await cancel();
+      return { ok: false, status: 0, body: { error: there ? t("The connection dropped. Nothing was kept.") : t("The Pocket did not answer. Nothing was kept.") } };
+    }
+    if (typeof r.body.received === "number") await cancel();
+    return r;
+  }
 }
 
 function fileRow(name, sizeText) {
@@ -592,7 +658,7 @@ async function sendOne(file, q, row) {
     overwrite = 1;
   }
   row.state.textContent = t("Uploading to {s}", { s: check.path });
-  const r = await uploadXhr("/api/upload?" + new URLSearchParams(Object.assign({ overwrite }, q)), file, row);
+  const r = await uploadPieces(Object.assign({ overwrite }, q), file, row);
   if (r.ok) {
     row.state.className = "ok small";
     row.state.textContent = (r.body.replaced ? t("Replaced {s}", { s: r.body.path }) : t("Saved as {s}", { s: r.body.path })) + (r.body.bios ? " · " + t("BIOS for {s} is ready", { s: r.body.bios }) : "");
@@ -638,7 +704,12 @@ async function uploadView() {
       let system = pick.value;
       if (!system) {
         const fits = systemsFor(file.name, u.systems);
-        if (fits.length === 1) system = fits[0].id;
+        // A type several systems take that means one of them (`.md` the Mega Drive, `.sfc` the SNES) goes there unasked;
+        // a console sold under regional names is one folder in the list already.
+        const ext = file.name.toLowerCase().split(".").pop();
+        const meant = fits.length > 1 && u.prefer ? fits.find((s) => s.id === u.prefer[ext]) || fits.find((s) => s.id === ext) : null;
+        if (meant) system = meant.id;
+        else if (fits.length === 1) system = fits[0].id;
         else if (fits.length > 1) {
           const names = fits.map((s, i) => `${i + 1}. ${s.name}`).join("\n");
           const n = Number(prompt(t("{s} fits several systems. Which one?", { s: file.name }) + "\n" + names, "1"));

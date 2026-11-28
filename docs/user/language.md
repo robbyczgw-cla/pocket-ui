@@ -2,11 +2,11 @@
 
 Settings → System → **Language** switches every menu, button hint, message and in-game notice between **English**,
 **Deutsch** (German), **Español** (Spanish), **Português (Brasil)** (Brazilian Portuguese), **Français** (French),
-**Italiano** (Italian) and **한국어** (Korean). Press A or Left/Right to cycle through them; the screen updates instantly with no restart. You can
+**Italiano** (Italian), **한국어** (Korean), **简体中文** (Simplified Chinese), **Tiếng Việt** (Vietnamese) and **日本語** (Japanese). Press A or Left/Right to cycle through them; the screen updates instantly with no restart. You can
 also pick your language on the Welcome page during first start (Left/Right).
 
 Until you pick one yourself, pocket-ui follows ROCKNIX's system language: German, any regional Spanish, any Portuguese
-(shown as Brazilian Portuguese), any regional French, Italian (Italy or Switzerland), Korean, and English for everything else.
+(shown as Brazilian Portuguese), any regional French, Italian (Italy or Switzerland), Korean, Simplified Chinese (mainland China and Singapore; Taiwan, Hong Kong and Macau, which write Traditional Chinese, start in English), Vietnamese, Japanese, and English for everything else.
 Once you choose a language here or on the Welcome page, pocket-ui remembers it even if the system language changes later.
 
 A few things stay in English even when you switch languages:

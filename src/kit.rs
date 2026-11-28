@@ -229,7 +229,33 @@ fn paint_bar(c: &mut Canvas, text: &mut Text, hints: &[(&str, &str)]) -> (i32, V
             areas.push((Area::new(start - gap, y0 - 8, x - start - gap, hint_h(c.h) + 16), b));
         }
     }
+    PAINTED_HINTS.with(|p| {
+        // A frame's bars, never more: a paint that keeps without anyone taking stays this small.
+        if let Some(kept) = p.borrow_mut().as_mut().filter(|k| k.len() < MAX_KEPT_HINTS) {
+            kept.extend(areas.iter().copied());
+        }
+    });
     (x0, areas)
+}
+
+thread_local! {
+    /// The hint pills painted between `record_painted_hints` and `take_painted_hints` (`paint_bar`), for a page that
+    /// doesn't keep its own map: Android's first start makes them its touch targets (`Setup::register_touch`). None:
+    /// nobody asked, nothing is kept (every other bar on every platform paints past it).
+    static PAINTED_HINTS: std::cell::RefCell<Option<Vec<(Area, Button)>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// At most this many pills are kept (a few bars' worth).
+const MAX_KEPT_HINTS: usize = 32;
+
+/// From now on this thread keeps the hint pills it paints, until `take_painted_hints` (anything kept before goes).
+pub fn record_painted_hints() {
+    PAINTED_HINTS.with(|p| *p.borrow_mut() = Some(Vec::new()));
+}
+
+/// The hint pills painted since `record_painted_hints` (a tap on one is that button's press); the keeping ends.
+pub fn take_painted_hints() -> Vec<(Area, Button)> {
+    PAINTED_HINTS.with(|p| p.borrow_mut().take().unwrap_or_default())
 }
 
 /// A hint key: its round cap (`x`, `y`, `w`, `h`) in `bg` and `key` centred on it in Body `px` in `fg`, its baseline at
@@ -455,12 +481,13 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
         let translating = text.translating();
         text.set_translate(false);
         let mut words: Vec<(&str, &str)> = if unbroken {
-            // The narrow lines' units; where two lines meet between hanzi, nothing joins them.
+            // The narrow lines' units, joined where two lines meet as they stood in the paragraph: nothing between two
+            // hanzi, a space between "RomM" and "サーバー".
             let mut all: Vec<(&str, &str)> = Vec::new();
             for l in &narrow {
                 let mut units = units_of(l);
                 if let (Some((_, before)), Some(first)) = (all.last(), units.first_mut()) {
-                    if before.chars().last().zip(first.1.chars().next()).is_some_and(|(a, b)| crate::text::cjk_break(a, b)) {
+                    if shown.contains(&format!("{before}{}", first.1)) && !shown.contains(&format!("{before} {}", first.1)) {
                         first.0 = "";
                     }
                 }
@@ -493,7 +520,9 @@ pub fn footer_lines(text: &mut Text, desc: &str, screen_w: i32, pill_x: i32, lin
                 if rest.is_empty() {
                     break;
                 }
-                let glue = if above.chars().last().zip(word.chars().next()).is_some_and(|(a, b)| crate::text::cjk_break(a, b)) { "" } else { " " };
+                // The glue the paragraph had between the two: nothing between hanzi, a space between "RomM" and "サ".
+                let tail = units_of(above).last().map_or(String::new(), |(_, t)| t.to_string());
+                let glue = if shown.contains(&format!("{tail}{word}")) && !shown.contains(&format!("{tail} {word}")) { "" } else { " " };
                 let longer = format!("{above}{glue}{word}");
                 if text.width(Face::Body, px, &longer) > wide {
                     break;
@@ -778,6 +807,32 @@ pub fn empty_state(c: &mut Canvas, text: &mut Text, art: Option<Art>, (x, w): (i
 mod tests {
     use super::*;
 
+    /// Sol 26.11.: the pills Android's first start taps are kept only when asked for, and never pile up (every bar of
+    /// every page paints through here, all the time).
+    #[test]
+    fn painted_hints_are_kept_only_when_asked_and_never_pile_up() {
+        let mut text = crate::text::Text::builtin();
+        let mut px = vec![0u32; 640 * 480];
+        let mut paint = || {
+            let mut c = Canvas::new(&mut px, 640, 480);
+            page_hints(&mut c, &mut text, &[("A", "Open"), ("B", "Back")]);
+        };
+        paint();
+        assert!(take_painted_hints().is_empty(), "nobody asked: nothing kept");
+        record_painted_hints();
+        paint();
+        let kept = take_painted_hints();
+        let mut buttons: Vec<Button> = kept.iter().map(|(_, b)| *b).collect();
+        buttons.sort_by_key(|b| format!("{b:?}"));
+        assert_eq!(buttons, vec![Button::East, Button::South], "{kept:?}");
+        assert!(take_painted_hints().is_empty(), "taken once, and the keeping ended");
+        record_painted_hints();
+        for _ in 0..500 {
+            paint();
+        }
+        assert!(take_painted_hints().len() <= MAX_KEPT_HINTS, "a forgotten take keeps a few bars, not every frame's");
+    }
+
     #[test]
     fn arrows_and_angles_painted_natively_are_the_old_picture_not_a_pixel_thicker() {
         // The link arrow (1 px rows) and a row's angle (a disc per step) at even and odd places on a 640x480 panel
@@ -1046,6 +1101,12 @@ mod tests {
         assert_eq!(out.concat(), desc, "nothing lost, no space put in: {out:?}");
         let px = footer_px(&mut text, desc, pill_x);
         assert!(out.iter().all(|l| text.width(Face::Body, px, l) <= column), "{out:?}");
+        // Latin words and kana keep the space they had where lines meet ("RomM サーバー", 26.11.2026).
+        let mixed = "ご自身の RomM サーバーにあるゲームを棚に表示します。各ゲームは初回起動時にダウンロードされます。";
+        let column = text.width(Face::Body, SMALL, mixed) / 3;
+        let out = footer_lines(&mut text, mixed, 1280, column + 24 + PAD + BTN_PAD, 6);
+        assert_eq!(out.concat().replace(' ', ""), mixed.replace(' ', ""), "nothing lost: {out:?}");
+        assert!(!out.iter().any(|l| l.contains("RomMサ")), "no space lost: {out:?}");
     }
 
     #[test]

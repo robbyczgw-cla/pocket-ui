@@ -342,7 +342,7 @@ fn wall(c: &mut Canvas) {
 fn front_of(text: &mut Text, e: &Entry, f: f32) -> Pic {
     let k = f / media::shelf_scale();
     let (_, _, lw, lh) = media::label_rect(e.medium, k);
-    let cover = e.cover.as_ref().map(|i| art::cover_fit(i, lw, lh));
+    let cover = e.cover.as_ref().map(|i| art::cover_fit_case(i, lw, lh, e.medium));
     let title = media::printed_title(&e.title, true);
     let mut pic = media::front(text, e.medium, k, e.look(), &title, cover.as_ref(), if cover.is_some() { None } else { e.console }, &e.system_name);
     case_stickers::on_front_of(text, &mut pic, &e.stickers, e.medium, k, &title, cover.is_some(), if cover.is_some() { None } else { e.console }, e.seed);

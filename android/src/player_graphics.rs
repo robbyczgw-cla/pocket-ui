@@ -4,6 +4,22 @@ use pocket_ui::{image::Image, touch::Area};
 #[cfg(target_os = "android")]
 #[link(name = "EGL")]
 extern "C" { fn eglGetProcAddress(name: *const std::ffi::c_char) -> *const std::ffi::c_void; }
+#[derive(Clone, Copy)]
+#[cfg_attr(test, allow(dead_code))]
+pub(super) enum GamePicture<'a> {
+    Software(&'a Image),
+    Shared { texture: glow::Texture, size: (u32, u32), texture_size: (u32, u32), bottom_left: bool },
+}
+
+impl GamePicture<'_> {
+    fn size(self) -> (u32, u32) {
+        match self {
+            Self::Software(image) => (image.w, image.h),
+            Self::Shared { size, .. } => size,
+        }
+    }
+}
+
 pub(super) struct Graphics {
     gl: glow::Context,
     program: glow::Program,
@@ -26,6 +42,9 @@ pub(super) struct Graphics {
     /// The game texture's filters as last set, and that it changed since its mipmaps were made (`prepare_texture`).
     game_filters: Option<(u32, u32)>,
     game_mips_dirty: bool,
+    shared_sampler: Option<glow::Sampler>,
+    shared_filters: Option<(u32, u32)>,
+    shared_mips_dirty: bool,
     // Linux's screen frames (`bezel::Layer`): the same frame code and the same GL layer behind the picture.
     frame: pocket_ui::bezel::Layer,
     // What the frame layer last reported (drawn or not yet), so a change is logged once: a frame that never shows must be findable.
@@ -33,12 +52,16 @@ pub(super) struct Graphics {
 }
 impl Graphics {
     #[cfg(target_os = "android")]
-    pub(super) fn new() -> Result<Self, String> {
+    pub(super) fn new(shared: bool) -> Result<Self, String> {
         let gl = unsafe { glow::Context::from_loader_function_cstr(|name| eglGetProcAddress(name.as_ptr())) };
-        Self::from_context(gl)
+        Self::init(gl, shared)
     }
-    // Takes ownership of the frontend's current context; also used by the real GLES regression tests.
+    #[cfg(test)]
     pub(super) fn from_context(gl: glow::Context) -> Result<Self, String> {
+        Self::init(gl, true)
+    }
+    // Takes ownership of the frontend's current context.
+    fn init(gl: glow::Context, shared: bool) -> Result<Self, String> {
         unsafe {
             let program = gl.create_program()?;
             for(kind,source)in[(glow::VERTEX_SHADER,"#version 300 es\nout vec2 uv;void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));uv=vec2(p.x,1.0-p.y);gl_Position=vec4(p*2.0-1.0,0.0,1.0);}"),(glow::FRAGMENT_SHADER,"#version 300 es\nprecision mediump float;in vec2 uv;uniform sampler2D image;uniform bool overlay;out vec4 color;void main(){vec4 t=texture(image,uv);vec3 c=t.bgr;float a=overlay?(t.a>0.0?t.a:float(any(notEqual(c,vec3(0.0))))):1.0;color=vec4(c,a);}")] {
@@ -85,6 +108,11 @@ impl Graphics {
             gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::NEAREST as i32);
             gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE as i32);
             gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE as i32);
+            let shared_sampler = shared.then(|| gl.create_sampler().ok()).flatten();
+            if let Some(sampler) = shared_sampler {
+                gl.sampler_parameter_i32(sampler, glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE as i32);
+                gl.sampler_parameter_i32(sampler, glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE as i32);
+            }
             let picture_programs = pocket_ui::video_program::Programs::new(&gl)?;
             let vao = gl.create_vertex_array()?;
             #[cfg(target_os = "android")]
@@ -109,6 +137,9 @@ impl Graphics {
                 picture_programs,
                 game_filters: None,
                 game_mips_dirty: true,
+                shared_sampler,
+                shared_filters: None,
+                shared_mips_dirty: true,
                 frame_state: None,
                 frame: {
                     // A frame that is not ready is drawn on a thread: the picture never waits for it (`Layer::set_async`).
@@ -161,6 +192,17 @@ impl Graphics {
             }
         }
     }
+    #[cfg(target_os = "android")]
+    pub(super) fn can_sample_shared(&self) -> bool {
+        self.shared_sampler.is_some()
+    }
+
+    #[cfg_attr(test, allow(dead_code))]
+    pub(super) fn shared_picture_changed(&mut self) {
+        self.shared_mips_dirty = true;
+    }
+
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(super) fn present(
         &mut self,
@@ -173,6 +215,21 @@ impl Graphics {
         frame: Option<&pocket_ui::bezel::Placed>,
         // The size and viewport the picture, its switch-on and its frame are in (`picture::Space`); the overlay is in
         // `size` on `view`.
+        picture: ((i32, i32), (i32, i32, i32, i32)),
+    ) {
+        self.present_frame(pixels, size, view, game.map(|(image, rect)| (GamePicture::Software(image), rect)), dirty, crt, frame, picture);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn present_frame(
+        &mut self,
+        pixels: &[u32],
+        size: (i32, i32),
+        view: (i32, i32, i32, i32),
+        game: Option<(GamePicture<'_>, Area)>,
+        dirty: bool,
+        crt: &[pocket_ui::crt_on::Quad],
+        frame: Option<&pocket_ui::bezel::Placed>,
         picture: ((i32, i32), (i32, i32, i32, i32)),
     ) {
         let backdrop = self.backdrop;
@@ -195,7 +252,7 @@ impl Graphics {
     fn draw_picture(
         &mut self,
         backdrop: u32,
-        game: Option<(&Image, Area)>,
+        game: Option<(GamePicture<'_>, Area)>,
         crt: &[pocket_ui::crt_on::Quad],
         frame: Option<&pocket_ui::bezel::Placed>,
         picture: ((i32, i32), (i32, i32, i32, i32)),
@@ -229,12 +286,40 @@ impl Graphics {
                 gl.active_texture(glow::TEXTURE0);
             }
             if let Some((image, rect)) = game {
-                // Upload the core's native framebuffer, not a CPU enlargement of it. The phone's
-                // physical resolution therefore does not multiply the per-frame copy or CPU blit cost.
-                gl.bind_texture(glow::TEXTURE_2D, Some(self.game_texture));
-                Self::upload(gl, &image.px, (image.w as i32, image.h as i32), &mut self.game_size);
-                self.game_mips_dirty = true;
-                pocket_ui::video_program::prepare_texture(gl, self.variant, &mut self.game_filters, &mut self.game_mips_dirty);
+                let mut variant = self.variant;
+                let (bgr, flip_y, active_uv) = match image {
+                    GamePicture::Software(image) => {
+                        gl.bind_texture(glow::TEXTURE_2D, Some(self.game_texture));
+                        Self::upload(gl, &image.px, (image.w as i32, image.h as i32), &mut self.game_size);
+                        self.game_mips_dirty = true;
+                        pocket_ui::video_program::prepare_texture(gl, self.variant, &mut self.game_filters, &mut self.game_mips_dirty);
+                        (true, false, (1.0, 1.0))
+                    }
+                    GamePicture::Shared { texture, size, texture_size, bottom_left } => {
+                        let Some(sampler) = self.shared_sampler else { return frame_drawn };
+                        gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+                        let mut filters = pocket_ui::video_program::filters(variant);
+                        if self.shared_mips_dirty && matches!(filters.1, glow::LINEAR_MIPMAP_NEAREST | glow::LINEAR_MIPMAP_LINEAR) {
+                            gl.generate_mipmap(glow::TEXTURE_2D);
+                            if gl.get_error() == glow::NO_ERROR {
+                                self.shared_mips_dirty = false;
+                            } else {
+                                variant = (variant.0, pocket_ui::video_program::Effect::None, false);
+                                filters = pocket_ui::video_program::filters(variant);
+                            }
+                        }
+                        if self.shared_filters != Some(filters) {
+                            gl.sampler_parameter_i32(sampler, glow::TEXTURE_MAG_FILTER, filters.0 as i32);
+                            gl.sampler_parameter_i32(sampler, glow::TEXTURE_MIN_FILTER, filters.1 as i32);
+                            self.shared_filters = Some(filters);
+                        }
+                        gl.bind_sampler(0, Some(sampler));
+                        (false, bottom_left, (
+                            size.0 as f32 / texture_size.0 as f32,
+                            size.1 as f32 / texture_size.1 as f32,
+                        ))
+                    }
+                };
                 // The same arithmetic as `picture::Space::on_window`.
                 let (x, y, w, h) = (
                     pic_view.0 + rect.x * pic_view.2 / pic_size.0,
@@ -243,12 +328,14 @@ impl Graphics {
                     rect.h * pic_view.3 / pic_size.1,
                 );
                 gl.viewport(x, y, w, h);
-                // pocket-core's picture pass over the whole viewport: the texture holds the player's 0xRRGGBB words as
-                // RGBA bytes, so B, G, R (Linux's XRGB8888 upload).
-                let (iw, ih) = (image.w.max(1) as f32, image.h.max(1) as f32);
-                let lines = pocket_ui::picture_fx::crt_lines(image.h, self.upscaled_3d, pocket_ui::picture_fx::native_lines(&self.system));
-                let pass = pocket_ui::video_program::Pass { rect: [-1.0, -1.0, 1.0, 1.0], src: (iw, ih), scale: (w as f32 / iw, h as f32 / ih), turns: 0, bgr: true, lines };
-                self.picture_programs.get(gl, self.variant).draw(gl, &pass);
+                let (iw, ih) = image.size();
+                let (iw, ih) = (iw.max(1) as f32, ih.max(1) as f32);
+                let lines = pocket_ui::picture_fx::crt_lines(ih as u32, self.upscaled_3d, pocket_ui::picture_fx::native_lines(&self.system));
+                let pass = pocket_ui::video_program::Pass { rect: [-1.0, -1.0, 1.0, 1.0], src: (iw, ih), scale: (w as f32 / iw, h as f32 / ih), turns: 0, bgr, lines };
+                self.picture_programs.get(gl, variant).draw_region(gl, &pass, flip_y, active_uv);
+                if matches!(image, GamePicture::Shared { .. }) {
+                    gl.bind_sampler(0, None);
+                }
                 gl.use_program(Some(self.program));
             }
             // A frame's inlay (the DS frame's hinge in the gap between its screens) goes over the picture, as on Linux.
@@ -313,7 +400,7 @@ impl Graphics {
             let complete = self.gl.check_framebuffer_status(glow::FRAMEBUFFER) == glow::FRAMEBUFFER_COMPLETE;
             let mut out = None;
             if complete {
-                let drawn = self.draw_picture(0, Some(game), &[], frame, picture);
+                let drawn = self.draw_picture(0, Some((GamePicture::Software(game.0), game.1)), &[], frame, picture);
                 let mut rgba = vec![0u8; (vw * vh * 4) as usize];
                 self.gl.read_pixels(vx, vy, vw, vh, glow::RGBA, glow::UNSIGNED_BYTE, glow::PixelPackData::Slice(&mut rgba));
                 // GL's rows go bottom to top; the preview's top to bottom.
@@ -333,6 +420,7 @@ impl Drop for Graphics {
         unsafe {
             self.gl.delete_texture(self.texture);
             self.gl.delete_texture(self.game_texture);
+            if let Some(sampler) = self.shared_sampler { self.gl.delete_sampler(sampler); }
             self.gl.delete_program(self.program);
             self.gl.delete_program(self.solid_program);
             self.gl.delete_vertex_array(self.vao);

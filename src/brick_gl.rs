@@ -74,6 +74,10 @@ pub struct Egl {
     display: Handle,
     surface: Handle,
     context: Handle,
+    /// A small pbuffer beside a window surface (`add_pbuffer`), null until made: where the context is current between `on_window`s.
+    pbuffer: Handle,
+    config: Handle,
+    create_pbuffer: unsafe extern "C" fn(Handle, Handle, *const i32) -> Handle,
     swap: unsafe extern "C" fn(Handle, Handle) -> u32,
     get_error: unsafe extern "C" fn() -> i32,
     make_current: unsafe extern "C" fn(Handle, Handle, Handle, Handle) -> u32,
@@ -197,7 +201,7 @@ impl Egl {
             for (name, v) in [("GL_VERSION", glow::VERSION), ("GL_RENDERER", glow::RENDERER), ("GL_VENDOR", glow::VENDOR), ("GL_SHADING_LANGUAGE_VERSION", glow::SHADING_LANGUAGE_VERSION)] {
                 say(format!("{name}: {}", gl.get_parameter_string(v)));
             }
-            Ok(Egl { gl, es3, display, surface, context, swap, get_error, make_current, destroy_surface, destroy_context, terminate, get_proc, _native: native, _egl: egl, _gles: gles })
+            Ok(Egl { gl, es3, display, surface, context, pbuffer: null, config, create_pbuffer, swap, get_error, make_current, destroy_surface, destroy_context, terminate, get_proc, _native: native, _egl: egl, _gles: gles })
         }
     }
 
@@ -217,6 +221,31 @@ impl Egl {
         }
     }
 
+    /// A 16x16 pbuffer beside the window surface; the context is current on it from now on, on the window only between
+    /// `on_window(true)` and `on_window(false)`. The Brick's 3D core runs on it as on the read-back's pbuffer: what a core draws or reads
+    /// on framebuffer 0 behind its frontend's back is then that small empty surface, not the screen's last picture (`brick_gles`).
+    pub fn add_pbuffer(&mut self) -> Result<(), String> {
+        if self.pbuffer.is_null() {
+            // SAFETY: display and config are alive; the attribute list ends with EGL_NONE.
+            let p = unsafe { (self.create_pbuffer)(self.display, self.config, [EGL_WIDTH, 16, EGL_HEIGHT, 16, EGL_NONE].as_ptr()) };
+            if p.is_null() {
+                return Err(format!("pbuffer: EGL error 0x{:x}", unsafe { (self.get_error)() }));
+            }
+            self.pbuffer = p;
+        }
+        self.on_window(false)
+    }
+
+    /// The context current on the window surface (true) or on the pbuffer (`add_pbuffer`, false).
+    pub fn on_window(&self, window: bool) -> Result<(), String> {
+        let surface = if window || self.pbuffer.is_null() { self.surface } else { self.pbuffer };
+        // SAFETY: display, surfaces and context are alive for as long as `self`.
+        if unsafe { (self.make_current)(self.display, surface, surface, self.context) } == 0 {
+            return Err(format!("eglMakeCurrent: EGL error 0x{:x}", unsafe { (self.get_error)() }));
+        }
+        Ok(())
+    }
+
     pub fn swap(&self) -> Result<(), String> {
         // SAFETY: display and surface are alive and current for as long as `self`.
         if unsafe { (self.swap)(self.display, self.surface) } == 0 {
@@ -232,6 +261,9 @@ impl Drop for Egl {
         // SAFETY: what `open` made, once, in the order EGL wants.
         unsafe {
             (self.make_current)(self.display, null, null, null);
+            if !self.pbuffer.is_null() {
+                (self.destroy_surface)(self.display, self.pbuffer);
+            }
             (self.destroy_surface)(self.display, self.surface);
             (self.destroy_context)(self.display, self.context);
             (self.terminate)(self.display);

@@ -1376,15 +1376,37 @@ pub fn cover_fill(img: &Image, w: i32, h: i32) -> Image {
 /// Box art rarely has its label's shape (a Game Boy Advance box is near square, its cartridge's label wide); filling
 /// the label cut off the box's sides and top (Alex's photo, 2026-10-28).
 pub fn cover_fit(img: &Image, w: i32, h: i32) -> Image {
+    fit_with(img, w, h, 0.0, 50)
+}
+
+/// What of a cover a DS or 3DS case may cut off along its longer side (its scan's margin, both ends together) to fill
+/// more of the insert: the box art of these cases is nearly square, their insert taller (`cover_fit_case`).
+pub const CASE_TRIM: f32 = 0.10;
+
+/// `cover_fit` for a case's insert `m`: a DS or 3DS case's cover may lose up to [`CASE_TRIM`] of its longer side and
+/// the rest of the insert takes the cover's own edge colour, not a darker margin (the lead's review 26.11.2026: thick
+/// grey bars above and below Mario Kart DS). Every other case as `cover_fit`.
+pub fn cover_fit_case(img: &Image, w: i32, h: i32, m: crate::media::Medium) -> Image {
+    if matches!(m, crate::media::Medium::Ds | crate::media::Medium::N3ds) {
+        fit_with(img, w, h, CASE_TRIM, 0)
+    } else {
+        cover_fit(img, w, h)
+    }
+}
+
+/// `cover_fit` that may cut off `trim` of the cover's overflowing side to fill more, its margin darkened by `darken`.
+fn fit_with(img: &Image, w: i32, h: i32, trim: f32, darken: u32) -> Image {
     let (w, h) = (w.max(1) as u32, h.max(1) as u32);
     if img.w == 0 || img.h == 0 {
         return Image { w, h, px: vec![0; (w * h) as usize] };
     }
-    // The cover's size in the label: its height or its width the label's.
-    let (fw, fh) = if img.w as u64 * h as u64 > img.h as u64 * w as u64 {
-        (w, ((img.h as u64 * w as u64 / img.w as u64) as u32).clamp(1, h))
+    // The cover's size in the label: its height or its width the label's (and with a trim a little more of it shown,
+    // its overflowing side cut in the middle).
+    let wide = img.w as u64 * h as u64 > img.h as u64 * w as u64;
+    let (fw, fh) = if wide {
+        (w, ((img.h as f32 * w as f32 / (img.w as f32 * (1.0 - trim))) as u32).clamp(1, h))
     } else {
-        (((img.w as u64 * h as u64 / img.h as u64) as u32).clamp(1, w), h)
+        (((img.w as f32 * h as f32 / (img.h as f32 * (1.0 - trim))) as u32).clamp(1, w), h)
     };
     let scaled = cover_fill(img, fw as i32, fh as i32);
     // The margin: the average of the cover's outermost pixels.
@@ -1397,7 +1419,7 @@ pub fn cover_fit(img: &Image, w: i32, h: i32) -> Image {
         n += 1;
     }
     let n = n.max(1);
-    let margin = mix(((r / n) << 16 | (g / n) << 8 | b / n) as u32, 0x000000, 50);
+    let margin = mix(((r / n) << 16 | (g / n) << 8 | b / n) as u32, 0x000000, darken);
     let mut px = vec![margin; (w * h) as usize];
     let (ox, oy) = ((w - fw) / 2, (h - fh) / 2);
     for y in 0..fh {
@@ -2439,6 +2461,28 @@ mod tests {
         // The same shape: no margin, the cover fills it.
         let same = cover_fit(&img, 20, 40);
         assert!(same.px[20 * 20..].iter().all(|p| *p == 0xc02020), "no margin where the shapes agree");
+    }
+
+    #[test]
+    fn a_ds_case_shows_its_near_square_cover_large_on_its_own_colour_never_grey_bars() {
+        // The lead's review 26.11.2026: Mario Kart DS (box art 512 x 459) in the DS case's taller insert had thick grey
+        // bars above and below. White cover with a blue middle; the insert 146 x 160 (the DS case's).
+        let (iw, ih) = (512u32, 459u32);
+        let img = Image { w: iw, h: ih, px: (0..ih).flat_map(|y| (0..iw).map(move |x| if (100..400).contains(&x) && (100..360).contains(&y) { 0x2040c0 } else { 0xf4f4f4 })).collect() };
+        let (w, h) = (146, 160);
+        let plain = cover_fit(&img, w, h);
+        let case = cover_fit_case(&img, w, h, crate::media::Medium::Ds);
+        let rows_of = |out: &Image, c: u32| (0..out.h).filter(|&y| out.px[(y * out.w + out.w / 2) as usize] == c).count();
+        // The margin is the cover's own white, not a darker grey.
+        assert!(case.px[(w / 2) as usize] >> 16 & 0xff >= 0xf0, "the top row is the cover's white: {:06x}", case.px[(w / 2) as usize]);
+        assert!(plain.px[(w / 2) as usize] >> 16 & 0xff < 0xf0, "elsewhere the margin stays a printed label's, darker");
+        // Larger: more rows of the cover's blue in the middle column, the cover cut by at most CASE_TRIM of its width.
+        let (blue_case, blue_plain) = (rows_of(&case, 0x2040c0), rows_of(&plain, 0x2040c0));
+        assert!(blue_case > blue_plain, "the cover larger in the insert ({blue_case} vs {blue_plain} rows)");
+        let shown = (0..w).filter(|&x| case.px[(80 * w + x) as usize] == 0x2040c0).count() as f32 / w as f32;
+        assert!(shown < 300.0 / (iw as f32 * (1.0 - CASE_TRIM)) + 0.03, "no more than the trim cut off: {shown}");
+        // Other cases as before.
+        assert_eq!(cover_fit_case(&img, w, h, crate::media::Medium::Ps2).px, plain.px);
     }
 
     #[test]

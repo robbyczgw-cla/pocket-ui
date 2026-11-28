@@ -107,6 +107,7 @@ pub(crate) fn settings_page_holds_games(page: &SettingsPage) -> bool {
         | SettingsPage::Gamelist
         | SettingsPage::Screenshots
         | SettingsPage::AndroidGames
+        | SettingsPage::AndroidExtras
         | SettingsPage::SleepPower => false,
     }
 }
@@ -122,7 +123,7 @@ pub(crate) enum Picked {
 /// `picked` in `items` of the new list `systems`.
 pub(crate) fn find_picked(picked: &Picked, items: &[Item], systems: &[System]) -> Option<usize> {
     items.iter().position(|i| match (picked, i) {
-        (Picked::System(name), Item::System(s)) => systems.get(*s).is_some_and(|s| &s.name == name),
+        (Picked::System(name), Item::System(s)) => systems.get(*s).is_some_and(|s| pocket_ui::region_pairs::same_shelf(&s.name, name)),
         (Picked::Game(path), Item::Game(s, g)) => systems.get(*s).and_then(|s| s.games.get(*g)).is_some_and(|g| &g.path == path),
         (Picked::Other(a), b) => a == b,
         _ => false,
@@ -352,6 +353,7 @@ impl App {
         };
         self.curator_follow_library(&fresh);
         self.connections_follow_library(&fresh);
+        self.series_follow_library(&fresh);
         self.cabinet_library_changed();
         self.held = None;
         self.systems = fresh;
@@ -363,7 +365,7 @@ impl App {
             }
         }
         self.home_item = home_item.and_then(|p| match p {
-            Picked::System(name) => self.systems.iter().position(|s| s.name == name).map(Item::System),
+            Picked::System(name) => self.systems.iter().position(|s| pocket_ui::region_pairs::same_shelf(&s.name, &name)).map(Item::System),
             Picked::Other(i) => Some(i),
             Picked::Game(_) => None,
         });
@@ -432,6 +434,7 @@ mod tests {
             core: None,
             emulators: vec![],
             games: games.iter().map(|g| Game { name: g.to_string(), path: format!("/roms/{name}/{g}").into() }).collect(),
+            parts: Vec::new(),
         }
     }
 

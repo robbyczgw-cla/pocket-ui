@@ -67,7 +67,7 @@ Plus Retro mode in one toggle, phone-to-handheld ROM uploads, your own RomM serv
 Mode and one-press Wi-Fi updates. [See everything it does](https://pocketui.xyz/features).
 
 Free and open source, with no account and no tracking. Menus in English, German, Spanish, Brazilian Portuguese, French,
-Italian and Korean.
+Italian, Korean, Simplified Chinese, Vietnamese and Japanese.
 
 **Supported systems:** Game Boy, GBC, GBA, NES, SNES, Mega Drive, Master System, Game Gear, PC Engine, PlayStation, N64,
 PSP, Dreamcast, Nintendo DS, Saturn, arcade and PortMaster ports. Stronger handhelds like the AYN Odin 2 also play PS2,
@@ -127,7 +127,7 @@ Add games from your phone or computer over Wi-Fi via Settings → Games → Add 
 | **Anbernic** | RG35XX Plus, RG35XX SP, RG35XX H, RG35XX Pro, RG35XX 2024, RG28XX, RG34XX, RG34XX-SP, RG40XX H, RG40XX V, RG CubeXX, RG-SP | [Image per model](https://pocketui.xyz/install#anbernic). Dedicated builds for newer-screen Plus/SP and RG40XX H DDR3. Original 2023 RG35XX not supported. |
 | **Retroid** | Pocket Mini V2 | [Image](https://pocketui.xyz/install#retroid), plus one step: Boot mode → Loader. Android stays untouched. |
 | **AYN** | Odin 2, Odin 2 Mini, Odin 2 Portal | [Image](https://pocketui.xyz/install#odin), after installing ROCKNIX's boot helper once (it replaces the bootloader; Android apps and data stay). |
-| **TrimUI** | Brick (incl. Brick Hammer), Smart Pro; Brick Pro experimental | [Unzip the TrimUI package onto an empty FAT32 card](https://pocketui.xyz/install#brick); nothing is flashed. |
+| **TrimUI** | Brick (incl. Brick Hammer); Smart Pro and Brick Pro experimental | [Unzip the TrimUI package onto an empty FAT32 card](https://pocketui.xyz/install#brick); nothing is flashed. |
 | **Retroid, beta** | Pocket 5, Flip 2, Pocket 6, Pocket Nova | [Beta images](https://pocketui.xyz/install#rp5-uefi), see notes below. Some need OpenABL once (it replaces the bootloader; Android apps and data stay). |
 | **R36S, beta** | Genuine R36S (clones aren't covered yet) | [Own card](https://pocketui.xyz/install#r36s) in TF1; your original card stays in TF2 with your games. No Wi-Fi needed, updates come as a zip, and the first start takes up to 10 minutes. |
 | **Already on dArkOS** | 640×480 dArkOS handhelds, including the R36S | [pocket-ui beta for dArkOS](https://pocketui.xyz/install#darkos): unzip into `ports`; nothing is flashed. |

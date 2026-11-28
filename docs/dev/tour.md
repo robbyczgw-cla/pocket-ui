@@ -55,3 +55,27 @@ cards for what was already there. Dev builds report Cargo's version; to see the 
 than an entry's `since`, use `--snapshot tour-new:<id>`, or (mock runs) `POCKETUI_NEW_IN`. A look worth trying has
 `try_it` (Retro, 0.3.0): in "New in this version" only, while it is off, its card starts on On and A says "Try Retro", so
 one press tries it and B leaves everything as it was.
+
+**Asked elsewhere, notes, builds** (0.8.0). A switch the first start asks on a step of its own (ScreenScraper under Box art,
+Order on the look step) is in `features::FIRST_START_ASKS`: "Choose for yourself" leaves it out, and the setup's copy of
+the switches never overwrites what those steps set (`App` takes `take_tour` with the App's own values for them). A card
+that must say more than its line (what ScreenScraper sends) has a `features::NOTES` entry, painted whole under its line across
+the page; the preview gives up the height it takes. `features::in_this_build` keeps a card out of "New in this version" where its
+feature is not in the build (ScreenScraper without pocket-ui's developer id, `screenscraper::shown`; tests use
+`screenscraper::shown_for_this_thread`).
+
+**Real box pictures picker** (0.8.0, owner 27.11.2026). In "New in this version" the ScreenScraper card is no On/Off/Later
+card: `Cards::picker` paints the four kinds (`screenscraper::PICTURE_NAMES`, the rows under ScreenScraper in Settings) as
+rows with a tick box on the left and the chosen kind's real example on the right (`features::SAMPLES`, `assets/ss-samples/`, Tobu Tobu
+Girl's CC BY 4.0 print art, credited under the picture with `SAMPLE_CREDIT`; sources in `assets/ss-samples/SOURCES.md`).
+The ticks start at `Switches::screenscraper_show` (`screenscraper::Show::default` on a device that never changed them). A
+flips the chosen kind in `Cards::picks` only; START takes them into `Switches` with ScreenScraper On (`Out::Changed`, nothing
+ticked: stays off); B puts the card off like Later and goes to the next card. `App::adopt_switches` sets the kinds before
+On, so the first run fetches only those. The first start shows the same page: A on Your games' Real box pictures row (while
+it is off) opens `Step::Cards` with `Mode::Pictures`; START gives the setup the kinds and On (`take_screenscraper_pictures`
+before `take_screenscraper`, also in that order in `main.rs`), B nothing; both go back to the row. When "New in this
+version" opens, the shelf's touch targets are cleared and a gesture in progress is dropped (`touch_rec.reset`), so a late
+tap on its START hint can't become the card's START; the same drop happens whenever a button changes the first start's
+page (`main.rs`, `Setup::at` before and after the press).
+Snapshots: `--snapshot tour-new:screenscraper:<keys>` (d, u, a, b, s START; pressed on the cards only, nothing saved) and
+`--snapshot setup:first-games:<keys>`.

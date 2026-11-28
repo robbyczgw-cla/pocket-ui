@@ -8,5 +8,10 @@
     "file": "jni-sys-macros-MIT.txt",
     "source": "https://raw.githubusercontent.com/jni-rs/jni-sys/64d77b7a5f119d7b55b4e2c169a4668067ff59e6/LICENSE-MIT",
     "sha256": "1d85bd754b04ceec93e98e890edd1fa3c6a22e81bcb32135806beeccefa51cd1"
+  },
+  {
+    "file": "SHIZUKU-API.txt",
+    "source": "https://raw.githubusercontent.com/RikkaApps/Shizuku-API/5ab1d6f844ca6d24fff691bdaa3bc44c308ce1ca/LICENSE",
+    "sha256": "64870037f294b6f2b75c8ebe77cc0702acb3b64f86b4b0e58bf8558525303686"
   }
 ]

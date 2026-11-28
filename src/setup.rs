@@ -23,7 +23,7 @@ use crate::pad::Button;
 use crate::palette::*;
 use crate::text::{Face, Text};
 use crate::remote;
-use crate::settings::{Animations, Appearance, Art, Motion};
+use crate::settings::{Animations, Appearance, Art, Motion, ShelfOrder};
 use crate::system_ctl::SharedHw;
 use crate::timezone::{self, Guess};
 use crate::net_state::{NetState, Notice, NoticeKind, Radio, Scan, ScanError, Snapshot};
@@ -187,9 +187,41 @@ fn extras_cheats() -> bool {
     { false }
 }
 
-/// Box art, Pictures, supported optional data, then Starter pack.
+/// Box art, Pictures, ScreenScraper and the three rows under it (where it is, `screenscraper_row`), supported optional
+/// data, then Starter pack.
 fn extras_rows() -> usize {
-    3 + usize::from(ports::offered()) + usize::from(extras_cheats())
+    3 + screenscraper_rows() + usize::from(ports::offered()) + usize::from(extras_cheats())
+}
+
+/// The rows right under ScreenScraper: which of its pictures are shown (`screenscraper::Show`).
+const PICTURE_ROWS: [&str; 4] = crate::screenscraper::PICTURE_NAMES;
+
+/// How many rows ScreenScraper has on the page: its own and the three under it, or none.
+fn screenscraper_rows() -> usize {
+    if screenscraper_row() { 1 + PICTURE_ROWS.len() } else { 0 }
+}
+
+/// Which of the rows under ScreenScraper `sel` is (0 spines, 1 labels, 2 box backs), if it is one.
+fn picture_row(sel: usize) -> Option<usize> {
+    (screenscraper_row() && sel > SCREENSCRAPER_ROW && sel <= SCREENSCRAPER_ROW + PICTURE_ROWS.len()).then(|| sel - SCREENSCRAPER_ROW - 1)
+}
+
+/// Box art & downloads has the ScreenScraper row, right under Pictures (`SCREENSCRAPER_ROW`), in builds with pocket-ui's
+/// developer id (`screenscraper::shown`). The page's other rows are written in their places without it
+/// (`extras_logical`, `extras_at`).
+fn screenscraper_row() -> bool {
+    crate::screenscraper::shown()
+}
+const SCREENSCRAPER_ROW: usize = 2;
+
+/// A row's place among the rows without the ScreenScraper row.
+fn extras_logical(sel: usize) -> usize {
+    if screenscraper_row() && sel > SCREENSCRAPER_ROW + PICTURE_ROWS.len() { sel - screenscraper_rows() } else { sel }
+}
+
+/// Where the row `logical` (counted without the ScreenScraper row) is on the page.
+fn extras_at(logical: usize) -> usize {
+    if screenscraper_row() && logical >= SCREENSCRAPER_ROW { logical + screenscraper_rows() } else { logical }
 }
 
 /// Setup steps that Settings can open on their own.
@@ -231,6 +263,8 @@ enum WifiRow {
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum LookRow {
     Layout,
+    /// Settings › Look › Layout: Home by console or by series (`series_shelf`).
+    Order,
     Appearance,
     /// The first start: Barlow or Retro (Settings › Look › Style).
     Font,
@@ -262,6 +296,8 @@ enum Step {
     Portal(Box<crate::portal_page::PortalPage>),
     /// Other network: the hidden network's name.
     HiddenName { kb: Keyboard },
+    /// Box art & downloads → ScreenScraper → Sign in: the account's name, then (`user` set) its password.
+    ScreenScraperLogin { user: Option<String>, kb: Keyboard },
     /// The Wi-Fi country: `list` is (code, name), "Automatic" first with an empty code.
     Country { sel: usize, list: Vec<(String, String)> },
     /// Time zone, right after Wi-Fi: a guess to confirm, or the picker.
@@ -281,6 +317,9 @@ enum Step {
     Remote,
     /// The first start's last page, after the look: "How cozy should it be?" (`cozy_level`), the cozy switches together.
     Cozy { sel: usize },
+    /// Android's handheld view after "Your games", inside its stage: what makes the app the handheld's own (`HandheldRow`).
+    /// Left out where none of it is there (Linux, an app without the Home app row).
+    Handheld { sel: usize },
     Done,
 }
 
@@ -536,7 +575,10 @@ pub struct Setup {
     look_row: usize,
     /// Settings > Look as it was when the page took its first press: the layout, Appearance, Motion and Animations, which
     /// B puts back (the Brick and the Odin, 2026-11-07: B kept the last layout looked at, though the bar said "A Keep").
-    look_opened: Option<(usize, Appearance, Motion, Option<Animations>)>,
+    look_opened: Option<(usize, Appearance, Motion, Option<Animations>, ShelfOrder)>,
+    /// Settings › Look › Layout › Order as shown (`with_order`), and whether the page changed it (`take_order`).
+    order: ShelfOrder,
+    order_changed: bool,
     /// Opened again from Settings › Help & tools › First-start setup (`again`): B on the welcome goes back there, and
     /// `backed_out` says so to the app.
     again: bool,
@@ -564,9 +606,30 @@ pub struct Setup {
     /// (`take_art`).
     art: Art,
     art_changed: bool,
+    /// Box art & downloads → ScreenScraper (`screenscraper::shown`): the row's state from the app, whether a press
+    /// switched it (`take_screenscraper`), a login typed (`take_ss_login`) or a sign-out asked (`take_ss_logout`).
+    screenscraper: crate::screenscraper::RowState,
+    screenscraper_changed: bool,
+    /// A press switched one of the rows under ScreenScraper (`take_screenscraper_pictures`).
+    screenscraper_pictures_changed: bool,
+    screenscraper_login: Option<(String, String)>,
+    screenscraper_logout: bool,
+    /// The Real box pictures page (`Step::Cards` with `Mode::Pictures`) has been painted since it opened: until then a
+    /// START is the last page's (a tap on its hint that the app's touch map still holds) and is not taken (Sol 27.11.2026).
+    pictures_painted: bool,
     cheat_data: Option<crate::cheat_data::Page>,
     extras_demo_online: Option<bool>,
     extras_touch: std::cell::RefCell<crate::touch::HitMap>,
+    /// The rows of the last "Your games" or "Your handheld" frame, for a finger (`register_touch`, `row_taps`).
+    stage_touch: std::cell::RefCell<crate::touch::HitMap>,
+    /// Android's Home app row (`with_home_app`): None where there is no such row (Linux, an app without it); whether
+    /// pocket-ui is the Home app now; and A on its row, once for the app, which asks Android (`take_home_app_ask`).
+    home_app: Option<bool>,
+    home_app_ask: bool,
+    /// Settings › System › Android extras is there (`with_android_extras`): "Your handheld" says where it is.
+    android_extras: bool,
+    /// `--snapshot setup:first-handheld` outside Android's profile (the translation suites): the page as Android shows it.
+    handheld_demo: bool,
     open_starter: bool,
     covers_cancel: crate::update::Cancel,
     /// The time zone step was left without a pick and with nothing to go on: the clock is on UTC (the Done page says so).
@@ -759,6 +822,73 @@ impl Setup {
         std::mem::take(&mut self.art_changed).then_some(self.art)
     }
 
+    /// The ScreenScraper row as the app knows it (on, account, last run): when the page opens and as a run goes on.
+    pub fn with_screenscraper(mut self, state: crate::screenscraper::RowState) -> Self {
+        self.screenscraper = state;
+        self
+    }
+
+    /// The ScreenScraper row's state while the page is open (a run's progress, a sign-in's answer).
+    pub fn set_screenscraper(&mut self, state: crate::screenscraper::RowState) {
+        let (on, show) = (self.screenscraper.on, self.screenscraper.show);
+        self.screenscraper = state;
+        // A press not yet taken by the app stays.
+        if self.screenscraper_changed {
+            self.screenscraper.on = on;
+        }
+        if self.screenscraper_pictures_changed {
+            self.screenscraper.show = show;
+        }
+    }
+
+    /// On or Off after a press switched the ScreenScraper row, once; the app keeps it.
+    pub fn take_screenscraper(&mut self) -> Option<bool> {
+        std::mem::take(&mut self.screenscraper_changed).then_some(self.screenscraper.on)
+    }
+
+    /// Real spines, labels and box backs after a press switched one of them, once; the app keeps them.
+    pub fn take_screenscraper_pictures(&mut self) -> Option<crate::screenscraper::Show> {
+        std::mem::take(&mut self.screenscraper_pictures_changed).then_some(self.screenscraper.show)
+    }
+
+    /// A press on a row under ScreenScraper (`row`: 0 spines, 1 labels, 2 box backs, 3 manuals): A, Left and Right
+    /// switch it.
+    fn press_picture_row(&mut self, row: usize, b: Button) {
+        if matches!(b, Button::East | Button::Left | Button::Right) {
+            self.screenscraper.show.flip(row);
+            self.screenscraper_pictures_changed = true;
+        }
+    }
+
+    /// The name and password typed under Sign in, once: the app checks them (`ssuserInfos`) and keeps them.
+    pub fn take_ss_login(&mut self) -> Option<(String, String)> {
+        self.screenscraper_login.take()
+    }
+
+    /// X on the row of a signed-in account: sign out, once.
+    pub fn take_ss_logout(&mut self) -> bool {
+        std::mem::take(&mut self.screenscraper_logout)
+    }
+
+    /// A press on the ScreenScraper row: A, Left and Right switch it, X signs in (the keyboard) or out.
+    fn press_screenscraper(&mut self, b: Button) {
+        match b {
+            Button::North if self.screenscraper.user.is_some() => {
+                self.screenscraper_logout = true;
+                self.screenscraper.user = None;
+                self.screenscraper.line = None;
+                self.screenscraper.today = (0, 0);
+            }
+            // Off sends nothing, a sign-in neither: switch it on first.
+            Button::North if self.screenscraper.on => self.step = Step::ScreenScraperLogin { user: None, kb: Keyboard::default() },
+            Button::North => {}
+            _ => {
+                self.screenscraper.on = !self.screenscraper.on;
+                self.screenscraper_changed = true;
+            }
+        }
+    }
+
     /// The language after Left/Right on the welcome step changed it, once; the app keeps it (Settings → Language).
     pub fn take_language(&mut self) -> Option<crate::i18n::Lang> {
         self.language_chosen.take()
@@ -931,7 +1061,9 @@ pub fn look_preview_rect(screen: (i32, i32), first: bool) -> (i32, i32, i32, i32
         // Large text: as before, the picture keeps its share (`the_look_pictures_use_the_room_of_the_page`).
         use crate::text_size::TextSize;
         let size = crate::type_scale::get();
-        let lines = if h >= 960 { 3 } else if size == TextSize::Normal { 2 } else { 1 };
+        // What HOME does is said on the last page since 0.8, so two lines on 960 lines and more (where the look changes
+        // later, the pointer to more), one on fewer. Order stands beside the layout's name (`paint_order`), no row.
+        let lines = if h >= 960 { 2 } else { 1 };
         let two_line_note = if h >= 960 || size == TextSize::Large { 0 } else { TWO_LINE_NOTE * if crate::retro::on() { 2 } else { 1 } };
         (37 + look_down(h, 25) + grow(50) + 63 + grow(28) + 3 * look_row_step(h) + two_line_note + 10 + mid(24) + (lines - 1) * line(24, 8) + 8, 16)
     } else {
@@ -1347,6 +1479,17 @@ enum FoundRow {
     Apps,
     /// Android: a system with games and no app for it: A opens the app's official page (`android_first_start::APP_DOWNLOADS`).
     Get(u8),
+    /// Box art & downloads → ScreenScraper as a switch, under Box art, where the row is (`screenscraper_row`); signing in
+    /// stays in Settings.
+    ScreenScraper,
+}
+
+/// The rows of Android's "Your handheld" (`Setup::handheld_rows`), each there only with the feature behind it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HandheldRow {
+    /// pocket-ui as Android's Home app (Settings › System › Home app): A asks Android, which shows its own question.
+    HomeApp,
+    Continue,
 }
 
 /// What a touch on Add games does.
@@ -1404,7 +1547,16 @@ fn no_games_way(image_card: bool, games_card: bool, games_drive: bool, card_in_c
 /// Android: the line over a found games folder's row on "Your games".
 const FOLDER_NOTE: &str = "Another app stores games here. Press A to add it to your shelf; your files stay put.";
 
+/// "Your handheld" (Android's handheld view): what the page is for, its Home app row's line, and where Android extras are.
+/// The last page's line on Pocket Sync (Settings › Connections › Pocket Sync), which the first start doesn't ask about.
+const POCKET_SYNC_LINE: &str = "pocket-ui on a second device? Settings › Connections › Pocket Sync keeps your saves the same on both.";
+const HANDHELD_SUB: &str = "Make pocket-ui part of your handheld.";
+const HOME_APP_NOTE: &str = "pocket-ui becomes your Home app: your handheld starts on the shelf, and Home in a game opens its pause menu. Android asks first.";
+const ANDROID_EXTRAS_LINE: &str = "More any time in Settings › System › Android extras: fewer pop-ups, and a pause menu in other emulator apps.";
+
 /// The Box art row's line on "Your games".
+/// The ScreenScraper row's line on "Your games": what it brings, and where the account is.
+const SCREENSCRAPER_FIRST_NOTE: &str = "Real spines, labels, box backs and manuals. A shows each with a real example to pick from. No account needed.";
 const BOX_ART_NOTE: &str = "Fetches real box art in the background while online. Only the game's title is sent.";
 
 /// Add games with Wi-Fi but file sharing off: how to start it, and how long it stays on.
@@ -1464,11 +1616,12 @@ fn stage(step: &Step) -> Option<Only> {
     match step {
         Step::Look | Step::ShelfSystems { .. } => Some(Only::Look),
         Step::Wifi | Step::Portal(_) | Step::Password { .. } | Step::Connecting { .. } | Step::HiddenName { .. } | Step::Country { .. } => Some(Only::Wifi),
-        Step::Extras { .. } | Step::Ports | Step::PortFiles(_) | Step::PortsCard => Some(Only::Extras),
-        Step::Games | Step::Phone(_) | Step::Found { .. } => Some(Only::Games),
+        Step::Extras { .. } | Step::ScreenScraperLogin { .. } | Step::Ports | Step::PortFiles(_) | Step::PortsCard => Some(Only::Extras),
+        Step::Games | Step::Phone(_) | Step::Found { .. } | Step::Handheld { .. } => Some(Only::Games),
         Step::Remote => Some(Only::Remote),
         // Settings > Time is the way to this one on its own.
         // The profiles and the cards are first-start steps; Settings → Tour shows the cards on its own.
+        Step::Cards(c) if c.mode == features::Mode::Pictures => Some(Only::Games),
         Step::Play { .. } | Step::Cards(_) => Some(Only::Play),
         Step::Welcome | Step::Zone(_) | Step::Cozy { .. } | Step::Done => None,
     }
@@ -1493,7 +1646,8 @@ fn stage_of(step: &Step) -> Option<usize> {
         Step::Welcome => Some(0),
         Step::Wifi => Some(1),
         Step::Zone(z) if matches!(z.view, ZoneView::Card | ZoneView::List { from: ListFrom::Country, .. }) => Some(1),
-        Step::Found { .. } => Some(games),
+        // "Your handheld" is the second page of the games' stage: the first start has no more dots for it.
+        Step::Found { .. } | Step::Handheld { .. } => Some(games),
         Step::Look => Some(games + 1),
         Step::Cozy { .. } => Some(games + 2),
         _ => None,
@@ -1513,8 +1667,10 @@ fn resume_name(step: &Step) -> Option<&'static str> {
         Step::Look | Step::Cozy { .. } => Some("shelf-look"),
         Step::Wifi | Step::Portal(_) | Step::Password { .. } | Step::Connecting { .. } | Step::HiddenName { .. } | Step::Country { .. } => Some("wifi"),
         Step::Zone(_) => Some("zone"),
-        Step::Found { .. } | Step::Games | Step::Phone(_) => Some("games"),
-        Step::Welcome | Step::Play { .. } | Step::Cards(_) | Step::Extras { .. } | Step::Ports | Step::PortFiles(_) | Step::PortsCard | Step::ShelfSystems { .. } | Step::Remote | Step::Done => None,
+        // "Your handheld" comes back as your games, one press on.
+        Step::Found { .. } | Step::Games | Step::Phone(_) | Step::Handheld { .. } => Some("games"),
+        Step::Cards(c) if c.mode == features::Mode::Pictures => Some("games"),
+        Step::Welcome | Step::Play { .. } | Step::Cards(_) | Step::Extras { .. } | Step::ScreenScraperLogin { .. } | Step::Ports | Step::PortFiles(_) | Step::PortsCard | Step::ShelfSystems { .. } | Step::Remote | Step::Done => None,
     }
 }
 
@@ -1783,6 +1939,8 @@ impl Setup {
             welcome_row: 0,
             look_row: 0,
             look_opened: None,
+            order: ShelfOrder::Console,
+            order_changed: false,
             again: false,
             backed_out: false,
             language_chosen: None,
@@ -1803,9 +1961,20 @@ impl Setup {
             covers_unreachable: false,
             art: Art::default(),
             art_changed: false,
+            screenscraper: Default::default(),
+            screenscraper_changed: false,
+            screenscraper_pictures_changed: false,
+            screenscraper_login: None,
+            screenscraper_logout: false,
+            pictures_painted: false,
             cheat_data: None,
             extras_demo_online: None,
             extras_touch: Default::default(),
+            stage_touch: Default::default(),
+            home_app: None,
+            home_app_ask: false,
+            android_extras: false,
+            handheld_demo: false,
             open_starter: false,
             covers_cancel: Default::default(),
             zone_utc: false,
@@ -1886,7 +2055,7 @@ impl Setup {
     pub fn kids_cancelled(&mut self) {
         self.kids_wanted = false;
         self.kids_skipped = true;
-        self.enter_look();
+        self.after_games();
         self.remember_step(false);
     }
 
@@ -1895,7 +2064,7 @@ impl Setup {
     pub fn kids_no_games(&mut self) {
         self.kids_wanted = false;
         self.kids_later = true;
-        self.enter_look();
+        self.after_games();
         self.remember_step(false);
     }
 
@@ -1929,6 +2098,12 @@ impl Setup {
             "games" => self.enter_found(),
             "look" => self.enter_look(),
             "cozy" => self.enter_cozy(),
+            // Android's "Your handheld" (with `with_home_app`; without it the look, as Continue on your games goes).
+            "handheld" => {
+                self.handheld_demo = true;
+                self.after_games();
+            }
+            "done" => self.step = Step::Done,
             _ => {}
         }
         self
@@ -2113,6 +2288,17 @@ impl Setup {
             page.demo_signin(what);
         }
         self
+    }
+
+    /// Settings › Look › Layout › Order as the app has it.
+    pub fn with_order(mut self, o: ShelfOrder) -> Self {
+        self.order = o;
+        self
+    }
+
+    /// The Order the page changed to, once: the app uses and keeps it at once, as the layouts.
+    pub fn take_order(&mut self) -> Option<ShelfOrder> {
+        std::mem::take(&mut self.order_changed).then_some(self.order)
     }
 
     pub fn with_appearance(mut self, a: Appearance) -> Self {
@@ -3245,7 +3431,7 @@ impl Setup {
 
     pub fn with_extras_portmaster_demo(self, state: &str) -> Self {
         let mut page = self.with_portmaster_demo(state);
-        page.step = Step::Extras { sel: 2 };
+        page.step = Step::Extras { sel: extras_at(2) };
         page.extras_demo_online = Some(!state.ends_with("offline"));
         page.portmaster_status = match state {
             "installed" | "installed-offline" | "remove" | "removing" => ports::RuntimeStatus::Ready,
@@ -3450,6 +3636,17 @@ impl Setup {
             *sel = (*sel as i32 + n).clamp(0, extras_rows() as i32 - 1) as usize;
             return;
         }
+        // The first start's rows ("Your games", "Your handheld"): a tap selects the row.
+        if self.row_taps() {
+            let len = self.stage_touch.borrow().list_state().map_or(0, |(_, len)| len);
+            if let Step::Found { sel } | Step::Handheld { sel } = &mut self.step {
+                *sel = (*sel as i32 + n).clamp(0, len.max(1) as i32 - 1) as usize;
+            }
+            if let Step::Cards(cards) = &mut self.step {
+                cards.select((cards.choice() as i32 + n).clamp(0, len.max(1) as i32 - 1) as usize);
+            }
+            return;
+        }
         let len = self.ways().len();
         if len > 0 {
             self.ways_sel = (self.ways_sel as i32 + n).clamp(0, len as i32 - 1) as usize;
@@ -3459,16 +3656,43 @@ impl Setup {
 
     /// Whether the focus is on the row of ways (a tap on the selected tile then does it).
     pub fn ways_focused(&self) -> bool {
-        self.ways_focus || matches!(self.step, Step::Extras { .. })
+        self.ways_focus || matches!(self.step, Step::Extras { .. }) || self.row_taps()
     }
 
-    /// Add games takes touch: its tiles of ways and its hints.
+    /// The first start's pages whose rows a finger picks (`stage_touch`, on Android with the hint pills): "Your games" and
+    /// "Your handheld".
+    fn row_taps(&self) -> bool {
+        self.only.is_none() && (matches!(self.step, Step::Found { .. } | Step::Handheld { .. }) || self.on_pictures_page())
+    }
+
+    /// Your games › Real box pictures (`Mode::Pictures`) is open.
+    fn on_pictures_page(&self) -> bool {
+        matches!(&self.step, Step::Cards(c) if c.mode == features::Mode::Pictures)
+    }
+
+    /// Add games takes touch: its tiles of ways and its hints. On Android every step takes it (Sol P1-1, 26.11.: a phone or
+    /// a handheld without a pad couldn't leave the welcome): its hint pills are its buttons.
     pub fn takes_touch(&self) -> bool {
+        self.takes_touch_on(crate::device::android_profile())
+    }
+
+    fn takes_touch_on(&self, android: bool) -> bool {
+        android || self.ways_take_touch()
+    }
+
+    /// The steps with touch targets of their own (Add games' tiles of ways).
+    fn ways_take_touch(&self) -> bool {
         matches!(self.step, Step::Games | Step::Extras { .. })
     }
 
     /// The last frame's touch targets, into the app's map: the ways as rows of a list, the hints as buttons.
     pub fn register_touch(&self, hits: &mut crate::touch::HitMap) {
+        self.register_touch_on(hits, crate::device::android_profile());
+    }
+
+    fn register_touch_on(&self, hits: &mut crate::touch::HitMap, android: bool) {
+        // Taken first, on every step: the keeping ends here (`kit::record_painted_hints`).
+        let painted = crate::kit::take_painted_hints();
         if let Step::Extras { sel } = self.step {
             for &(area, target) in self.extras_touch.borrow().targets() {
                 match target {
@@ -3480,8 +3704,26 @@ impl Setup {
             hits.list(sel, extras_rows(), 0.0, 0.0);
             return;
         }
-        // Only the step that takes touch: the other steps' frames would keep Add games' tiles in the map.
-        if !self.takes_touch() {
+        // Only the step that takes touch: the other steps' frames would keep Add games' tiles in the map. On Android the
+        // other steps' hint pills, as this frame painted them, are their buttons.
+        if !self.ways_take_touch() {
+            if self.takes_touch_on(android) {
+                for (area, b) in painted {
+                    hits.button(area, b);
+                }
+                // "Your games" and "Your handheld": a tap on a row selects it, a second does it (`row_taps`).
+                if self.row_taps() {
+                    let rows = self.stage_touch.borrow();
+                    for &(area, target) in rows.targets() {
+                        if let crate::touch::Target::Row(i) = target {
+                            hits.row(area, i);
+                        }
+                    }
+                    if let Some((sel, len)) = rows.list_state() {
+                        hits.list(sel, len, 0.0, 0.0);
+                    }
+                }
+            }
             return;
         }
         for (area, t) in self.touch.borrow().iter() {
@@ -3619,6 +3861,7 @@ impl Setup {
             Step::Look => (1u8, self.appearance, self.motion, self.look_row, self.animations_shown(), self.theme).hash(&mut h),
             Step::Play { sel } => (15u8, sel).hash(&mut h),
             Step::Cozy { sel } => (16u8, sel).hash(&mut h),
+            Step::Handheld { sel } => (21u8, sel, self.home_app).hash(&mut h),
             Step::Cards(c) => (16u8, c.mark()).hash(&mut h),
             Step::Wifi => (2u8, &self.forget, &self.net_menu).hash(&mut h),
             Step::Password { ssid, kb, .. } => (3u8, ssid, &kb.text, kb.row, kb.col, kb.shift, kb.symbols).hash(&mut h),
@@ -3626,12 +3869,13 @@ impl Setup {
             Step::Country { sel, .. } => (14u8, sel).hash(&mut h),
             Step::Connecting { ssid } => (4u8, ssid).hash(&mut h),
             Step::Portal(p) => (17u8, p.mark()).hash(&mut h),
-            Step::Extras { sel } => (5u8, sel).hash(&mut h),
+            Step::Extras { sel } => (5u8, sel, &self.screenscraper).hash(&mut h),
+            Step::ScreenScraperLogin { user, kb } => (21u8, user, &kb.text, kb.row, kb.col, kb.shift, kb.symbols).hash(&mut h),
             Step::Ports => (6u8, self.port_tab).hash(&mut h),
             Step::PortFiles(page) => (12u8, page.scroll()).hash(&mut h),
             Step::PortsCard => (20u8, self.card_sel).hash(&mut h),
             Step::Games => 7u8.hash(&mut h),
-            Step::Found { sel } => (19u8, sel, self.art == Art::Off, self.games_counted).hash(&mut h),
+            Step::Found { sel } => (19u8, sel, self.art == Art::Off, self.games_counted, self.screenscraper.on).hash(&mut h),
             Step::Phone(_) => 18u8.hash(&mut h),
             Step::Remote => 8u8.hash(&mut h),
             Step::Done => 9u8.hash(&mut h),
@@ -3658,6 +3902,7 @@ impl Setup {
             Step::Look => "look",
             Step::Play { .. } => "how you like to play",
             Step::Cozy { .. } => "how cozy",
+            Step::Handheld { .. } => "your handheld",
             Step::Cards(_) => "feature cards",
             Step::Wifi => "wifi",
             Step::Password { .. } => "password",
@@ -3670,6 +3915,7 @@ impl Setup {
             Step::HiddenName { .. } => "wifi: hidden",
             Step::Country { .. } => "wifi: country",
             Step::Extras { .. } => "extras",
+            Step::ScreenScraperLogin { .. } => "extras: screenscraper sign-in",
             Step::Ports => match self.port_tab {
                 PortTab::Ready => "ports",
                 PortTab::OwnFiles => "ports: own files",
@@ -3830,10 +4076,53 @@ impl Setup {
             (true, false) => {
                 self.kids_wanted = false;
                 self.kids_later = true;
-                self.enter_look();
+                self.after_games();
             }
-            _ => self.enter_look(),
+            _ => self.after_games(),
         }
+    }
+
+    /// On from "Your games": Android's "Your handheld" where it has a row, else the look.
+    fn after_games(&mut self) {
+        if self.handheld_rows().is_empty() {
+            self.enter_look();
+        } else {
+            self.step = Step::Handheld { sel: 0 };
+        }
+    }
+
+    /// The rows of "Your handheld": the Home app where the app has it, then Continue; none without the Home app (the
+    /// Android extras line alone is no page).
+    fn handheld_rows(&self) -> Vec<HandheldRow> {
+        if self.only.is_some() || !(crate::device::android_profile() || self.handheld_demo) || self.home_app.is_none() {
+            return Vec::new();
+        }
+        vec![HandheldRow::HomeApp, HandheldRow::Continue]
+    }
+
+    /// Android's Home app row as the app knows it (`app_android::home_app_held`); `None`: no such row.
+    pub fn with_home_app(mut self, held: Option<bool>) -> Self {
+        self.home_app = held;
+        self
+    }
+
+    /// The Home app as Android says when the view is back in front (after its question): the row shows it.
+    pub fn set_home_app(&mut self, held: bool) {
+        if self.home_app.is_some() {
+            self.home_app = Some(held);
+        }
+    }
+
+    /// A on the Home app row, once: the app asks Android (`app_android::ask_home_app`), the answer comes with
+    /// `set_home_app`.
+    pub fn take_home_app_ask(&mut self) -> bool {
+        std::mem::take(&mut self.home_app_ask)
+    }
+
+    /// Settings › System › Android extras is in this app: "Your handheld" names it.
+    pub fn with_android_extras(mut self, there: bool) -> Self {
+        self.android_extras = there;
+        self
     }
 
     /// The look step.
@@ -4175,7 +4464,10 @@ impl Setup {
     }
 
     pub fn press(&mut self, b: Button) -> bool {
-        let runtime_row = matches!(self.step, Step::Extras { sel: 2 })
+        if b == Button::Start && !self.pictures_painted && self.on_pictures_page() {
+            return false;
+        }
+        let runtime_row = matches!(self.step, Step::Extras { sel } if sel == extras_at(2) && !(screenscraper_row() && sel == SCREENSCRAPER_ROW) && picture_row(sel).is_none())
             || matches!(self.step, Step::Ports) && !self.portmaster_ready();
         if runtime_row && self.portmaster_confirm_remove {
             match b {
@@ -4188,7 +4480,7 @@ impl Setup {
         if runtime_row && b == Button::North && self.portmaster_can_remove() {
             self.portmaster_confirm_remove = true;
             self.portmaster_note = None;
-            self.step = Step::Extras { sel: 2 };
+            self.step = Step::Extras { sel: extras_at(2) };
             return false;
         }
         if matches!(self.step, Step::Extras { .. }) && matches!(b, Button::South | Button::Start) {
@@ -4283,7 +4575,11 @@ impl Setup {
                 self.after_welcome();
                 true
             }
-            Step::Look => {
+            Step::Look if !self.handheld_rows().is_empty() => {
+                self.step = Step::Handheld { sel: 0 };
+                true
+            }
+            Step::Look | Step::Handheld { .. } => {
                 self.enter_found();
                 true
             }
@@ -4303,7 +4599,7 @@ impl Setup {
         }
         match &self.step {
             Step::Zone(z) => matches!(z.view, ZoneView::Card),
-            Step::Wifi | Step::Found { .. } | Step::Look | Step::Cozy { .. } => true,
+            Step::Wifi | Step::Found { .. } | Step::Handheld { .. } | Step::Look | Step::Cozy { .. } => true,
             _ => false,
         }
     }
@@ -4356,10 +4652,11 @@ impl Setup {
 
     fn press_step(&mut self, b: Button) -> bool {
         if matches!(self.step, Step::Look) && self.only.is_some() && self.look_opened.is_none() {
-            self.look_opened = Some((self.theme, self.appearance, self.motion, self.animations));
+            self.look_opened = Some((self.theme, self.appearance, self.motion, self.animations, self.order));
         }
         let profiles = self.profiles();
         let found_rows = self.found_rows();
+        let handheld_rows = self.handheld_rows();
         // Add games: the row of ways under the grid, and the grid's own keys.
         if matches!(self.step, Step::Games) {
             let used = if self.ways_focus { self.press_ways(b) } else { self.press_grid(b) };
@@ -4410,6 +4707,9 @@ impl Setup {
                 self.step = Step::Done;
             }
             Step::Look => match b {
+                // Settings › Look › Layout: Order stands above the layouts, at the top right (`paint_order`).
+                Button::Up if self.only.is_some() => self.look_row = 1,
+                Button::Down if self.only.is_some() => self.look_row = 0,
                 Button::Up => self.look_row = self.look_row.saturating_sub(1),
                 Button::Down => self.look_row = (self.look_row + 1).min(self.look_rows().len() - 1),
                 Button::Left | Button::Right => self.change_look_row(b == Button::Right),
@@ -4430,6 +4730,21 @@ impl Setup {
                         self.art_changed = true;
                     }
                     (Button::East | Button::Left | Button::Right, Some(FoundRow::Apps)) => self.android_apps = !self.android_apps,
+                    // Off: the Real box pictures page, the same choice as the card after an update (each kind with a real
+                    // example, START turns it on, B leaves it off; `features::Cards::picker`). On: Off at once. No sign-in
+                    // here: the account stays in Box art & downloads.
+                    (Button::East | Button::Left | Button::Right, Some(FoundRow::ScreenScraper)) if self.screenscraper.on => {
+                        self.screenscraper.on = false;
+                        self.screenscraper_changed = true;
+                    }
+                    (Button::East | Button::Left | Button::Right, Some(FoundRow::ScreenScraper)) => {
+                        if let Some(i) = features::by_id("screenscraper") {
+                            let mut switches = self.switches.clone();
+                            (switches.screenscraper, switches.screenscraper_show) = (false, self.screenscraper.show);
+                            self.step = Step::Cards(Box::new(Cards::new(features::Mode::Pictures, vec![i], switches, self.later.clone())));
+                            self.pictures_painted = false;
+                        }
+                    }
                     (Button::East, Some(FoundRow::Get(i))) => self.android_page = self.android_to_get().get(i as usize).map(|g| g.url),
                     (Button::East, Some(FoundRow::Folder(i))) => {
                         if let Some(f) = self.android_new_folders().get(i as usize) {
@@ -4439,6 +4754,19 @@ impl Setup {
                     }
                     (Button::East, Some(FoundRow::More)) => self.step = Step::Games,
                     (Button::East, Some(FoundRow::Continue | FoundRow::Later)) => self.leave_games(),
+                    _ => {}
+                }
+            }
+            // "Your handheld": Up/Down, A or Left/Right on the Home app asks Android (nothing is set without its question),
+            // A on Continue goes on to the look (B, L1: your games again; START: ends the first start).
+            Step::Handheld { sel } => {
+                let rows = &handheld_rows;
+                *sel = (*sel).min(rows.len().saturating_sub(1));
+                match (b, rows.get(*sel).copied()) {
+                    (Button::Up, _) => *sel = sel.saturating_sub(1),
+                    (Button::Down, _) => *sel = (*sel + 1).min(rows.len().saturating_sub(1)),
+                    (Button::East | Button::Left | Button::Right, Some(HandheldRow::HomeApp)) => self.home_app_ask = true,
+                    (Button::East, _) => self.enter_look(),
                     _ => {}
                 }
             }
@@ -4481,6 +4809,25 @@ impl Setup {
                 Button::South => self.step = Step::Look,
                 _ => {}
             },
+            // Your games › Real box pictures: START takes the kinds ticked and ScreenScraper On, B nothing; both go back to
+            // Your games, on its row.
+            Step::Cards(cards) if cards.mode == features::Mode::Pictures => {
+                let out = cards.press(b);
+                if let Some(s) = cards.take_switches() {
+                    if s.screenscraper_show != self.screenscraper.show {
+                        self.screenscraper.show = s.screenscraper_show;
+                        self.screenscraper_pictures_changed = true;
+                    }
+                    if s.screenscraper && !self.screenscraper.on {
+                        self.screenscraper.on = true;
+                        self.screenscraper_changed = true;
+                    }
+                }
+                if matches!(out, features::Out::Done | features::Out::Back) {
+                    let sel = self.found_rows().iter().position(|r| *r == FoundRow::ScreenScraper).unwrap_or(0);
+                    self.step = Step::Found { sel };
+                }
+            }
             Step::Cards(cards) => {
                 let out = cards.press(b);
                 if let Some(s) = cards.take_switches() {
@@ -4552,15 +4899,24 @@ impl Setup {
                 self.press_zone(b);
                 self.zone_offsets_wanted();
             }
-            Step::Extras { sel } => match b {
+            // The ScreenScraper row: A, Left and Right switch it, Y signs in or out (`press_screenscraper`).
+            Step::Extras { sel } if screenscraper_row() && *sel == SCREENSCRAPER_ROW && matches!(b, Button::East | Button::Left | Button::Right | Button::North) => self.press_screenscraper(b),
+            // The rows under it: A, Left and Right switch them; nothing else of the page's rows' buttons applies there,
+            // but B and START leave as from every row (0.8 check video 27.11.2026: they were swallowed here, the page
+            // had no way out but a restart).
+            Step::Extras { sel } if !matches!(b, Button::Up | Button::Down | Button::South | Button::Start) && picture_row(*sel).is_some() => {
+                let row = picture_row(*sel).unwrap_or(0);
+                self.press_picture_row(row, b);
+            }
+            Step::Extras { sel } => { let l = extras_logical(*sel); match b {
                 Button::Up => *sel = (*sel + extras_rows() - 1) % extras_rows(),
                 Button::Down => *sel = (*sel + 1) % extras_rows(),
                 // The Pictures choice needs no Wi-Fi: it only says what the downloads bring.
-                Button::East | Button::Right if *sel == 1 => {
+                Button::East | Button::Right if l == 1 => {
                     self.art = self.art.next();
                     self.art_changed = true;
                 }
-                Button::Left if *sel == 1 => {
+                Button::Left if l == 1 => {
                     self.art = self.art.prev();
                     self.art_changed = true;
                 }
@@ -4569,17 +4925,17 @@ impl Setup {
                     self.covers_cancel.cancel();
                     self.open_starter = true;
                 }
-                Button::East if extras_cheats() && *sel == 3 => {
+                Button::East if extras_cheats() && l == 3 => {
                     let online = self.extras_demo_online.unwrap_or_else(|| self.ip.is_some() || wifi::ip().is_some());
                     if let Some(page) = &mut self.cheat_data { page.activate(online); }
                 }
-                Button::North if extras_cheats() && *sel == 3 => {
+                Button::North if extras_cheats() && l == 3 => {
                     if let Some(page) = &mut self.cheat_data { page.confirm_remove(); }
                 }
-                Button::East if *sel == 2 && (ports::trimui_standalone() || self.portmaster.is_some()) => self.enter_ports(),
-                Button::East if *sel == 2 && crate::ports_card::offered() && !self.extras_demo_online.unwrap_or_else(|| self.ip.is_some() || wifi::ip().is_some()) => self.enter_ports_card(),
+                Button::East if l == 2 && (ports::trimui_standalone() || self.portmaster.is_some()) => self.enter_ports(),
+                Button::East if l == 2 && crate::ports_card::offered() && !self.extras_demo_online.unwrap_or_else(|| self.ip.is_some() || wifi::ip().is_some()) => self.enter_ports_card(),
                 Button::East if self.ip.is_some() || wifi::ip().is_some() => {
-                    if *sel == 0 {
+                    if l == 0 {
                         self.start_covers();
                     } else {
                         self.enter_ports();
@@ -4588,6 +4944,18 @@ impl Setup {
                 Button::Start => self.go_to_games(),
                 Button::South => self.enter_zone(),
                 _ => {}
+            }},
+            // Sign in: the name, then the password (L1 empties the field, B on an empty one goes back).
+            Step::ScreenScraperLogin { user, kb } => match if b == Button::L1 { kb.text.clear(); Outcome::Editing } else { kb.press(b) } {
+                Outcome::Editing => {}
+                Outcome::Cancelled => self.step = Step::Extras { sel: SCREENSCRAPER_ROW },
+                Outcome::Done(t) if t.trim().is_empty() => {}
+                Outcome::Done(name) if user.is_none() => self.step = Step::ScreenScraperLogin { user: Some(name.trim().to_string()), kb: Keyboard::default() },
+                Outcome::Done(password) => {
+                    self.screenscraper_login = user.take().map(|u| (u, password));
+                    self.screenscraper.line = Some("Signing in…".into());
+                    self.step = Step::Extras { sel: SCREENSCRAPER_ROW };
+                }
             },
             Step::PortsCard => {
                 let count = self.card_ports.as_ref().map_or(0, Vec::len);
@@ -4597,13 +4965,13 @@ impl Setup {
                     Button::Down => self.card_sel = (self.card_sel + 1).min(count.saturating_sub(1)),
                     Button::East if self.card_ready() > 0 => self.install_from_card(),
                     Button::East | Button::North if self.card_ports.is_some() => { self.card_note = None; self.look_on_card(); }
-                    Button::South | Button::Start => self.step = Step::Extras { sel: 2 },
+                    Button::South | Button::Start => self.step = Step::Extras { sel: extras_at(2) },
                     _ => {}
                 }
             }
             Step::Ports if !portmaster_ready => match b {
                 Button::East => self.start_portmaster(),
-                Button::South | Button::Start => self.step = Step::Extras { sel: 2 },
+                Button::South | Button::Start => self.step = Step::Extras { sel: extras_at(2) },
                 _ => {}
             },
             Step::Ports => {
@@ -4624,7 +4992,7 @@ impl Setup {
                             self.open_port_files(&port);
                         }
                     }
-                    Button::South | Button::Start => self.step = Step::Extras { sel: 2 },
+                    Button::South | Button::Start => self.step = Step::Extras { sel: extras_at(2) },
                     _ => {}
                 }
             }
@@ -4757,8 +5125,21 @@ impl Setup {
     }
 
     pub fn paint(&mut self, c: &mut Canvas, text: &mut Text) {
+        // This frame's hint pills, for `register_touch`.
+        crate::kit::record_painted_hints();
+        self.stage_touch.borrow_mut().clear();
         if let Step::Cards(cards) = &mut self.step {
-            cards.paint(c, text);
+            let hits = cards.paint(c, text);
+            // The Real box pictures page's rows take a finger as Your games' rows do (`row_taps`): a tap selects a kind,
+            // a second ticks it.
+            if cards.mode == features::Mode::Pictures {
+                self.pictures_painted = true;
+                let mut touch = self.stage_touch.borrow_mut();
+                for &(area, i) in &hits.choices {
+                    touch.row(area, i);
+                }
+                touch.list(hits.sel, hits.choices.len(), 0.0, 0.0);
+            }
             return;
         }
         c.clear(pal().void);
@@ -4771,7 +5152,9 @@ impl Setup {
                 let row = [crate::ui_art::Art::Logo, crate::ui_art::Art::Device(model)];
                 #[cfg_attr(not(feature = "brick"), allow(unused_mut))]
                 let mut lines = vec![
-                    if crate::device::android_profile() {
+                    if crate::device::android_profile() && !self.handheld_rows().is_empty() {
+                        "Up next: your games and your handheld, then pick a look."
+                    } else if crate::device::android_profile() {
                         "Up next: your games, then pick a look."
                     } else if self.no_wifi {
                         "Up next: time zone, your games, then pick a look."
@@ -4863,6 +5246,10 @@ impl Setup {
             Step::Look => {
                 self.paint_look(c, text, &[], false);
             }
+            Step::Handheld { sel } => {
+                let sel = *sel;
+                self.paint_handheld(c, text, sel);
+            }
             Step::Cozy { sel } => {
                 crate::cozy_level::paint(c, text, *sel);
                 hints(c, text, &[("A", "Finish"), ("B", "Back"), ("START", "Skip")]);
@@ -4913,12 +5300,12 @@ impl Setup {
                     (None, _) if self.lead_kind() == Some(Lead::Off) => "Turn on",
                     (_, Some(WifiRow::Zone)) => "Change",
                     (_, Some(WifiRow::Scan)) => "Scan again",
-                    (_, Some(WifiRow::Continue)) => "Continue",
+                    (_, Some(WifiRow::Continue)) => "Next",
                     _ => "Open",
                 };
                 let online = self.entries.iter().any(|e| e.active);
                 if self.no_radio() && first {
-                    hints(c, text, &[("A", "Continue"), ("B", "Back")]);
+                    hints(c, text, &[("A", "Next"), ("B", "Back")]);
                 } else if self.no_radio() {
                     hints(c, text, &[("B", "Back")]);
                 } else if self.net_menu.is_some() {
@@ -4974,6 +5361,23 @@ impl Setup {
             Step::Extras { sel } => {
                 let sel = *sel;
                 self.paint_extras(c, text, sel, &dots);
+            }
+            Step::ScreenScraperLogin { user, kb } => {
+                let title = if user.is_some() { "Your ScreenScraper password" } else { "Your ScreenScraper name" };
+                let title = text.fit(Face::Title, 50, title, c.w - 2 * MARGIN);
+                text.draw(c, Face::Title, 50, MARGIN, 110, pal().chalk, &title);
+                if user.is_some() {
+                    let dots: String = "•".repeat(kb.text.chars().count());
+                    paint_keyboard_shown(c, text, kb, "Sign in", &dots);
+                } else {
+                    paint_keyboard_noted(c, text, kb, "Next", SCREENSCRAPER_ACCOUNT_NOTE);
+                }
+                let delete = if kb.text.is_empty() { ("B", "Back") } else { ("B", "Delete") };
+                let mut bar = vec![("A", "Type"), delete];
+                if !kb.text.is_empty() {
+                    bar.push(("L1", "Clear"));
+                }
+                hints(c, text, &bar);
             }
             Step::Ports => self.paint_ports(c, text, &dots),
             Step::PortFiles(_) => self.paint_port_files(c, text, &dots),
@@ -5038,6 +5442,10 @@ impl Setup {
                     lines.push(crate::first_game::LAST_PAGE_LINE);
                 }
                 lines.push("Revisit every feature any time in Settings › Help & tools › Tour.");
+                // Pocket Sync asks nothing on the first start (it needs a second Pocket): one line on where it is.
+                if self.only.is_none() && !self.kids_wanted {
+                    lines.push(POCKET_SYNC_LINE);
+                }
                 if self.zone_utc {
                     lines.push("The clock is on UTC. Set your time zone in Settings › System › Time.");
                 }
@@ -5116,6 +5524,9 @@ impl Setup {
         rows.extend((0..self.android_to_get().len().min(2) as u8).map(FoundRow::Get));
         if !self.no_wifi {
             rows.push(FoundRow::BoxArt);
+            if screenscraper_row() {
+                rows.push(FoundRow::ScreenScraper);
+            }
         }
         rows
     }
@@ -5265,6 +5676,7 @@ impl Setup {
         let apps_note = crate::android_first_start::apps_note(&self.android_offers());
         let note = match rows.get(sel) {
             Some(FoundRow::BoxArt) => Some(BOX_ART_NOTE),
+            Some(FoundRow::ScreenScraper) => Some(SCREENSCRAPER_FIRST_NOTE),
             Some(FoundRow::Apps) => Some(apps_note.as_str()),
             Some(FoundRow::Folder(_)) => Some(FOLDER_NOTE),
             Some(FoundRow::Get(_)) => Some(crate::android_first_start::GET_NOTE),
@@ -5352,6 +5764,13 @@ impl Setup {
             text.draw(c, Face::Body, 24, MARGIN, y + 8, pal().alert, &l);
             y += crate::type_scale::line(24, 8);
         }
+        {
+            let mut touch = self.stage_touch.borrow_mut();
+            for i in 0..rows.len() {
+                touch.row(crate::touch::Area::new(MARGIN, top + i as i32 * row, width, row - 8), i);
+            }
+            touch.list(sel, rows.len(), 0.0, 0.0);
+        }
         for (i, r) in rows.iter().enumerate() {
             let ry = top + i as i32 * row;
             let selected = i == sel;
@@ -5363,11 +5782,14 @@ impl Setup {
                 _ => String::new(),
             };
             let name = match r {
-                FoundRow::Continue => "Continue",
+                // A step of the first start: "Next", not a game's "Continue" (Neon 26.11.: Reprendre, 続きから).
+                FoundRow::Continue => "Next",
                 FoundRow::More if games > 0 => "Add more…",
                 FoundRow::More => "Add games…",
                 FoundRow::Later => "I'll add games later",
                 FoundRow::BoxArt => "Box art",
+                // Named by what it brings (the lead, 26.11.); "ScreenScraper" whole, never shortened.
+                FoundRow::ScreenScraper => "Real box pictures (ScreenScraper)",
                 FoundRow::Apps => "Emulator apps",
                 FoundRow::Folder(_) | FoundRow::Get(_) => folder_row.as_str(),
             };
@@ -5375,25 +5797,104 @@ impl Setup {
             // A found folder's words are long ("2341 games in Emulation/roms · internal storage"): smaller before cut.
             let (npx, name) = text.fit_sizes(Face::Title, &[37, 30, 26], name, width - 56);
             text.draw(c, Face::Title, npx, MARGIN + 28, base, fg, &name);
-            if matches!(r, FoundRow::BoxArt | FoundRow::Apps) {
-                let off = if *r == FoundRow::Apps { !self.android_apps } else { self.art == Art::Off };
+            if matches!(r, FoundRow::BoxArt | FoundRow::Apps | FoundRow::ScreenScraper) {
+                let off = match r {
+                    FoundRow::Apps => !self.android_apps,
+                    FoundRow::ScreenScraper => !self.screenscraper.on,
+                    _ => self.art == Art::Off,
+                };
                 let on = if off { "Off" } else { "On" };
                 let value = if selected { format!("‹ {on} ›") } else { on.to_string() };
                 crate::kit::row_value(c, text, 24, MARGIN + width - 28, ry + (row - 8) / 2 + crate::type_scale::base(10, 24), &value, selected);
             }
         }
         let action = match rows.get(sel) {
-            Some(FoundRow::BoxArt | FoundRow::Apps) => "Switch",
+            // Off, A opens the Real box pictures page to choose the kinds on.
+            Some(FoundRow::ScreenScraper) if !self.screenscraper.on => "Choose",
+            Some(FoundRow::BoxArt | FoundRow::Apps | FoundRow::ScreenScraper) => "Switch",
             Some(FoundRow::Folder(_)) => "Add",
             Some(FoundRow::Get(_)) => "Open",
             Some(FoundRow::More) => "Open",
-            _ => "Continue",
+            _ => "Next",
         };
         hints(c, text, &[("A", action), ("B", "Back"), ("START", "Skip the rest")]);
     }
 
+    /// Android's "Your handheld" (`Step::Handheld`): a line on what it is for, the rows from the bottom up as on "Your
+    /// games", the line about the selected row over them, and where Android extras are.
+    fn paint_handheld(&self, c: &mut Canvas, text: &mut Text, sel: usize) {
+        let width = c.w - 2 * MARGIN;
+        text.draw(c, Face::Title, 67, MARGIN, 140, pal().chalk, "Your handheld");
+        let mut y = 192;
+        for l in text.wrap_prose_at_most(Face::Body, 28, HANDHELD_SUB, width, 2) {
+            text.draw(c, Face::Body, 28, MARGIN, y, pal().dust, &l);
+            y += crate::type_scale::line(28, 10);
+        }
+        if self.android_extras {
+            y += 20;
+            for l in text.wrap_prose_at_most(Face::Body, 24, ANDROID_EXTRAS_LINE, width, 3) {
+                text.draw(c, Face::Body, 24, MARGIN, y, pal().chalk, &l);
+                y += crate::type_scale::line(24, 8);
+            }
+        }
+        let rows = self.handheld_rows();
+        let row = found_row(c.h);
+        let top = found_rows_top(c.h, rows.len());
+        let note = match rows.get(sel) {
+            Some(HandheldRow::HomeApp) => Some(HOME_APP_NOTE),
+            _ => None,
+        };
+        let note_lines = note.map(|n| text.wrap_prose_at_most(Face::Body, 24, n, width, 3)).unwrap_or_default();
+        let mut ny = top - 18 - (note_lines.len() as i32 - 1) * crate::type_scale::line(24, 8);
+        // The handheld itself in the room between the words and the rows (as on the welcome), where it fits.
+        let model = crate::device::current().model.unwrap_or(crate::device::Model::MiniV2);
+        let art = crate::ui_art::Art::Device(model);
+        let k = crate::ui_art::empty_scale(c.h);
+        let (aw, ah) = crate::ui_art::size(art, k);
+        let room = (y + 20, ny - crate::type_scale::line(24, 8) - 30);
+        if room.1 - room.0 >= ah {
+            crate::ui_art::paint(c, art, (c.w - aw) / 2, room.0 + (room.1 - room.0 - ah) / 2, k);
+        }
+        // The note only where it stands clear of the lines above it.
+        if ny - crate::type_scale::line(24, 8) >= y {
+            for l in &note_lines {
+                text.draw(c, Face::Body, 24, MARGIN, ny, pal().dust, l);
+                ny += crate::type_scale::line(24, 8);
+            }
+        }
+        let mut touch = self.stage_touch.borrow_mut();
+        for (i, r) in rows.iter().enumerate() {
+            let ry = top + i as i32 * row;
+            let selected = i == sel;
+            crate::kit::shelf_row(c, MARGIN, ry, width, row - 8, selected);
+            touch.row(crate::touch::Area::new(MARGIN, ry, width, row - 8), i);
+            let fg = if selected { pal().ink } else { pal().chalk };
+            let name = match r {
+                HandheldRow::HomeApp => "Start on the shelf",
+                HandheldRow::Continue => "Next",
+            };
+            let base = ry + (row - 8) / 2 + crate::type_scale::base(13, 37);
+            let (npx, name) = text.fit_sizes(Face::Title, &[37, 30, 26], name, width - 200);
+            text.draw(c, Face::Title, npx, MARGIN + 28, base, fg, &name);
+            if *r == HandheldRow::HomeApp {
+                let on = if self.home_app == Some(true) { "On" } else { "Off" };
+                let value = if selected { format!("‹ {on} ›") } else { on.to_string() };
+                crate::kit::row_value(c, text, 24, MARGIN + width - 28, ry + (row - 8) / 2 + crate::type_scale::base(10, 24), &value, selected);
+            }
+        }
+        touch.list(sel, rows.len(), 0.0, 0.0);
+        drop(touch);
+        let action = if rows.get(sel) == Some(&HandheldRow::HomeApp) { "Switch" } else { "Next" };
+        hints(c, text, &[("A", action), ("B", "Back"), ("START", "Skip the rest")]);
+    }
+
     /// The existing page, in the same row and footer style as other Settings pages.
-    fn paint_extras(&mut self, c: &mut Canvas, text: &mut Text, sel: usize, dots: &str) {
+    fn paint_extras(&mut self, c: &mut Canvas, text: &mut Text, at: usize, dots: &str) {
+        // The rows are written in their places without the ScreenScraper row (`extras_logical`); it goes in last.
+        let on_ss = screenscraper_row() && at == SCREENSCRAPER_ROW;
+        let on_picture = picture_row(at);
+        // On a row under ScreenScraper no other row's footer applies (`usize::MAX` matches none of them).
+        let sel = if on_picture.is_some() { usize::MAX } else { extras_logical(at) };
         if let Some(page) = &mut self.cheat_data { page.poll(); }
         let online = self.extras_demo_online.unwrap_or_else(|| self.ip.is_some() || wifi::ip().is_some());
         // `no_wifi_chip`: dArkOS's own Wi-Fi counts (`darkos::wifi_here`); the box art downloads there when it is online.
@@ -5408,6 +5909,7 @@ impl Setup {
             else if covers_error { "Retry".into() }
             else if self.covers_running || self.covers.is_some() { extras_status(self.covers, self.covers_running, self.art == Art::Pictures, self.games_known(), dots) }
             else { "Download".into() };
+        #[allow(unused_mut)]
         let mut rows = vec![
             crate::emu_menu::Row { name: "Box art".into(), value: covers, desc: if online && covers_error { "Couldn't reach the artwork server. Try again later.".into() } else if no_chip { COVERS_FROM_COMPUTER.into() } else { about } },
             crate::emu_menu::Row { name: "Pictures".into(), value: if sel == 1 { format!("‹ {} ›", self.art.label()) } else { self.art.label().into() },
@@ -5434,20 +5936,72 @@ impl Setup {
             || runtime && (self.portmaster_note.is_some() || online && matches!(self.portmaster, Some(PortMasterState::Offer(_))) && self.portmaster_low_space().is_some())
             || sel == 0 && online && covers_error;
         let remove = runtime && !self.portmaster_confirm_remove && self.portmaster_can_remove();
-        crate::extras_page::paint(c, text, &mut self.extras_touch.borrow_mut(), &rows, sel, (!online).then_some(offline),
-            crate::extras_page::Footer { action, alert, remove });
+        let (action, alert, remove) = if on_ss || on_picture.is_some() { (Some("Switch"), false, false) } else { (action, alert, remove) };
+        if screenscraper_row() {
+            rows.insert(SCREENSCRAPER_ROW, self.screenscraper_row_shown(on_ss));
+            for row in 0..PICTURE_ROWS.len() {
+                rows.insert(SCREENSCRAPER_ROW + 1 + row, self.picture_row_shown(row, on_picture == Some(row)));
+            }
+        }
+        let north = (on_ss && (self.screenscraper.on || self.screenscraper.user.is_some())).then_some(if self.screenscraper.user.is_some() { "Sign out" } else { "Sign in" });
+        crate::extras_page::paint(c, text, &mut self.extras_touch.borrow_mut(), &rows, at, (!online).then_some(offline),
+            crate::extras_page::Footer { action, alert, remove, north,
+                // On ScreenScraper and the rows under it, all five stay in view together.
+                keep_to: (on_ss || on_picture.is_some()).then_some(SCREENSCRAPER_ROW + PICTURE_ROWS.len()) });
+    }
+
+    /// Box art & downloads → ScreenScraper: On or Off, the account, the last run and the credit ScreenScraper's
+    /// licence asks for.
+    /// The four rows under it say what it brings (Real box backs, Off by default, says what Off keeps) and the credit names
+    /// the site: no sentence of its own for that, and the rest is one paragraph (0.8 check video on the Brick: the text
+    /// pushed Real box backs and Real manuals off the 1024x768 page).
+    fn screenscraper_row_shown(&self, selected: bool) -> crate::emu_menu::Row {
+        let on = if self.screenscraper.on { "On" } else { "Off" };
+        // The account, the last run and the day's lookups run on as one paragraph, each sentence in the interface's
+        // language: one line each pushed Real manuals off the page at Large text.
+        let mut said = vec![match &self.screenscraper.user {
+            Some(user) => format!("Signed in as {user}."),
+            None => SCREENSCRAPER_GUEST.to_string(),
+        }];
+        said.extend(self.screenscraper.line.clone());
+        // The day's count, except when the line already says the day is used up.
+        let (used, limit) = self.screenscraper.today;
+        if limit > 0 && !(used >= limit && self.screenscraper.line.is_some()) {
+            said.push(format!("Today: {} of {} lookups.", self.screenscraper.today.0, self.screenscraper.today.1));
+        }
+        let gap = if matches!(crate::i18n::current(), crate::i18n::Lang::Zh | crate::i18n::Lang::Ja) { "" } else { " " };
+        let said: Vec<String> = said.iter().map(|s| crate::i18n::tr(s)).collect();
+        let desc = format!("{}\n{}", said.join(gap), crate::screenscraper::credit_shown());
+        crate::emu_menu::Row { name: "ScreenScraper".into(), value: if selected { format!("‹ {on} ›") } else { on.into() }, desc }
+    }
+
+    /// A row under ScreenScraper: Real spines, Real labels or Real box backs, On or Off, and what it shows.
+    fn picture_row_shown(&self, row: usize, selected: bool) -> crate::emu_menu::Row {
+        let show = self.screenscraper.show;
+        let on = match row { 0 => show.spines, 1 => show.labels, 2 => show.backs, _ => show.manuals };
+        let on = if on { "On" } else { "Off" };
+        let desc = match row {
+            0 => "The shelf shows each game's real box spine.",
+            1 => "Cartridges carry their real label (Mega Drive and DS keep the cover's art).",
+            2 => "Turning a box over shows its real back. Off keeps pocket-ui's own back with your progress.",
+            _ => "Games with an original manual get a Game manual row on their Details page.",
+        };
+        crate::emu_menu::Row { name: PICTURE_ROWS[row].into(), value: if selected { format!("‹ {on} ›") } else { on.into() }, desc: desc.into() }
     }
 
     pub fn take_open_starter(&mut self) -> bool { std::mem::take(&mut self.open_starter) }
     pub fn at_starter(mut self) -> Self { self.step = Step::Extras { sel: extras_rows() - 1 }; self }
-    pub fn at_portmaster(mut self) -> Self { self.step = Step::Extras { sel: 2 }; self }
+    pub fn at_portmaster(mut self) -> Self { self.step = Step::Extras { sel: extras_at(2) }; self }
+
+    /// Box art & downloads on its ScreenScraper row (snapshots).
+    pub fn at_screenscraper(mut self) -> Self { self.step = Step::Extras { sel: SCREENSCRAPER_ROW }; self }
     pub fn cheat_status(&self) -> Option<(&'static str, u64, u64)> { self.cheat_data.as_ref().map(|p| p.status()) }
 
     /// Uses the production row mapper, with no worker or filesystem access.
     pub fn with_cheats_demo(mut self, state: &str) -> Self {
         self.cheat_data = Some(crate::cheat_data::Page::snapshot(state));
         self.extras_demo_online = Some(!state.ends_with("offline"));
-        self.step = Step::Extras { sel: 3 };
+        self.step = Step::Extras { sel: extras_at(3) };
         self
     }
 
@@ -5871,9 +6425,11 @@ impl Setup {
     /// seen, not hidden behind a key).
     fn look_rows(&self) -> &'static [LookRow] {
         if self.only.is_some() {
-            &[LookRow::Layout]
+            // Settings › Look › Layout: the layouts, and under them the order of Home's shelves.
+            &[LookRow::Layout, LookRow::Order]
         } else {
-            &[LookRow::Layout, LookRow::Font, LookRow::Colours, LookRow::Appearance]
+            // The first start: the order of Home's shelves right under the layouts (by console, as before, until changed).
+            &[LookRow::Layout, LookRow::Order, LookRow::Font, LookRow::Colours, LookRow::Appearance]
         }
     }
 
@@ -5891,7 +6447,11 @@ impl Setup {
     /// B on Settings > Look: everything the page changed goes back to how it was (the app takes it as it takes a
     /// change: the layout through `take_profile_look`, the rest from `appearance`, `motion`, `take_animations`).
     fn cancel_look(&mut self) {
-        let Some((theme, appearance, motion, animations)) = self.look_opened.take() else { return };
+        let Some((theme, appearance, motion, animations, order)) = self.look_opened.take() else { return };
+        if self.order != order {
+            self.order = order;
+            self.order_changed = true;
+        }
         if self.theme != theme {
             self.theme = theme;
             self.profile_look = Some(theme);
@@ -5915,6 +6475,10 @@ impl Setup {
                 self.theme = if forward { (self.theme + 1) % n } else { (self.theme + n - 1) % n };
             }
             Some(LookRow::Appearance) => self.appearance = turn(&Appearance::ALL, self.appearance, forward),
+            Some(LookRow::Order) => {
+                self.order = turn(&ShelfOrder::ALL, self.order, forward);
+                self.order_changed = true;
+            }
             // The app steps them (`take_font_step`, `take_colours_step`), as Settings › Look's rows do.
             Some(LookRow::Font) => self.font_step = Some(forward),
             Some(LookRow::Colours) => self.colours_step = Some(forward),
@@ -5926,6 +6490,9 @@ impl Setup {
     /// made by the app), the one shown in the middle and its neighbours at the sides; then its name, one line
     /// about it, and how to switch. `sample`: the previews use the built-in sample games.
     pub fn paint_look(&mut self, c: &mut Canvas, text: &mut Text, previews: &[Image], sample: bool) -> LookShown {
+        // This frame's hint pills, for `register_touch` (the App's look step paints past `paint`).
+        crate::kit::record_painted_hints();
+        self.stage_touch.borrow_mut().clear();
         c.clear(pal().void);
         let first = self.only.is_none();
         let title = if first { "How your games stand" } else { "Choose a look" };
@@ -5947,6 +6514,12 @@ impl Setup {
         // Smaller type before "…": German and Spanish at large text ended in "Probier j…" (first-start walk 2026-11-06).
         let (sub_px, sub) = text.fit_sizes(Face::Body, &[28, 25, 22], sub, c.w - 2 * MARGIN);
         text.draw(c, Face::Body, sub_px, MARGIN, look_down(c.h, 192), pal().dust, &sub);
+        if !first {
+            // Settings › Look › Layout: the order of Home's shelves beside the title, where the page has room; the pictures
+            // keep theirs (`the_look_pictures_use_the_room_of_the_page`).
+            let clear = MARGIN + text.width(Face::Title, title_px, &title).max(text.width(Face::Body, sub_px, &sub)) + 32;
+            let _ = self.paint_order(c, text, (title_y - crate::type_scale::px(title_px) as i32, look_down(c.h, 192) + 8), clear, c.w - MARGIN);
+        }
         self.paint_step_count(c, text);
         // As large as the room under the title allows (`look_preview_rect`): Settings › Look, and the first start
         // with its rows under it.
@@ -5965,14 +6538,32 @@ impl Setup {
         let (name, blurb) = self.themes[self.theme];
         let base = y + ph + 37 + look_down(c.h, 25) + crate::type_scale::grow(50);
         text.draw(c, Face::Title, 50, MARGIN, base, pal().chalk, name);
+        // The first start: Order beside the layout's name, left of the marks (0.8: a row of its own took the pictures'
+        // room at Large text and on short screens; the dots stand where Settings has it, beside the title).
+        let layouts_w = if first {
+            let cap = crate::type_scale::px(50) as i32 * 3 / 4;
+            // Clear of the longest layout name, so Order stands in one place whichever layout is shown (the explorer
+            // knows a row by its place: one that moved with the name was a row of its own per layout).
+            let widest = self.themes.iter().map(|(t, _)| text.width(Face::Title, 50, t)).max().unwrap_or(0);
+            let clear = MARGIN + widest + 32;
+            let right = c.w - MARGIN - n as i32 * 28 - 8;
+            let left = self.paint_order(c, text, (base - cap - 8, base + 8), clear, right);
+            // The layouts' row ends before Order's, so the two are two rows for the navigation explorer.
+            (left - 36 - MARGIN).max(1)
+        } else {
+            c.w - 2 * MARGIN
+        };
         // The layouts focused: the bar beside their name, as beside a row of pills. For the navigation explorer the
         // layouts are one row from the pictures to the name.
-        crate::nav_probe::row(c, (MARGIN, y - 8, c.w - 2 * MARGIN, base + 12 - (y - 8)));
+        crate::nav_probe::row(c, (MARGIN, y - 8, layouts_w, base + 12 - (y - 8)));
         if self.look_row == 0 {
             let cap = crate::type_scale::px(50) as i32 * 3 / 4;
-            focus_bar(c, base - cap - 6, cap + 12);
-            crate::nav_probe::focus(c, (MARGIN - 28, y - 8, c.w - 2 * MARGIN + 28, base + 12 - (y - 8)));
+            // The bar alone: its focus for the explorer is the layouts' row, not the whole line, where Order stands too.
+            focus_mark(c, base - cap - 6, cap + 12);
+            crate::nav_probe::focus(c, (MARGIN - 28, y - 8, layouts_w + 28, base + 12 - (y - 8)));
         }
+        // Order focused (Settings › Look › Layout): its line in the layout's place, about the choice in view.
+        let blurb = if !first && self.look_row == 1 { self.order.blurb() } else { blurb };
         // Easy on a card with many games: says so, nothing more.
         let blurb = if crate::settings::Theme::ALL.get(self.theme) == Some(&crate::settings::Theme::Big) && self.games.len() > HANDFUL { "One big case at a time, simple menus. Great for smaller libraries." } else { blurb };
         // Smaller type before "…", as the subtitle: the Brick's 1024 px ended the Shelf's in "The one you pick shows its…".
@@ -5985,8 +6576,9 @@ impl Setup {
             let color = if i as usize == self.theme { pal().chalk } else { pal().keycap };
             c.rect(mx, base - 18, 16, 16, color);
         }
+
         // The rows under the layouts, slimmer rows of pills one under the other as `look_rows` has them; the focused
-        // one has the bar beside it. Settings > Look > Layout: none. The first start: Style, Colours, Appearance, the
+        // one has the bar beside it. Settings > Look > Layout: none. The first start: Order, Style, Colours, Appearance, the
         // previews above changing with them.
         // A note on two lines beside its pills (1024x768: "Clean and narrow, the look pocket-ui started / with.") reaches
         // lower than its row: the next row, or the lines under the rows, start the rows' gap under it, not on it (Brick
@@ -5995,10 +6587,11 @@ impl Setup {
         let step = look_row_step(c.h);
         let gap = step - pill_h();
         let label_w = self.label_w(text);
-        let rows = &self.look_rows()[1..];
-        for (i, row) in rows.iter().enumerate() {
+        // Order is painted beside a name (`paint_order`): Settings › Look › Layout's title, the first start's layout name.
+        let rows: Vec<LookRow> = self.look_rows()[1..].iter().copied().filter(|r| *r != LookRow::Order).collect();
+        for row in rows.iter() {
             let foot = self.paint_look_row(c, text, *row, top, label_w);
-            if self.look_row as usize == i + 1 {
+            if self.look_rows().get(self.look_row) == Some(row) {
                 focus_bar(c, top, pill_h());
             }
             top = (top + step).max(foot + gap);
@@ -6011,10 +6604,57 @@ impl Setup {
         shown
     }
 
+    /// Settings › Look › Layout's Order: its label and two pills, right-aligned in the band `(top, bottom)` beside the title,
+    /// never left of `clear` (the title's end): the label goes first, then the type gets smaller. Focused (Up from the
+    /// layouts), the bar stands beside it.
+    /// Returns where it begins on the left (its label, or its pills without one).
+    fn paint_order(&self, c: &mut Canvas, text: &mut Text, (top, bottom): (i32, i32), clear: i32, right: i32) -> i32 {
+        let names: Vec<&str> = ShelfOrder::ALL.iter().map(|o| o.name()).collect();
+        let on = ShelfOrder::ALL.iter().position(|o| *o == self.order).unwrap_or(0);
+        let pills = |text: &mut Text, px: u32, pad: i32| names.iter().map(|n| text.width(Face::Body, px, n) + pad).sum::<i32>() + 8;
+        let label = "Order";
+        let fits = |text: &mut Text, px: u32, pad: i32, with_label: bool| {
+            let w = pills(text, px, pad) + if with_label { text.width(Face::Body, px, label) + 20 } else { 0 };
+            right - w >= clear
+        };
+        let (px, pad, with_label) = [(24u32, 32, true), (24, 24, true), (24, 24, false), (22, 20, false), (20, 16, false)]
+            .into_iter()
+            .find(|&(px, pad, l)| fits(text, px, pad, l))
+            .unwrap_or((20, 16, false));
+        let h = pill_h().min(bottom - top).max(24);
+        let row_top = top + (bottom - top - h) / 2;
+        let base = row_top + h / 2 + crate::type_scale::mid(px);
+        let widths: Vec<i32> = names.iter().map(|n| text.width(Face::Body, px, n) + pad).collect();
+        let total = widths.iter().sum::<i32>() + 8;
+        let mut x = right - total;
+        let start = if with_label { x - text.width(Face::Body, px, label) - 20 } else { x };
+        if with_label {
+            text.draw(c, Face::Body, px, start, base, pal().dust, label);
+        }
+        crate::retro::pill(c, x, row_top, total, h, h / 2, pal().keycap);
+        x += 4;
+        for (i, (n, w)) in names.iter().zip(&widths).enumerate() {
+            if i == on {
+                crate::retro::pill(c, x, row_top + 4, *w, h - 8, (h - 8) / 2, pal().label);
+            }
+            text.draw(c, Face::Body, px, x + pad / 2, base, if i == on { pal().ink } else { pal().chalk }, n);
+            x += w;
+        }
+        crate::nav_probe::row(c, (start, row_top, right - start, h));
+        if self.look_row == 1 {
+            // The text's colour, as `focus_bar`: visible on the light look's cream too.
+            crate::retro::pill(c, start - 28, row_top + 6, 8, h - 12, 4, pal().chalk);
+            crate::nav_probe::focus(c, (start - 28, row_top, right - start + 28, h));
+        }
+        start
+    }
+
     /// One row of pills under the layouts, from `top`; returns the foot of what it painted (`pill_row`).
     fn paint_look_row(&self, c: &mut Canvas, text: &mut Text, row: LookRow, top: i32, label_w: i32) -> i32 {
         match row {
             LookRow::Layout => top + pill_h(),
+            // Beside a name (`paint_order`), not under the layouts.
+            LookRow::Order => top,
             LookRow::Appearance => {
                 let names: Vec<&str> = Appearance::ALL.iter().map(|a| a.name()).collect();
                 let on = Appearance::ALL.iter().position(|a| *a == self.appearance).unwrap_or(0);
@@ -6057,13 +6697,7 @@ impl Setup {
         if self.kids_later {
             lines.push("Kids Mode needs games it can start. Set it up later in Settings › System › Kids mode.");
         }
-        if self.home_line.get().unwrap_or_else(|| {
-            let v = crate::first_game::told_on_last_page(&self.data_dir);
-            self.home_line.set(Some(v));
-            v
-        }) {
-            lines.push(crate::first_game::LAST_PAGE_LINE);
-        }
+        // What HOME does in a game is said once, on the last page ("You're all set"; Neon 26.11.: twice was too much).
         lines.push("Change the look any time in Settings › Look.");
         // Whole lines only, and none over the hint bar: the last ones give way on a short screen.
         let mut y = top;
@@ -6120,7 +6754,7 @@ impl Setup {
 
     /// The labels of the pill rows line up.
     fn label_w(&self, text: &mut Text) -> i32 {
-        ["Appearance", "Motion", "Animations", "Style", "Colours"].iter().map(|l| text.width(Face::Body, 24, l)).max().unwrap_or(0)
+        ["Appearance", "Motion", "Animations", "Style", "Colours", "Order"].iter().map(|l| text.width(Face::Body, 24, l)).max().unwrap_or(0)
     }
 
     /// The line under the Wi-Fi page's title and its colour. What is true now outranks an old note: a switch under way
@@ -6239,7 +6873,8 @@ impl Setup {
                     Some(WifiRow::Country) => ("Wi-Fi country".to_string(), self.country_value(), None),
                     Some(WifiRow::Zone) => ("Time zone".to_string(), self.zone_value(), None),
                     Some(WifiRow::Scan) => ("Scan again".to_string(), if self.scanning { "Scanning…".to_string() } else { String::new() }, None),
-                    Some(WifiRow::Continue) if self.entries.iter().any(|e| e.active) => ("Continue".to_string(), String::new(), None),
+                    // Online: on to your games, a step of the first start ("Next", not a game's "Continue").
+                    Some(WifiRow::Continue) if self.entries.iter().any(|e| e.active) => ("Next".to_string(), String::new(), None),
                     Some(WifiRow::Continue) | None => ("Continue offline".to_string(), String::new(), None),
                 },
             };
@@ -6379,20 +7014,27 @@ fn found_row(h: i32) -> i32 {
 /// with what the page changed put back, so it says Cancel (the Brick, 2026-11-07: no B on the bar, and B kept the layout).
 fn look_hints(settings: bool, below: bool) -> Vec<(&'static str, &'static str)> {
     match (settings, below) {
-        (true, false) => vec![("Left/Right", "Layout"), ("A", "Keep"), ("B", "Cancel")],
+        // Up/Down: the Order of Home's shelves, at the top right (`paint_order`).
+        (true, false) => vec![("Left/Right", "Layout"), ("Up/Down", "Order"), ("A", "Keep"), ("B", "Cancel")],
         (true, true) => vec![("Left/Right", "Change"), ("A", "Keep"), ("B", "Cancel")],
         // The first start: "How cozy should it be?" comes next.
-        (false, false) => vec![("Left/Right", "Layout"), ("A", "Continue"), ("B", "Back")],
-        (false, true) => vec![("Left/Right", "Change"), ("A", "Continue"), ("B", "Back")],
+        (false, false) => vec![("Left/Right", "Layout"), ("A", "Next"), ("B", "Back")],
+        (false, true) => vec![("Left/Right", "Change"), ("A", "Next"), ("B", "Back")],
     }
 }
 
 /// The focus of a page whose rows are pills, not list rows (the welcome, the look step): a bar in the margin beside the
 /// row from `top`, `h` high.
 fn focus_bar(c: &mut Canvas, top: i32, h: i32) {
-    crate::retro::pill(c, MARGIN - 28, top + 6, 8, h - 12, 4, pal().label);
+    focus_mark(c, top, h);
     // For the navigation explorer the focus is the whole row the bar stands beside.
     crate::nav_probe::focus(c, (MARGIN - 28, top, c.w - 2 * MARGIN + 28, h));
+}
+
+/// The bar of `focus_bar` without telling the navigation explorer where the focus is.
+fn focus_mark(c: &mut Canvas, top: i32, h: i32) {
+    // The text's colour: light on dark, dark on the light look's cream (Neon 26.11.: a white bar there was invisible).
+    crate::retro::pill(c, MARGIN - 28, top + 6, 8, h - 12, 4, pal().chalk);
 }
 
 /// The last step's first line: the games already on the card, or where they will show up (the first-day run,
@@ -6624,6 +7266,9 @@ fn pill_row(c: &mut Canvas, text: &mut Text, top: i32, label: &str, names: &[&st
 
 /// The Extras page's line about the picture downloads: where from, what is sent, and what Off does (the sizes
 /// are in docs/user/extras.md).
+/// Box art & downloads → ScreenScraper: what it brings, a guest's lot, and where an account comes from.
+const SCREENSCRAPER_GUEST: &str = "No account needed. Signing in (X) raises the daily limit.";
+const SCREENSCRAPER_ACCOUNT_NOTE: &str = "A free account from screenscraper.fr. Your password stays on this handheld.";
 const PICTURES_NOTE: &str = "Box art downloads free online: no account, only game titles sent. Off skips auto downloads.";
 
 /// The height of a slim row of pills (the look step's two), 40 px around Body 24.
@@ -7272,6 +7917,107 @@ mod tests {
         assert_eq!(s.at(), "welcome");
     }
 
+    /// A tap on the first target of `want` in the frame just painted, as the app turns it into presses (`app_touch`):
+    /// a key is that key, a row selects and a tap on the selected row is A. True when the first start ended.
+    fn tap(s: &mut Setup, want: crate::touch::Target) -> bool {
+        let mut px = vec![0u32; 1240 * 1080];
+        s.paint(&mut Canvas::new(&mut px, 1240, 1080), &mut Text::builtin());
+        assert!(s.takes_touch(), "{}: no touch", s.at());
+        let mut hits = crate::touch::HitMap::default();
+        s.register_touch(&mut hits);
+        let a = hits.targets().iter().find(|(_, t)| *t == want).map(|(a, _)| *a).unwrap_or_else(|| panic!("{}: no {want:?} in {:?}", s.at(), hits.targets()));
+        let done = match hits.tap((a.x + a.w / 2) as f32, (a.y + a.h / 2) as f32) {
+            crate::touch::TapAction::Press(b) => s.press(b),
+            crate::touch::TapAction::Activate => s.press(Button::East),
+            crate::touch::TapAction::Steps(n) => {
+                s.ways_steps(n);
+                false
+            }
+            other => panic!("{}: {want:?} did {other:?}", s.at()),
+        };
+        s.settle();
+        done
+    }
+
+    /// Android's "Your handheld" (0.8, 26.11.2026): after "Your games", inside its stage (no extra dot). The Home app row
+    /// asks Android on A and shows what Android answered; Continue goes on to the look, B back to your games. Without the
+    /// Home app row in the app the page is never shown. And with touch alone (no pad) every page of the first start goes
+    /// on to the shelf, also with no games at all. A child process: the profile is read once.
+    #[test]
+    fn android_your_handheld_asks_for_the_home_app_and_touch_alone_reaches_the_shelf() {
+        use crate::touch::Target;
+        if !crate::device::android_profile() {
+            let out = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "setup::tests::android_your_handheld_asks_for_the_home_app_and_touch_alone_reaches_the_shelf", "--nocapture"])
+                .env(crate::device::ANDROID_PROFILE_ENV, "1")
+                .output()
+                .unwrap();
+            let said = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+            assert!(out.status.success() && said.contains("1 passed"), "{said}");
+            return;
+        }
+        crate::android_first_start::set_facts(Some(crate::android_first_start::Facts { folders: Some(vec![]), can_read: true, bios: vec![] }));
+        crate::play_route::set_phone(crate::play_route::Phone::default());
+        // The pad: an empty library, "I'll add games later", then the page.
+        fresh("android-handheld");
+        let (s, _hw) = setup("android-handheld", "UTC", None);
+        let mut s = s.with_home_app(Some(false)).with_android_extras(true);
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "your games");
+        assert_eq!(s.found_rows()[..2], [FoundRow::More, FoundRow::Later], "no games: Add games… and later");
+        press(&mut s, &[Button::Down, Button::East]);
+        assert_eq!(s.at(), "your handheld");
+        assert_eq!(s.step_of(), Some((2, stage_count())), "the games' stage still: no dot more");
+        assert_eq!(stage_count(), 4);
+        press(&mut s, &[Button::East]);
+        assert!(s.take_home_app_ask(), "A on the Home app asks Android");
+        assert!(!s.take_home_app_ask(), "once");
+        assert_eq!(s.home_app, Some(false), "nothing set before Android's answer");
+        s.set_home_app(true);
+        assert_eq!(s.home_app, Some(true));
+        press(&mut s, &[Button::Down, Button::East]);
+        assert_eq!(s.at(), "look");
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "your handheld", "B on the look: the page before");
+        press(&mut s, &[Button::South]);
+        assert_eq!(s.at(), "your games");
+        // A restart there comes back to your games, one press on.
+        s.remember_step(false);
+        assert_eq!(std::fs::read_to_string(s.data_dir.join(RESUME_FILE)).unwrap(), "games");
+
+        // Without the Home app row (an app without it, Linux): Continue on your games goes on to the look.
+        fresh("android-handheld-none");
+        let (mut s, _hw) = setup("android-handheld-none", "UTC", None);
+        press(&mut s, &[Button::East, Button::Down, Button::East]);
+        assert_eq!(s.at(), "look", "no page without its row");
+
+        // Touch alone, no games: the welcome's A key, the Later row (a tap selects, a second does it), Continue, the
+        // look's and the cozy page's A keys: the shelf.
+        fresh("android-handheld-touch");
+        let (s, _hw) = setup("android-handheld-touch", "UTC", None);
+        let mut s = s.with_home_app(Some(false));
+        assert!(!tap(&mut s, Target::Button(Button::East)));
+        assert_eq!(s.at(), "your games");
+        assert!(!tap(&mut s, Target::Row(1)));
+        assert!(matches!(s.step, Step::Found { sel: 1 }), "the tap selects I'll add games later");
+        assert!(!tap(&mut s, Target::Row(1)));
+        assert_eq!(s.at(), "your handheld");
+        assert!(!tap(&mut s, Target::Row(0)));
+        assert!(s.take_home_app_ask(), "a tap on the selected Home app row asks Android");
+        assert!(!tap(&mut s, Target::Row(1)));
+        assert!(!tap(&mut s, Target::Row(1)));
+        assert_eq!(s.at(), "look");
+        assert!(!tap(&mut s, Target::Button(Button::East)));
+        assert_eq!(s.at(), "how cozy");
+        assert!(tap(&mut s, Target::Button(Button::East)), "Finish on the cozy page ends the first start: the shelf");
+        // And B as a key: back a page from your games.
+        fresh("android-handheld-touch-b");
+        let (mut s, _hw) = setup("android-handheld-touch-b", "UTC", None);
+        tap(&mut s, Target::Button(Button::East));
+        tap(&mut s, Target::Button(Button::South));
+        assert_eq!(s.at(), "welcome");
+    }
+
     /// Android's "Your games" (18.11.2026): a games folder of another app is a row A adds, the emulator apps found are one
     /// switch taken on leaving, a system with games and no app gets its app's official page, and a missing Saturn BIOS is
     /// said. Walked with the D-pad in the Handheld view's profile (a child process: the profile is read once).
@@ -7359,6 +8105,34 @@ mod tests {
         check(&mut s);
     }
 
+    /// Sol P1-1 (26.11.2026): on Android a finger alone gets through the first start. Before, only Add games took touch:
+    /// a phone or a handheld without a pad stood on the welcome for good. Every step's A pill is a target there; on the
+    /// Linux handhelds (pad first) the steps stay buttons only.
+    #[test]
+    fn on_android_every_first_start_step_can_be_tapped_on_through_its_hints() {
+        fresh("touch-steps");
+        let (mut s, _hw) = setup("touch-steps", "UTC", Some(IW_AT));
+        let mut seen = Vec::new();
+        for step in 0..3 {
+            let mut px = vec![0u32; 1240 * 1080];
+            s.paint(&mut Canvas::new(&mut px, 1240, 1080), &mut Text::builtin());
+            let mut android = crate::touch::HitMap::default();
+            s.register_touch_on(&mut android, true);
+            let buttons: Vec<Button> = android.targets().iter().filter_map(|(_, t)| match t { crate::touch::Target::Button(b) => Some(*b), _ => None }).collect();
+            assert!(buttons.contains(&Button::East), "{}: A is a target on Android: {buttons:?}", s.at());
+            if step == 0 {
+                s.paint(&mut Canvas::new(&mut px, 1240, 1080), &mut Text::builtin());
+                let mut linux = crate::touch::HitMap::default();
+                s.register_touch_on(&mut linux, false);
+                assert!(linux.targets().is_empty(), "the welcome stays buttons only on Linux");
+            }
+            seen.push(s.at());
+            // On, as the tap on that pill does it (`tap_button`: A pressed and let go).
+            press(&mut s, &[Button::East]);
+        }
+        assert!(seen.len() == 3 && seen[0] != seen[1], "{seen:?}");
+    }
+
     /// "How cozy should it be?" (19.11.2026): A on the look goes there, not to the shelf; it opens on Cozy (a new device),
     /// the D-pad reaches all three levels, A takes one and ends the first start, B and L1 go back to the look, START ends it
     /// with the switches as they are. Its dot is the last one, lit.
@@ -7400,6 +8174,67 @@ mod tests {
         s.enter_look();
         press(&mut s, &[Button::East]);
         assert!(matches!(s.step, Step::Cozy { sel: 1 }));
+    }
+
+    /// 0.8 (26.11.2026): where Box art & downloads has the ScreenScraper row, "Your games" has it under Box art, Off until
+    /// switched (the Settings row's own start); A opens the Real box pictures page and its START turns it on with the
+    /// kinds ticked for the app (`take_screenscraper`, `take_screenscraper_pictures`), and the first start goes on as before. A child process: the row's switch is read from the environment.
+    #[test]
+    fn your_games_offers_real_box_pictures_from_screenscraper_off_until_switched() {
+        if std::env::var_os("POCKETUI_SCREENSCRAPER_ROW").is_none() {
+            let out = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "setup::tests::your_games_offers_real_box_pictures_from_screenscraper_off_until_switched", "--nocapture"])
+                .env("POCKETUI_MOCK", "1")
+                .env("POCKETUI_SCREENSCRAPER_ROW", "1")
+                .output()
+                .unwrap();
+            let said = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+            assert!(out.status.success() && said.contains("1 passed"), "{said}");
+            return;
+        }
+        fresh("found-ss");
+        let (mut s, _hw) = setup("found-ss", "UTC", Some(IW_AT));
+        s.games = vec![("snes".into(), PathBuf::from("/storage/roms/snes/a.sfc"))];
+        at_wifi(&mut s);
+        wifi_continue(&mut s);
+        assert_eq!(s.found_rows(), [FoundRow::Continue, FoundRow::More, FoundRow::BoxArt, FoundRow::ScreenScraper]);
+        assert!(!s.screenscraper.on, "Off until switched");
+        // A opens the Real box pictures page, the same choice as the card after an update (owner 27.11.2026): each kind
+        // with a real example; nothing is taken before START.
+        press(&mut s, &[Button::Down, Button::Down, Button::Down, Button::East]);
+        assert!(matches!(&s.step, Step::Cards(c) if c.picker() && c.picks() == crate::screenscraper::Show::default()), "the picker, today's kinds ticked");
+        let mut px = vec![0u32; 1024 * 768];
+        s.paint(&mut Canvas::new(&mut px, 1024, 768), &mut Text::builtin());
+        // A finger picks a kind as on Your games' rows (Sol 27.11.2026: touch-only Android reached only the first).
+        assert!(s.row_taps() && s.stage_touch.borrow().list_state() == Some((0, 4)), "the four rows take a finger");
+        s.ways_steps(2);
+        assert!(matches!(&s.step, Step::Cards(c) if c.choice() == 2), "a tap on Real box backs selects it");
+        s.ways_steps(-2);
+        // B: Not now, back on the row, nothing taken.
+        press(&mut s, &[Button::South]);
+        assert!(matches!(s.step, Step::Found { sel: 3 }), "back on its row");
+        assert_eq!((s.take_screenscraper(), s.take_screenscraper_pictures()), (None, None), "Not now takes nothing");
+        // Real box backs ticked (the third row), then START: the kinds and On, for the app, once.
+        press(&mut s, &[Button::East, Button::Down, Button::Down, Button::East]);
+        assert_eq!(s.take_screenscraper(), None, "A on the page only ticks");
+        press(&mut s, &[Button::Start]);
+        assert_eq!(s.take_screenscraper(), None, "a START before the page's first frame is the last page's: not taken");
+        s.paint(&mut Canvas::new(&mut px, 1024, 768), &mut Text::builtin());
+        press(&mut s, &[Button::Start]);
+        assert_eq!(s.take_screenscraper_pictures(), Some(crate::screenscraper::Show { backs: true, ..Default::default() }), "the kinds ticked");
+        assert_eq!(s.take_screenscraper(), Some(true), "START switches it on, for the app");
+        assert_eq!(s.take_screenscraper(), None, "once");
+        assert_eq!(s.at(), "your games", "no sign-in here");
+        assert!(matches!(s.step, Step::Found { sel: 3 }));
+        // On: A switches it off at once.
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.take_screenscraper(), Some(false));
+        press(&mut s, &[Button::North]);
+        assert_eq!(s.at(), "your games", "X does nothing on this page");
+        let mut px = vec![0u32; 1024 * 768];
+        s.paint(&mut Canvas::new(&mut px, 1024, 768), &mut Text::builtin());
+        press(&mut s, &[Button::Up, Button::Up, Button::Up, Button::East]);
+        assert_eq!(s.at(), "look", "Next goes on");
     }
 
     /// Your games: Continue with games, Add more… opens the grid and B there comes back; without games the ways and
@@ -7535,7 +8370,7 @@ mod tests {
         crate::type_scale::set(TextSize::Normal);
     }
 
-    /// The look stage: Style, Colours and Appearance are rows under the layouts, Down reaches each, Left/Right change it;
+    /// The look stage: Order, Style, Colours and Appearance are rows under the layouts, Down reaches each, Left/Right change it;
     /// B goes back to your games.
     #[test]
     fn the_look_stage_has_style_and_b_goes_back_to_your_games() {
@@ -7544,14 +8379,15 @@ mod tests {
         let mut s = s.at_stage("look");
         press(&mut s, &[Button::Right]);
         assert_eq!(s.theme, 1);
-        press(&mut s, &[Button::Down, Button::Left]);
+        // Order first (0.8), then Style.
+        press(&mut s, &[Button::Down, Button::Down, Button::Left]);
         assert_eq!((s.take_font_step(), s.take_colours_step()), (Some(false), None), "Style: the app steps it");
         press(&mut s, &[Button::Down, Button::Right]);
         assert_eq!(s.take_colours_step(), Some(true), "Colours: the app steps them");
         press(&mut s, &[Button::Down, Button::Right, Button::Down]);
         assert_eq!(s.appearance(), Appearance::Light, "the last row, Appearance; Down stays on it");
         assert_eq!((s.at(), s.theme), ("look".to_string(), 1), "the rows leave the layout as it was");
-        press(&mut s, &[Button::Up, Button::Up, Button::Up]);
+        press(&mut s, &[Button::Up, Button::Up, Button::Up, Button::Up]);
         assert_eq!(s.look_row, 0, "Up: back to the layouts");
         paint_it(&mut s);
         // B goes back a stage, never ends the setup (first-start walk 2026-11-06: B, B from Kids Mode's first page was
@@ -8802,14 +9638,31 @@ mod tests {
             s.press(b);
             assert_eq!(s.previewing(), Some(want), "{b:?}");
         }
-        // Down is the row under the layouts, Style, as in every list.
-        press(&mut s, &[Button::Down, Button::Right]);
+        // Down is the row under the layouts (Order), then Style, as in every list.
+        press(&mut s, &[Button::Down, Button::Down, Button::Right]);
         assert_eq!(s.previewing(), Some(1), "Down and Left/Right on the row leave the layout alone");
         assert_eq!(s.take_font_step(), Some(true), "and change the style instead");
         assert!(!s.press(Button::East), "A keeps it and goes on to the cozy page, from any row");
         assert_eq!(s.at(), "how cozy");
         assert!(s.press(Button::East), "A there ends the setup");
         assert_eq!(s.theme, 1);
+    }
+
+    /// 0.8 (26.11.2026): the first start's look has Order right under the layouts, by console until changed; Right takes
+    /// by series at once (the app keeps it, `take_order`), and A still goes on from that row.
+    #[test]
+    fn the_first_start_look_orders_by_console_or_by_series() {
+        let (s, _) = setup("first-order", "UTC", None);
+        let mut s = s.at_stage("look");
+        assert_eq!(s.look_rows()[..2], [LookRow::Layout, LookRow::Order]);
+        assert_eq!(s.order, ShelfOrder::Console, "by console until changed");
+        press(&mut s, &[Button::Down, Button::Right]);
+        assert_eq!(s.take_order(), Some(ShelfOrder::Series));
+        assert_eq!(s.take_order(), None, "once");
+        press(&mut s, &[Button::Left]);
+        assert_eq!(s.take_order(), Some(ShelfOrder::Console));
+        press(&mut s, &[Button::East]);
+        assert_eq!(s.at(), "how cozy", "A on Order goes on");
     }
 
     #[test]
@@ -8821,16 +9674,22 @@ mod tests {
         let (s, _) = setup("look-rows", "UTC", None);
         let mut s = s.with_appearance(Appearance::Dark).only(Only::Look);
         let (theme, motion, animations) = (s.theme, s.motion(), s.animations_shown());
-        assert_eq!(s.look_rows(), &[LookRow::Layout], "the layouts and nothing under them");
-        press(&mut s, &[Button::Down, Button::Right]);
-        assert_eq!(s.look_row, 0, "Down stays on the layouts");
+        assert_eq!(s.look_rows(), &[LookRow::Layout, LookRow::Order], "the layouts and the order of Home's shelves under them");
+        press(&mut s, &[Button::Right, Button::Up, Button::Up]);
+        assert_eq!(s.look_row, 1, "Up reaches Order, at the top right, and stops there");
         assert_eq!((s.appearance(), s.motion(), s.animations_shown()), (Appearance::Dark, motion, animations), "nothing else changes");
         assert_eq!(s.previewing(), Some((theme + 1) % s.themes.len()), "Right: the next layout");
+        press(&mut s, &[Button::Right]);
+        assert_eq!(s.take_order(), Some(ShelfOrder::Series), "Right on Order: by series, used at once");
+        assert_eq!(s.take_order(), None, "once");
+        press(&mut s, &[Button::Down]);
+        assert_eq!(s.look_row, 0, "Down: back to the layouts");
         let bar = look_hints(true, false);
         assert!(bar.iter().any(|(k, _)| *k == "B"), "B goes back and says so: {bar:?}");
         assert!(bar.iter().any(|(k, _)| *k == "Left/Right"), "{bar:?}");
         assert!(s.press(Button::South), "B leaves the page");
         assert_eq!(s.take_profile_look(), Some(theme), "and puts the layout back");
+        assert_eq!(s.take_order(), Some(ShelfOrder::Console), "and the order");
         assert_eq!(s.take_animations(), None, "the page chose no animations");
         // A keeps what is shown.
         let (s, _) = setup("look-keep", "UTC", None);
@@ -8864,7 +9723,7 @@ mod tests {
             first.press(b);
         }
         assert_eq!((first.appearance(), first.at()), (before, "look".to_string()), "nothing hidden on keys");
-        press(&mut first, &[Button::Down, Button::Down, Button::Down, Button::Right]);
+        press(&mut first, &[Button::Down, Button::Down, Button::Down, Button::Down, Button::Right]);
         assert_ne!(first.appearance(), before, "Down to Appearance, Right");
     }
 
@@ -8989,8 +9848,8 @@ mod tests {
                     if shown.blurb.contains('…') {
                         failed.push(format!("{at}: its line cut: {}", shown.blurb));
                     }
-                    // Under 960 lines at larger text the menu's line only (the picture keeps its share).
-                    let mut want = vec![crate::first_game::LAST_PAGE_LINE];
+                    // Under 960 lines at larger text the picture keeps its share; HOME is said on the last page.
+                    let mut want = Vec::new();
                     if h >= 960 || size == TextSize::Normal {
                         want.push("Change the look any time in Settings › Look.");
                     }
@@ -9563,8 +10422,8 @@ mod hint_bars {
 
     #[test]
     fn the_look_steps_hints_name_the_keys_of_the_focused_row() {
-        assert_eq!(look_hints(false, false), [("Left/Right", "Layout"), ("A", "Continue"), ("B", "Back")]);
-        assert_eq!(look_hints(false, true), [("Left/Right", "Change"), ("A", "Continue"), ("B", "Back")], "Style, Colours, Appearance");
+        assert_eq!(look_hints(false, false), [("Left/Right", "Layout"), ("A", "Next"), ("B", "Back")]);
+        assert_eq!(look_hints(false, true), [("Left/Right", "Change"), ("A", "Next"), ("B", "Back")], "Style, Colours, Appearance");
         for below in [false, true] {
             assert!(look_hints(true, below).iter().all(|(_, label)| !label.is_empty()), "every key on Settings → Look has its word");
         }

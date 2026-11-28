@@ -27,8 +27,14 @@ the same Wi-Fi network.
   because their files can tell a launcher what to run, so copy those via File sharing or the SD card. Saves and BIOS files
   aren't accepted here either; copy BIOS files to `roms/bios` on your computer or via the
   [web companion](web-companion.md).
-- **Size limits:** cartridges up to 64 MB, DS 512 MB, arcade sets 1 GB, discs up to 9 GB, 3DS 4 GB. For huge disc
-  collections, copying straight to the SD card is faster.
+- **The right folder:** a game goes into its console's folder by its file type. A console with several folders
+  (Mega Drive and Genesis, SNES and Super Famicom) is one choice: the main folder, or the other one when only that is
+  on your card ([One console, several folders](systems.md#one-console-several-folders)).
+- **Size limits:** cartridges up to 64 MB, DS 512 MB, arcade sets 1 GB, discs up to 9 GB, 3DS 4 GB. Large discs go in
+  pieces, so they work from Android phones too, and a short Wi-Fi drop doesn't stop them. For huge disc collections,
+  copying straight to the SD card is faster.
+- **If something goes wrong:** the page says which: the connection broke off (that file is not kept, the others go on),
+  the phone could not read the file, or the Pocket closed the page or went to sleep (scan the new code).
 - **Safe disc sheets:** `.cue`, `.gdi` and `.m3u` files can only reference tracks inside their own folder; paths pointing
   outside are rejected.
 - **No accidental overwrites:** existing games are never replaced; your phone says "Already on the Pocket" and skips them.

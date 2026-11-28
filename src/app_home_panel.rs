@@ -62,6 +62,12 @@ impl App {
             Item::Sticker(id) => {
                 Some(home_panel::list(List::Sticker, tiles(self.curator.sticker_tops.get(&id)), self.describe(item).3, ready))
             }
+            // A series' first games, as a smart shelf's (`app_series`): a Zelda shelf shows Zelda's cases.
+            Item::Series(i) => {
+                // Each tile says what tells the game apart, not the series again ("Ocarina of Time", not "The Legend…").
+                let games = self.series_games(i).take(home_panel::MAX_COVERS).filter_map(|it| if let Item::Game(s, g) = it { self.game_tile(s, g).map(|t| self.series_tile(i, t, (s, g))) } else { None }).collect();
+                Some(home_panel::list(List::SmartShelf, games, self.describe(item).3, true))
+            }
             _ => None,
         }
     }
@@ -165,20 +171,18 @@ impl App {
         let step = pocket_ui::type_scale::line(24, 4);
         // Rows of room: console + two lines of name, or two lines of name, or (too small for two) the console alone.
         let rows = (h - 10) / step;
-        let lines = 2;
         let text = std::cell::RefCell::new(&mut self.text);
-        let shown = home_panel::title_lines(
+        // The name in the largest size that takes its first word, a long word broken after a hyphen (`tile_name`); the
+        // console alone only where nothing fits, never a word cut to "Ne…".
+        let named = home_panel::tile_name(
             &tile.title,
             w - 16,
-            lines,
-            &mut |s| text.borrow_mut().width(Face::Title, 24, s),
-            &mut |s, max| text.borrow_mut().fit(Face::Title, 24, s, max),
+            rows,
+            &mut |s, px| text.borrow_mut().width(Face::Title, px, s),
+            &mut |s, px, max| text.borrow_mut().fit(Face::Title, px, s, max),
         );
-        // A title plus its console must both fit. The first word cut to "Ne…" (a tile too narrow for it): the console alone. A long name that goes on past the
-        // second line ends in "…" at a word, as on the shelf.
-        let first = tile.title.split_whitespace().next().unwrap_or("");
-        let whole = rows > shown.len() as i32 && !shown.is_empty() && self.text.width(Face::Title, 24, first) <= w - 16;
-        let (words, face_px) = if whole { (shown, 24) } else { (vec![console.clone()], 24) };
+        let whole = named.is_some();
+        let (face_px, words) = named.unwrap_or_else(|| (24, vec![console.clone()]));
         let show_console = whole && words.iter().all(|l| *l != console);
         let block = words.len() as i32 * step + if show_console { step } else { 0 };
         let mut cy = y + (h - block) * 2 / 5 + step - 6;

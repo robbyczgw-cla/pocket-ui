@@ -354,6 +354,10 @@ Back and the Games tab close it. The selection on the Games page is kept (`posit
   the app …" and leaves the shelf. No moments or slots: Continue starts the app again. Tests:
   `tests/nav_explorer.rs` `an_android_game_marked_on_the_pad_stands_on_the_shelf_and_starts_its_app` (the journey) and
   `the_android_games_page_by_the_pad_in_every_language_and_its_empty_states`; `android_games::tests`.
+- **Android extras (26.11.2026).** Settings › System › **Android extras** (handheld view only, `device::hides_in`
+  "android_extras"): the ADB grant, Shizuku, root and the pause menu over other emulator apps, all opt-in. Levels, the
+  Java side (`Extras`, `ShizukuLink`, `ExtrasProvider`, `PadWatch` in the `:extras` process) and what depends on the
+  firmware: [ANDROID-EXTRAS.md](ANDROID-EXTRAS.md).
 - **Tests.** `android_02_tests::drawer` (in the gate): listing and suggestion, the mark and its shelf, start from it and
   after a restart, D-pad and touch reach on the Retroid screens, every empty state, icons, and text fit in EN/DE/ES.
   Java is checked on a handheld (see [Building and evidence](#building-and-evidence)).
@@ -436,8 +440,8 @@ or game loaded. Default variant order is explicit; editable user profiles and co
 | Profile | Package / Activity | Action and ROM contract | Validation |
 |---|---|---|---|
 | RetroArch | `com.retroarch.aarch64`, `com.retroarch`, `com.retroarch.ra32` / `com.retroarch.browser.retroactivity.RetroActivityFuture` | MAIN; `ROM=saf://<escaped tree>/<relative name>`, `LIBRETRO=<installed app dataDir>/cores/<core>_libretro_android.so`; prefix read grant for the selected tree | Emulator test described in status report; package/core variant must be checked separately |
-| ARMSX2 (first for PS2) | `com.armsx2/.Main` | VIEW; document URI as data. 2.9.3 boots it at once (`handleExternalLaunchIntent`), Close returns to pocket-ui (`ui.exitToLauncherExternal`, on by default) | Odin 2 Mini, 10.11.2026, ARMSX2 2.9.3 (GitHub release): straight into the game (a PS2 disc's intro), its menu's Close returned to pocket-ui |
-| NetherSX2 / AetherSX2 | `xyz.aethersx2.android/.EmulationActivity` | MAIN; `bootPath=<document URI>` | Recipe only (not installed: ARMSX2 is tried first) |
+| ARMSX2 (first for PS2) | `com.armsx2/.Main` (GitHub), then `come.nanodata.armsx2/com.armsx2.Main` (Google Play, 2.9.7: the same Main, VIEW with content and file data; RG556, 26.11.2026) | VIEW; document URI as data. 2.9.3 boots it at once (`handleExternalLaunchIntent`), Close returns to pocket-ui (`ui.exitToLauncherExternal`, on by default) | Odin 2 Mini, 10.11.2026, ARMSX2 2.9.3 (GitHub release): straight into the game (a PS2 disc's intro), its menu's Close returned to pocket-ui |
+| NetherSX2 / AetherSX2 | `xyz.aethersx2.android/.EmulationActivity` | MAIN; `bootPath=<document URI>` | Last for PS2. RG556 26.11.2026 (NetherSX2 v1.4-2953, a CHD over RomProvider's content URI): "no disc"; not shown to work, so both ARMSX2 builds come first |
 | Dolphin official | `org.dolphinemu.dolphinemu/.ui.main.MainActivity` | MAIN; the ClipData's URI (the read grant), `AutoStartFile=<document URI>` for old builds. 2603a's `StartupHandler` boots ClipData before data before extras | Odin 2 Mini, 10.11.2026, Dolphin 2603a (F-Droid): straight into the game, Exit Emulation returned to pocket-ui |
 | PPSSPP / Gold | `org.ppsspp.ppsspp` or `org.ppsspp.ppssppgold` / `org.ppsspp.ppsspp.PpssppActivity` | VIEW; document URI as data, octet-stream | Recipe only |
 | DuckStation | `com.github.stenzek.duckstation/.EmulationActivity` | MAIN; `bootPath=<document URI>` | Recipe only; legacy path-only builds excluded |
@@ -584,7 +588,8 @@ Android hardware rendering lives entirely in `src/platform/android_hw_render.rs`
 a separate GLES3 context, host framebuffer/depth/stencil, native-size frame capture and context teardown.
 `CoreSession` keeps all core calls on that context, including state operations, while Java's Activity
 context is restored before composition and lifecycle return. The core context tracks replaced window
-surfaces across rotation. Direct shared-texture composition can remove the current readback later.
+surfaces across rotation. Shared-texture composition uses GLES fences in both directions. CPU capture happens
+when a preview, screenshot or other CPU picture consumer asks for it.
 
 ### Main refresh (2026-10-30)
 

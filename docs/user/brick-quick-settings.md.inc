@@ -60,7 +60,8 @@ choose your brightness again in Quick settings.
   first; the next start opens it again.
 - **Held 6 seconds:** the Brick switches off, after the running game has written its save.
 - **Low battery.** At 5% a note says so; at 2% the Brick saves the running game and switches itself off, so the game is not lost
-  when the battery runs out. On the charger, none of this happens.
+  when the battery runs out. On the charger, none of this happens. The safeguard ignores a reading of 2% or less
+  if the battery still reads 3.70 V or higher.
 
 ### Sleep & power settings
 

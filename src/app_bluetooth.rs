@@ -569,7 +569,10 @@ impl App {
             (Face::Body, 26, 34)
         };
         for l in &lines {
-            for line in self.text.wrap(face, px, l, width) {
+            let wrapped = self.text.wrap(face, px, l, width);
+            // Lines of stacked Vietnamese marks stand taller (`Text::tall_extra`, 0 for Latin text).
+            let step = step + self.text.tall_extra(face, px, &wrapped);
+            for line in wrapped {
                 if y > y_end {
                     return;
                 }

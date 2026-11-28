@@ -85,15 +85,21 @@ no code is showing.**) for wrong, expired or inactive codes. Just generate a fre
 - **Shelves**: Favourites and Curator's smart shelves (rename, delete; make them on the
   Pocket with the Lens). A smart shelf lists its games in the order chosen for it on the Pocket. Deleting a shelf never deletes a game.
 - **Upload**:
-  - **Games** go into their system's folder, chosen by the file type (with a question when several systems take it).
-    A file the system does not take is refused, with the types it does take.
+  - **Games** go into their system's folder, chosen by the file type. A type that usually means one console goes there
+    (`.md` the Mega Drive, `.sfc` the SNES); other types several systems take (`.iso`, `.chd`, `.zip`) bring a
+    question. A console with several folders is one choice: its games go into the main folder (`megadrive`, `snes`,
+    `nes`, `pcengine`), or into the other one when only that is on the card ([One console, several
+    folders](systems.md#one-console-several-folders)). A file the system does not take is refused, with the types it
+    does take.
   - **BIOS files** go into `roms/bios` (NAOMI and Atomiswave files into `roms/bios/dc`). The page lists what the
     Pocket's own emulator still misses, and ticks it off after the upload.
   - **PortMaster files**: for each installed port that waits for your own game files, its instructions and a place to
     drop files or a whole folder. They go straight into the port's folder, `roms/ports/<port>/<folder>`, as with file
     sharing ([Box art & downloads](extras.md)); scripts and programs are refused.
-  - A file of the same name is only replaced after you say so. An upload that is cut off (the browser closed, the
-    network dropped) leaves nothing behind. At most 9 GB per game or port file and 128 MB per BIOS file, and at
+  - A file of the same name is only replaced after you say so. Large files go in pieces, so even multi-GB disc
+    images send from a phone's browser; a short network drop is bridged by sending the last piece again. An upload
+    that is cut off for good (the browser closed, the network gone) leaves nothing behind, and the page says whether
+    the connection dropped, the Pocket stopped answering or the browser could not read the file. At most 9 GB per game or port file and 128 MB per BIOS file, and at
     least 256 MB stay free on the SD card, even with several uploads at once. Scripts and programs (`.sh`, `.py`, `.so`,
     `.elf` and any file that starts like a Linux program) are never taken, and nothing goes into the `ports` folder,
     where the Pocket runs programs from.
@@ -105,8 +111,9 @@ no code is showing.**) for wrong, expired or inactive codes. Just generate a fre
     The Pocket names it after this game, so a save from another device or with another name fits (`Emerald.srm`
     becomes `Pokemon - Emerald Version (USA).srm`). Before it replaces a save or state, the page asks, and the one that
     was there goes into a saves backup first: Settings › System › Backup & reset lists it as **Before restore**, and
-    can put it back. Saves move well between devices; save states only work with the same emulator. Only while no game
-    runs: a game that starts during the upload ends it and nothing changes.
+    can put it back. Saves move well between devices; save states only work with the same emulator. Large states (up to
+    512 MB) send from Android phones too: they travel in pieces like game files. Only while no game runs: a game that
+    starts during the upload ends it and nothing changes.
   - The **Saves** tab: how many saves and states the Pocket has, **Download all saves (ZIP)** and **Saves and states
     (ZIP)**, with the folders of the SD card inside (`roms/gba/…`), so they can be copied back as they are. A
     download stops when a game starts.

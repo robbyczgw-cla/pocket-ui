@@ -29,14 +29,15 @@ scripts/device-check.sh --volume --family h700 --host root@<device-host> --out v
 
 `scripts/volume-device-check.py` takes the lock on the device (`flock -n`) for one bounded session, reads the real amixer TLV and
 kernel DAPM graph, then sets 10..100% without opening any PCM. It sums the serial DAC, Line Out and software
-residual gains, checking the DAC against the [H700 speaker curve](H700-VOLUME.md#gain-mute-and-routing)
-and both channels against `-73.08 + 1.16*DAC + 60*log10(percent/100)` dB, tolerance ±1.5 dB.
+residual gains, checking DAC raw 63 against the [H700 speaker curve](H700-VOLUME.md#gain-mute-and-routing)
+and both channels against `60*log10(percent/100)` dB, tolerance ±1.5 dB. The software residual must stay at
+or below unity. At 100%, Line Out must reach raw 31 and both software channels must reach unity.
 Unknown topology/TLV, open PCM, active streams, physical input or a battery below 20% abort the test. It restores the exact sink
 volume/mute, mixer controls and saved WirePlumber bytes, including after a curve failure. A changed output route
 is reported as an incomplete restore rather than forcing old speaker switches onto headphones or another output.
 No UI key, game, sound source, restart or background mute guard is used.
 
-The JSON records all ten levels, real topology, closed PCM, exact restoration and the running UI binary's SHA256.
+The JSON records the initial mixer and sink state, all ten levels, real topology, closed PCM, exact restoration and the running UI binary's SHA256.
 Before `scripts/release-check.sh`, set `POCKET_VOLUME_CHECK_EVIDENCE` to that JSON. The release check recomputes the
 gain and refuses incomplete/failed evidence, evidence older than 24 hours, or a different binary from
 `POCKET_STORAGE_BIN_DIR/pocket-ui`. Copy the evidence alongside the release binaries when the release check runs
@@ -317,6 +318,24 @@ combination of the four flags, revisions, failed-write retries, and old-publishe
 - [ ] Idle 3 min: screen goes dark (light sleep); any button wakes it. Then 2 more min: deep sleep.
 - [ ] Settings > System > Battery: the graph fills over time (needs ~20 min on battery for "time left").
 
+### Battery reading reset (RK817)
+
+R36S, R36XX and the other RK3326/RK3566 handhelds (ROCKNIX card or the dArkOS beta): Settings > System > Battery shows
+`X Reset reading`; other devices don't. X opens the question, B closes it with nothing changed. A writes the chip and
+switches off through Power off; only with the owner at the device (agents never switch a device off remotely). After
+the next cold start the kernel log says how the level was taken: ROCKNIX `rk817-charger` (no "columb counter invalid"
+line any more), dArkOS's BSP driver its first-power-on values. The shelf says once to charge it full.
+
+Without the power off, over ssh, the registers alone (as root; prints the state, writes nothing):
+
+    pocket-ui --rk817 show                  # rk817 i2c-0: sts=0x.. saved=<12 hex digits, 0x9d..0xa2>
+    pocket-ui --rk817 reset-only            # writes the reset, prints the state before it
+    pocket-ui --rk817 restore sts=0x.. saved=<12 hex digits>   # puts that state back and reads it back
+
+Run `reset-only` and `restore` in one command, with `i2cget -f -y 0 0x20 0x57` (and 0x9d..0xa2) before and after on
+ROCKNIX as an independent reading; the state before is also in the log line. Never leave a reset written on a device
+that may be switched off before the owner wants it (the next cold start would then take it).
+
 ## Buttons and display
 - [ ] Vol± on the shelf and in a game: volume changes, the bar shows it.
 - [ ] Start+Vol±: brightness. Select+Vol±: warmer/colder (works system-wide here: gamma ramps found).
@@ -470,3 +489,101 @@ Every line found now decides the emulator of that system or game (the log at sta
   on pocket-core again (and goes back to the fallback if it fails again, no loop).
 - [ ] Speed: `grep 'emulator choice: page' /var/log/pocket-ui.log` under 50 ms; `launch: game process started` after
   A unchanged against before (≈1 ms); first frame after boot unchanged.
+
+### Emulator selection before the game walk
+
+On the ROCKNIX test card, keep one representative game for every system under test. Use
+the release candidate's pocket-ui binary and the candidate card's files. Run
+`pocket-ui --check-emulator-routes expected.json` before pressing any game buttons.
+From the build host, the equivalent command also checks the binary's hash:
+`scripts/device-check.sh --emulator-routes HOST DEVICE_BINARY LOCAL_BINARY expected.json`.
+The check opens no window and runs no emulator. It reports the selected emulator, core
+and availability for the first game in each populated system. A missing or extra system,
+changed selection or missing executable fails the check.
+
+Keep the reviewed expectations with the test card's fixtures. To start a reference, run
+`pocket-ui --emulator-routes` and verify each row independently before saving its JSON as
+the expectation. The Mini V2's Xbox row should be `["hakux", "hakux", "ready"]` when the
+core is installed and the game uses the standard setting. Reuse the approved expectation
+for the next release. Keep the result with the Kern acceptance report and continue the
+per-system start walk only after the routes match.
+
+### Emulator routes of the release payloads
+
+The same probe also runs without hardware, against what a player downloads. Since 0.8 it is a
+release stage of its own, after the packages, the Brick card and the dArkOS port and before the
+release check's verdict: a wrong route is a red release.
+
+    scripts/release-routes.sh VERSION WORKDIR rocknix-install=ZIP rocknix-card=ZIP \
+      rocknix-ota=TAR.GZ rocknix-update=ZIP brick-card=ZIP brick-update=ZIP \
+      darkos-zip=ZIP darkos-update=ZIP
+
+`scripts/release-routes.json` is the expected table: for each device family (ROCKNIX SM8250,
+SM8550, SM4450, H700, RK3566, RK3326, the TrimUI Brick and pocket-ui beta for dArkOS on RK3566
+and RK3326) and each system the emulator, the core and where its file must come from: `payload`
+where pocket-ui promises to ship it (hakuX, bsnes-hd for Mode 7 HD, gpSP, DSperate, every Brick
+core), `base` for ROCKNIX's or dArkOS's own cores and start scripts, `unsupported` where
+pocket-ui refuses the system with a message. Every family includes Saturn, PICO-8, Ports, DOS
+(`pc`) and ScummVM. Change the table only together with the code or docs/user/systems.md that it
+follows.
+
+A documented exception is a route with a fourth element, its reason: green, and every run lists
+it once per family (`exception …` lines, `exceptions` in the receipt). On ROCKNIX these are
+Saturn without a BIOS (standalone YabaSanshiro with its HLE BIOS) and PICO-8 without the
+official player (FAKE-08 in pocket-core). Variants run the probe again with extra files: with a
+`saturn_bios.bin` Saturn must start in pocket-core (YabaSanshiro), with `pico8_64` in
+`roms/pico-8` PICO-8 must start ROCKNIX's `start_pico8.sh`, with Mode 7 HD chosen a Super
+Nintendo game must start bsnes-hd from the payload. ScummVM is tested with a `.scummvm` game
+(`games` in the table): ROCKNIX's `.sh` entries stay with standalone ScummVM by design.
+
+How it works: `scripts/release-routes.py bundle` reads the payloads where they were built (a few
+seconds; only listings, small files and the pocket-ui programs leave the machine) and lays them out
+as their installers do (install.sh, the card's seed, the updater, the Brick card and update with
+every asset its list names). The ROCKNIX base comes from a listing of the pinned system
+(`release-routes.py base`, once per pin: 20261001 for SM8250, SM8550 and H700, 20261101 for
+RK3326, RK3566 and SM4450; default folder `~/pocket-review/route-bases`). dArkOS's base is its
+root partition (btrfs), mounted read only from the image, with `roms.tar`, which dArkOS unpacks
+onto the card at its first start (the card's folders): `sudo release-routes.py base MOUNT
+dArkOS-RG353M-v08272026 DIR --source-file <image>.7z.001 --with-tar roms.tar`, the same for the
+RG351MP image (RK3326). The pin is v08272026, the images the port was written and container-tested
+against (docs/DARKOS.md). On the aarch64 build
+host, in its Linux container (`tools/air-build.sh -x`), `release-routes.py run` builds one tree
+per family and payload, puts one test game in every system's folder and runs the payload's own `pocket-ui --emulator-routes` in it with chroot,
+once per representative device (`POCKETUI_DEVICE`) and once more per variant. For dArkOS the tree
+does what the port's `start.sh` does first: the port under `/roms/ports`, its `storage` as
+`/storage`, the port's own `systems.py` turning dArkOS's ES list into the shelf (only the image's
+64-bit cores go to pocket-core; the base keeps each core's ELF head for that), the image's cores
+and the port's DSperate in one folder, and `POCKETUI_HOST=darkos`. A system that stays on dArkOS's
+own command is checked for that command's script and core in the image (filled in as
+`host-launch.py` fills it).
+For every route it then checks on its own that the core or start script is in the tree and came
+from the source the table names. hakuX is seeded from the release folder as pocket-ui does at its
+first start. A program without the probe (0.7.1 and older) is refused before anything runs.
+The trees run four at a time. 0.7.2 with a main build as the probe (25.11.2026): 1210 routes,
+42 s on the build host, about 20 s for the bundle; sending a fresh bundle (about 40 MB, mostly
+the two pocket-ui programs) to the build host took 4 minutes over the home line. Keep WORKDIR's
+name the same from release to release (for example `$OUT/release-routes`): the build host keeps
+its copy by that name, so the bases and unchanged files are not sent again (then 68 s in all).
+
+The receipt (`WORKDIR/target/air/release-routes-VERSION.json`) lists every route with expected,
+actual, file and source, and the documented exceptions.
+
+### Emulator routes on hardware
+
+For the release acceptance, after the offline check: on each reachable device one start of
+about 10 s per system the table gives to pocket-core, through the FIFO `play` (the same `launch`
+as the shelf), with a link to the smallest game of the device's folder under a new name below
+`.pocket-ui-test`: no save state, Continue moment or per-game choice decides the route, and saves
+go to the session's own folders. The launch line's emulator and core and the core pocket-core
+really loaded (`/proc/<pid>/maps`) are compared with the table, then the game quits without
+saving. RetroArch and standalone routes are not started here; their choice is the probe's.
+
+- Brick: `scripts/device-check.sh --journey --phase routes --out DIR --label NAME
+  [--systems gb,gba,...]` (the journey's isolated UI, lock, mute guard and exact restore of
+  mixer, speaker, lights and config; about 20 starts per session, so two sessions for the table).
+- ROCKNIX (Mini V2, the Kern test card with the release candidate; `play` needs 0.8 or newer):
+  `scripts/device-check.sh --device rpmini --routes scripts/release-routes.json --family
+  'ROCKNIX SM8250'`. The guard holds the volume at 0 every 0.5 s and the found volume and mute
+  go back at the end. Ask the lead first: its owner may be playing on it.
+
+Only a session that ends with the restore proven counts.

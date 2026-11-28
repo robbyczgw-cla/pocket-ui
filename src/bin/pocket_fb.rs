@@ -847,8 +847,9 @@ impl Server {
                 return;
             }
         }
-        // Another window: on the GPU its first picture crossfades from the one on show.
-        self.cross_next = self.gl.is_some() && !self.shown_by_picture && self.focus.is_some_and(|f| f != (key, surface));
+        // Another window: on the GPU its first picture crossfades from the one on show. Not from a native port (a PortMaster game,
+        // pocket-core's direct way): it drew on the screen itself, our texture still holds what was on show before it.
+        self.cross_next = self.gl.is_some() && !self.shown_by_picture && self.focus.is_some_and(|f| f != (key, surface) && f != NATIVE_PORT);
         self.focus = Some((key, surface));
         self.paint();
         self.send_frames(key, surface);
@@ -1003,9 +1004,11 @@ impl Server {
         }
     }
 
-    /// The window to show when `focus` is gone.
+    /// The window to show when `focus` is gone: pocket-ui's when it has one (a game or a native port that ended goes back to the
+    /// shelf, not to a game window's last picture), else any.
     fn fall_back(&mut self) {
-        let next = self.clients.iter().find_map(|(k, c)| c.surfaces.iter().find(|(_, s)| s.configured).map(|(id, _)| (*k, *id)));
+        let windows = || self.clients.iter().flat_map(|(k, c)| c.surfaces.iter().filter(|(_, s)| s.configured).map(move |(id, s)| (*k, *id, s.app_id.as_str())));
+        let next = windows().find(|w| w.2 == "pocket-ui").or_else(|| windows().next()).map(|(k, s, _)| (k, s));
         match next {
             Some((k, s)) => self.raise(k, s),
             None => self.focus = None,

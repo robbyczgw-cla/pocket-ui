@@ -273,6 +273,182 @@ fn a_game_that_starts_during_the_upload_ends_it_with_nothing_changed() {
     assert!(backups(&r).is_empty());
 }
 
+// --- putting back in pieces (`/api/saves/upload/start`, then `/api/upload/part` as for a game file) -------------
+// Chrome on Android breaks off a large file sent in one request (25.11.2026, game uploads); a PS2 or Wii state is
+// tens of MB. The pieces keep every rule of the whole put-back above.
+
+/// The `.upload` files anywhere under the card's ROMs folder: temporary files under way or left behind.
+fn leftovers(r: &Rig) -> Vec<std::path::PathBuf> {
+    walk(&r.root.join("roms")).into_iter().filter(|p| p.to_string_lossy().ends_with(".upload")).collect()
+}
+
+struct Saver<'a> {
+    r: &'a Rig,
+    cookie: String,
+    csrf: String,
+}
+
+impl Saver<'_> {
+    fn new(r: &Rig) -> Saver<'_> {
+        let (cookie, csrf) = r.pair();
+        Saver { r, cookie, csrf }
+    }
+
+    fn post(&self, path: &str, body: &[u8]) -> Answer {
+        self.r.req("POST", path, &[("Cookie", &self.cookie), ("X-CSRF-Token", &self.csrf)], body)
+    }
+
+    fn start(&self, q: &str, size: u64) -> Answer {
+        self.post(&format!("/api/saves/upload/start?{q}&size={size}"), b"")
+    }
+
+    fn id(&self, q: &str, size: u64) -> String {
+        let a = self.start(q, size);
+        assert_eq!(a.status, 200, "{}", String::from_utf8_lossy(&a.body));
+        a.json()["id"].as_str().expect("an id").to_string()
+    }
+
+    fn part(&self, id: &str, offset: usize, bytes: &[u8]) -> Answer {
+        self.post(&format!("/api/upload/part?id={id}&offset={offset}"), bytes)
+    }
+}
+
+#[test]
+fn a_save_put_back_in_pieces_takes_its_place_only_after_the_last_piece_with_the_old_one_backed_up() {
+    let r = rig("saves-pieces", false);
+    with_saves(&r);
+    let s = Saver::new(&r);
+    let id = game_id(&r);
+    let srm = r.root.join(format!("roms/gba/{GAME}.srm"));
+    assert_eq!(s.start(&format!("id={id}&name=Emerald.srm"), 12).status, 409, "never over a save without asking");
+    let up = s.id(&format!("id={id}&name=Emerald.srm&replace=1"), 12);
+    assert_eq!(leftovers(&r).len(), 1, "the temporary file, in the uploads folder");
+    let a = s.part(&up, 0, b"abcd");
+    assert_eq!((a.status, a.json()["received"].as_u64()), (200, Some(4)));
+    // At the wrong place, and the same piece again after its answer was lost: where the Pocket stands.
+    let a = s.part(&up, 8, b"ijkl");
+    assert_eq!((a.status, a.json()["received"].as_u64()), (416, Some(4)));
+    assert_eq!(s.part(&up, 0, b"abcd").status, 416);
+    assert_eq!(s.part(&up, 4, b"efgh").json()["received"], 8);
+    assert_eq!(std::fs::read(&srm).unwrap(), b"battery", "nothing changes before the last byte");
+    assert!(backups(&r).is_empty());
+    let done = s.part(&up, 8, b"ijkl");
+    assert_eq!(done.status, 200, "{}", String::from_utf8_lossy(&done.body));
+    let v = done.json();
+    assert_eq!((v["name"].as_str(), v["replaced"].as_bool(), v["game"].as_str()), (Some("Advance Wars (USA).srm"), Some(true), Some("Advance Wars")), "{v}");
+    assert!(v.get("received").is_none(), "the last answer is the put-back's: {v}");
+    assert_eq!(std::fs::read(&srm).unwrap(), b"abcdefghijkl", "named after this game");
+    let b = backups(&r);
+    assert_eq!(b.len(), 1, "the one replaced went into a saves backup");
+    assert_eq!(b[0].manifest.reason, crate::backup::Reason::BeforeRestore);
+    assert_eq!(std::fs::read(b[0].dir.join(&b[0].manifest.items[0].stored)).unwrap(), b"battery");
+    assert_eq!(std::fs::read(r.root.join("roms/gba/Other.srm")).unwrap(), b"not ours", "another game's save stays");
+    assert!(leftovers(&r).is_empty(), "nothing left behind: {:?}", leftovers(&r));
+    assert_eq!(s.part(&up, 12, b"x").status, 404, "done: the id is gone");
+}
+
+#[test]
+fn a_large_state_in_pieces_goes_to_the_games_states_folder() {
+    let r = rig("saves-pieces-state", false);
+    with_saves(&r);
+    let s = Saver::new(&r);
+    // 40 MB, as a PS2 state, in the page's 8 MB pieces.
+    let data: Vec<u8> = (0..40u32 << 20).map(|i| (i % 251) as u8).collect();
+    let piece = super::files::PIECE as usize;
+    let start = s.start(&format!("id={}&name=PS2%20game.state", game_id(&r)), data.len() as u64);
+    assert_eq!(start.status, 200, "{}", String::from_utf8_lossy(&start.body));
+    assert_eq!(start.json()["piece"], piece as u64);
+    let up = start.json()["id"].as_str().unwrap().to_string();
+    let mut last = None;
+    for at in (0..data.len()).step_by(piece) {
+        let a = s.part(&up, at, &data[at..(at + piece).min(data.len())]);
+        assert_eq!(a.status, 200, "{}", String::from_utf8_lossy(&a.body));
+        last = Some(a);
+    }
+    assert_eq!(last.unwrap().json()["name"], format!("{GAME}.state"));
+    assert!(std::fs::read(r.root.join(format!("roms/savestates/gba/{GAME}.state"))).unwrap() == data, "the whole state, byte for byte");
+    assert!(backups(&r).is_empty(), "a new state replaces nothing");
+    assert!(leftovers(&r).is_empty());
+}
+
+#[test]
+fn pieces_keep_the_rules_of_putting_back() {
+    let r = rig("saves-pieces-rules", false);
+    with_saves(&r);
+    let s = Saver::new(&r);
+    let id = game_id(&r);
+    // The game comes from the id: one not on the Pocket is refused; the name sent never picks another game's file.
+    assert_eq!(s.start("id=nope&name=x.srm", 4).status, 404);
+    assert_eq!(s.start(&format!("id={id}&name=evil.sh"), 4).status, 403, "only saves and states");
+    assert_eq!(s.start(&format!("id={id}&name=x.pstate.png"), 4).status, 403, "a state's picture is the Pocket's");
+    assert_eq!(s.start(&format!("id={id}&name=x.srm&replace=1"), saves::SAVE_MAX + 1).status, 413);
+    assert_eq!(s.start(&format!("id={id}&name=x.state"), saves::STATE_MAX + 1).status, 413);
+    assert_eq!(s.post(&format!("/api/saves/upload/start?id={id}&name=x.srm&replace=1"), b"").status, 411, "the size comes with the start");
+    assert_eq!(r.req("POST", &format!("/api/saves/upload/start?id={id}&name=x.srm&size=4"), &[("Cookie", s.cookie.as_str())], b"").status, 403, "the start needs the CSRF token");
+    assert!(leftovers(&r).is_empty());
+    let up = s.id(&format!("id={id}&name=Other.srm&replace=1"), 8);
+    assert_eq!(r.req("POST", &format!("/api/upload/part?id={up}&offset=0"), &[("Cookie", s.cookie.as_str())], b"abcd").status, 403, "a piece needs the token");
+    // Another browser can't add to it or cancel it.
+    let other = Saver::new(&r);
+    assert_eq!(other.part(&up, 0, b"abcd").status, 404);
+    other.post(&format!("/api/upload/cancel?id={up}"), b"");
+    assert_eq!(s.part(&up, 0, b"abcd").status, 200, "still there for its own browser");
+    // Past the announced size: over, nothing kept.
+    assert_eq!(s.part(&up, 4, b"efghij").status, 413);
+    assert_eq!(s.part(&up, 4, b"efgh").status, 404);
+    assert_eq!(std::fs::read(r.root.join(format!("roms/gba/{GAME}.srm"))).unwrap(), b"battery");
+    assert_eq!(std::fs::read(r.root.join("roms/gba/Other.srm")).unwrap(), b"not ours", "never the other game's save");
+    // Cancelled: its temporary file goes.
+    let up = s.id(&format!("id={id}&name=x.srm&replace=1"), 8);
+    assert_eq!(s.part(&up, 0, b"abcd").status, 200);
+    assert_eq!(s.post(&format!("/api/upload/cancel?id={up}"), b"").status, 200);
+    assert_eq!(s.part(&up, 4, b"efgh").status, 404);
+    // Started again for the same place: the one left goes, its room is free.
+    let left = s.id(&format!("id={id}&name=x.srm&replace=1"), 8);
+    assert_eq!(s.part(&left, 0, b"abcd").status, 200);
+    let again = s.id(&format!("id={id}&name=y.srm&replace=1"), 4);
+    assert_eq!(s.part(&left, 4, b"efgh").status, 404, "replaced by the same save started again");
+    assert_eq!(leftovers(&r).len(), 1);
+    assert_eq!(s.part(&again, 0, b"newr").status, 200);
+    assert_eq!(std::fs::read(r.root.join(format!("roms/gba/{GAME}.srm"))).unwrap(), b"newr");
+    assert!(leftovers(&r).is_empty(), "nothing left behind: {:?}", leftovers(&r));
+}
+
+#[test]
+fn a_game_that_starts_during_a_put_back_in_pieces_ends_it_with_nothing_changed() {
+    let r = rig("saves-pieces-game", false);
+    with_saves(&r);
+    let s = Saver::new(&r);
+    let id = game_id(&r);
+    let srm = r.root.join(format!("roms/gba/{GAME}.srm"));
+    let playing = |on: bool| r.shared.game_running.store(on, std::sync::atomic::Ordering::Relaxed);
+    let started = || r.shared.games_started.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    // Nothing starts while a game runs.
+    playing(true);
+    let a = s.start(&format!("id={id}&name=x.srm&replace=1"), 8);
+    assert_eq!((a.status, a.json()["playing"].as_bool()), (503, Some(true)));
+    playing(false);
+    // A game that runs when the next piece comes: ended, not paused (its saves are the game's now).
+    let up = s.id(&format!("id={id}&name=x.srm&replace=1"), 8);
+    assert_eq!(s.part(&up, 0, b"abcd").status, 200);
+    started();
+    playing(true);
+    let a = s.part(&up, 4, b"efgh");
+    assert_eq!(a.status, 500, "{}", String::from_utf8_lossy(&a.body));
+    assert_eq!(a.json()["error"], "A game started. Nothing was changed.");
+    playing(false);
+    assert_eq!(s.part(&up, 4, b"efgh").status, 404, "over");
+    // A game that started and ended between two pieces ends it too.
+    let up = s.id(&format!("id={id}&name=x.srm&replace=1"), 8);
+    assert_eq!(s.part(&up, 0, b"abcd").status, 200);
+    started();
+    let a = s.part(&up, 4, b"efgh");
+    assert_eq!(a.json()["error"], "A game started. Nothing was changed.", "{}", String::from_utf8_lossy(&a.body));
+    assert_eq!(std::fs::read(&srm).unwrap(), b"battery");
+    assert!(backups(&r).is_empty());
+    assert!(leftovers(&r).is_empty(), "nothing left behind: {:?}", leftovers(&r));
+}
+
 fn walk(dir: &Path) -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
     for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {

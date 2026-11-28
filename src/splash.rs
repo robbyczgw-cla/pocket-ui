@@ -327,6 +327,37 @@ impl Scene {
     }
 }
 
+/// The Android app's start picture (`android/res/drawable-nodpi/splash_mark.png`, the system splash's icon and the
+/// window's background before Android 12; docs/BOOT-SPLASH.md "On Android"): the boot screen's picture as the Mini V2's
+/// 1240x1080 shows it (cartridge four times its pixels, wordmark 67, the bar in its first colour), on black, cut to a
+/// square. Android draws the icon in a 240 dp square and shows only the circle two thirds as wide in its middle, so the
+/// square is half again the picture's diagonal: the whole picture stays in that circle, and at the Mini V2's 2.0 the
+/// 240 dp are about the square's own size. Returns the side and the pixels (0xRRGGBB, rows top down).
+pub fn android_icon() -> (u32, Vec<u32>) {
+    let (w, h) = ANDROID_ICON_FROM;
+    let mut scene = Scene::new(w, h);
+    let mut buf = vec![VOID; (w * h) as usize];
+    scene.paint(&mut Canvas::new(&mut buf, w, h), &Timeline::new(Motion::Off, false).look(Duration::ZERO));
+    let r = scene.picture_rect();
+    let diagonal = ((r.w * r.w + r.h * r.h) as f32).sqrt();
+    let side = ((diagonal * 1.5).ceil() as i32).min(h as i32);
+    let (cx, cy) = (r.x + r.w / 2, r.y + r.h / 2);
+    let (x0, y0) = (cx - side / 2, cy - side / 2);
+    let mut out = vec![VOID; (side * side) as usize];
+    for y in 0..side {
+        for x in 0..side {
+            let (sx, sy) = (x0 + x, y0 + y);
+            if (0..w as i32).contains(&sx) && (0..h as i32).contains(&sy) {
+                out[(y * side + x) as usize] = buf[(sy * w as i32 + sx) as usize];
+            }
+        }
+    }
+    (side as u32, out)
+}
+
+/// The screen the Android start picture is cut from: the Mini V2's.
+pub const ANDROID_ICON_FROM: (u32, u32) = (1240, 1080);
+
 /// The cartridge at (x, y), `k` screen pixels a pixel, faded towards black by `a` (0..=255).
 fn paint_mark(c: &mut Canvas, x: i32, y: i32, k: i32, a: u32) {
     let Some(s) = crate::ui_art::get(crate::ui_art::Art::Logo) else { return };
@@ -651,6 +682,31 @@ mod tests {
 
     fn red(c: u32) -> u32 {
         (c >> 16) & 0xff
+    }
+
+    #[test]
+    fn androids_start_picture_is_the_boot_screens_and_fits_the_splash_circle() {
+        let (side, px) = android_icon();
+        let lit: Vec<(i32, i32)> = (0..side as i32).flat_map(|y| (0..side as i32).map(move |x| (x, y))).filter(|&(x, y)| px[(y * side as i32 + x) as usize] != VOID).collect();
+        assert!(!lit.is_empty(), "the picture is there");
+        // Android shows the icon's middle circle, two thirds of the square wide: everything lit stays inside it.
+        let (c, r) = (side as f32 / 2.0, side as f32 / 3.0);
+        for &(x, y) in &lit {
+            let d = ((x as f32 + 0.5 - c).powi(2) + (y as f32 + 0.5 - c).powi(2)).sqrt();
+            assert!(d <= r, "({x},{y}) is {d:.0} px from the middle, the circle is {r:.0}");
+        }
+        // The bar in its first colour (NES) and the wordmark in Chalk, as the boot screen's first moment.
+        assert!(px.contains(&STRIPES[0]) && px.contains(&CHALK));
+        // The APK carries this very picture (regenerate: `cargo run --bin pocket-splash -- --android-icon android/res/drawable-nodpi/splash_mark.png`).
+        let shipped = include_bytes!("../android/res/drawable-nodpi/splash_mark.png");
+        let decoder = png::Decoder::new(std::io::Cursor::new(&shipped[..]));
+        let mut reader = decoder.read_info().expect("a PNG");
+        let mut data = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut data).expect("its pixels");
+        assert_eq!((info.width, info.height), (side, side), "splash_mark.png is out of date: regenerate it");
+        assert_eq!(info.color_type, png::ColorType::Rgb);
+        let differ = px.iter().zip(data.chunks(3)).filter(|(p, d)| [(**p >> 16) as u8, (**p >> 8) as u8, **p as u8] != d[..3]).count();
+        assert!(differ * 100 <= px.len(), "splash_mark.png is out of date ({differ} pixels differ): regenerate it");
     }
 
     #[test]

@@ -42,8 +42,8 @@ Deleting from the SD card asks twice to confirm.
 
 Press **START** on Home or inside any console list to open **Settings** (B returns; see [Settings](settings.md)). Tap
 **HOME** on the shelf for quick settings (brightness, volume, Wi-Fi, Bluetooth, sleep and power).
-On Anbernic H700 handhelds, the speaker gets more headroom above 25% and reaches ROCKNIX's speaker level
-at 100%. The saved volume percentage carries over, and the speaker gain ramps up when needed.
+On Anbernic H700 handhelds, the speaker is louder below 100%. The maximum stays the same. Your saved volume
+percentage carries over, and the speaker gain ramps up when needed.
 
 Each row includes a quick detail line:
 
@@ -193,6 +193,36 @@ the TV keeps its still picture. New pictures appear when you return.
 ### Easy
 
 One big game at a time, simple menus: see [Easy](easy.md).
+
+### Shelves by series
+
+Big fan of Zelda, Sonic or Final Fantasy? Set Settings → Look → Layout → **Order** to **By series** and Home lines up your
+games by series instead of by console, in Shelf, Split and Cabinet:
+
+- **One shelf per series**, sorted by name: every game of the series from every console, in release order. Each game
+  keeps its own console's case, so a Zelda shelf mixes NES cartridges, GameCube discs and DS cards. The covers beside a
+  series name each game by what tells it apart ("Ocarina of Time", "II: Adventure of Link", "2" for Sonic the Hedgehog 2;
+  the first game by its year).
+- **One of a kind** comes last: games that are not part of a series, and series with only one game on your Pocket. Once
+  a second game of a series arrives, the series gets its own shelf.
+- **A series' cover and spine** (Shelf look): the big cover of a series shows up to four of its games' boxes, slightly
+  fanned like cases on a table, its best-known games first; with one box art it shows that game's box, with none the
+  series' name. The spine shows the series' name. Only box art already on your card is used, nothing extra downloads
+  for the cover.
+- Sub-series stand with their big series where fans expect them (Super Mario Land on the Super Mario shelf), while Mario
+  Kart, Mario Party, Yoshi and Wario keep shelves of their own.
+- **A** opens a series' games, **X** its **series card** in place of the console page (in Shelf and Split; in Cabinet
+  the series are shelves, so X on a game opens the game's card, as with consoles there): who made it, since when, how many
+  main games it has and how many of them you own, its key games (the ones on your Pocket are marked), your games of it
+  with year and console, and for 58 of the biggest series a short history. A series without its own history still
+  shows its years, your games and their consoles; One of a kind says what it holds and, when none of your games share a
+  series yet, says so.
+
+The series come from pocket-ui's offline game data (Wikidata) and from the titles themselves ("Burnout 2" and
+"Burnout 3" are one series), so it works fully offline. Where [ScreenScraper](extras.md) already brought box art, the
+series and numbering it knows help too; nothing extra is downloaded for them. Right after the start, while Curator reads your library, Home shows your consoles for a
+moment, then switches to series. Easy and Kids Mode always stay by console. Hidden systems and games in Shelf space's
+crate stay off the series shelves as well.
 
 ## Console pages
 

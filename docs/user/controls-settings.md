@@ -107,6 +107,7 @@ Opened via START on any PortMaster card ([Performance & fan](performance.md#port
 | Button | What it does |
 |---|---|
 | L1 / R1 | Zoom graph window (3, 6, 12, 24 or 48 hours). |
+| X | Only with the RK817 power chip (R36S, RK3326, RK3566): asks whether to [reset the battery reading](settings-system.md#battery). There A resets it and switches off, B keeps everything. |
 | B | Return to Settings. |
 
 ### In the manual
@@ -126,7 +127,8 @@ Opened via START on any PortMaster card ([Performance & fan](performance.md#port
 | Your language | Up / Down pick Language, Big text or For a child; Left / Right change live ([Language](language.md)); A starts; Y jumps to Kids mode. |
 | Wi-Fi (first start) | Up / Down browse networks, Other network…, Wi-Fi country, Time zone, Scan again and Continue; A confirms; X rescans; B goes back. |
 | Time zone (first start) | Up / Down pick Looks right (Keep UTC) or Choose another…; A confirms; X chooses another; B goes back. |
-| Your games | Up / Down pick Continue, Add more… / Add games… / I'll add games later, and Box art (toggle with A or Left/Right); B goes back. |
+| Your games | Up / Down pick Continue, Add more… / Add games… / I'll add games later, and Box art (toggle with A or Left/Right); A on Real box pictures opens its page; B goes back. |
+| Real box pictures (first start, New in this version) | Up / Down pick a kind; A ticks or unticks it; START turns ScreenScraper on with the kinds ticked; B (Not now) leaves it off. |
 | How your games stand | Up / Down pick layouts, Style, Colours and Appearance; Left / Right cycle; A finishes straight onto your shelf; B goes back. |
 | Choose a look (Settings) | Up / Down pick layouts, Appearance, Motion and Game start animation; Left / Right cycle; A saves; B cancels. |
 | How you like to play (Settings) | Up / Down pick The shelf, Easy, Enthusiast or Choose for yourself; A applies; B goes back. |

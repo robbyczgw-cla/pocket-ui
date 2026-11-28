@@ -30,16 +30,25 @@ impl App {
         if self.notice_painted || self.running.is_some() || self.sleep.overlay().is_some() {
             return;
         }
-        if let Some(n) = &self.notice {
-            self.notice_painted = n.paint(c, &mut self.text) > 0;
-        }
+        self.paint_shelf_notice(c);
+    }
+
+    /// The file-access sheet takes the whole screen. A pending notice waits for the shelf.
+    pub(crate) fn paint_shelf_notice(&mut self, c: &mut Canvas) -> i32 {
+        let bottom = self.notice.as_ref().filter(|_| !self.android_files_ask).map_or(0, |n| n.paint(c, &mut self.text));
+        self.notice_painted = bottom > 0;
+        bottom
+    }
+
+    fn notice_can_close(&self) -> bool {
+        !self.android_files_ask && self.notice_painted && self.notice.is_some() && self.running.is_none()
     }
 
     /// A or B closes a notice that is on the screen, and nothing else happens with that press. Any other button
     /// works as usual and leaves the notice up.
     pub(crate) fn close_notice_pad(&mut self, pe: &PadEvent) -> bool {
         let PadEvent::Button { button, pressed: true, .. } = pe else { return false };
-        if !(self.notice_painted && self.notice.is_some() && self.running.is_none()) || !(*button == CONFIRM || *button == CANCEL) {
+        if !self.notice_can_close() || !(*button == CONFIRM || *button == CANCEL) {
             return false;
         }
         // Android's installer at work (`app_update_hint`): B stops it, A leaves the card up (it is what is going on).
@@ -63,7 +72,7 @@ impl App {
 
     /// A tap closes it, and the finger does nothing else.
     pub(crate) fn close_notice_touch(&mut self, t: &TouchEvent) -> bool {
-        if t.phase != Phase::Down || !(self.notice_painted && self.notice.is_some() && self.running.is_none()) {
+        if t.phase != Phase::Down || !self.notice_can_close() {
             return false;
         }
         self.touch_rec.reset();

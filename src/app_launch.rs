@@ -10,7 +10,9 @@ use super::{App, Notice, Player, Run, UserEvent};
 enum Outcome {
     Missing(String),
     Empty(String),
-    Ready { at: frozen::AtLaunch, wait: bool, resumable: bool, preview: bool, env: Vec<(&'static str, String)> },
+    /// `note`: the start plays with something else than chosen or usual, and says so (`swap_note`).
+    /// `controls`: a standalone emulator's saved controls for another controller were set aside (`stale_controls`).
+    Ready { at: frozen::AtLaunch, wait: bool, resumable: bool, preview: bool, env: Vec<(&'static str, String)>, note: Option<String>, controls: Option<String> },
 }
 
 pub(crate) struct Pending {
@@ -32,10 +34,16 @@ impl App {
         }
         // PortMaster's missing-files page uses its own cached installation state and no insertion scene.
         if matches!(system.as_str(), "ports") && !pocket_ui::device::darkos_port() && self.port_needs_files(&path) { return; }
-        let Some(sys) = self.systems.iter().find(|s| s.name == system) else { return };
+        // A stored id ("genesis" in Recent) finds the shelf it is on now; the game starts as its folder's system
+        // (`region_pairs`: `genesis/` on the merged Mega Drive shelf is `-P genesis`, its saves and states its own).
+        let Some(sys) = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system)) else { return };
+        let system = sys.own_id(&path).to_string();
         // Android (a phone, `play_route`): our player is always there, it is the APK's.
         let host = std::path::Path::new(super::host_bin()).exists() || pocket_ui::play_route::phone().is_some();
-        let (emulator, core) = self.route(sys, Some(&path), host);
+        // The route, and a saved choice it had to pass over: said at the start, never kept quiet (`swap_note`).
+        let (resolved, dropped) = self.resolve_noting(sys, &path, host);
+        let swap = (resolved.from, dropped.map(|d| pocket_ui::swap_note::dropped(&d, &resolved.runner)));
+        let (emulator, core) = (resolved.runner.emulator, resolved.runner.core);
         // Android's handheld view: a core to download first, or no app for the system, is told here instead of started.
         if self.phone_prelaunch(&system, &name, &path) { return; }
         // Our own player on Android stays pocket-core's route (hosted), as on Linux (Lead, 13.11.2026: the ritual first): the
@@ -53,7 +61,10 @@ impl App {
             mark: self.recents.list.iter().find(|r| r.path == path).and_then(|r| r.frozen.clone()) };
         // Capture names in memory; hidden twins may need directory/config reads, which belong on the worker too.
         let same_stem = |p: &std::path::Path| p != path && p.file_stem() == path.file_stem();
-        let shown_games: Vec<_> = self.systems.iter().filter(|s| s.name == system).flat_map(|s| &s.games)
+        // Twins share a states folder: on a merged shelf only the games of the same folder's system are.
+        let own: &str = &system;
+        let shown_games: Vec<_> = self.systems.iter().filter(|s| pocket_ui::region_pairs::same_shelf(&s.name, own))
+            .flat_map(|s| s.games.iter().filter(move |g| s.own_id(&g.path) == own))
             .filter(|g| same_stem(&g.path)).map(|g| g.path.clone()).collect();
         let hidden_games: Vec<_> = self.library.hidden_games().filter(|p| same_stem(p)).map(std::path::Path::to_path_buf).collect();
         let recent = self.recents.list.clone();
@@ -119,7 +130,7 @@ impl App {
                 drop(discard);
                 pocket_ui::heap_trim::trim_now();
             }
-            let prepared = prepare(&name, &game, &data, kids, pixel, shared(), shown, drains, java.as_deref(), romm.as_deref(), fan);
+            let prepared = prepare(&name, &game, &data, kids, pixel, shared(), shown, drains, java.as_deref(), romm.as_deref(), swap, fan);
             let _ = tx.send(prepared);
             let _ = proxy.send_event(UserEvent::LaunchPrepared);
         });
@@ -151,7 +162,7 @@ impl App {
         self.romm.get_mut().fetch = None;
         let Some(p) = self.pending_launch.take() else { return };
         match outcome {
-            Outcome::Ready { at, wait, resumable, preview, env } => self.launch_prepared(p, at, wait, resumable, preview, env),
+            Outcome::Ready { at, wait, resumable, preview, env, note, controls } => self.launch_prepared(p, at, wait, resumable, preview, env, note, controls),
             outcome => {
                 pocket_ui::covers::set_game_on(self.running.is_some());
                 // A start that never began: how far its animation had got, for the way back out (`begin_failed_start`).
@@ -194,7 +205,8 @@ pub(crate) static TEST_PREPARE_RELEASED: std::sync::atomic::AtomicBool = std::sy
 pub(crate) static TEST_PREPARED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, pixel: bool,
-    shared: bool, shown: bool, drains: Vec<i32>, java: Option<&pocket_ui::j2me_java::Fetch>, romm: Option<&super::app_romm::RommFetch>, fan: impl FnOnce(bool) -> pocket_ui::perf_fan::FanKeeper) -> (Outcome, pocket_ui::perf_fan::FanKeeper) {
+    shared: bool, shown: bool, drains: Vec<i32>, java: Option<&pocket_ui::j2me_java::Fetch>, romm: Option<&super::app_romm::RommFetch>,
+    swap: (pocket_ui::emu_choice::From, Option<String>), fan: impl FnOnce(bool) -> pocket_ui::perf_fan::FanKeeper) -> (Outcome, pocket_ui::perf_fan::FanKeeper) {
     pocket_ui::trace::step("launch preparation begin");
     if pocket_ui::proc::mock() {
         if let Some(ms) = std::env::var("POCKETUI_TEST_PREPARE_MS").ok().and_then(|s| s.parse::<u64>().ok()) {
@@ -211,13 +223,6 @@ fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, 
     }
     let hosted = Player::of(&game.system, &game.emulator, &game.core) == Player::Hosted;
     let (system, path, emulator, core) = (&game.system, &game.path, &game.emulator, &game.core);
-    #[cfg(target_os = "linux")]
-    if system == "xbox" && !pocket_ui::proc::mock() && !pocket_ui::hakux::supported(pocket_ui::device::current()) {
-        return (Outcome::Empty("Xbox games need a stronger handheld, like the Retroid Pocket 5 or Mini V2.".into()), fan(false));
-    }
-    if emulator == "hakux" && !pocket_ui::proc::mock() && !pocket_ui::hakux::installed() {
-        return (Outcome::Empty("hakuX is missing. Install a pocket-ui update to play Xbox games.".into()), fan(false));
-    }
     // A RomM game's first start: its download, unless it is on the card (`app_romm`). What went wrong is the start's note.
     if let Some(r) = romm {
         if let Err(f) = r.run(path) { return (Outcome::Empty(f.words()), fan(false)); }
@@ -225,6 +230,25 @@ fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, 
     if let Some(msg) = pocket_ui::library_cache::missing_game(name, path) { return (Outcome::Missing(msg), fan(false)); }
     if let Some(msg) = pocket_ui::library_cache::empty_game(name, path) { return (Outcome::Empty(msg), fan(false)); }
     pocket_ui::trace::step("launch files checked");
+    #[cfg(target_os = "linux")]
+    if !pocket_ui::proc::mock() {
+        let runner = pocket_ui::emu_choice::Runner::new(emulator, core);
+        if let Some(message) = super::app_emu_choice::rocknix_problem(&runner, system) {
+            return (Outcome::Empty(message), fan(false));
+        }
+    }
+    // What plays instead of the chosen or usual emulator, said at the start (`swap_note`): the saved choice the resolver
+    // passed over, else the platform's own swap (Saturn's BIOS, PICO-8, H700 gpSP, Mode 7 HD).
+    let (from, dropped) = swap;
+    #[cfg(all(target_os = "linux", not(target_os = "android")))]
+    let note = dropped.or_else(|| platform_note(system, path, emulator, core, from, data));
+    #[cfg(not(all(target_os = "linux", not(target_os = "android"))))]
+    let note = { let _ = from; dropped };
+    // The official PICO-8: an empty aarch64 folder would send start_pico8.sh to a program that isn't there (`hostsys`).
+    #[cfg(target_os = "linux")]
+    if system == "pico-8" && emulator == "pico-8" && !pocket_ui::proc::mock() {
+        if let Some(roms) = pocket_ui::hostsys::bios_dir().parent() { pocket_ui::hostsys::pico8_tidy(roms); }
+    }
     if let Some(fetch) = java {
         println!("j2me: loading Java before {}", path.display());
         if let Err(e) = pocket_ui::j2me_java::load(&pocket_ui::j2me_java::Places::here(), fetch) {
@@ -263,6 +287,11 @@ fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, 
     pocket_ui::dpad_stick_rocknix::before_start(system, core, path);
     // Phone games at their own screen size, filling the screen (`j2me_size`).
     pocket_ui::j2me_size::before_start(system, core, path);
+    // Saved controls of YabaSanshiro or Azahar for a controller this game won't get: ROCKNIX writes fresh ones (`stale_controls`).
+    #[cfg(all(target_os = "linux", not(target_os = "android")))]
+    let controls = (!pocket_ui::proc::mock() && !pocket_ui::device::darkos_port()).then(|| pocket_ui::stale_controls::before_start(system, emulator)).flatten();
+    #[cfg(not(all(target_os = "linux", not(target_os = "android"))))]
+    let controls = None;
     standalone::set_kids(kids);
     standalone::launch(system, emulator, core, path, data);
     pocket_ui::trace::step("launch standalone prepared");
@@ -271,5 +300,22 @@ fn prepare(name: &str, game: &frozen::Game, data: &std::path::Path, kids: bool, 
     let env = emu_settings::launch_env(system, path);
     pocket_ui::trace::step("launch environment ready");
     pocket_ui::on_start::note_started(data, path);
-    (Outcome::Ready { at, wait, resumable, preview, env }, keeper)
+    (Outcome::Ready { at, wait, resumable, preview, env, note, controls }, keeper)
+}
+
+/// The platform's swap for this start (`swap_note::platform`), read on the preparation's thread (a stat or two; the
+/// game's settings file only for a Super Nintendo game on a handheld with Mode 7 HD).
+#[cfg(all(target_os = "linux", not(target_os = "android")))]
+fn platform_note(system: &str, path: &std::path::Path, emulator: &str, core: &str, from: pocket_ui::emu_choice::From, data: &std::path::Path) -> Option<String> {
+    let bios = pocket_ui::hostsys::bios_dir();
+    let h700 = pocket_ui::device::current().model.is_some_and(|m| m.h700_class());
+    let mode7 = || pocket_ui::mode7_hd::chosen_without_core(data, system, path);
+    let here = pocket_ui::swap_note::Here {
+        bios_dir: &bios,
+        h700,
+        gpsp_bundled: h700 && pocket_ui::h700_gba::bundled_path().is_file(),
+        pico8_launcher: std::path::Path::new("/usr/bin/start_pico8.sh").is_file() || std::env::var_os("POCKETUI_TEST_PICO8_LAUNCHER").is_some(),
+        mode7_without_core: &mode7,
+    };
+    pocket_ui::swap_note::platform(system, &pocket_ui::emu_choice::Runner::new(emulator, core), from, &here)
 }

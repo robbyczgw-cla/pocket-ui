@@ -86,6 +86,9 @@ pub struct Text {
     /// Ideographs and kana from the Chinese font files pocket-ui ships (`text_fallback::cjk`): false only in tests of a
     /// card without them (`without_own_cjk`).
     own_cjk: bool,
+    /// The interface is Japanese: ideographs and kana in their Japanese forms (`text_fallback::cjk_ja`); `sync` drops the
+    /// glyphs drawn in the other forms when the language changes.
+    cjk_ja: bool,
     /// Not tried yet; tried: the font and its fit to the title face and the body face, or `None` without one.
     fallback: Option<Option<(Arc<Fallback>, [Fit; 2])>>,
     /// The glyphs a thread draws ahead of time (`prewarm`), taken in at the first glyph the cache lacks.
@@ -255,15 +258,16 @@ fn fallback_glyph(fallback: &mut Option<Option<(Arc<Fallback>, [Fit; 2])>>, path
 /// capitals (one pixel next to Departure Mono's eight-pixel capitals). Any other face gets Noto Sans KR or SC fitted like
 /// the system's font (`fits`: its ideographs as high as the capitals and a sixth, centred on them, as bold as the face).
 #[allow(clippy::too_many_arguments)]
-fn shipped_glyph(font: &Font, scale: f32, grid: f32, tight: Option<u32>, step: u32, title: &Font, body: &Font, scales: [f32; 2], slot: usize, px: u32, ch: char, own_cjk: bool) -> Option<Glyph> {
-    use crate::text_fallback::{cjk, cjk_has, korean, korean_has, CJK_PIXEL_DROP, KOREAN_PIXEL_ROWS};
+fn shipped_glyph(font: &Font, scale: f32, grid: f32, tight: Option<u32>, step: u32, title: &Font, body: &Font, scales: [f32; 2], slot: usize, px: u32, ch: char, own_cjk: bool, ja: bool) -> Option<Glyph> {
+    use crate::text_fallback::{cjk_font, cjk_has, korean, korean_has, CJK_PIXEL_DROP, KOREAN_PIXEL_ROWS};
     let korean_letter = korean_has(ch);
     if !korean_letter && !(own_cjk && cjk_has(ch)) {
         return None;
     }
-    let sans = if korean_letter { None } else { Some(cjk(false)?) };
+    // In a Japanese interface the Japanese letter forms (`ja`), else the Chinese ones.
+    let sans = if korean_letter { None } else { Some(cjk_font(false, ja, ch)?) };
     if grid > 0.0 {
-        let pixel = if korean_letter { None } else { cjk(true).filter(|f| f.has(ch)) };
+        let pixel = if korean_letter { None } else { cjk_font(true, ja, ch).filter(|f| f.has(ch)) };
         if korean_letter || pixel.is_some() {
             let sized = px as f32 * scale;
             let sized = match tight {
@@ -342,6 +346,12 @@ fn words(s: &str) -> impl Iterator<Item = &str> {
     s.split(|c: char| c.is_whitespace() && c != '\u{a0}' && c != '\u{202f}').filter(|w| !w.is_empty())
 }
 
+/// Vietnamese letters with a stacked mark or a hook above (the Latin Extended Additional block's vowels, U+1EA0-U+1EF9):
+/// taller than a capital with one accent.
+fn stacked_marks(ch: char) -> bool {
+    matches!(ch as u32, 0x1EA0..=0x1EF9)
+}
+
 /// Where `wrap` may end a line in `s`: each unit with what goes before it when it follows another on the same line.
 /// Between words, a space between two (`words`); inside a word of Chinese or Japanese, which have no spaces, before and
 /// after every ideograph and kana ("" between), kept with the marks that must not start a line (。，、」） and the small
@@ -408,6 +418,7 @@ impl Text {
             more_bytes: 0,
             fallback_path,
             own_cjk: true,
+            cjk_ja: false,
             fallback: None,
             warm: None,
             warm_names: None,
@@ -456,9 +467,17 @@ impl Text {
     /// changed the faces are swapped and everything drawn with the old ones dropped. The faces of a style are parsed
     /// the first time it is used (`FontStyle::fitted`), not here per frame. A store theme's faces stay.
     fn sync(&mut self) {
+        // Japanese letter forms in a Japanese interface: the ideographs drawn in the other forms go.
+        let ja = crate::i18n::current() == crate::i18n::Lang::Ja;
+        if ja != self.cjk_ja {
+            self.cjk_ja = ja;
+            self.drop_fallback_glyphs();
+            self.covered.clear();
+            self.folded.clear();
+        }
         let want = self.pinned.unwrap_or_else(font_style::get);
         // Retro's letters matter only in Retro: another style keeps its faces when they change.
-        let letters = if want == FontStyle::Retro { font_style::retro_letters() } else { self.letters };
+        let letters = if want == FontStyle::Retro { font_style::effective_letters() } else { self.letters };
         // A face sized in screen pixels (Departure Mono) is drawn anew when the canvas is shown at another scale.
         let step = if self.tight.iter().any(|t| *t) || want == FontStyle::Retro { crate::scaled_layout::step() } else { self.step };
         if want == self.style && letters == self.letters && step == self.step {
@@ -543,7 +562,7 @@ impl Text {
             self.take_warm();
         }
         // One lookup for a glyph in the cache, as before the fallback font; the fields apart for the one that isn't.
-        let Text { cache, title, body, scale, grid, lcd, tight, step, base, fallback_path, fallback, more, more_bytes, drawn, own_cjk, .. } = self;
+        let Text { cache, title, body, scale, grid, lcd, tight, step, base, fallback_path, fallback, more, more_bytes, drawn, own_cjk, cjk_ja, .. } = self;
         cache.entry(key).or_insert_with(|| {
             *drawn += 1;
             let (font, k, g, l, n) = match face {
@@ -557,7 +576,7 @@ impl Text {
             }
             // A letter the face lacks: Korean or Chinese from the fonts pocket-ui ships, else the system's CJK font's, if it has one.
             if font.lookup_glyph_index(ch) == 0 && ch != '?' {
-                let korean = shipped_glyph(font, k, g, n, *step, title, body, *scale, face.slot(), px, ch, *own_cjk);
+                let korean = shipped_glyph(font, k, g, n, *step, title, body, *scale, face.slot(), px, ch, *own_cjk, *cjk_ja);
                 if let Some(glyph) = korean.or_else(|| fallback_glyph(fallback, fallback_path.as_deref(), title, body, *scale, face, px, ch)) {
                     *more_bytes += glyph_bytes(&glyph);
                     more.push(key);
@@ -676,7 +695,7 @@ impl Text {
             }
         }
         let path = self.fallback_path.clone();
-        let own_cjk = self.own_cjk;
+        let (own_cjk, cjk_ja) = (self.own_cjk, self.cjk_ja);
         let names: Vec<String> = names.into_iter().filter(|n| !n.is_ascii()).map(str::to_string).collect();
         // Without the system's CJK font only names with letters of the shipped fonts have any to draw ahead (`shipped_glyph`).
         if names.is_empty() || path.is_none() && !names.iter().any(|n| n.chars().any(|c| crate::text_fallback::korean_has(c) || own_cjk && crate::text_fallback::cjk_has(c))) {
@@ -701,7 +720,7 @@ impl Text {
                 let (main, i) = if face == Face::Title { (&title, 0) } else { (&body, 1) };
                 for &ch in letters.iter().filter(|&&ch| main.lookup_glyph_index(ch) == 0) {
                     // As `glyph` draws it: Korean and Chinese from the shipped fonts, the rest from the system's.
-                    let korean = shipped_glyph(main, scale[i], grid[i], tight[i].then_some(step), step, &title, &body, scale, i, px, ch, own_cjk);
+                    let korean = shipped_glyph(main, scale[i], grid[i], tight[i].then_some(step), step, &title, &body, scale, i, px, ch, own_cjk, cjk_ja);
                     if let Some(glyph) = korean.or_else(|| font.as_ref().and_then(|(font, fits)| font.raster(ch, px, fits[i]))) {
                         out.push(((face, px, ch), glyph));
                     }
@@ -890,8 +909,9 @@ impl Text {
         self.width_raw(face, px, s)
     }
 
-    /// How far `s`'s Korean, Chinese and Japanese letters reach above those of Latin text ("Hd") at the same size, in
-    /// pixels; 0 for a string without them. Hangul and ideographs stand taller than a capital: a line placed close under
+    /// How far `s`'s Korean, Chinese and Japanese letters, and Vietnamese ones with two marks or a hook (ấ, Ắ, ả), reach
+    /// above those of Latin text ("Hd") at the same size, in pixels; 0 for a string without them (a single accent, É, is
+    /// not counted: the other languages keep every pixel). Hangul and ideographs stand taller than a capital: a line placed close under
     /// another by Latin heights ran into it in Korean (pause menu's save notice under the game's name, Large text,
     /// 22.11.2026). `s` as given, not translated.
     pub fn cjk_rise(&mut self, face: Face, px: u32, s: &str) -> i32 {
@@ -901,7 +921,13 @@ impl Text {
             m.height as i32 + m.ymin
         };
         let latin = rise('H').max(rise('d'));
-        s.chars().filter(|ch| crate::text_fallback::is_korean(*ch) || crate::text_fallback::is_cjk(*ch)).map(&mut rise).max().map_or(0, |k| (k - latin).max(0))
+        s.chars().filter(|ch| crate::text_fallback::is_korean(*ch) || crate::text_fallback::is_cjk(*ch) || stacked_marks(*ch)).map(&mut rise).max().map_or(0, |k| (k - latin).max(0))
+    }
+
+    /// The most any of `lines` reaches above Latin text (`cjk_rise`): what a page that steps lines by Latin heights adds
+    /// to its step, so a line of hangul, hanzi or stacked Vietnamese marks never runs into the one above; 0 for Latin.
+    pub fn tall_extra<S: AsRef<str>>(&mut self, face: Face, px: u32, lines: &[S]) -> i32 {
+        lines.iter().map(|l| self.cjk_rise(face, px, l.as_ref())).max().unwrap_or(0)
     }
 
     fn width_raw(&mut self, face: Face, px: u32, s: &str) -> i32 {
@@ -1791,6 +1817,7 @@ mod tests {
         for px in [24, 32, 40] {
             assert!(text.cjk_rise(Face::Body, px, "SD 카드 저장 실패") > 0, "{px}");
             assert_eq!(text.cjk_rise(Face::Body, px, "Couldn't save to the SD card. Écran, Ñ"), 0, "{px}");
+            assert!(text.cjk_rise(Face::Title, 44 + px, "Tắt") > 0, "{px}: Vietnamese stacked marks");
         }
     }
 
@@ -2337,6 +2364,52 @@ mod tests {
         crate::scaled_layout::set_step((1240, 1080), (1240, 1080));
     }
 
+    /// Vietnamese in Retro's Departure Mono: every one of its 146 letters with marks has a glyph (76 added from the
+    /// font's own pixels, `scripts/departure-vietnamese.py`), on the font's grid (no grey edge), and a tone mark over a
+    /// circumflex or breve stands above it, not in it (ấ taller than â, Ấ than Â).
+    #[test]
+    fn every_vietnamese_letter_is_in_departure_mono_on_its_grid_with_stacked_marks_above() {
+        let face = ttf_parser::Face::parse(crate::font_style::DEPARTURE, 0).unwrap();
+        // Every letter Vietnamese writes with a mark (the bases a ă â e ê i o ô ơ u ư y đ and the tones), as NFC has them.
+        let letters = "aàáãảạăằắẵẳặâầấẫẩậeèéẽẻẹêềếễểệiìíĩỉịoòóõỏọôồốỗổộơờớỡởợuùúũủụưừứữửựyỳýỹỷỵAÀÁÃẢẠĂẰẮẴẲẶÂẦẤẪẨẬEÈÉẼẺẸÊỀẾỄỂỆIÌÍĨỈỊOÒÓÕỎỌÔỒỐỖỔỘƠỜỚỠỞỢUÙÚŨỦỤƯỪỨỮỬỰYỲÝỸỶỴđĐ";
+        assert_eq!(letters.chars().count(), 146);
+        let missing: String = letters.chars().filter(|c| face.glyph_index(*c).is_none()).collect();
+        assert!(missing.is_empty(), "Departure Mono lacks {missing}");
+        let _style = font_style::for_this_thread(FontStyle::Retro, RetroLetters::Departure);
+        let mut t = Text::builtin().pinned_to(FontStyle::Retro);
+        for px in [24, 30, 44] {
+            for ch in letters.chars() {
+                let (_, bitmap) = t.glyph(Face::Body, px, ch).clone();
+                assert!(!bitmap.is_empty() && bitmap.iter().all(|&v| v == 0 || v == 255), "{px} px {ch}: grey edges or no ink");
+            }
+            for (one, two) in [("â", "ấ"), ("ă", "ẳ"), ("Â", "Ấ"), ("Ê", "Ễ"), ("o", "ơ")] {
+                let (a, b) = (ink(&mut t, Face::Body, px, one), ink(&mut t, Face::Body, px, two));
+                assert!(b.1 < a.1 || one == "o" && b.2 > a.2, "{px} px: {two} {b:?} reaches above {one} {a:?} (or the horn to its right)");
+            }
+        }
+    }
+
+    /// Pixelify has none of Vietnamese's stacked marks: with the interface in Vietnamese, Retro paints with Departure
+    /// Mono even when Settings says Retro Pixelify (`font_style::effective_letters`), every letter there; back in
+    /// English, Pixelify as chosen.
+    #[test]
+    fn vietnamese_in_retro_pixelify_is_written_in_departure_mono() {
+        let _style = font_style::for_this_thread(FontStyle::Retro, RetroLetters::Pixelify);
+        {
+            let _vi = crate::i18n::for_this_thread(crate::i18n::Lang::Vi);
+            let mut t = Text::builtin().pinned_to(FontStyle::Retro);
+            t.sync();
+            assert_eq!(t.letters, RetroLetters::Departure);
+            for ch in "ấệổữỳđƠ".chars() {
+                let (x0, _, x1, _) = ink(&mut t, Face::Body, 30, &ch.to_string());
+                assert!(x1 > x0, "{ch} has ink");
+            }
+        }
+        let mut t = Text::builtin().pinned_to(FontStyle::Retro);
+        t.sync();
+        assert_eq!(t.letters, RetroLetters::Pixelify, "English: the player's choice");
+    }
+
     /// Korean lines of the kind the interface says (until `ko.tsv` has its own): the Korean fonts' tests and the matrix.
     pub(crate) const KOREAN_SAMPLES: [&str; 5] = ["설정", "게임을 계속하려면 A를 누르세요", "저장 슬롯 3 · 오늘 11:41", "화면 밝기와 소리", "와이파이에 연결되지 않았습니다"];
 
@@ -2476,6 +2549,26 @@ mod tests {
             }
         }
         crate::scaled_layout::set_step((1280, 960), (1280, 960));
+    }
+
+    /// Switching to Japanese draws ideographs anew in their Japanese forms, and back again: no glyph of the other
+    /// forms stays in the cache (`sync` drops them when the language changes).
+    #[test]
+    fn a_kanji_changes_its_form_with_the_interface_language() {
+        let pixels = |t: &mut Text| {
+            let mut buf = vec![0u32; 200 * 120];
+            t.draw(&mut Canvas::new(&mut buf, 200, 120), Face::Body, 60, 10, 90, 0xffffff, "直");
+            buf
+        };
+        let mut t = Text::builtin();
+        t.set_translate(false);
+        let chinese = pixels(&mut t);
+        let japanese = {
+            let _ja = crate::i18n::for_this_thread(crate::i18n::Lang::Ja);
+            pixels(&mut t)
+        };
+        assert_ne!(chinese, japanese, "Japanese forms in a Japanese interface");
+        assert_eq!(pixels(&mut t), chinese, "and the Chinese ones again after it");
     }
 
     /// Chinese has no spaces: a line breaks between any two hanzi, never before 。，、）」 nor after （「 (kinsoku), Latin

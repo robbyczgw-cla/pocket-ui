@@ -83,6 +83,7 @@ box game
 plain front
 standing spine
 shown front
+series cover's cases
 film halves
 shelf tile
 posed spine
@@ -1368,6 +1369,7 @@ wifi: hidden
 wifi: country
 ports: own files
 your games
+your handheld
 shelf systems
 zone: regions
 zone: {s}
@@ -1555,6 +1557,16 @@ usage: --unpack-runtime ZIP DEST
 
 # src/image.rs: existing framebuffer IPC command, never painted
 pocket_grab {s}
+# src/platform/android_hw_render.rs: GLES entry points and a driver allocation diagnostic.
+glFenceSync
+glClientWaitSync
+glDeleteSync
+glGenSamplers
+glSamplerParameteri
+glBindSampler
+glDeleteSamplers
+Cannot allocate a GLES game texture
+
 # src/platform/android_audio.rs: the game stream's numbers in the player's log line; a bridge method's name.
 out_ms={s} aaudio_xruns={s} burst={s} buffer={s} callback_underruns={s} handoff_ms={s} reported_out_ms={s} timestamp_fallback={s}
 diagnosticsPath
@@ -2150,6 +2162,12 @@ Accept-Language: ko-KR,ko;q=0.9,en;q=0.7
 Accept-Language: zh-CN,zh;q=0.9,en;q=0.7
 FusionPixel12-zh_hans-CJK.otf
 NotoSansSC-Regular-CJK.otf
+# Vietnamese: the Accept-Language header.
+Accept-Language: vi-VN,vi;q=0.9,en;q=0.7
+# Japanese: the Accept-Language header and the names of its font files (src/text_fallback.rs).
+Accept-Language: ja-JP,ja;q=0.9,en;q=0.7
+FusionPixel12-ja-CJK.otf
+NotoSansJP-Regular-CJK.otf
 # src/libretro.rs: pocket-core's start steps in the first-frame log line (R36S hand test #7/#12)
 core library
 core init
@@ -2202,7 +2220,6 @@ image target is not a regular file
 
 # src/update/image_files.rs and src/fsutil.rs: image refresh diagnostics
 image backup is not a regular file
-skipping FBIOBLANK on RK3326
 
 # src/android handheld view: choosing a game's own cover
 pickCover
@@ -2227,3 +2244,94 @@ FBIOPUT_VSCREENINFO returned: {s}
 hakuX bundle failed its checksum
 could not copy hakuX bundle
 hakuX bundle has no version
+
+# The read-only release probe prints these to the terminal
+no test games were found on this device
+expected emulator routes: {s}
+
+# src/web/pieces_tests.rs
+Cookie
+X-CSRF-Token
+
+# fuel_gauge: log lines and errors of the RK817 battery reading reset
+restore not kept: want {s}, have {s}
+no RK817 on this device
+battery reading reset (before: {s})
+a snapshot or test run never writes the chip
+# stale_controls.rs: /proc/bus/input/devices fields, EmulationStation's and Azahar's file keys, ROCKNIX platform names.
+Bus
+Vendor
+Product
+inputConfig
+[Controls]
+RK3576
+SM6115
+SM4450
+SM8550
+SM8650
+SM8750
+SM8250
+
+# src/brick_gl.rs (log lines of the vendor's EGL)
+pbuffer: EGL error 0x{s}
+eglMakeCurrent: EGL error 0x{s}
+
+# src/brick_gles.rs (the direct way's log lines and pocket-fb's IPC commands)
+pocket_port end {s}
+pocket_port begin {s}
+GLES 3 {s}, screen {s}x{s}
+[app_id="pocket-native-port"] focus
+
+# src/brick_picture.rs (a log line of the direct way)
+no picture yet
+# Why the library is read again after a console name changed (a log line, `App::console_names_changed`)
+console names
+filesAccess
+askFilesAccess
+setView
+
+# Android extras: root scripts and their errors (src/android_extras/root.rs, only logged), the desktop stand-in of a press.
+for p in /sys/devices/system/cpu/cpufreq/policy*; do\n  [ -d "$p" ] || continue\n  for f in scaling_available_frequencies cpuinfo_min_freq cpuinfo_max_freq scaling_min_freq scaling_max_freq scaling_governor; do\n    [ -r "$p/$f" ] && echo "cpu $p/$f $(cat "$p/$f")"\n  done\ndone\nfor d in /sys/class/devfreq/*; do\n  case "$(basename "$d") $(cat "$d/name" 2>/dev/null)" in *gpu*|*kgsl*|*mali*|*GPU*)\n    for f in available_frequencies min_freq max_freq governor; do [ -r "$d/$f" ] && echo "gpu $d/$f $(cat "$d/$f")"; done;;\n  esac\ndone\nfor h in /sys/class/hwmon/hwmon*; do\n  case "$(cat "$h/name" 2>/dev/null)" in *fan*)\n    for f in pwm1 pwm1_enable; do [ -r "$h/$f" ] && echo "fan $h/$f $(cat "$h/$f")"; done;;\n  esac\ndone
+[ -w {s}/{s} ] && echo {s} > {s}/{s}
+dd if={s} bs=1 skip={s} count=32 2>/dev/null | od -An -v -tx1
+printf '{s}' | dd of={s} bs=1 seek={s} count=32 conv=notrunc 2>/dev/null && sync && {s}
+misc has no boot control block
+fewer than two slots
+boot control CRC does not match
+not on Android: {s} {s}
+
+
+# src/app_series.rs: a piece of "{t} · {s} · since {n}", translated whole
+since {s}
+# src/screenscraper.rs: struct names of Debug, region tags of ROM file names, ScreenScraper's media types
+Login
+Dev
+united kingdom
+box-2D
+box-2D-back
+box-2D-side
+support-2D
+
+# ScreenScraper: why a run started (the log) and the setup step's name for the navigation explorer
+switched on
+after the box art
+extras: screenscraper sign-in
+Root
+XRef
+Kids
+Image
+DCTDecode
+jpg {s} {s}
+Encrypt
+not inside the manuals' folder
+
+# src/app_screenscraper.rs
+pictures shown changed
+
+# src/startup.rs (the N64 start watch: a phase name in the log)
+process start
+# src/background_io.rs, src/app_screenscraper.rs: why a shelf job stopped, and the run's resume, for the log only
+after a stop
+a game started
+an update needs the card
+a game or an update had the card meanwhile

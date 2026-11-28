@@ -106,6 +106,16 @@ pub mod dir_index;
 pub mod romm;
 pub mod romm_net;
 pub mod romm_page;
+/// ScreenScraper.fr: box art and the box's other faces by checksum, only in builds with pocket-ui's developer id (docs/SCREENSCRAPER.md).
+pub mod screenscraper;
+/// What ScreenScraper says of a game besides its pictures: its description in the player's language, genre, players, dates.
+pub mod screenscraper_facts;
+/// A game's manual PDF from ScreenScraper as the page pictures it is made of (scans: one JPEG per page).
+pub mod manual_pdf;
+/// The game's real manual on screen: a page at a time, L1/R1 to turn, A to zoom (`app_manual`).
+pub mod manual_view;
+/// The game's own label from ScreenScraper on the drawn cartridge or disc, cut out and kept in its own colours (`real_label`).
+pub mod real_label;
 pub mod auto_covers;
 pub mod game_pictures;
 pub mod picture_cycle;
@@ -207,6 +217,10 @@ pub mod unlock_card;
 pub mod standalone;
 pub mod emu_settings;
 pub mod fallback;
+/// The start's word when a game plays with something else than chosen or usual (`swap_note`).
+pub mod swap_note;
+/// Saved controls of a standalone emulator for another controller: set aside before the start (`stale_controls`).
+pub mod stale_controls;
 pub mod first_game;
 pub mod h700_gba;
 pub mod core_prewarm;
@@ -245,6 +259,8 @@ pub mod sleep_settings;
 pub mod auto_off;
 /// Low-battery warning and power-off (review B12 / SOL-05).
 pub mod low_battery;
+/// Settings → System → Battery's "Reset battery reading" on RK817 devices (R36S, RK3326/RK3566).
+pub mod fuel_gauge;
 /// The heat guard (the TrimUI Brick's own card): over the CPU zone's limit the game is saved and the device switched off.
 #[cfg(feature = "brick")]
 pub mod heat;
@@ -342,6 +358,12 @@ pub mod console_credits;
 /// Connections: a game's developer, publisher, series and genre lead to the player's other games (docs/CURATOR.md).
 pub mod civil_date;
 pub mod connections;
+/// The shelf by series and what the series card says of the biggest series (docs/SERIES-SHELF.md).
+pub mod series_facts;
+pub mod series_page;
+pub mod series_shelf;
+/// A series' cover (its games' cases stacked) and its spine's logo (`series_look`, docs/SERIES-SHELF.md).
+pub mod series_look;
 pub mod credits_page;
 pub mod wiki_text;
 pub mod sync;
@@ -383,6 +405,8 @@ pub mod launch_picture;
 pub mod android_handheld;
 /// The Android games: apps the player calls games, one list for both views (`launcher.json` `android_games`).
 pub mod android_games;
+/// Settings → System → Android extras: the ADB grant, Shizuku, root and the pause menu over other emulators (docs/ANDROID-EXTRAS.md).
+pub mod android_extras;
 // "Where was I?": the card over a moment continued after a long break.
 pub mod where_was_i;
 /// RetroAchievements: rcheevos (vendor/rcheevos) for pocket-core games, the account, the files pocket-ui reads.
@@ -467,6 +491,8 @@ pub mod touch_ui;
 pub mod document_library;
 pub mod document_check;
 pub mod system_names;
+/// Consoles sold under regional names are one shelf, named as the player chooses (`region_pairs`).
+pub mod region_pairs;
 
 pub mod device_model;
 #[cfg(feature = "brick")]

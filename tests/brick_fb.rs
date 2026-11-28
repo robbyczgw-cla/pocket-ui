@@ -753,6 +753,94 @@ fn the_gpus_way_shows_the_right_colours_and_follows_the_focus() {
     wait_for("the game back", || rgb_of(&bridge) == RED_ON_FB[..3]);
 }
 
+/// pocket-core's direct way (and any native port) draws on the screen itself. When it ends, the bridge puts the window under it back
+/// from what it already has: pocket-ui asleep sends no new picture, and the game's last one must not stay on the screen.
+#[test]
+fn the_gpus_way_draws_the_window_again_when_a_native_port_ends() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let bridge = gl_bridge(None, "pbuffer", log.path(), dir);
+    let said = std::fs::read_to_string(log.path()).unwrap();
+    if said.contains("GL failed") {
+        eprintln!("no software GPU here, this test has nothing to check: {said}");
+        return;
+    }
+    let mut ui = Client::connect(&bridge.path("w"), "pocket-ui");
+    ui.show(0, RED);
+    wait_for("the shelf through the GPU", || rgb_of(&bridge) == RED_ON_FB[..3]);
+    let pid = std::process::id();
+    assert!(bridge.command_ok(&format!("pocket_port begin {pid}")));
+    // The port's own picture on the screen.
+    std::fs::write(bridge.path("fb"), vec![0x42; (W * H * 4) as usize]).unwrap();
+    assert!(bridge.command_ok(&format!("pocket_port end {pid}")));
+    wait_for("the shelf again, without a new picture from it", || rgb_of(&bridge) == RED_ON_FB[..3]);
+    // And once more over a focus of the window that has the screen already (pocket-ui's own `focus` after a game).
+    std::fs::write(bridge.path("fb"), vec![0x43; (W * H * 4) as usize]).unwrap();
+    assert!(bridge.command_ok(&format!("{UI} focus")));
+    wait_for("the shelf again after its focus", || rgb_of(&bridge) == RED_ON_FB[..3]);
+}
+
+/// The pause menu over pocket-core's direct way (a native port on the screen): pocket-ui's window comes with a cut. A crossfade would
+/// start from the bridge's texture, which still holds what was on show before the port took the screen (the game's first frames or the
+/// shelf), not what the port showed: a flash of an old picture (red on main: `gpu window crossfade` after the focus).
+#[test]
+fn the_pause_menu_over_a_native_port_comes_without_a_crossfade_from_an_old_picture() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let mut bridge = gl_bridge(None, "pbuffer", log.path(), dir);
+    if std::fs::read_to_string(log.path()).unwrap().contains("GL failed") {
+        eprintln!("no software GPU here, this test has nothing to check");
+        return;
+    }
+    let mut ui = Client::connect(&bridge.path("w"), "pocket-ui");
+    ui.show(0, GREEN);
+    wait_for("the shelf", || rgb_of(&bridge) == GREEN_ON_FB[..3]);
+    let mut game = Client::connect(&bridge.path("w"), "pocket-core");
+    game.show(0, RED);
+    wait_for("the game's first frames", || rgb_of(&bridge) == RED_ON_FB[..3]);
+    std::thread::sleep(Duration::from_millis(300));
+    let fades = |log: &Path| std::fs::read_to_string(log).unwrap().matches("gpu window crossfade").count();
+    let before = fades(log.path());
+    let pid = std::process::id();
+    assert!(bridge.command_ok(&format!("pocket_port begin {pid}")));
+    std::fs::write(bridge.path("fb"), vec![0x42; (W * H * 4) as usize]).unwrap();
+    // pocket-ui covers the game for its pause menu (`control::show_ui_over`).
+    assert!(bridge.command_ok(&format!("{GAMES} fullscreen disable; {UI} focus; {UI} fullscreen enable")));
+    wait_for("the menu", || rgb_of(&bridge) == GREEN_ON_FB[..3]);
+    std::thread::sleep(Duration::from_millis(300));
+    bridge.stop();
+    assert_eq!(fades(log.path()), before, "no crossfade out of the native port: {}", std::fs::read_to_string(log.path()).unwrap());
+}
+
+/// A native port that ends while it has the screen (pocket-core's direct way at the end of a game) gives it to pocket-ui's window, the
+/// shelf, never to a game window with its last picture from before the port took over (on main: whichever window came first in a hash
+/// map, red there most runs with three games' windows).
+#[test]
+fn a_native_port_that_ends_gives_the_screen_to_pocket_ui() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let bridge = gl_bridge(None, "pbuffer", log.path(), dir);
+    if std::fs::read_to_string(log.path()).unwrap().contains("GL failed") {
+        eprintln!("no software GPU here, this test has nothing to check");
+        return;
+    }
+    let mut ui = Client::connect(&bridge.path("w"), "pocket-ui");
+    ui.show(0, GREEN);
+    wait_for("the shelf", || rgb_of(&bridge) == GREEN_ON_FB[..3]);
+    let mut games: Vec<Client> = (0..3).map(|_| Client::connect(&bridge.path("w"), "pocket-core")).collect();
+    for g in &mut games {
+        g.show(0, RED);
+    }
+    wait_for("a game", || rgb_of(&bridge) == RED_ON_FB[..3]);
+    let pid = std::process::id();
+    assert!(bridge.command_ok(&format!("pocket_port begin {pid}")));
+    std::fs::write(bridge.path("fb"), vec![0x42; (W * H * 4) as usize]).unwrap();
+    assert!(bridge.command_ok(&format!("pocket_port end {pid}")));
+    wait_for("the shelf after the port", || rgb_of(&bridge) != [0x42; 3]);
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(rgb_of(&bridge), GREEN_ON_FB[..3], "pocket-ui's window, not a game's old picture");
+}
+
 /// Row `y` of the file, colours only.
 fn rgb_at(bridge: &Bridge, y: u32) -> [u8; 3] {
     let at = (y * W * 4) as usize;

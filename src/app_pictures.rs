@@ -198,6 +198,8 @@ impl App {
                 }
             }
         }
+        // A cover the Layout page's previews by series waited for (`app_series::series_cover_in`).
+        self.series_cover_in(&key);
         self.covers.insert(key.clone(), img.map(Rc::new));
         let visible = self.pictures.visible.contains(&key);
         self.pictures.loaded.push_back(key);

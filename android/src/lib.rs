@@ -1593,6 +1593,10 @@ impl ApplicationHandler<BridgeEvent> for App {
                 }
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
+                // An F-key the pause menu meant for another emulator does nothing here, not even the "any key" steps below.
+                if emulator_f_key(&event.physical_key) {
+                    return;
+                }
                 // Any button skips a start on its way; the finger still on the A that started it doesn't count.
                 if self.insert.is_some() {
                     if !event.repeat {
@@ -2155,4 +2159,18 @@ impl App {
         self.ui.core_busy = Some(p.core.clone());
         self.core_run = Some(core_downloads::Run::start(p, url));
     }
+}
+
+/// An F-key (F1 to F12) as the pause menu presses it for another emulator (Android extras, `TargetKey.java`): on Android 13
+/// such a press can land in pocket-ui's own window instead (docs/ANDROID-EXTRAS.md), and here it must do nothing at all
+/// (Sol's recheck of b203531cf). Kept the same in android/src/lib.rs and android/handheld/app_android.rs
+/// (`android_extras` tests).
+fn emulator_f_key(key: &PhysicalKey) -> bool {
+    matches!(
+        key,
+        PhysicalKey::Code(
+            KeyCode::F1 | KeyCode::F2 | KeyCode::F3 | KeyCode::F4 | KeyCode::F5 | KeyCode::F6 | KeyCode::F7 | KeyCode::F8
+                | KeyCode::F9 | KeyCode::F10 | KeyCode::F11 | KeyCode::F12
+        ) | PhysicalKey::Unidentified(NativeKeyCode::Android(131..=142))
+    )
 }

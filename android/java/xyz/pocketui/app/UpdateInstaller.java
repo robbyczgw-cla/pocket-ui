@@ -180,7 +180,14 @@ public final class UpdateInstaller {
         }, "pocket-update").start();
         return "";
     }
+    /** Told when a download starts (true) and ends (false): the view keeps the screen on meanwhile (`Awake`, set by
+     *  PocketBase). A hook, not a call into Awake, so this class still compiles alone in the JVM reader tests. */
+    static volatile java.util.function.Consumer<Boolean> awake = on -> {};
     private void download(Network n, String url, File file, long size, String hash) throws Exception {
+        awake.accept(true);
+        try { transfer(n, url, file, size, hash); } finally { awake.accept(false); }
+    }
+    private void transfer(Network n, String url, File file, long size, String hash) throws Exception {
         HttpURLConnection c = open(n, url, size, true);
         try {
             MessageDigest sha = MessageDigest.getInstance("SHA-256");

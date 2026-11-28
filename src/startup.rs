@@ -15,9 +15,16 @@ pub fn is_r36s_n64(system: &str) -> bool {
 
 /// The usual summary only reaches the log after a swap. On the R36S, log N64 phases live, and sample Linux's
 /// counters during a long wait so the report still has evidence if the player has to quit or reboot.
+///
+/// The watch is running before this returns (at most `watch_ready`): a new thread's start waits on a lock the core's
+/// dlopen holds for as long as the core takes to load (a futex wait in /proc; glibc's loader lock, which a thread's start
+/// takes for its thread-locals). A watch thread first scheduled after the main thread entered dlopen printed nothing for
+/// the whole stall it is there for (nightly 27.11.2026, `tests/r36s_n64_start.rs`: 7 of 24 parallel runs on the Air).
 pub fn watch_r36s_n64(started: Instant) {
     if N64_START.set(started).is_err() { return; }
-    let _ = std::thread::Builder::new().name("n64-start-watch".into()).spawn(move || {
+    let (ready, is_ready) = std::sync::mpsc::channel();
+    let watch = move || {
+        let _ = ready.send(());
         std::thread::sleep(Duration::from_secs(3));
         while n64_start_pending() && started.elapsed() < Duration::from_secs(120) {
             let (phase, since) = MARKS.lock().ok().and_then(|m| m.last().copied()).unwrap_or(("process start", started));
@@ -25,7 +32,38 @@ pub fn watch_r36s_n64(started: Instant) {
             println!("n64 start: waiting phase={phase} phase_ms={} {sample}", since.elapsed().as_millis());
             std::thread::sleep(Duration::from_secs(5));
         }
-    });
+    };
+    let spawn = |watch| std::thread::Builder::new().name("n64-start-watch".into()).spawn(watch).map(drop);
+    // Tests: the watch thread starts this late, as the scheduler of a busy handheld may start it (`tests/r36s_n64_start.rs`).
+    let late = std::env::var_os("POCKET_CORE_TEST").and(std::env::var("POCKET_CORE_TEST_LATE_WATCH_MS").ok()).and_then(|ms| ms.parse().ok());
+    let spawned = match late {
+        Some(ms) => std::thread::Builder::new().name("n64-watch-late".into()).spawn(move || {
+            std::thread::sleep(Duration::from_millis(ms));
+            let _ = spawn(watch);
+        }).map(drop),
+        None => spawn(watch),
+    };
+    if spawned.is_ok() {
+        let _ = is_ready.recv_timeout(watch_ready());
+    }
+}
+
+/// How long the start waits at most for a watch thread to run (`watch_r36s_n64`, `spawn_ready`); it takes microseconds
+/// when the handheld isn't overloaded. Host tests (`POCKET_CORE_TEST`) on a loaded gate host wait longer: a hang guard.
+fn watch_ready() -> Duration {
+    if std::env::var_os("POCKET_CORE_TEST").is_some() { Duration::from_secs(10) } else { Duration::from_secs(1) }
+}
+
+/// A thread that has to run while the core loads (a load watch), returned once it runs (at most `watch_ready`): one
+/// that first starts after the core's dlopen began waits for the whole load (`watch_r36s_n64`).
+pub fn spawn_ready<T: Send + 'static>(name: &str, f: impl FnOnce() -> T + Send + 'static) -> std::io::Result<std::thread::JoinHandle<T>> {
+    let (ready, is_ready) = std::sync::mpsc::channel();
+    let thread = std::thread::Builder::new().name(name.into()).spawn(move || {
+        let _ = ready.send(());
+        f()
+    })?;
+    let _ = is_ready.recv_timeout(watch_ready());
+    Ok(thread)
 }
 
 fn n64_wait_sample(proc: &std::path::Path) -> String {
@@ -114,7 +152,7 @@ pub fn watch_load() -> LoadWatch {
 
 fn watch_load_at(path: std::path::PathBuf, delay: Duration) -> LoadWatch {
     let (stop, rx) = std::sync::mpsc::channel::<()>();
-    let worker = std::thread::Builder::new().name("loading".into()).spawn(move || {
+    let worker = spawn_ready("loading", move || {
         if rx.recv_timeout(delay) == Err(std::sync::mpsc::RecvTimeoutError::Timeout) {
             let _ = std::fs::write(&path, std::process::id().to_string());
             let _ = rx.recv();

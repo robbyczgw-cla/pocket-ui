@@ -3868,6 +3868,10 @@ From your EmulationStation gamelist	EmulationStation gamelist에서 가져옴
 Facts: your EmulationStation gamelist	정보 출처: EmulationStation gamelist
 Facts: Wikidata, CC0, and your EmulationStation gamelist	정보 출처: Wikidata, CC0, EmulationStation gamelist
 {n} of 5 in EmulationStation	EmulationStation에서 5점 중 {n}점
+Text: ScreenScraper.fr, CC BY-NC-SA 4.0	글: ScreenScraper.fr, CC BY-NC-SA 4.0
+{n} of 20 on ScreenScraper	ScreenScraper에서 20점 중 {n}점
+The whole text: SELECT	전체 글: SELECT
+Community rating	커뮤니티 평점
 
 # --- Screenshots (Settings > Games, the game card's row; gallery.rs, app_gallery.rs)
 The pictures you took with HOME + A, newest first.	HOME + A로 찍은 이미지예요. 최신순으로 보여요.
@@ -5735,6 +5739,16 @@ Curator is still reading the library; the shelves' games show in a moment.	Curat
 The connection dropped. Nothing was kept.	연결이 끊어졌어요. 저장된 내용은 없어요.
 Waiting	대기 중
 The Pocket did not answer. Nothing was sent.	Pocket이 응답하지 않았어요. 전송된 내용은 없어요.
+This browser could not read the file. Nothing was kept.	이 브라우저가 파일을 읽지 못했어요. 저장된 내용은 없어요.
+The Pocket did not answer. Nothing was kept.	Pocket이 응답하지 않았어요. 저장된 내용은 없어요.
+The phone did not say how large the piece is.	휴대폰이 조각 크기를 알려 주지 않았어요.
+Where does this piece go?	이 조각은 어디에 들어가나요?
+That file did not arrive whole. Nothing was kept. Send it again.	이 파일이 다 도착하지 않았어요. 저장된 내용은 없어요. 다시 보내 주세요.
+Can't read the disc sheet: {s}	디스크 목록을 읽을 수 없어요: {s}
+That upload is not on the Pocket any more. Nothing was kept.	이 업로드는 이제 Pocket에 없어요. 저장된 내용은 없어요.
+The piece was cut off. Send it again.	조각이 중간에 끊겼어요. 다시 보내 주세요.
+That piece does not follow the {s} bytes the Pocket has.	이 조각은 Pocket이 가진 {s}바이트 다음에 이어지지 않아요.
+That piece goes past the end of the file. Nothing was kept.	이 조각은 파일 끝을 넘어가요. 저장된 내용은 없어요.
 The Pocket refused this file.	Pocket이 이 파일을 거부했어요.
 {s} is there already. Replace it?	{s}이(가) 이미 있어요. 교체할까요?
 Uploading to {s}	{s}(으)로 업로드 중
@@ -5921,3 +5935,281 @@ That picture is too large. Pick a smaller resolution.	이미지 해상도가 너
 
 hakuX is missing. Install a pocket-ui update to play Xbox games.	hakuX가 없습니다. Xbox 게임을 하려면 pocket-ui 업데이트를 설치하세요.
 Xbox games need a stronger handheld, like the Retroid Pocket 5 or Mini V2.	Xbox 게임을 하려면 Retroid Pocket 5나 Mini V2처럼 성능이 더 좋은 휴대용 기기가 필요합니다.
+{s} is missing. Update your system or choose another emulator under Runs on.	{s}이(가) 없습니다. 시스템을 업데이트하거나 실행 환경에서 다른 에뮬레이터를 선택하세요.
+pocket-core doesn't open .{s} files, so this game plays with {s2}.	pocket-core는 .{s} 파일을 열지 않아 이 게임은 {s2}(으)로 실행됩니다.
+pocket-core doesn't open this file, so this game plays with {s}.	pocket-core는 이 파일을 열지 않아 이 게임은 {s}(으)로 실행됩니다.
+{s} isn't available here, so this game plays with {s2}.	{s}을(를) 여기서 사용할 수 없어 이 게임은 {s2}(으)로 실행됩니다.
+No Saturn BIOS in roms/bios, so this game plays with {s} and its built-in BIOS. With a Saturn BIOS there, it plays in pocket-core with the full pause menu.	roms/bios에 Saturn BIOS가 없어 이 게임은 {s}와(과) 내장 BIOS로 실행됩니다. 그곳에 Saturn BIOS가 있으면 pocket-core에서 전체 일시정지 메뉴와 함께 실행됩니다.
+The official PICO-8 isn't in roms/pico-8, so this cart plays with FAKE-08.	공식 PICO-8이 roms/pico-8에 없어 이 카트는 FAKE-08로 실행됩니다.
+bsnes-hd isn't available here, so this game plays with Snes9x without Mode 7 HD.	bsnes-hd를 여기서 사용할 수 없어 이 게임은 Mode 7 HD 없이 Snes9x로 실행됩니다.
+Controls for {s} were reset to match this controller.	{s} 조작이 이 컨트롤러에 맞게 초기화되었습니다.
+Only for a battery level that is wrong, like 0% while the battery is full.	배터리가 가득 찼는데 0%로 보이는 것처럼 잔량 표시가 틀릴 때만 쓰세요.
+Reset and switch off	초기화하고 전원 끄기
+Reset reading	표시 초기화
+Reset the battery reading?	배터리 잔량 표시를 초기화할까요?
+The battery chip did not take it. Everything stays as it was, and your Pocket stays on.	배터리 칩이 받아들이지 않았어요. 모든 것이 그대로이고 Pocket은 켜진 상태로 있어요.
+The battery reading was not reset	배터리 잔량 표시를 초기화하지 못했어요
+The battery reading was reset. Charge your Pocket until it is full once, then the percentage is right again.	배터리 잔량 표시를 초기화했어요. Pocket을 한 번 가득 충전하면 퍼센트가 다시 정확해져요.
+Your Pocket forgets the saved level and switches off. Switch it on again and it measures the level anew. Then charge it until it is full once.	Pocket이 저장된 잔량을 잊고 전원이 꺼져요. 다시 켜면 잔량을 새로 측정해요. 그다음 한 번 가득 충전하세요.
+SNES (US console)	SNES (미국판 본체)
+Name the Sega console: Mega Drive or Genesis. One shelf holds the games of all its folders; the Mega-CD follows. Saves and pictures stay with each game.	세가 콘솔의 이름을 고르세요: Mega Drive 또는 Genesis. 모든 폴더의 게임이 한 선반에 모이고, Mega-CD도 함께 바뀌어요. 세이브와 이미지는 각 게임에 그대로 남아요.
+Name the Super Nintendo: SNES, SNES with the US console at launch, or Super Famicom. One shelf holds the games of all its folders. Saves and pictures stay with each game.	Super Nintendo의 이름을 고르세요: SNES, 실행 시 미국판 본체를 쓰는 SNES, 또는 Super Famicom. 모든 폴더의 게임이 한 선반에 모여요. 세이브와 이미지는 각 게임에 그대로 남아요.
+Name the Nintendo console: NES or Famicom. One shelf holds the games of all its folders. Saves and pictures stay with each game.	닌텐도 콘솔의 이름을 고르세요: NES 또는 Famicom. 모든 폴더의 게임이 한 선반에 모여요. 세이브와 이미지는 각 게임에 그대로 남아요.
+Name the NEC console: PC Engine or TurboGrafx-16. One shelf holds the games of all its folders; the CD follows. Saves and pictures stay with each game.	NEC 콘솔의 이름을 고르세요: PC Engine 또는 TurboGrafx-16. 모든 폴더의 게임이 한 선반에 모이고, CD도 함께 바뀌어요. 세이브와 이미지는 각 게임에 그대로 남아요.
+Battery low ({n}%). At {m}% the game is saved and closed.	배터리 부족 ({n}%). {m}%가 되면 게임을 저장하고 닫아요.
+Battery empty. Saving…	배터리가 다 됐어요. 저장 중…
+Read your games	게임 읽기
+The Handheld view reads your games straight from the ROMs folder (for example ROMs/gba, ROMs/snes). For that, Android asks for access to all files. pocket-ui only reads games and pictures there.	핸드헬드 화면은 ROMs 폴더(예: ROMs/gba, ROMs/snes)에서 게임을 바로 읽어요. 그래서 Android가 모든 파일에 대한 접근 권한을 요청해요. pocket-ui는 거기서 게임과 그림만 읽어요.
+Your saves live in the app's own folder; if the Mobile view has a games folder, a copy of them goes into its folder "pocket-ui saves" when a game ends.	세이브는 앱 전용 폴더에 있어요. 모바일 화면에 게임 폴더가 있으면 게임이 끝날 때 그 복사본이 "pocket-ui saves" 폴더에 들어가요.
+Without this access, use the Mobile view: there you pick a folder.	이 권한 없이 쓰려면 모바일 화면을 쓰세요. 거기서 폴더를 골라요.
+Allow access	접근 허용
+Mobile view	모바일 화면
+# Settings › System › Android extras (src/android_extras.rs) and the pause menu over other emulator apps (PadWatch.java)
+Android extras	Android 추가 기능
+Optional: more of Android with Shizuku, a one-time ADB grant or root. Nothing changes until you set it up.	선택 사항: Shizuku, 한 번의 ADB 권한 또는 루트로 Android를 더 활용합니다. 설정하기 전에는 아무것도 바뀌지 않습니다.
+Level	단계
+Root (Magisk)	루트 (Magisk)
+Pause menu in other emulators	다른 에뮬레이터의 일시정지 메뉴
+No pop-up notifications	팝업 알림 없음
+No animations	애니메이션 없음
+Hide system bars	시스템 바 숨기기
+Stay awake while charging	충전 중 화면 켜짐 유지
+Needs the grant	권한 필요
+Allow pocket-ui	pocket-ui 허용
+Granted	허용됨
+Not granted	허용 안 됨
+Not checked	확인 안 함
+Not found	찾을 수 없음
+Allow	허용
+Open Shizuku	Shizuku 열기
+Get Shizuku	Shizuku 받기
+Check root	루트 확인
+Standard	기본
+ADB grant	ADB 권한
+Root	루트
+Standard: pocket-ui works as a normal app and needs nothing here.	기본: pocket-ui는 일반 앱으로 작동하며 여기서 필요한 것이 없습니다.
+Each extra is your choice: the ADB grant, Shizuku or root. They are off until you set them up.	추가 기능은 모두 선택입니다: ADB 권한, Shizuku 또는 루트. 설정하기 전에는 꺼져 있습니다.
+ADB grant: pocket-ui may change Android's settings below.	ADB 권한: pocket-ui가 아래의 Android 설정을 바꿀 수 있습니다.
+Root: everything Shizuku gives, through Magisk.	루트: Shizuku가 주는 모든 것을 Magisk로.
+After a restart of the device, start Shizuku again in its app (with root it starts by itself).	기기를 다시 시작한 뒤에는 Shizuku 앱에서 다시 시작하세요 (루트가 있으면 저절로 시작됩니다).
+Shizuku is running. Press A and allow pocket-ui in Shizuku's question.	Shizuku가 실행 중입니다. A를 누르고 Shizuku의 질문에서 pocket-ui를 허용하세요.
+Shizuku is installed but not running. Press A to open it, then start it there.	Shizuku가 설치되어 있지만 실행 중이 아닙니다. A를 눌러 연 다음 거기서 시작하세요.
+Without a computer: Android's Developer options › Wireless debugging on, then Pairing in Shizuku.	컴퓨터 없이: Android 개발자 옵션 › 무선 디버깅을 켠 다음 Shizuku에서 페어링하세요.
+1. Get Shizuku: press A, or scan the code with your phone.	1. Shizuku 받기: A를 누르거나 휴대폰으로 코드를 스캔하세요.
+2. Android's Developer options: turn on Wireless debugging.	2. Android 개발자 옵션: 무선 디버깅을 켜세요.
+3. In Shizuku: Pairing with the code, then Start.	3. Shizuku에서: 코드로 페어링한 다음 시작.
+4. Back here, press A and allow pocket-ui.	4. 여기로 돌아와 A를 누르고 pocket-ui를 허용하세요.
+Once, from a computer with adb: USB debugging on, the cable in, then type this line:	한 번만, adb가 있는 컴퓨터에서: USB 디버깅을 켜고 케이블을 꽂은 다음 이 줄을 입력하세요:
+Root is ready: pocket-ui uses Magisk for what Shizuku would do.	루트가 준비되었습니다: pocket-ui가 Shizuku 대신 Magisk를 사용합니다.
+Magisk said no, or this device has no root. Press A to ask again.	Magisk가 거부했거나 이 기기에 루트가 없습니다. 다시 물으려면 A를 누르세요.
+Only with Magisk. A asks Magisk once; allow pocket-ui there.	Magisk가 있을 때만 가능합니다. A를 누르면 Magisk에 한 번 묻습니다. 거기서 pocket-ui를 허용하세요.
+HOME, or SELECT + START, opens pocket-ui's pause menu over games that pocket-ui started in other emulator apps.	HOME 또는 SELECT + START를 누르면 pocket-ui가 다른 에뮬레이터 앱에서 시작한 게임 위에 pocket-ui 일시정지 메뉴가 열립니다.
+A opens Android's accessibility page: turn on pocket-ui pause menu there. Android 13 and newer may first ask you to allow restricted settings in pocket-ui's app info.	A를 누르면 Android 접근성 페이지가 열립니다: 거기서 pocket-ui pause menu를 켜세요. Android 13 이상에서는 먼저 pocket-ui 앱 정보에서 제한된 설정을 허용하라고 할 수 있습니다.
+Pop-up notifications stay away, all over Android. Off puts Android's setting back.	팝업 알림이 Android 전체에서 나타나지 않습니다. 끄면 Android 설정이 원래대로 돌아갑니다.
+Android's window and transition animations off, all over Android: apps open at once.	Android 전체에서 창과 전환 애니메이션이 꺼집니다: 앱이 바로 열립니다.
+Android's status and navigation bars stay hidden in every app (Android 10 and older).	Android 상태 표시줄과 탐색 바가 모든 앱에서 숨겨집니다 (Android 10 이하).
+The screen stays on while the device charges, as Android's developer option.	기기가 충전되는 동안 화면이 켜져 있습니다. Android 개발자 옵션과 같습니다.
+Needs the ADB grant, Shizuku or root first (the rows above).	먼저 ADB 권한, Shizuku 또는 루트가 필요합니다 (위 항목).
+pocket-ui pause menu	pocket-ui 일시정지 메뉴
+Emulator's own menu	에뮬레이터 자체 메뉴
+Teach the save key (F2)	저장 키 가르치기 (F2)
+Teach the load key (F4)	불러오기 키 가르치기 (F4)
+A Select	A 선택
+B Back to the game	B 게임으로 돌아가기
+Save key sent	저장 키를 보냈어요
+Not saved	저장되지 않음
+Load key sent	불러오기 키를 보냈어요
+Not loaded	불러오지 않음
+Key sent	키를 보냈어요
+Key not sent	키를 보내지 못했어요
+Not sent safely	안전하게 보내지 못했어요
+Grant	허용하기
+Take back	회수
+Accessibility page	접근성 페이지
+Granted. A takes it back; the switches below go back to Android's values first.	허용되었습니다. A를 누르면 회수합니다. 그 전에 아래 스위치가 Android 값으로 돌아갑니다.
+Granted. It stays until you take it back (adb shell pm revoke) or uninstall pocket-ui.	허용되었습니다. 회수하거나(adb shell pm revoke) pocket-ui를 제거할 때까지 유지됩니다.
+Shizuku or root can give it: press A. You can take it back here at any time.	Shizuku나 루트로 줄 수 있습니다: A를 누르세요. 여기서 언제든 회수할 수 있습니다.
+Then press A here. It stays until you take it back or uninstall pocket-ui. With Shizuku or root, A gives it here.	그런 다음 여기서 A를 누르세요. 회수하거나 pocket-ui를 제거할 때까지 유지됩니다. Shizuku나 루트가 있으면 여기서 A로 줄 수 있습니다.
+A opens Android's accessibility page, where you can turn it off.	A를 누르면 Android 접근성 페이지가 열리며, 거기서 끌 수 있습니다.
+With Shizuku or root it saves and loads too: teach the emulator the keys once, from the menu's Teach rows.	Shizuku나 루트가 있으면 저장과 불러오기도 됩니다: 메뉴의 가르치기 항목으로 에뮬레이터에 키를 한 번 알려 주세요.
+Without Shizuku or root it brings back the shelf and opens the emulator's own menu.	Shizuku나 루트가 없으면 선반으로 돌아가고 에뮬레이터 자체 메뉴를 엽니다.
+Shizuku: keys pressed in other emulators for save and load, and the ADB grant with one A.	Shizuku: 저장과 불러오기를 위해 다른 에뮬레이터에서 키를 누르고, A 한 번으로 ADB 권한을 줍니다.
+Shizuku is ready. pocket-ui presses save and load in other emulators and adds the whole system log to a bug report.	Shizuku가 준비되었습니다. pocket-ui가 다른 에뮬레이터에서 저장과 불러오기를 누르고, 버그 보고서에 전체 시스템 로그를 넣습니다.
+It brings back the shelf and opens the emulator's own menu; save and quit there.	선반으로 돌아가거나 에뮬레이터 자체 메뉴를 엽니다. 저장과 종료는 그 메뉴에서 하세요.
+Shizuku: the ADB grant with one A, and the whole system log in a bug report.	Shizuku: A 한 번으로 ADB 권한을 주고, 버그 보고서에 전체 시스템 로그를 넣습니다.
+Shizuku is ready: A on ADB grant gives the grant, and a bug report gets the whole system log.	Shizuku가 준비되었습니다: ADB 권한에서 A를 누르면 권한을 주고, 버그 보고서에 전체 시스템 로그가 들어갑니다.
+Shizuku is ready. ADB access is already granted. A bug report includes the whole system log.	Shizuku가 준비되었습니다. ADB 권한이 이미 부여되었습니다. 버그 보고서에는 전체 시스템 로그가 포함됩니다.
+ADB access is already granted.	ADB 권한이 이미 부여되었습니다.
+Your handheld	내 휴대용 기기
+Make pocket-ui part of your handheld.	pocket-ui를 기기의 일부로 만들어 보세요.
+Start on the shelf	선반에서 시작
+pocket-ui becomes your Home app: your handheld starts on the shelf, and Home in a game opens its pause menu. Android asks first.	pocket-ui가 홈 앱이 돼요. 기기를 켜면 선반에서 시작하고, 게임 중 Home을 누르면 일시정지 메뉴가 열려요. Android가 먼저 물어봐요.
+More any time in Settings › System › Android extras: fewer pop-ups, and a pause menu in other emulator apps.	더 많은 기능은 언제든 설정 › 시스템 › Android 추가 기능에서: 팝업 줄이기, 다른 에뮬레이터 앱의 일시정지 메뉴.
+Got a second Pocket? Settings › Connections › Pocket Sync keeps your saves the same on both.	Pocket이 하나 더 있나요? 설정 › 연결 › Pocket Sync가 두 기기의 세이브를 똑같이 맞춰 줘요.
+
+
+
+# Shelves by series (app_series.rs, series_page.rs, look_settings.rs ShelfOrder)
+By console	콘솔별
+By series	시리즈별
+A shelf for each console.	콘솔마다 선반 하나.
+A shelf for each series, every console's games in release order.	시리즈마다 선반 하나, 모든 콘솔의 게임을 발매 순으로.
+One of a kind	단독 게임
+1 game that stands alone	단독 게임 1개
+{n} games that stand alone	단독 게임 {n}개
+{t} · {s} · since {n}	{t} · {s} · {n}년부터
+{s} · since {n}	{s} · {n}년부터
+{n} games · {n2} to {n3}	게임 {n}개 · {n2}~{n3}년
+{n} games · {n2}	게임 {n}개 · {n2}년
+1 game · {n}	게임 1개 · {n}년
+{n} to {n2}	{n}~{n2}년
+{n} of {m} main games	본편 {m}개 중 {n}개
+The series	시리즈
+Since	시작
+Main games	본편
+Years	연도
+You have	보유
+Consoles	콘솔
+Key games	대표작
+On your Pocket	내 Pocket에 있음
+Your games of this series	이 시리즈의 내 게임
+Your games of this series, in release order.	이 시리즈의 내 게임, 발매 순.
+Games that are not part of a series, or the only one of theirs on your Pocket.	시리즈에 속하지 않거나, 내 Pocket에 그 시리즈가 하나뿐인 게임.
+No series found among your games yet. Games of one series join their own shelf once two of them are on your Pocket.	아직 내 게임 중에 시리즈가 없습니다. 같은 시리즈 게임이 Pocket에 두 개 있으면 전용 선반이 생깁니다.
+Facts: Wikipedia, written for pocket-ui	정보: Wikipedia, pocket-ui용으로 작성
+
+# The series cards' stories (series_facts_data.rs, painted by series_page.rs)
+Capcom's courtroom drama first took the stand on the Game Boy Advance in Japan in 2001 as Gyakuten Saiban, created by Shu Takumi. As rookie defence attorney Phoenix Wright, players hunt for clues, press eccentric witnesses and expose lies with razor-sharp timing. The 2005 Nintendo DS release carried the series worldwide and turned a shouted Objection into a gaming favourite.	캡콤의 법정 드라마는 2001년 일본 게임보이 어드밴스에서 타쿠미 슈가 만든 역전재판으로 처음 증언대에 섰다. 신참 변호사 나루호도 류이치가 되어 단서를 찾고, 괴짜 증인을 추궁하고, 칼 같은 타이밍으로 거짓말을 밝혀낸다. 2005년 닌텐도 DS판이 시리즈를 전 세계로 퍼뜨렸고, 힘차게 외치는 "이의 있음"은 게이머들이 사랑하는 명대사가 되었다.
+Intelligent Systems launched this turn-based strategy series in Japan in 1988 with Famicom Wars, pitting colourful armies of tanks, planes and infantry across grid maps. Every commanding officer brings a signature CO Power that can swing a close match in a single turn. Advance Wars on the Game Boy Advance brought the series to the West in 2001 and opened the door for Fire Emblem too.	인텔리전트 시스템즈는 1988년 일본에서 패미컴 워즈로 이 턴제 전략 시리즈를 시작해, 전차와 비행기, 보병으로 이루어진 알록달록한 군대를 격자 맵 위에서 맞붙게 했다. 지휘관마다 고유한 CO 파워가 있어 팽팽한 승부를 단 한 턴 만에 뒤집을 수 있다. 2001년 게임보이 어드밴스의 어드밴스 워즈가 시리즈를 서양에 선보였고, 파이어 엠블렘에게도 문을 열어 주었다.
+Hudson Soft kicked off Bomberman on Japanese home computers in 1983 before the 1985 NES version turned its maze-blasting puzzle action into a household hit. Dropping timed bombs to clear paths and trap rivals makes every round brisk, readable and joyful. Multiplayer became its beating heart, peaking at ten-player couch chaos in Saturn Bomberman before Konami acquired Hudson Soft in 2011.	허드슨은 1983년 일본 PC로 봄버맨을 처음 선보였고, 1985년 NES판이 미로를 폭파하는 퍼즐 액션을 집집마다 즐기는 히트작으로 만들었다. 시한폭탄을 놓아 길을 뚫고 라이벌을 가두는 플레이 덕분에 모든 라운드가 빠르고, 알기 쉽고, 즐겁다. 멀티플레이는 시리즈의 심장이 되어 새턴 봄버맨의 10인 소파 대혼전에서 절정을 맞았고, 이후 2011년 코나미가 허드슨을 인수했다.
+Capcom entered classic console role-playing with Breath of Fire on the Super Nintendo in 1993, introducing heroes usually named Ryu and Nina across self-contained fantasy worlds. Ryu's gift for shapeshifting into mighty dragons gives its turn-based battles a thrilling edge alongside rich sprite art. Breath of Fire III on PlayStation in 1997 brought the series into 3D graphics and voice acting.	캡콤은 1993년 슈퍼 닌텐도의 브레스 오브 파이어로 정통 콘솔 RPG에 뛰어들었고, 작품마다 독립된 판타지 세계에서 주로 류와 니나라는 이름의 주인공들을 선보였다. 강력한 드래곤으로 변신하는 류의 능력은 풍성한 도트 그래픽과 함께 턴제 전투에 짜릿한 묘미를 더한다. 1997년 플레이스테이션의 브레스 오브 파이어 III는 시리즈에 3D 그래픽과 음성 연기를 도입했다.
+Konami unleashed Castlevania on the Famicom Disk System in 1986 as Akumajō Dracula, sending vampire hunter Simon Belmont into Dracula's gothic castle with his trusty whip. Tight platforming, classic monsters and unforgettable music defined its 8-bit and 16-bit adventures. In 1997, Symphony of the Night on PlayStation embraced open castle exploration and helped shape the Metroidvania genre.	코나미는 1986년 패미컴 디스크 시스템으로 악마성 드라큘라를 선보이며, 뱀파이어 헌터 시몬 벨몬드를 믿음직한 채찍과 함께 드라큘라의 고딕 성으로 보냈다. 정교한 플랫포밍, 고전 몬스터, 잊을 수 없는 음악이 8비트와 16비트 모험을 완성했다. 1997년 플레이스테이션의 악마성 드라큘라 X 월하의 야상곡은 성을 자유롭게 탐험하는 방식을 받아들여 메트로배니아 장르를 만드는 데 한몫했다.
+Square assembled a dream team for Chrono Trigger on the Super Nintendo in 1995, uniting Hironobu Sakaguchi, Yuji Horii and artist Akira Toriyama with Yasunori Mitsuda's soaring score. Seamless battles, time-travelling quests and multiple endings made every playthrough feel alive. After Radical Dreamers on Satellaview in 1996, Chrono Cross on PlayStation in 1999 explored parallel worlds.	스퀘어는 1995년 슈퍼 닌텐도의 크로노 트리거를 위해 드림팀을 꾸렸다. 사카구치 히로노부, 호리이 유지, 아티스트 토리야마 아키라가 모였고, 미츠다 야스노리의 웅장한 음악이 더해졌다. 끊김 없는 전투, 시간 여행 모험, 멀티 엔딩 덕분에 매번의 플레이가 생생하게 느껴졌다. 1996년 사테라뷰의 래디컬 드리머즈에 이어, 1999년 플레이스테이션의 크로노 크로스는 평행 세계를 탐험했다.
+Konami stormed Japanese arcades with Contra in 1987, sending commandos Bill Rizer and Lance Bean into fierce run-and-gun battles against alien invaders. Grabbing power-ups like the Spread Gun turns the screen into pure action joy, especially in two-player co-op. Its 1988 NES port cemented the thirty-life Konami Code in gaming folklore, while Europe knew the robot-starring version as Probotector.	코나미는 1987년 혼두라로 일본 오락실을 휩쓸며, 특공대원 빌 라이저와 랜스 빈을 외계 침략자와의 격렬한 런앤건 전투로 보냈다. 스프레드 건 같은 파워업을 먹으면 화면이 순수한 액션의 쾌감으로 가득 차고, 2인 협력이라면 더더욱 그렇다. 1988년 NES판은 목숨 30개를 주는 코나미 커맨드를 게임계의 전설로 만들었고, 유럽에서는 로봇이 주인공인 버전이 Probotector로 알려졌다.
+Naughty Dog spun Crash Bandicoot onto Sony's PlayStation in 1996, pairing sharp 3D obstacle courses with Saturday-morning cartoon energy. Created by Andy Gavin and Jason Rubin, the goofy marsupial smashes crates and foils the mad plans of Doctor Neo Cortex. Alongside Crash Bandicoot 2, Warped and Crash Team Racing, he quickly became the PlayStation's beloved unofficial mascot.	너티 독은 1996년 소니 플레이스테이션에 크래시 밴디쿳을 선보이며, 날렵한 3D 장애물 코스와 토요일 아침 만화 같은 에너지를 결합했다. 앤디 개빈과 제이슨 루빈이 만든 엉뚱한 유대류는 상자를 부수며 네오 코텍스 박사의 황당한 계획을 막아 낸다. 크래시 밴디쿳 2, Warped, 크래시 팀 레이싱과 함께 그는 곧 플레이스테이션의 사랑받는 비공식 마스코트가 되었다.
+Shigeru Miyamoto created Donkey Kong for arcades in 1981 to rescue unsold Nintendo cabinets, casting a barrel-hurling gorilla opposite a nimble carpenter who soon became Mario. Its clever platforming sparked a lasting dynasty of jungle adventures filled with charm and bounce. Rare's Donkey Kong Country on Super Nintendo in 1994 stunned players with lush pre-rendered visuals and a timeless soundtrack.	미야모토 시게루는 1981년 팔리지 않은 닌텐도 기판을 살리기 위해 아케이드용 동키콩을 만들었고, 통을 던지는 고릴라와 훗날 마리오가 되는 날렵한 목수를 맞붙였다. 기발한 플랫포밍은 매력과 경쾌함이 넘치는 정글 모험의 오랜 계보를 열었다. 1994년 슈퍼 닌텐도로 나온 레어의 동키콩 컨트리는 화려한 프리렌더링 그래픽과 시대를 초월한 사운드트랙으로 게이머들을 놀라게 했다.
+Technos Japan rolled Double Dragon into arcades in 1987, led by Yoshihisa Kishimoto and inspired by Bruce Lee's classic film Enter the Dragon. Martial-arts twins Billy and Jimmy Lee fight across gritty city streets to rescue Marian, trading punches, kicks and picked-up weapons. Its side-by-side two-player cooperative brawling kicked off a golden age for side-scrolling beat 'em ups.	테크노스 재팬은 1987년 키시모토 요시히사의 지휘 아래, 이소룡의 고전 영화 용쟁호투에서 영감을 받은 더블 드래곤을 오락실에 내놓았다. 무술가 쌍둥이 빌리 리와 지미 리는 거친 도시 거리를 누비며 펀치와 킥, 주운 무기로 마리안을 구하러 간다. 나란히 싸우는 2인 협력 난투는 횡스크롤 벨트스크롤 액션의 황금기를 열었다.
+Enix debuted Dragon Quest on Japan's Famicom in 1986, crafted by Yuji Horii with Akira Toriyama's expressive characters and Koichi Sugiyama's orchestral themes. Known early in North America as Dragon Warrior, it welcomed millions to turn-based console role-playing with clear menus and heartwarming fairy-tale journeys. Its cheeky blue Slime became one of gaming's friendliest icons.	에닉스는 1986년 일본 패미컴으로 드래곤 퀘스트를 선보였다. 호리이 유지가 만들고 토리야마 아키라의 표정 풍부한 캐릭터와 스기야마 코이치의 오케스트라 음악이 함께했다. 북미에서는 처음에 Dragon Warrior로 알려졌으며, 알기 쉬운 메뉴와 마음 따뜻한 동화 같은 여정으로 수백만 명을 턴제 콘솔 RPG의 세계로 이끌었다. 장난기 가득한 파란 슬라임은 게임계에서 가장 친근한 아이콘 중 하나가 되었다.
+Nintendo launched F-Zero alongside the Super Famicom in 1990, showing off blistering futuristic speed with Mode 7 tracks that curved into the horizon. Piloting hovering machines like Captain Falcon's craft rewards daring boosts, tight corners and nerves of steel. In 2003, Sega's Amusement Vision teamed with Nintendo on F-Zero GX for GameCube, delivering a dazzling rush alongside its arcade twin F-Zero AX.	닌텐도는 1990년 슈퍼 패미컴과 함께 F-ZERO를 출시해, 지평선을 향해 휘어지는 모드 7 코스로 눈부신 미래형 속도감을 뽐냈다. 캡틴 팔콘의 머신 같은 부유 머신을 몰면 과감한 부스트, 날카로운 코너링, 강철 같은 담력이 보상받는다. 2003년에는 세가의 어뮤즈먼트 비전이 닌텐도와 손잡고 게임큐브용 F-ZERO GX를 만들어, 아케이드 쌍둥이 F-ZERO AX와 함께 짜릿한 질주를 선사했다.
+Hironobu Sakaguchi created Final Fantasy for Square on Japan's Famicom in 1987, kicking off one of role-playing's grandest adventures. Every numbered entry builds a fresh world and cast while weaving in friendly staples like chocobos, moogles and a character named Cid. Final Fantasy VII on PlayStation in 1997 brought cinematic 3D storytelling to a global audience and sold over 14 million copies.	사카구치 히로노부는 1987년 스퀘어를 위해 일본 패미컴으로 파이널 판타지를 만들며 RPG 역사상 손꼽히는 웅장한 모험을 시작했다. 넘버링 작품마다 새로운 세계와 캐릭터를 그리면서도 초코보, 모그리, 시드라는 이름의 캐릭터 같은 반가운 단골 요소를 녹여 낸다. 1997년 플레이스테이션의 파이널 판타지 VII은 영화 같은 3D 스토리텔링을 전 세계 관객에게 전했고 1,400만 장 이상 팔렸다.
+Intelligent Systems introduced Fire Emblem on the Famicom in 1990, created by Shouzou Kaga as a thoughtful blend of grid-based tactics and character drama. Because fallen allies stay lost in classic mode, every bold move carries genuine tension and care for your squad. Following Marth and Roy's spotlight in Super Smash Bros. Melee, the 2003 Game Boy Advance entry finally brought the series West.	인텔리전트 시스템즈는 1990년 패미컴으로 파이어 엠블렘을 선보였다. 카가 쇼조가 격자 전술과 캐릭터 드라마를 사려 깊게 엮어 만든 작품이다. 클래식 모드에서는 쓰러진 동료가 영영 돌아오지 않기 때문에, 대담한 한 수마다 진짜 긴장감과 부대를 향한 애정이 담긴다. 대난투 스매시브라더스 DX에서 마르스와 로이가 주목받은 뒤, 2003년 게임보이 어드밴스 작품이 마침내 시리즈를 서양에 소개했다.
+Camelot Software Planning crafted Golden Sun for the Game Boy Advance in 2001, led by brothers Hiroyuki and Shugo Takahashi with sweeping music by Motoi Sakuraba. Young adepts wield elemental Psynergy to solve clever dungeon puzzles and collect playful Djinn that reshape their powers. The Lost Age continued the portable epic in 2002 before Dark Dawn arrived on Nintendo DS in 2010.	카멜롯 소프트웨어 플래닝은 2001년 게임보이 어드밴스용 황금의 태양을 만들었다. 타카하시 히로유키와 타카하시 슈고 형제가 이끌었고, 사쿠라바 모토이가 웅장한 음악을 맡았다. 젊은 에너지스트들은 원소의 힘 에너지로 기발한 던전 퍼즐을 풀고, 능력을 바꿔 주는 귀여운 쟌을 모은다. 2002년 The Lost Age가 휴대용 서사시를 이어 갔고, 2010년에는 닌텐도 DS로 Dark Dawn이 나왔다.
+Konami fired up Gradius in arcades in 1985, known outside Japan as Nemesis, putting players in the cockpit of the sleek Vic Viper starship. Collecting capsules lets players step along a selectable power meter, choosing speed, lasers or hovering upgrades on the fly. Its NES conversion made gaming history as the very first title to feature the famous Konami Code.	코나미는 1985년 오락실에 그라디우스를 띄웠다. 일본 밖에서는 Nemesis로도 알려졌으며, 플레이어는 날렵한 우주선 빅 바이퍼의 조종석에 앉는다. 캡슐을 모으면 선택식 파워업 게이지가 한 칸씩 올라가, 스피드, 레이저, 떠다니는 옵션을 그때그때 고를 수 있다. NES 이식판은 그 유명한 코나미 커맨드를 처음으로 넣은 게임으로 역사에 이름을 남겼다.
+Kazunori Yamauchi and Polyphony Digital launched Gran Turismo on PlayStation in 1997, proudly wearing its subtitle The Real Driving Simulator. Players earn racing licences, buy everyday cars and fine-tune a dream garage grounded in authentic handling and care for car culture. That debut sped past ten million copies and launched PlayStation's best-selling game franchise.	야마우치 카즈노리와 폴리포니 디지털은 1997년 플레이스테이션으로 그란 투리스모를 출시하며, The Real Driving Simulator라는 부제를 자랑스럽게 내걸었다. 플레이어는 레이싱 라이선스를 따고, 일상적인 차를 사고, 실감 나는 핸들링과 자동차 문화에 대한 애정을 바탕으로 꿈의 차고를 세팅한다. 이 데뷔작은 1,000만 장을 넘기며 플레이스테이션 최고의 판매량을 자랑하는 게임 시리즈의 출발점이 되었다.
+Scottish programmers David Jones and Mike Dailly created Grand Theft Auto at DMA Design in Dundee, releasing the first game in 1997 for PC and PlayStation. Its early top-down cities offered mischievous open-ended freedom to roam streets, grab rides and tackle wild jobs. Grand Theft Auto III leapt into 3D in 2001 and reshaped open-world games as DMA Design became Rockstar North.	스코틀랜드 프로그래머 데이비드 존스와 마이크 데일리는 던디의 DMA Design에서 그랜드 테프트 오토를 만들었고, 1997년 PC와 플레이스테이션으로 첫 작품을 내놓았다. 초기의 탑뷰 도시에서는 거리를 누비고, 차를 훔치고, 엉뚱한 일거리에 도전하는 장난기 가득한 자유를 누릴 수 있었다. 2001년 그랜드 테프트 오토 III는 3D로 도약해 오픈월드 게임을 새로 정의했고, 그 무렵 DMA Design은 락스타 노스가 되었다.
+Yasuhiro Wada dreamed up Bokujō Monogatari from his countryside childhood in Miyazaki, launching on Japan's Super Famicom in 1996 via Pack-In-Video. Instead of boss fights, players plant seasonal crops, tend friendly livestock and build cosy lives alongside quirky neighbours. Natsume brought it West as Harvest Moon in 1997, and from 2014 the original creators continued overseas as Story of Seasons.	와다 야스히로는 미야자키 시골에서 보낸 어린 시절을 바탕으로 목장이야기를 구상했고, 이 게임은 1996년 팩인비디오를 통해 일본 슈퍼 패미컴으로 나왔다. 보스와 싸우는 대신 플레이어는 계절 작물을 심고, 친근한 가축을 돌보고, 개성 넘치는 이웃들과 아늑한 삶을 꾸려 간다. 1997년 낫츠메가 Harvest Moon이라는 이름으로 서양에 들여왔고, 2014년부터는 원래 제작진이 해외에서도 Story of Seasons라는 이름으로 이어 가고 있다.
+Masahiro Sakurai dreamed up Kirby at HAL Laboratory as a cheerful platformer anyone could enjoy, debuting with Kirby's Dream Land on Game Boy in 1992. Floating on puffs of air and inhaling foes gave the little hero instant charm, and Kirby's Adventure on NES in 1993 introduced his famous Copy Abilities. His name honours lawyer John Kirby, and international Game Boy boxes first showed him white.	사쿠라이 마사히로는 HAL 연구소에서 누구나 즐길 수 있는 밝은 플랫포머로 커비를 구상했고, 1992년 게임보이의 별의 커비로 데뷔시켰다. 공기를 머금고 둥실 떠오르고 적을 빨아들이는 모습에 작은 영웅은 곧바로 사랑받았으며, 1993년 NES의 별의 커비 꿈의 샘 이야기에서는 유명한 카피 능력이 처음 등장했다. 이름은 변호사 존 커비에게서 따왔고, 해외 게임보이 패키지에서는 처음에 하얀 모습으로 그려졌다.
+Koichi Ishii sparked the Mana series at Square in 1991 with Final Fantasy Adventure on Game Boy, known in Japan as Seiken Densetsu. Stepping out on its own, Secret of Mana on Super Nintendo in 1993 won hearts with colourful real-time combat and its clever Ring Command menu. Across every adventure, the ancient Mana Tree and Mana Sword anchor its bright, storybook fantasy.	이시이 코이치는 1991년 스퀘어에서 게임보이용 Final Fantasy Adventure로 마나 시리즈를 열었다. 일본에서는 성검전설로 알려진 작품이다. 독자적인 길을 걷게 된 1993년 슈퍼 닌텐도의 성검전설 2는 화려한 실시간 전투와 기발한 링 커맨드 메뉴로 많은 이의 마음을 사로잡았다. 모든 모험에서 고대의 마나 나무와 마나의 검이 밝고 동화 같은 판타지의 중심을 이룬다.
+Nintendo revved up Mario Kart on the Super Nintendo in 1992 with Super Mario Kart, produced by Shigeru Miyamoto and directed by Tadashi Sugiyama and Hideki Konno. Born as a two-player racing experiment inspired by F-Zero, it turned banana peels and shells into pure multiplayer magic. Selling over eight million copies, that debut became the fourth best-selling SNES game and launched kart racing.	닌텐도는 1992년 슈퍼 닌텐도의 슈퍼 마리오 카트로 마리오 카트의 시동을 걸었다. 미야모토 시게루가 프로듀서를, 스기야마 타다시와 콘노 히데키가 디렉터를 맡았다. F-ZERO에서 영감을 받은 2인용 레이싱 실험에서 출발해, 바나나 껍질과 등껍질을 순수한 멀티플레이의 마법으로 바꿔 놓았다. 800만 장 이상 팔린 이 데뷔작은 SNES 역대 판매량 4위에 올랐고 카트 레이싱 장르를 열었다.
+Hudson Soft built the first Mario Party for Nintendo on the Nintendo 64 in 1998, turning Mushroom Kingdom favourites into a lively digital board game. Up to four players race for stars across themed boards before diving into snappy minigames after every round. Some frantic stick-spinning minigames proved so intense that Nintendo even sent free gloves to players with sore palms.	허드슨은 1998년 닌텐도를 위해 닌텐도 64로 첫 마리오 파티를 만들어, 버섯 왕국의 인기 캐릭터들을 활기찬 디지털 보드게임으로 탄생시켰다. 최대 4명이 테마별 보드에서 스타를 차지하려 경쟁하고, 매 턴이 끝나면 신나는 미니게임에 뛰어든다. 스틱을 정신없이 돌리는 일부 미니게임은 너무 격렬해서, 닌텐도가 손바닥이 아픈 플레이어들에게 무료 장갑을 보내기까지 했다.
+Capcom introduced Mega Man on the NES in 1987, known in Japan as Rockman alongside his sister Roll. Players tackle Dr. Wily's Robot Masters in any order, claiming each defeated boss's weapon to turn the tables on the next stage. Mega Man 2 in 1988 cemented its tight action formula, and the blue hero later branched into beloved worlds like Mega Man X, Zero and Battle Network.	캡콤은 1987년 NES로 Mega Man을 선보였다. 일본에서는 록맨이라는 이름으로 여동생 롤과 함께 알려졌다. 플레이어는 와일리 박사의 보스 로봇들에 원하는 순서로 도전하고, 쓰러뜨린 보스의 무기를 얻어 다음 스테이지에서 판을 뒤집는다. 1988년 록맨 2가 탄탄한 액션 공식을 굳혔고, 파란 영웅은 이후 록맨 X, 록맨 제로, 록맨 에그제 같은 사랑받는 세계로 뻗어 나갔다.
+Atlus launched Megami Tensei on Japan's Famicom in 1987, published by Namco and adapted from Aya Nishitani's Digital Devil Story novels. Negotiating with mythological demons to join your party and fusing them into stronger allies gave role-playing games a bold, stylish twist. Many entries unfold across a haunted Tokyo where tough choices between Law and Chaos shape the fate of the world.	아틀러스는 1987년 일본 패미컴으로 여신전생을 내놓았다. 남코가 발매했고, 니시타니 아야의 소설 디지털 데빌 스토리를 원작으로 했다. 신화 속 악마와 협상해 파티에 합류시키고, 합체시켜 더 강한 동료로 만드는 시스템은 RPG에 대담하고 세련된 반전을 안겼다. 많은 작품이 악마가 들끓는 도쿄를 무대로, 로우와 카오스 사이의 어려운 선택이 세계의 운명을 결정한다.
+Hideo Kojima created Metal Gear for Konami on MSX2 home computers in 1987, turning hardware limits into a fresh style of play built around sneaking instead of shooting. As covert operative Solid Snake, players slip past guards to stop a nuclear-armed walking tank called Metal Gear. In 1998, Metal Gear Solid on PlayStation brought cinematic stealth into 3D and earned worldwide acclaim.	코지마 히데오는 1987년 코나미를 위해 MSX2 컴퓨터로 메탈기어를 만들며, 하드웨어의 한계를 쏘는 대신 숨어드는 새로운 플레이 방식으로 바꿔 놓았다. 비밀 요원 솔리드 스네이크가 되어 경비병을 피해 잠입하고, 핵무기를 탑재한 보행 전차 메탈기어를 저지한다. 1998년 플레이스테이션의 메탈기어 솔리드는 영화 같은 잠입 액션을 3D로 옮겨 전 세계의 찬사를 받았다.
+Nazca Corporation unleashed Metal Slug on Neo Geo arcades in 1996 before merging with SNK right after finishing the debut. Its lively artwork bursts with slapstick humour, wild bosses and crisp run-and-gun action starring the Peregrine Falcon Squad. Hopping into the chunky SV-001 tank, nicknamed Metal Slug, became an instant arcade highlight that earned a devoted cult following.	나즈카는 1996년 네오지오 오락실에 메탈슬러그를 내놓았고, 데뷔작을 완성하자마자 SNK와 합병했다. 생동감 넘치는 그래픽에는 슬랩스틱 유머, 황당한 보스, 페레그린 팔콘 부대가 주인공인 시원한 런앤건 액션이 가득하다. 메탈슬러그라는 별명의 땅딸막한 전차 SV-001에 올라타는 순간은 곧바로 오락실의 하이라이트가 되었고, 열성적인 컬트 팬층을 만들었다.
+Nintendo R&D1 debuted Metroid on Japan's Famicom Disk System in 1986, blending moody sci-fi exploration with platforming on the alien world of Zebes. Players guide bounty hunter Samus Aran through tangled tunnels, unlocking power-ups to open fresh paths and rewarding speedy clears with her iconic reveal. Super Metroid on Super Nintendo in 1994 perfected the formula with an automap and soaring atmosphere.	닌텐도 개발 1부는 1986년 일본 패미컴 디스크 시스템으로 메트로이드를 선보이며, 외계 행성 제베스를 무대로 음울한 SF 탐험과 플랫포밍을 결합했다. 플레이어는 현상금 사냥꾼 사무스 아란을 이끌고 얽히고설킨 통로를 지나며 파워업으로 새로운 길을 열고, 빠르게 클리어하면 상징적인 정체 공개 장면으로 보상받는다. 1994년 슈퍼 닌텐도의 슈퍼 메트로이드는 자동 지도와 압도적인 분위기로 그 공식을 완성했다.
+Ed Boon and John Tobias brought Mortal Kombat to arcades for Midway in 1992, turning heads with digitised live-action fighters and martial-arts flair. Iconic rivals Scorpion, Sub-Zero and Raiden clashed in intense duels capped by shocking finishing moves called Fatalities. The fierce debate around its arcade gore helped inspire the creation of the ESRB ratings board in North America.	에드 분과 존 토비아스는 1992년 미드웨이를 통해 모탈 컴뱃을 오락실에 내놓았고, 실사를 디지털로 옮긴 파이터와 무술의 멋으로 시선을 사로잡았다. 스콜피온, 서브제로, 라이덴 같은 상징적인 라이벌들이 격렬한 대결을 펼쳤고, 페이탈리티라 불리는 충격적인 마무리 기술로 끝을 맺었다. 오락실 속 잔혹 표현을 둘러싼 뜨거운 논쟁은 북미에서 등급 심의 기구 ESRB가 만들어지는 계기 중 하나가 되었다.
+Electronic Arts launched The Need for Speed on the 3DO in 1994, developed by EA Canada alongside car magazine Road & Track for authentic supercar handling. Roaring down scenic roads soon grew into thrilling police chases with Need for Speed III: Hot Pursuit in 1998. In 2003, Underground shifted the spotlight to vibrant street racing and deep custom tuning.	일렉트로닉 아츠는 1994년 3DO로 The Need for Speed를 출시했다. EA 캐나다가 자동차 잡지 Road & Track과 함께 개발해 실감 나는 슈퍼카 핸들링을 구현했다. 경치 좋은 도로를 질주하던 게임은 곧 1998년 니드 포 스피드 III: 핫 퍼슈트의 짜릿한 경찰 추격전으로 발전했다. 2003년 언더그라운드는 화려한 스트리트 레이싱과 깊이 있는 커스텀 튜닝에 스포트라이트를 비췄다.
+Tecmo introduced Ninja Gaiden in 1988 with two distinct adventures, an arcade brawler and a slick NES action platformer known in Japan as Ninja Ryukenden. Fast action, catchy music and dramatic story cutscenes made ninja hero Ryu Hayabusa an 8-bit legend. In 2004, Team Ninja relaunched the series in 3D on Xbox to universal acclaim.	테크모는 1988년 서로 다른 두 가지 모험으로 Ninja Gaiden을 선보였다. 하나는 아케이드 액션 게임, 다른 하나는 일본에서 닌자 용검전으로 알려진 세련된 NES 액션 플랫포머다. 빠른 액션, 귀에 남는 음악, 극적인 컷신이 닌자 영웅 류 하야부사를 8비트의 전설로 만들었다. 2004년 팀 닌자는 Xbox에서 시리즈를 3D로 부활시켜 만장일치의 찬사를 받았다.
+Toru Iwatani designed Pac-Man for Namco arcades in 1980, first released in Japan as Puck Man with a warm goal of welcoming everyone to the arcade. Chasing dots through glowing mazes while outsmarting four distinct ghosts and flipping the tables with Power Pellets proved endlessly replayable. Its cheerful yellow hero, inspired in part by a sliced pizza and the character kuchi, became a global pop icon.	이와타니 토루는 1980년 남코의 아케이드용으로 팩맨을 디자인했다. 일본에서는 처음에 Puck Man이라는 이름으로 나왔으며, 누구나 오락실을 편하게 찾을 수 있게 하겠다는 따뜻한 목표가 담겨 있었다. 빛나는 미로에서 점을 쫓고, 개성이 다른 유령 넷을 따돌리고, 파워 쿠키로 판을 뒤집는 재미는 끝없이 다시 하고 싶게 만들었다. 한 조각 빠진 피자와 한자 구(口, kuchi)에서 일부 영감을 얻은 쾌활한 노란 영웅은 세계적인 팝 아이콘이 되었다.
+Atlus spun Persona off from Megami Tensei in 1996 with Revelations: Persona on PlayStation, casting high school students who summon Personas born from their inner selves. Striking style and Shoji Meguro's memorable scores gave the series a vibrant voice of its own. Persona 3 on PlayStation 2 in 2006 paired dungeon crawling with daily school life and friendships, defining its signature rhythm.	아틀러스는 1996년 플레이스테이션의 여신이문록 페르소나로 여신전생에서 페르소나를 파생시켰다. 내면에서 태어난 페르소나를 소환하는 고등학생들이 주인공이다. 강렬한 스타일과 메구로 쇼지의 기억에 남는 음악이 시리즈에 생기 넘치는 고유의 목소리를 부여했다. 2006년 플레이스테이션 2의 페르소나 3는 던전 탐험과 일상적인 학교생활, 우정을 엮어 시리즈 특유의 리듬을 확립했다.
+Sega unveiled Phantasy Star on the Master System in 1987, blending starships, swords and magic in a bold science-fantasy epic. Young heroine Alis Landale journeys across planets and smooth first-person 3D maze dungeons to avenge her brother Nero. In 2000, Phantasy Star Online on Dreamcast blazed a trail by bringing cooperative online role-playing into living rooms on console.	세가는 1987년 마스터 시스템으로 판타시 스타를 공개하며, 우주선과 검과 마법을 대담한 SF 판타지 서사시로 버무렸다. 젊은 히로인 앨리스 랜데일은 오빠 네로의 복수를 위해 행성을 넘나들고 부드러운 1인칭 3D 미로 던전을 헤쳐 나간다. 2000년 드림캐스트의 판타시 스타 온라인은 협력 온라인 RPG를 콘솔로 거실에 들여오며 새로운 길을 개척했다.
+Satoshi Tajiri and artist Ken Sugimori created Pokémon at Game Freak, channelling Tajiri's childhood love of insect collecting into Pocket Monsters Red and Green for Game Boy in Japan in 1996. Catching, training and battling hundreds of charming creatures turned portable play into a social phenomenon. Using the Game Boy link cable to trade with friends made every cartridge feel connected.	타지리 사토시와 아티스트 스기모리 켄은 게임 프리크에서 포켓몬을 만들었고, 곤충 채집을 좋아하던 타지리의 어린 시절을 1996년 일본 게임보이용 포켓몬스터 적·녹으로 녹여 냈다. 수백 마리의 매력적인 생물을 잡고, 키우고, 배틀시키는 재미는 휴대용 게임을 사회 현상으로 바꿔 놓았다. 게임보이 통신 케이블로 친구와 교환하면서 모든 카트리지가 서로 연결된 듯 느껴졌다.
+Jordan Mechner crafted Prince of Persia for the Apple II in 1989 with Broderbund, rotoscoping footage of his brother David to achieve remarkably fluid swordplay and leaps. Players race a sixty-minute clock through trap-filled dungeons to topple Grand Vizier Jaffar and free the princess. After acquiring the rights in 2001, Ubisoft thrilled a new generation with The Sands of Time in 2003.	조던 메크너는 1989년 브로더번드와 함께 Apple II용 페르시아의 왕자를 만들었고, 동생 데이비드를 촬영한 영상을 로토스코핑해 놀랍도록 부드러운 칼싸움과 점프를 구현했다. 플레이어는 60분 제한 시간과 싸우며 함정 가득한 지하 감옥을 달려 대재상 자파를 무너뜨리고 공주를 구한다. 2001년 판권을 손에 넣은 유비소프트는 2003년 시간의 모래로 새로운 세대를 열광시켰다.
+Compile launched Puyo Puyo on MSX2 and Famicom Disk System in 1991, borrowing playful characters from its role-playing series Madō Monogatari. Matching four colourful blobs pops them away, while clever chain reactions shower rivals with nuisance Puyo in tense head-to-head battles. Western fans first met it as Dr. Robotnik's Mean Bean Machine and Kirby's Avalanche before Sega took the reins in 1998.	컴파일은 1991년 MSX2와 패미컴 디스크 시스템으로 뿌요뿌요를 내놓으며, 자사 RPG 시리즈 마도물어의 유쾌한 캐릭터들을 빌려 왔다. 같은 색 뿌요 네 개를 맞추면 터지고, 기발한 연쇄로 상대에게 방해 뿌요를 퍼붓는 긴장감 넘치는 대전이 펼쳐진다. 서양 팬들은 처음에 Dr. Robotnik's Mean Bean Machine과 Kirby's Avalanche로 이 게임을 만났고, 1998년에는 세가가 시리즈의 고삐를 넘겨받았다.
+Irem sent R-Type into arcades in 1987, challenging pilots of the R-9 Arrowhead starship to push back the eerie alien Bydo empire. Its ingenious Force pod docks onto the front or back of your ship, blocks shots and fires independently, turning every wave into a tactical puzzle. Inspired by Gradius, Aliens and H. R. Giger's art, it set a high-water mark for side-scrolling shooters.	아이렘은 1987년 오락실에 R-TYPE을 내놓으며, 우주선 R-9 애로우헤드의 파일럿들에게 섬뜩한 외계 제국 바이드를 물리치라는 도전을 던졌다. 기발한 포스는 기체 앞이나 뒤에 붙어 탄을 막고 스스로 공격까지 해서, 모든 적의 물결을 전술 퍼즐로 바꾼다. 그라디우스, 에이리언 2, H. R. 기거의 아트에서 영감을 받아 횡스크롤 슈팅의 새로운 기준을 세웠다.
+Insomniac Games launched Ratchet & Clank on PlayStation 2 in 2002, pairing Lombax mechanic Ratchet with his clever robot buddy Clank across vibrant sci-fi worlds. Inventive platforming collides with cheeky humour and an outrageously creative arsenal of exotic weapons and gadgets. Fresh off the Spyro trilogy, Insomniac turned the duo into a PlayStation flagship favourite.	인섬니악 게임즈는 2002년 플레이스테이션 2로 라쳇 & 클랭크를 내놓으며, 롬백스 정비공 라쳇과 똑똑한 로봇 단짝 클랭크를 화려한 SF 세계로 보냈다. 독창적인 플랫포밍에 짓궂은 유머, 터무니없이 창의적인 이색 무기와 장비가 어우러진다. 스파이로 3부작을 막 끝낸 인섬니악은 이 콤비를 플레이스테이션의 대표 인기 캐릭터로 키워 냈다.
+Michel Ancel created Rayman for Ubisoft in 1995, landing on Atari Jaguar, PlayStation and Sega Saturn with painterly, storybook worlds. Its upbeat limbless hero leaps through imaginative themed stages bursting with colour and charm to save his home alongside his friends. Rayman 2: The Great Escape made a joyful jump to 3D in 1999, and a later project even hatched the Raving Rabbids.	미셸 앙셀은 1995년 유비소프트에서 레이맨을 만들어, 그림처럼 아름다운 동화 세계와 함께 아타리 재규어, 플레이스테이션, 세가 새턴에 선보였다. 팔다리 없는 쾌활한 영웅은 색채와 매력이 넘치는 상상력 가득한 테마 스테이지를 뛰어다니며 친구들과 함께 고향을 구한다. 1999년 레이맨 2: 더 그레이트 이스케이프로 즐겁게 3D로 도약했고, 이후의 프로젝트에서는 레이빙 래비드까지 탄생했다.
+Capcom directors Shinji Mikami and Tokuro Fujiwara unveiled Resident Evil on PlayStation in 1996, known in Japan as Biohazard. Trapping players in a zombie-haunted mansion with scarce ammo and typewriter saves, it coined the term survival horror and drew spirit from Fujiwara's 1989 game Sweet Home. In 2005, Resident Evil 4 on GameCube reinvigorated the series by moving beyond fixed camera angles.	캡콤의 미카미 신지와 후지와라 토쿠로는 1996년 플레이스테이션으로 바이오하자드를 공개했다. 서양에서는 Resident Evil로 알려졌다. 부족한 탄약과 타자기 세이브로 플레이어를 좀비가 득실대는 저택에 가둔 이 게임은 서바이벌 호러라는 말을 만들어 냈고, 후지와라의 1989년 게임 스위트 홈에서 그 정신을 이어받았다. 2005년 게임큐브의 바이오하자드 4는 고정 카메라에서 벗어나며 시리즈에 새 활력을 불어넣었다.
+Namco tore into arcades with Ridge Racer in 1993 on its 3D texture-mapped System 22 hardware, then thrilled home players as a PlayStation launch title in 1994. High-energy tracks and sweeping power drifts through mountain bends defined its breezy arcade feel. Series host Reiko Nagase debuted in Rage Racer in 1996 and became its unmistakable smiling face.	남코는 1993년 3D 텍스처 매핑을 지원하는 System 22 기판으로 릿지 레이서를 오락실에 내놓았고, 1994년에는 플레이스테이션 런칭 타이틀로 집에서도 게이머들을 열광시켰다. 에너지 넘치는 코스와 산길 커브를 휩쓰는 시원한 드리프트가 경쾌한 아케이드 감각을 완성했다. 시리즈의 안내역 나가세 레이코는 1996년 레이지 레이서로 데뷔해 시리즈를 대표하는 미소 띤 얼굴이 되었다.
+Konami's Team Silent brought Silent Hill to PlayStation in 1999, following everyday father Harry Mason into an eerie American town in search of his missing daughter. Cleverly using thick fog and darkness to mask hardware limits gave the streets an unforgettable dread, underscored by Akira Yamaoka's haunting music. Silent Hill 2 on PlayStation 2 in 2001 elevated psychological horror storytelling.	코나미의 팀 사일런트는 1999년 플레이스테이션으로 사일런트 힐을 내놓았다. 평범한 아버지 해리 메이슨이 실종된 딸을 찾아 섬뜩한 미국의 마을로 들어간다. 짙은 안개와 어둠으로 하드웨어의 한계를 교묘하게 감춘 덕분에 거리에는 잊을 수 없는 공포가 감돌았고, 야마오카 아키라의 잊히지 않는 음악이 이를 더욱 부각했다. 2001년 플레이스테이션 2의 사일런트 힐 2는 심리 호러 스토리텔링을 한 단계 끌어올렸다.
+Yuji Naka, Naoto Ohshima and Hirokazu Yasuhara sped Sonic the Hedgehog onto the Sega Mega Drive in 1991, giving Sega a bold blue mascot to rival Mario. Blazing through loops, scooping up golden rings and outsmarting Doctor Eggman made speed feel exhilarating. Sonic the Hedgehog 2 arrived in 1992 with sidekick Tails and bigger stages, powering Sega through the 16-bit era.	나카 유지, 오오시마 나오토, 야스하라 히로카즈는 1991년 세가 메가 드라이브로 소닉 더 헤지혹을 질주시켜, 마리오에 맞설 대담한 파란 마스코트를 세가에 안겼다. 루프를 내달리고, 황금 링을 쓸어 담고, 닥터 에그맨을 따돌리는 플레이가 속도를 짜릿하게 만들었다. 1992년 소닉 더 헤지혹 2는 단짝 테일즈와 더 커진 스테이지로 돌아와 16비트 시대의 세가를 이끌었다.
+Insomniac Games launched Spyro the Dragon on Sony's PlayStation in 1998, starring a plucky purple dragon freeing his fellow dragons from crystal prisons. Bright open realms and playful energy made exploring every corner a joy, paired with catchy soundtracks by The Police drummer Stewart Copeland. Spyro later soared back in 2018 with the Spyro Reignited Trilogy.	인섬니악 게임즈는 1998년 소니 플레이스테이션으로 스파이로 더 드래곤을 출시했다. 주인공은 수정 감옥에 갇힌 동료 드래곤들을 풀어 주는 용감한 보라색 드래곤이다. 밝고 탁 트인 세계와 장난기 넘치는 에너지 덕분에 구석구석 탐험하는 것이 즐거웠고, 폴리스의 드러머 스튜어트 코플랜드의 귀에 쏙 들어오는 음악이 함께했다. 2018년 스파이로는 스파이로 리그나이티드 트릴로지로 다시 날아올랐다.
+Nintendo EAD and British programmers Argonaut Software launched Star Fox on the Super Nintendo in 1993, using the cartridge's Super FX chip for pioneering console 3D. Ace pilot Fox McCloud and his animal squadron weave Arwings across the Lylat system to stop Andross, known in Europe as Starwing. In 1997, Star Fox 64 brought the series to Nintendo 64 as its first Rumble Pak game.	닌텐도 EAD와 영국 프로그래머들의 아르고넛 소프트웨어는 1993년 슈퍼 닌텐도로 스타폭스를 출시했고, 카트리지의 슈퍼 FX 칩으로 콘솔 3D의 새 길을 열었다. 에이스 파일럿 폭스 맥클라우드와 동물 비행대는 아윙을 몰고 라일랏 성계를 누비며 안돌프를 막아선다. 유럽에서는 Starwing으로 알려졌다. 1997년 스타폭스 64는 시리즈를 닌텐도 64로 옮기며 진동팩을 지원한 첫 게임이 되었다.
+Capcom introduced Street Fighter to arcades in 1987, designed by Takashi Nishiyama and Hiroshi Matsumoto with martial artists Ryu and Ken taking centre stage. Its 1991 sequel Street Fighter II ignited a worldwide arcade craze, establishing the blueprint for one-on-one fighting games with iconic fighters and special moves. It grew into Capcom's flagship fighting series and one of gaming's longest-running franchises.	캡콤은 1987년 오락실에 스트리트 파이터를 선보였다. 니시야마 타카시와 마츠모토 히로시가 디자인했고, 무술가 류와 켄이 무대 중앙에 섰다. 1991년 후속작 스트리트 파이터 II는 전 세계적인 오락실 열풍을 일으키며, 상징적인 캐릭터와 필살기로 1대1 대전 격투 게임의 청사진을 세웠다. 시리즈는 캡콤을 대표하는 격투 게임이자 게임 역사상 가장 오래 이어진 프랜차이즈 중 하나로 성장했다.
+Sega unleashed Streets of Rage on the Mega Drive in 1991, titled Bare Knuckle in Japan, sending former officers Axel Stone, Blaze Fielding and Adam Hunter against crime boss Mr. X. Punchy co-op brawling meets Yuzo Koshiro's electrifying club-inspired soundtracks that pushed 16-bit audio to new heights. Streets of Rage 2 followed in 1992 with new fighters and cemented its classic status.	세가는 1991년 메가 드라이브로 Streets of Rage를 선보였다. 일본에서는 베어 너클이라는 이름으로 나왔으며, 전직 경찰 액셀 스톤, 블레이즈 필딩, 애덤 헌터가 범죄 조직 보스 Mr. X에 맞선다. 화끈한 협력 난투에 클럽 음악에서 영감을 받은 코시로 유조의 짜릿한 사운드트랙이 더해져 16비트 사운드를 새로운 경지로 끌어올렸다. 1992년 베어 너클 2가 새로운 파이터들과 함께 이어지며 고전의 지위를 굳혔다.
+Shigeru Miyamoto and Takashi Tezuka kicked off Super Mario Bros. on the NES in 1985, turning Donkey Kong's hero into the joyful face of side-scrolling platforming. Super Mushrooms, Fire Flowers and secret Warp Pipes invite curious players to leap across every corner of the Mushroom Kingdom. In 1996, Super Mario 64 carried that playful precision into 3D and shaped how games move in open spaces.	미야모토 시게루와 테즈카 타카시는 1985년 NES로 슈퍼 마리오브라더스를 시작하며, 동키콩의 주인공을 횡스크롤 플랫포머의 즐거운 얼굴로 만들었다. 슈퍼버섯, 파이어플라워, 숨겨진 토관이 호기심 많은 플레이어를 버섯 왕국 구석구석으로 이끈다. 1996년 슈퍼 마리오 64는 그 경쾌한 정밀함을 3D로 옮기며, 게임 속 열린 공간을 움직이는 방식을 새로 만들었다.
+Namco opened the Tales series in Japan in 1995 with Tales of Phantasia on the Super Famicom, crafted by Wolf Team with even a sung theme song on the cartridge. Instead of waiting in menus, parties clash in lively real-time battles alongside spirited character banter and anime-styled fantasy quests. Standalone stories across seventeen main entries keep every adventure welcoming to newcomers.	남코는 1995년 일본에서 슈퍼 패미컴용 테일즈 오브 판타지아로 테일즈 시리즈의 막을 열었다. 개발은 울프 팀이 맡았고, 카트리지에 노래가 담긴 주제가까지 실었다. 메뉴에서 기다리는 대신 파티는 활기찬 실시간 전투를 벌이고, 생기 넘치는 캐릭터들의 입담과 애니메이션풍 판타지 모험이 함께한다. 17편의 본편이 각각 독립된 이야기라 어떤 모험이든 처음 하는 사람도 반갑게 맞이한다.
+Namco brought Tekken to arcades in 1994 under director Seiichi Ishii, turning the King of Iron Fist Tournament into a showcase for crisp 3D martial arts. Mapping each of the four attack buttons to a fighter's limb makes combos intuitive to pick up and endlessly rewarding to master. Centred on the fierce Mishima family rivalry, the original became the first PlayStation title to top one million copies.	남코는 1994년 이시이 세이이치 감독의 지휘 아래 철권을 오락실에 내놓으며, The King of Iron Fist Tournament를 선명한 3D 무술의 무대로 만들었다. 네 개의 공격 버튼을 각각 캐릭터의 팔다리에 대응시킨 덕분에 콤보는 직관적으로 익히기 쉽고, 마스터할수록 끝없이 보람차다. 미시마 가문의 치열한 대립을 중심에 둔 첫 작품은 플레이스테이션 최초로 100만 장을 넘긴 타이틀이 되었다.
+SNK united stars from Fatal Fury, Art of Fighting and beyond in The King of Fighters '94 on Neo Geo arcades, introducing fiery newcomer Kyo Kusanagi. Drafting a three-fighter dream squad for tense team battles gave arcade fans a fresh tactical layer alongside razor-sharp combos. Annual yearly editions ran straight through 2003 before the series adopted Roman numerals for later entries.	SNK는 네오지오 오락실용 더 킹 오브 파이터즈 '94에서 아랑전설, 용호의 권 등의 스타들을 한자리에 모았고, 불꽃 같은 신인 쿠사나기 쿄를 선보였다. 세 명의 파이터로 드림팀을 꾸려 긴장감 넘치는 팀 배틀에 나서는 방식은 날카로운 콤보와 함께 아케이드 팬들에게 새로운 전술의 재미를 안겼다. 매년 나온 연도별 작품은 2003년까지 끊김 없이 이어졌고, 이후 시리즈는 로마 숫자를 붙이기 시작했다.
+Shigeru Miyamoto and Takashi Tezuka created The Legend of Zelda on Japan's Famicom Disk System in 1986, inspired by Miyamoto's childhood adventures through woods and caves near Sonobe. Guiding Link across Hyrule to gather items, crack dungeon puzzles and save Princess Zelda pioneered battery saves on console. In 1998, Ocarina of Time brought Hyrule into 3D with target-locking combat on Nintendo 64.	미야모토 시게루와 테즈카 타카시는 1986년 일본 패미컴 디스크 시스템으로 젤다의 전설을 만들었다. 소노베 근처의 숲과 동굴을 누비던 미야모토의 어린 시절 모험이 영감이 되었다. 링크를 이끌고 하이랄을 누비며 아이템을 모으고, 던전 퍼즐을 풀고, 젤다 공주를 구하는 이 게임은 콘솔 배터리 세이브의 선구자가 되었다. 1998년 시간의 오카리나는 주목 시스템을 갖춘 전투와 함께 닌텐도 64에서 하이랄을 3D로 옮겼다.
+British studio Core Design in Derby launched Tomb Raider in 1996 on Sega Saturn, PC and PlayStation, starring archaeologist Lara Croft, largely created by Toby Gard. Climbing ruins, decoding ancient traps and exploring vast 3D temples gave action-adventure fans a fresh sense of scale and discovery. Lara's fearless charm swiftly turned the series into a worldwide cultural phenomenon.	더비에 있는 영국 스튜디오 코어 디자인은 1996년 세가 새턴, PC, 플레이스테이션으로 툼 레이더를 내놓았다. 주인공은 토비 가드가 주로 만들어 낸 고고학자 라라 크로프트다. 유적을 기어오르고, 고대의 함정을 풀고, 거대한 3D 신전을 탐험하는 경험은 액션 어드벤처 팬들에게 새로운 규모감과 발견의 즐거움을 선사했다. 라라의 두려움 없는 매력 덕분에 시리즈는 순식간에 세계적인 문화 현상이 되었다.
+Neversoft teamed with Activision and pro skater Tony Hawk to drop Tony Hawk's Pro Skater onto PlayStation in 1999, known in Britain as Tony Hawk's Skateboarding. Chaining flips, grinds and grabs through frantic two-minute runs while hunting S-K-A-T-E letters made every park impossible to put down. Its punk and ska soundtrack became a beloved touchstone of early-2000s gaming culture.	네버소프트는 액티비전, 프로 스케이터 토니 호크와 손잡고 1999년 플레이스테이션으로 토니 호크 프로 스케이터를 출시했다. 영국에서는 Tony Hawk's Skateboarding으로 알려졌다. 정신없는 2분짜리 런 동안 플립, 그라인드, 그랩을 이어 가며 S-K-A-T-E 글자를 찾다 보면 어떤 파크도 손에서 놓을 수 없었다. 펑크와 스카 사운드트랙은 2000년대 초 게임 문화를 대표하는 사랑받는 상징이 되었다.
+After bursting in as the rival boss of Super Mario Land 2 in 1992, Nintendo's greedy anti-hero claimed the spotlight in Wario Land: Super Mario Land 3 on Game Boy in 1994. His name plays on warui, Japanese for bad, and his treasure-hunting platformers celebrate smashing walls and breaking rules. In 2003, WarioWare on Game Boy Advance reinvented party chaos with rapid-fire microgames that speed up with every win.	1992년 슈퍼 마리오 랜드 2의 라이벌 보스로 불쑥 등장한 닌텐도의 욕심 많은 안티히어로는 1994년 게임보이의 와리오 랜드: 슈퍼 마리오 랜드 3에서 주인공 자리를 꿰찼다. 이름은 나쁘다는 뜻의 일본어 와루이를 비튼 것이며, 그의 보물찾기 플랫포머는 벽을 부수고 규칙을 깨는 재미로 가득하다. 2003년 게임보이 어드밴스의 메이드 인 와리오는 이길 때마다 빨라지는 초고속 마이크로게임으로 파티의 대혼란을 새롭게 만들어 냈다.
+Designed by Shigefumi Hino for Super Mario World in 1990, Mario's friendly dinosaur buddy quickly stepped into his own series with the puzzle game Yoshi on NES and Game Boy in 1991. Flutter-jumping, swallowing enemies and aiming colourful eggs give his adventures a joyful, tactile rhythm. Super Mario World 2: Yoshi's Island on Super Nintendo in 1995 made Yoshi the true star protecting Baby Mario.	1990년 히노 시게후미가 슈퍼 마리오 월드를 위해 디자인한 마리오의 다정한 공룡 친구는 1991년 NES와 게임보이용 퍼즐 게임 요시로 곧장 자신만의 시리즈를 갖게 되었다. 버둥버둥 점프, 적 삼키기, 알록달록한 알 던지기가 그의 모험에 즐겁고 손맛 나는 리듬을 더한다. 1995년 슈퍼 닌텐도의 슈퍼 마리오 요시 아일랜드는 아기 마리오를 지키는 요시를 진정한 주인공으로 만들었다.
+Nihon Falcom began Ys on Japan's NEC PC-8801 in 1987, charting the spirited travels of eager adventurer Adol Christin across ancient mysteries. Early entries stood out for brisk bump combat, letting players ram foes off-centre with effortless speed instead of mashing buttons. Rousing soundtracks by Yuzo Koshiro, Mieko Ishikawa and Hideya Nagata made music the lasting soul of the series.	니혼 팔콤은 1987년 일본 NEC PC-8801로 이스를 시작하며, 열정 넘치는 모험가 아돌 크리스틴이 고대의 수수께끼를 따라 떠나는 활기찬 여정을 그렸다. 초기 작품은 경쾌한 몸통 박치기 전투로 돋보였는데, 버튼을 연타하는 대신 적에게 살짝 비껴 부딪히는 것만으로 힘들이지 않고 빠르게 쓰러뜨릴 수 있었다. 코시로 유조, 이시카와 미에코, 나가타 히데야의 가슴 벅찬 사운드트랙은 음악을 시리즈의 영원한 영혼으로 만들었다.
+Home app	홈 앱
+On: your handheld starts on the shelf, and Home in a game brings its pause menu. Android asks once.	켜기: 기기가 선반에서 시작하고, 게임 중 Home을 누르면 일시정지 메뉴가 열려요. Android가 한 번 물어봐요.
+pocket-ui on a second device? Settings › Connections › Pocket Sync keeps your saves the same on both.	다른 기기에도 pocket-ui가 있나요? 설정 › 연결 › Pocket Sync가 두 기기의 세이브를 똑같이 맞춰 줘요.
+Up next: your games and your handheld, then pick a look.	다음: 내 게임과 내 휴대용 기기, 그다음 스타일을 골라요.
+# ScreenScraper downloads (src/screenscraper.rs: a run's end and the credit line)
+Data and media: ScreenScraper.fr (CC BY-NC-SA 4.0)	데이터 및 이미지: ScreenScraper.fr (CC BY-NC-SA 4.0)
+ScreenScraper is busy right now. Try again later, or sign in with your ScreenScraper account.	지금은 ScreenScraper가 바빠요. 나중에 다시 시도하거나 ScreenScraper 계정으로 로그인해 보세요.
+ScreenScraper doesn't accept this pocket-ui version. An update will fix it.	ScreenScraper가 이 pocket-ui 버전을 받지 않아요. 업데이트하면 해결돼요.
+ScreenScraper didn't accept your name or password. Check them in Box art & downloads.	ScreenScraper가 이름이나 비밀번호를 받지 않았어요. 표지 및 다운로드에서 확인해 보세요.
+ScreenScraper is closed for now. Try again later.	지금은 ScreenScraper가 닫혀 있어요. 나중에 다시 시도해 보세요.
+ScreenScraper wants a newer pocket-ui. Update pocket-ui to download from it.	ScreenScraper는 더 새로운 pocket-ui가 필요해요. pocket-ui를 업데이트하면 내려받을 수 있어요.
+That's all ScreenScraper allows for today. The rest comes tomorrow.	오늘 ScreenScraper에서 허용하는 양은 여기까지예요. 나머지는 내일 받아요.
+ScreenScraper didn't know many of your games today. The rest comes tomorrow.	오늘은 ScreenScraper가 모르는 게임이 많았어요. 나머지는 내일 받아요.
+Couldn't reach ScreenScraper. Try again later.	ScreenScraper에 연결할 수 없어요. 나중에 다시 시도해 보세요.
+
+# ScreenScraper's row (src/setup.rs, src/app_screenscraper.rs)
+No account needed. Signing in (X) raises the daily limit.	계정은 필요 없어요. 로그인(X)하면 하루 한도가 늘어나요.
+A free account from screenscraper.fr. Your password stays on this handheld.	screenscraper.fr의 무료 계정이에요. 비밀번호는 이 기기에만 남아요.
+Signed in as {s}.	{s}(으)로 로그인했어요.
+Today: {n} of {m} lookups.	오늘 {m}회 중 {n}회 조회했어요.
+Your ScreenScraper name	ScreenScraper 사용자 이름
+Your ScreenScraper password	ScreenScraper 비밀번호
+Sign out	로그아웃
+Looking up {n} of {m} games…	{m}개 중 {n}번째 게임을 찾는 중…
+1 new picture.	새 그림 1개.
+{n} new pictures.	새 그림 {n}개.
+Nothing new to download.	새로 받을 게 없어요.
+Getting spines {n} of {m}	옆면 가져오는 중 {n}/{m}
+That's all for today. The rest comes tomorrow.	오늘은 여기까지예요. 나머지는 내일 받아요.
+ScreenScraper didn't hand out pictures just now. Try again later.	ScreenScraper가 지금은 그림을 주지 않아요. 나중에 다시 해 보세요.
+Run in background	백그라운드에서 실행
+On: Android lets pocket-ui keep working in the background, like a download with the screen off.	켜짐: Android가 pocket-ui를 백그라운드에서 계속 실행해요. 화면이 꺼져도 다운로드가 이어져요.
+Spines: more tomorrow	옆면: 내일 이어서 받아요
+Real box pictures (ScreenScraper)	실제 박스 사진 (ScreenScraper)
+Real spines, labels, box backs and manuals. A shows each with a real example to pick from. No account needed.	실제 옆면, 라벨, 뒷면, 설명서를 받아요. A를 누르면 각각 실제 예시를 보고 고를 수 있어요. 계정은 필요 없어요.
+Game manual	게임 설명서
+The original, page by page	원본 그대로, 한 페이지씩
+Getting the manual from ScreenScraper…	ScreenScraper에서 설명서를 받는 중…
+This page can't be shown here	이 페이지는 여기에서 볼 수 없습니다
+Page {n}	{n}페이지
+This manual has no pages	이 설명서에는 페이지가 없습니다
+Needs Wi-Fi: the manual comes from ScreenScraper	Wi-Fi가 필요합니다: 설명서는 ScreenScraper에서 받습니다
+The manual could not be kept on the card	설명서를 카드에 저장하지 못했습니다
+ScreenScraper has no manual for this game after all	ScreenScraper에 이 게임의 설명서가 없습니다
+No answer from ScreenScraper. Try again later	ScreenScraper가 응답하지 않습니다. 나중에 다시 시도하세요
+Whole page	전체 페이지
+Real manuals	실제 설명서
+This manual can't be read here	이 설명서는 여기에서 읽을 수 없습니다
+LEFT RIGHT	왼쪽/오른쪽
+LEFT	왼쪽
+RIGHT	오른쪽
+DOWN	아래
+Zoom out	축소
+Real spines	실제 옆면
+Real labels	실제 라벨
+Real box backs	실제 뒷면
+The shelf shows each game's real box spine.	선반에 게임마다 실제 케이스 옆면이 보여요.
+Cartridges carry their real label (Mega Drive and DS keep the cover's art).	카트리지에 실제 라벨이 붙어요(메가 드라이브와 DS는 표지 그림 그대로예요).
+Turning a box over shows its real back. Off keeps pocket-ui's own back with your progress.	케이스를 뒤집으면 실제 뒷면이 보여요. 끄면 진행 상황이 담긴 pocket-ui 뒷면 그대로예요.
+Games with an original manual get a Game manual row on their Details page.	원본 설명서가 있는 게임은 상세 페이지에 게임 설명서 줄이 생깁니다.
+Hack	핵
+More of the game at the sides, in 16:9. Patch: a fix made for the game, if it has one. Hack: every 3D game, but the sides can show gaps. Takes effect the next time the game starts.	게임 양옆을 16:9로 더 보여 줘요. 패치: 그 게임용 수정이 있으면 써요. 핵: 모든 3D 게임에 쓰지만 양옆에 빈 곳이 보일 수 있어요. 다음에 게임을 시작할 때 적용돼요.
+{s} didn't start: pocket-ui couldn't write to the device's storage. Make some room and try again.	{s} 실행에 실패했어요: pocket-ui가 기기 저장공간에 쓰지 못했어요. 공간을 확보한 뒤 다시 시도하세요.
+{s} didn't start: Android couldn't open the emulator app. Open it once from Android, then try again.	{s} 실행에 실패했어요: Android가 에뮬레이터 앱을 열지 못했어요. Android에서 앱을 한 번 연 뒤 다시 시도하세요.
+Azahar closed right away. If it isn't set up yet, open Azahar once and finish its setup, then start the game again.	Azahar가 바로 종료됐어요. 아직 설정하지 않았다면 Azahar를 한 번 열어 초기 설정을 마친 뒤 게임을 다시 시작하세요.
+Real box pictures	실제 박스 사진
+real box spines, labels and backs	실제 옆면, 라벨, 뒷면
+Real spines, labels, box backs and manuals.	실제 옆면, 라벨, 뒷면, 설명서.
+Settings › Games › Box art & downloads › ScreenScraper	설정 › 게임 › 표지 및 다운로드 › ScreenScraper
+Only while it is on, it sends each game's checksum, size and file name to screenscraper.fr, as a guest unless you sign in.	켜져 있을 때만 각 게임의 체크섬, 크기, 파일 이름을 screenscraper.fr로 보내요. 로그인하지 않으면 게스트로 보내요.
+Shelves by series	시리즈별 선반
+your games grouped by series	시리즈별로 모은 게임
+Home groups your games by series, from every console, in release order.	홈에서 모든 콘솔의 게임을 시리즈별로, 발매 순으로 모아 줘요.
+Settings › Look › Layout › Order	설정 › 보기 › 레이아웃 › 정렬
+Example: {s}	예시: {s}
+Nothing is sent before START.	START를 누르기 전에는 아무것도 보내지 않아요.

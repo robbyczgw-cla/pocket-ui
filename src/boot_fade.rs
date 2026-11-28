@@ -2,13 +2,19 @@
 //! (pocket-splash) fades to black, sway comes up on black, and the shelf comes in over 300 ms instead of at once, in
 //! the dark and in the light look alike. Only at pocket-ui's first start since the device started: a mark in `/run`
 //! (a tmpfs, empty at every start of the device) tells a later start (Restart pocket-ui, the launcher after a crash,
-//! an update) from it, and waking from sleep starts nothing. Motion Off shows the first frame as it is.
+//! an update) from it, and waking from sleep starts nothing. Motion Off shows the first frame as it is. On Android every
+//! start of the handheld view's process fades ([`ANDROID_START`]).
 
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 /// pocket-ui's mark that it has started since the device started.
 pub const MARK: &str = "/run/pocket-ui-started";
+/// Android's handheld view (android/handheld): each start of its process is an app start from Android's splash, which
+/// shows the boot screen's picture on black (`splash::android_icon`, docs/BOOT-SPLASH.md "On Android"), so its first
+/// frame fades in from black as the shelf does after pocket-splash. `/run` isn't ours there; the process is the mark.
+pub const ANDROID_START: bool = cfg!(all(target_os = "android", feature = "handheld"));
+
 /// The fade from black.
 pub const FADE: Duration = Duration::from_millis(300);
 

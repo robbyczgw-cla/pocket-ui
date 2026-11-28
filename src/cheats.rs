@@ -573,6 +573,7 @@ fn unusable_row(why: Unusable) -> Row {
 // ---- what is on, per game ----------------------------------------------------------------------------
 
 fn store_path(data_dir: &Path, system: &str, rom: &Path) -> PathBuf {
+    let system = crate::region_pairs::own_system(system, rom);
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or("game");
     data_dir.join("cheats").join(system).join(format!("{stem}.json"))
 }

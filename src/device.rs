@@ -615,8 +615,8 @@ pub fn hides_in(key: &str, sticks: bool, nextui_owned: bool, android: bool) -> b
     if android && ANDROID_HIDES.contains(&key) {
         return true;
     }
-    // Settings → View (handheld or Mobile) and Games → Android games are Android's alone.
-    if key == "android_view" || key == "android_games" {
+    // Settings → View (handheld or Mobile), System → Home app, System → Android extras, System → Run in background and Games → Android games are Android's alone.
+    if key == "android_view" || key == "android_games" || key == "android_home" || key == "android_extras" || key == "android_background" {
         return !android;
     }
     // Settings → System → Back to EmulationStation is dArkOS's alone (src/darkos.rs).
@@ -756,6 +756,11 @@ mod tests {
         }
         assert!(super::hides_in("android_view", true, false, false), "no View row on Linux");
         assert!(!super::hides_in("android_view", true, false, true), "the View row on Android");
+        assert!(super::hides_in("android_home", true, false, false), "no Home app row on Linux: pocket-ui OS is the home");
+        assert!(!super::hides_in("android_home", true, false, true), "the Home app row on Android");
+        assert!(super::hides_in("android_extras", true, false, false) && !super::hides_in("android_extras", true, false, true), "Android extras: Android only");
+        assert!(super::hides_in("android_background", true, false, false), "no Run in background row on Linux");
+        assert!(!super::hides_in("android_background", true, false, true), "the Run in background row on Android");
         assert!(!super::hides_in("updates", true, false, true), "Updates on Android: a look by hand (17.11.2026)");
         assert!(!super::hides_in("boot_screen", true, false, true), "Console boot screen on Android: the player reads the private BIOS folder");
         // Bluetooth and Remote access have keys of their own for the dArkOS port; everywhere else they follow the radios.

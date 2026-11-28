@@ -36,6 +36,9 @@ impl App {
     pub(crate) fn paint_setup_in_column(&mut self, c: &mut Canvas) {
         self.in_page_column(c, |app, c| {
             if let Some(setup) = app.setup.as_mut() {
+                // "Your handheld": the Home app as Android last said (read when this view is back in front).
+                #[cfg(all(target_os = "android", feature = "handheld"))]
+                setup.set_home_app(crate::app_android::home_app_held());
                 setup.paint(c, &mut app.text);
                 setup.register_touch(&mut app.hits);
             }
@@ -72,8 +75,20 @@ impl App {
             at.map_or(Item::Recent(0), |(s, g)| Item::Game(s, g))
         };
         let items: Vec<Item> = std::iter::once(first).chain((0..sample.systems.len()).map(Item::System)).collect();
-        let systems = std::mem::replace(&mut self.systems, sample.systems.clone());
-        let shown_recents = if matches!(first, Item::Recent(_)) { vec![sample.game.clone()] } else { Vec::new() };
+        // By series (`app_series`): the player's own shelves by series, a series selected (a sample of one game has no
+        // series to show); Easy, which stays by console, the player's games.
+        // From the Order chosen, whatever the look in use (from Easy, which stays by console, too: Sol's review 26.11.2026).
+        let by_series = !sample.demo && self.series_preview_ready();
+        let series_home = by_series.then(|| {
+            let now = std::mem::replace(&mut self.theme, Theme::Split);
+            let items = self.home_items();
+            self.theme = now;
+            items
+        });
+        let (items, sample_systems) = match series_home { Some(home) => (home, self.systems.clone()), None => (items, sample.systems.clone()) };
+        let series_at = items.iter().position(|i| matches!(i, Item::Series(_))).unwrap_or(0);
+        let systems = std::mem::replace(&mut self.systems, sample_systems);
+        let shown_recents = if by_series { self.recents.list.clone() } else if matches!(first, Item::Recent(_)) { vec![sample.game.clone()] } else { Vec::new() };
         let recents = std::mem::replace(&mut self.recents.list, shown_recents);
         let items = std::mem::replace(&mut self.items, items);
         let big = std::mem::take(&mut self.big);
@@ -83,12 +98,19 @@ impl App {
         let hits = std::mem::take(&mut self.hits);
         // The previews show each look at rest, without touching the glides of the shelf behind (`app_motion`).
         let motion = std::mem::take(&mut self.motion);
-        let covers = std::mem::take(&mut self.covers);
+        // The player's own shelves keep their decoded covers; the ones not decoded yet are asked of the picture loader's
+        // thread as on the shelf, and when the last of them is in the previews are made once more (`series_cover_in`;
+        // Sol's reviews 26.11.2026: none kept with empty tiles, no decoding on the UI thread).
+        let covers = if by_series { self.covers.clone() } else { std::mem::take(&mut self.covers) };
+        self.pictures.visible.clear();
         let cover_run = std::mem::take(&mut self.cover_run);
         // The cabinet's shelves and pictures are the library's; the sample gets its own, read right away.
         let cabinet = std::mem::take(&mut self.cabinet);
-        self.cabinet.inline = true;
-        self.sample_cover = Some((sample.game.path.clone(), Rc::new(cover)));
+        // The sample's few pictures are read right away; the player's own shelves by series ask the cabinet's thread, as
+        // on the shelf (Sol's review 26.11.2026: no file read on the UI thread for a preview of a real library).
+        self.cabinet.inline = !by_series;
+        // The sample's own box art; by series the shelves are the player's, their covers their own.
+        self.sample_cover = (!by_series).then(|| (sample.game.path.clone(), Rc::new(cover)));
         (self.sel, self.prev_sel, self.screen) = (0, 0, Screen::Home);
         // Fully pulled out, as it rests.
         self.moved_at = Instant::now() - PULL * 4;
@@ -99,11 +121,20 @@ impl App {
         let (pw, ph) = pocket_ui::setup::look_preview((frame_w as i32, frame_h as i32));
         let mut previews = Vec::new();
         let mut buf = vec![0u32; (frame_w * frame_h) as usize];
+        let series_items = by_series.then(|| self.items.clone());
         for t in Theme::ALL {
             self.theme = t;
             // Each look at rest: nothing glides over from the one painted before.
             self.motion = Default::default();
             self.sel = 0;
+            if let Some(list) = &series_items {
+                if t == Theme::Big {
+                    self.items = self.big_items();
+                } else {
+                    self.items = list.clone();
+                    self.sel = series_at;
+                }
+            }
             self.prev_sel = self.sel;
             let mut c = Canvas::new(&mut buf, frame_w, frame_h);
             // As `App::paint` has it: the Shelf look in the column on a wide Linux screen (`app_column`).
@@ -127,9 +158,13 @@ impl App {
         self.motion = motion;
         self.covers = covers;
         self.cover_run = cover_run;
+        let read_inline = self.cabinet.read_inline;
         self.cabinet = cabinet;
+        if by_series {
+            self.series_previews_wait();
+        }
         self.sample_cover = None;
-        println!("look previews: {} looks in {:?}{}", previews.len(), started.elapsed(), if sample.demo { ", built-in sample" } else { "" });
+        println!("look previews: {} looks in {:?}{}{}", previews.len(), started.elapsed(), if sample.demo { ", built-in sample" } else { "" }, if by_series { format!(", by series, {read_inline} read on the spot") } else { String::new() });
         (previews, sample.demo)
     }
 
@@ -166,7 +201,7 @@ impl App {
 /// painted again when one changes.
 pub(crate) fn style_mark() -> u32 {
     // Retro's own colours too: Cocoa or Pea on the first start's Colours row changes the previews.
-    pocket_ui::button_prompts::get() as u32 | (pocket_ui::palette::colours() as u32) << 4 | (pocket_ui::font_style::get() as u32) << 8 | (pocket_ui::retro::colours() as u32) << 12 | (pocket_ui::font_style::retro_letters() as u32) << 16
+    pocket_ui::button_prompts::get() as u32 | (pocket_ui::palette::colours() as u32) << 4 | (pocket_ui::font_style::get() as u32) << 8 | (pocket_ui::retro::colours() as u32) << 12 | (pocket_ui::font_style::effective_letters() as u32) << 16
 }
 
 /// What the previews were painted with: appearance, language, text size and the corner's clock ("14:02", None while the

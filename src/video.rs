@@ -319,6 +319,22 @@ impl Renderer {
     /// Draws what `draw` would put on a `view_w`×`view_h` screen into the offscreen buffer, without reading it back
     /// (`render_offscreen`, and timing the shaders in tools). False when the buffer can't be made.
     pub fn draw_offscreen(&mut self, view_w: u32, view_h: u32, aspect: f32, settings: &VideoSettings) -> bool {
+        self.draw_offscreen_as(view_w, view_h, aspect, settings, true)
+    }
+
+    /// The Brick's direct way (`brick_gles`) before it takes the screen: the picture drawn as the screen would get it, into the
+    /// offscreen buffer, with a frame that is still being prepared left to its thread. True when nothing was missing (the frame
+    /// is there, the shaders compiled): the first picture on the screen then looks like the bridge's last one.
+    #[cfg(feature = "brick")]
+    pub fn ready_offscreen(&mut self, view_w: u32, view_h: u32, aspect: f32, settings: &VideoSettings) -> bool {
+        let was_pending = self.frame_pending;
+        let drawn = self.draw_offscreen_as(view_w, view_h, aspect, settings, false);
+        let ready = drawn && !self.frame_pending;
+        self.frame_pending = was_pending;
+        ready
+    }
+
+    fn draw_offscreen_as(&mut self, view_w: u32, view_h: u32, aspect: f32, settings: &VideoSettings, wait_for_frame: bool) -> bool {
         let (w, h) = (view_w.max(1), view_h.max(1));
         unsafe {
             if let Some((fb, tex, size)) = self.offscreen {
@@ -342,10 +358,14 @@ impl Renderer {
             self.ambient.reset();
             self.target = Some(fb);
             // A preview waits for its frame; what the screen showed last stays what `frame_pending` says.
-            let (was_async, was_pending) = (self.bezel.set_async(false), self.frame_pending);
-            self.draw(w, h, aspect, settings);
-            self.bezel.set_async(was_async);
-            self.frame_pending = was_pending;
+            if wait_for_frame {
+                let (was_async, was_pending) = (self.bezel.set_async(false), self.frame_pending);
+                self.draw(w, h, aspect, settings);
+                self.bezel.set_async(was_async);
+                self.frame_pending = was_pending;
+            } else {
+                self.draw(w, h, aspect, settings);
+            }
             self.target = None;
             self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
         }
@@ -440,6 +460,14 @@ impl Renderer {
         }
         self.swizzle = 0;
         self.mips_dirty = true;
+    }
+
+    /// The frame texture with its size when it holds a hardware-rendered core's frame (`copy_texture`), for a copy on the GPU (the
+    /// Brick's direct way keeps one every 2 s for a moment's photo).
+    #[cfg(feature = "brick")]
+    pub fn hw_texture(&self) -> Option<(glow::Texture, u32, u32)> {
+        let (w, h, format) = self.tex_size;
+        (w > 0 && format == FORMAT_HW).then_some((self.texture, w, h))
     }
 
     /// The frame texture read back as an XRGB8888 `Frame` (save-state previews of hardware-rendered

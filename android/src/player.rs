@@ -26,12 +26,15 @@ use std::{
 #[path = "picture.rs"]
 mod picture;
 mod player_speed;
+/// The low-battery guard (`low_battery` as on Linux): 5 % warns, 2 % saves and goes back to the shelf.
+#[path = "player_battery.rs"]
+mod player_battery;
 #[path = "play_cards.rs"]
 mod play_cards;
 thread_local! {static PLAYER:RefCell<Option<Player>>=const{RefCell::new(None)};}
 #[path = "player_graphics.rs"]
 mod player_graphics;
-use player_graphics::Graphics;
+use player_graphics::{GamePicture, Graphics};
 #[path = "player_video.rs"]
 mod player_video;
 use player_video::png;
@@ -57,9 +60,11 @@ mod player_achievements;
 mod ra_replay;
 // Dereferencing the core makes its isolated context current for every entry point,
 // including save/load, options and destruction; composition explicitly restores the Activity.
-fn core_hw_frame(core: &CoreSession) -> Option<pocket_ui::libretro::Frame> {
-    core.hw.as_ref()?.capture()
+enum DeliveredPicture {
+    Shared(pocket_ui::hw_render::Picture),
+    Cpu(pocket_ui::libretro::Frame),
 }
+
 struct CoreSession {
     core: std::mem::ManuallyDrop<Core>,
     hw: Option<pocket_ui::hw_render::HwContext>,
@@ -77,6 +82,15 @@ impl CoreSession {
             hw,
         })
     }
+    fn delivered(&self, software: Option<pocket_ui::libretro::Frame>) -> Option<DeliveredPicture> {
+        if let Some(hw) = &self.hw {
+            if let Some(picture) = hw.picture() {
+                return Some(if hw.shared() { DeliveredPicture::Shared(picture) } else { DeliveredPicture::Cpu(hw.capture(picture)) });
+            }
+        }
+        software.map(DeliveredPicture::Cpu)
+    }
+
     fn frontend_current(&self) {
         if let Some(hw) = &self.hw {
             hw.frontend_current();
@@ -108,8 +122,10 @@ impl moments::States for CoreSession {
 impl Drop for CoreSession {
     fn drop(&mut self) {
         if let Some(hw) = &mut self.hw {
+            if !hw.activate_for_cleanup() {
+                pocket_ui::hw_render::stop_lost_player();
+            }
             hw.destroy_callback();
-            hw.core_current();
         }
         unsafe {
             std::mem::ManuallyDrop::drop(&mut self.core);
@@ -130,6 +146,7 @@ struct Player {
     overlay_size: Option<(u32, u32)>,
     touch_visible: bool,
     frame: Option<std::sync::Arc<Image>>,
+    hw_picture: Option<pocket_ui::hw_render::Picture>,
     /// The album's camera (`pocket_ui::album`) for a game from the Handheld view: its album, caches and switch are the
     /// view's (`<data>/handheld`). None with Photos of big moments off.
     album: Option<pocket_ui::album::Camera>,
@@ -155,6 +172,10 @@ struct Player {
     /// Lines over the game's first moments about its start (`frozen_phone`), where they are and until when.
     note: Vec<String>,
     note_until: Option<Instant>,
+    /// pocket-ui's level bar after a volume key (`nativeVolumeKey`), and until when: Android's panel stays away, as on Linux.
+    level_bar: Option<(pocket_ui::osd::Data, Instant)>,
+    /// The battery is empty (`player_battery`): the pill says so this frame, the next one saves and closes.
+    battery_close: bool,
     note_area: Area,
     /// Where the achievement card was painted last (the accessibility tree names it).
     card_area: Area,
@@ -163,6 +184,8 @@ struct Player {
     paused: bool,
     resumed: bool,
     suspended: bool,
+    /// The pause menu was open when the player went to the background (`nativeSuspend`): waking keeps it (`android_wake`).
+    menu_at_suspend: bool,
     control_names: Vec<pocket_ui::controls::Target>,
     hold_button: Option<u8>,
     held: pocket_ui::controls::HoldToggle,
@@ -261,10 +284,14 @@ struct Player {
     list_menu: bool,
     /// The row of `list_rows` the list menu is on.
     list_sel: usize,
+    /// Load is on its last stop, From the start (`pause_list::step_load`); `slot` keeps Save's slot meanwhile.
+    from_start: bool,
     /// Earlier's moments of this game, newest first (`refresh_earlier`), and the one Earlier is on.
     earlier_row: pocket_ui::timeline::Row,
     /// The slots' and Earlier's pictures, read once while the menu is open.
     previews: HashMap<PathBuf, Option<std::sync::Arc<Image>>>,
+    /// The paused picture in the game's shape for the menu's window (`shaped`), with the frame it was made from.
+    shaped_frame: Option<(std::sync::Arc<Image>, std::sync::Arc<Image>)>,
     /// Where the list menu's rows were painted, for a finger (`pause_list::Out`).
     list_hits: Vec<(Area, usize)>,
     /// The list menu's hint keys as painted: a finger on "B Back" goes back, on "A OK" does the row.
@@ -409,6 +436,11 @@ impl Player {
         let mode7_options = mode7_offer.map_or_else(Vec::new, |o| pocket_ui::mode7_hd::core_options(&pocket_ui::core_options::core_id(Path::new(core_path)), mode7, o.scale));
         log::info!("mode 7: {mode7} ({} core options)", mode7_options.len());
         pocket_ui::mode7_hd::place(&mode7_options, &mut selected);
+        // Options → Picture → Widescreen (Dreamcast, `dc_widescreen`): Flycast's patches or hack, the row's choice over a
+        // saved Emulator value; the rule pocket-core follows on Linux.
+        let (dc_ws_mode, dc_ws) = pocket_ui::dc_widescreen::for_start(&system, &pocket_ui::core_options::core_id(Path::new(core_path)), picture.values().get(pocket_ui::dc_widescreen::KEY).map(String::as_str));
+        log::info!("widescreen: {dc_ws_mode} ({} core options)", dc_ws.len());
+        pocket_ui::dc_widescreen::place(&dc_ws, &mut selected);
         // Same missing-key defaults as Linux, below the player's saved options and resolution choice.
         pocket_ui::core_options::add_game_defaults(&mut selected, &pocket_ui::core_options::core_id(Path::new(core_path)), Path::new(rom));
         // Settings → Playing → Console boot screen, as the handheld view hands it (`android_handheld::launch_settings`): a start
@@ -433,7 +465,17 @@ impl Player {
             pocket_ui::boot_screen::Boot::Missing(file) => Some(file),
             pocket_ui::boot_screen::Boot::NotHere => None,
         };
+        // GLES PPSSPP can start its EmuThread during bootstrap or a state restore.
+        // It inherits this thread's affinity at creation, so apply it before either.
+        let mut placement = pocket_ui::core_pacing::Placement::of_this_device();
+        if boot_core == "ppsspp" && placement.fast().is_some_and(|cpus| cpus.len() == 1) {
+            placement = pocket_ui::core_pacing::Placement::new(&[]);
+        }
         let mut core = CoreSession::new(Core::load(Path::new(core_path), Path::new(rom), &bios, &saves, &selected)?)?;
+        if boot_core == "ppsspp" && placement.fast().is_some_and(|cpus| cpus.len() > 1) {
+            placement.keep(Instant::now());
+        }
+        log::info!("player placement: fast_cpus={}", placement.label());
         core.input_probe(pocket_ui::platform::android::string("diagnosticAudio") == "true");
         let (initial_frame, _, av, geometry) = core.run(0);
         if let Some(av) = av {
@@ -442,7 +484,7 @@ impl Player {
         if let Some(geometry) = geometry {
             core.av.geometry = geometry;
         }
-        let initial_frame = core_hw_frame(&core).or(initial_frame);
+        let initial_frame = core.delivered(initial_frame);
         // Frozen games: the file just copied decides, before the core sees a state. A moment for another file or core
         // isn't loaded and goes where it can't be lost; the start says so.
         let core_id = pocket_ui::frozen_phone::core_of(Path::new(core_path));
@@ -481,8 +523,6 @@ impl Player {
         }
         let display_hz = display_refresh_hz();
         let pacer = pocket_ui::core_pacing::Pacer::new(core.av.timing.fps, display_hz);
-        let placement = pocket_ui::core_pacing::Placement::of_this_device();
-        log::info!("player placement: fast_cpus={}", placement.label());
         let mut audio = pocket_ui::audio::Audio::open(core.av.timing.sample_rate, pocket_ui::audio::needs_jitter_reserve(&system));
         if let Some(audio) = &mut audio {
             audio.set_paced_timing(core.av.timing.sample_rate, core.av.timing.fps, display_hz);
@@ -500,16 +540,26 @@ impl Player {
             core.av.timing.sample_rate
         );
         core.frontend_current();
-        let mut gfx = Graphics::new()?;
+        let shared = core.hw.as_ref().is_some_and(|hw| hw.shared());
+        let mut gfx = Graphics::new(shared)?;
+        if let Some(hw) = core.hw.as_ref().filter(|_| !gfx.can_sample_shared()) {
+            hw.use_cpu_capture();
+        }
         // Linux's picture pass needs the console's native lines and whether a 3D core renders above them (scanlines).
         gfx.system = system.clone();
         gfx.upscaled_3d = core.hw.is_some();
         let now = Instant::now();
         let resumed_frame = if matches!(resume, pocket_ui::libretro::Resume::Resumed | pocket_ui::libretro::Resume::ResumedAgain) {
-            let (frame,_,_,_) = core.run(0);
-            core_hw_frame(&core).or(frame)
-        } else {None};
-        let frame = player_video::startup(initial_frame, resumed_frame);
+            let (frame, _, _, _) = core.run(0);
+            core.delivered(frame)
+        } else {
+            None
+        };
+        let (hw_picture, frame) = match resumed_frame.or(initial_frame) {
+            Some(DeliveredPicture::Shared(picture)) => (Some(picture), None),
+            Some(DeliveredPicture::Cpu(frame)) => (None, Some(player_video::image(frame))),
+            None => (None, None),
+        };
         if let Err(error) = pocket_ui::timeline::migrate_android(&base) { log::warn!("Earlier migration deferred: {error}"); }
         let mut timeline = pocket_ui::timeline::Timeline::default();
         if picture.earlier_on(&system) {
@@ -540,6 +590,7 @@ impl Player {
             overlay_size: None,
             touch_visible: pocket_ui::platform::android::string("hasGamepad") != "true",
             frame,
+            hw_picture,
             game_area: None,
             pad_extent: None,
             window: (0, 0),
@@ -556,6 +607,8 @@ impl Player {
             _document: document,
             note,
             note_until: None,
+            level_bar: None,
+            battery_close: false,
             note_area: Area::new(0, 0, 0, 0),
             card_area: Area::new(0, 0, 0, 0),
             card_label: String::new(),
@@ -563,6 +616,7 @@ impl Player {
             paused: false,
             resumed: matches!(resume, pocket_ui::libretro::Resume::Resumed | pocket_ui::libretro::Resume::ResumedAgain),
             suspended: false,
+            menu_at_suspend: false,
             control_names,
             hold_button: None,
             held: Default::default(),
@@ -638,8 +692,10 @@ impl Player {
             cheats: None,
             list_menu: false,
             list_sel: 0,
+            from_start: false,
             earlier_row: Default::default(),
             previews: HashMap::new(),
+            shaped_frame: None,
             list_hits: Vec::new(),
             list_hint_hits: Vec::new(),
             from_options: false,
@@ -669,8 +725,34 @@ impl Player {
             recovery_required: false,
         })
     }
+    fn accept_picture(&mut self, frame: Option<pocket_ui::libretro::Frame>) {
+        match self.core.delivered(frame) {
+            Some(DeliveredPicture::Shared(picture)) => {
+                self.hw_picture = Some(picture);
+                self.gfx.shared_picture_changed();
+                self.frame = None;
+            }
+            Some(DeliveredPicture::Cpu(frame)) => {
+                self.hw_picture = None;
+                self.frame = Some(player_video::image(frame));
+            }
+            None => return,
+        }
+        self.video_frames += 1;
+    }
+
+    /// Cache the same game picture for the pause sheet, previews and screenshots.
+    fn capture_picture(&mut self) {
+        if self.frame.is_none() {
+            if let Some((hw, picture)) = self.core.hw.as_ref().zip(self.hw_picture) {
+                self.frame = Some(player_video::image(hw.capture(picture)));
+            }
+        }
+    }
+
     fn state(&mut self, path: &Path) -> Result<(), String> {
         if self.recovery_required { return Err(moments::RECOVERY_MESSAGE.into()); }
+        self.capture_picture();
         let bytes = self.core.save_state().ok_or("This core could not save its state")?;
         if let Err(error) = pocket_ui::state_file::write(path, &bytes) {
             self.note_save_trouble(Some(pocket_ui::save_trouble::Trouble::of(&error)));
@@ -692,12 +774,17 @@ impl Player {
             return;
         }
         let now = Instant::now();
-        if cam.wants_picture() {
-            if let Some(p) = self.album_picture(now) {
-                cam.picture(p);
+        let wants_picture = cam.wants_picture();
+        let keep = self.album_ring.back().is_none_or(|(t, _)| now.duration_since(*t) >= Duration::from_secs(2));
+        if keep {
+            self.capture_picture();
+        }
+        if wants_picture {
+            if let Some((cam, picture)) = self.album.as_ref().zip(self.album_picture(now)) {
+                cam.picture(picture);
             }
         }
-        if self.album_ring.back().is_none_or(|(t, _)| now.duration_since(*t) >= Duration::from_secs(2)) {
+        if keep {
             if let Some(f) = self.frame.clone() {
                 self.album_ring.push_back((now, f));
                 while self.album_ring.len() > 5 {
@@ -724,6 +811,7 @@ impl Player {
         if self.recovery_required { return Err(moments::RECOVERY_MESSAGE.into()); }
         let path = pocket_ui::slots::auto_path(&self.base);
         // The battery save first, so the state is never older than it (`Core::resume`), as pocket-core's exit does.
+        self.capture_picture();
         let battery = self.core.write_sram();
         self.album_finish();
         if let Some(mark) = &self.mark {
@@ -761,6 +849,7 @@ impl Player {
             return Err(pocket_ui::achievements::hardcore::NO_LOAD.into());
         }
         let bytes = pocket_ui::state_file::read(path).map_err(|e| e.to_string())?;
+        self.capture_picture();
         let loaded_picture = pocket_ui::image::load_png(&pocket_ui::slots::preview_path(path));
         let result = if self.recovery_required { moments::recover(&mut self.core, &bytes) }
         else { self.undo.load(&mut self.core, &bytes, |preview| {
@@ -788,6 +877,8 @@ impl Player {
         self.stylus.clear();
         self.stylus_finger = None;
         self.core.set_pointer(None);
+        // The last visible image stays behind the menu until the new state delivers a frame.
+        self.hw_picture = None;
         if let Some(image) = loaded_picture { self.frame = Some(std::sync::Arc::new(image)); }
         self.held = Default::default();
         self.buttons = 0;
@@ -796,6 +887,53 @@ impl Player {
         self.touch_pulses = 0;
         log::info!("player state loaded: {}", path.display());
         Ok(())
+    }
+    /// The low-battery guard's news (`player_battery`), as pocket-core acts on Linux's: the warning in the pill over the
+    /// game (shown when the menu closes if it is open), and at the critical level "Battery empty. Saving…" for one frame,
+    /// then Save & quit's way back to the shelf. A save that fails keeps the game open with the failure said: closing
+    /// then would lose the progress the player can still save by hand.
+    fn battery(&mut self) {
+        if self.battery_close {
+            self.battery_close = false;
+            log::info!("player battery: empty, saving and closing");
+            if self.recovery_required { self.quit = true; self.audio.take(); self.leave_last_picture(false); return; }
+            match self.automatic() {
+                Ok(()) => { self.quit = true; self.audio.take(); self.leave_last_picture(true); }
+                Err(e) => {
+                    log::error!("player battery: save failed, the game stays open: {e}");
+                    // Over the game in the pill, and in the pause menu's own line when it is open (the pill shows only
+                    // over a running game; Sol 26.11.), as Save & quit says it.
+                    self.message = said(e, pocket_ui::save_trouble::MOMENT_FAILED);
+                    self.last_ok = false;
+                    self.note = vec![self.message.clone()];
+                    // Zoom and the achievements list paint no message line (Sol 26.11.): back to the menu's page that
+                    // does, as B would go there.
+                    if matches!(self.menu, Menu::Zoom | Menu::Achievements) {
+                        self.menu = Menu::Pause;
+                        self.scroll = 0;
+                        self.zoom_fingers.clear();
+                    }
+                    self.note_until = None;
+                    self.overlay_size = None;
+                }
+            }
+            return;
+        }
+        // No look at `suspended`: that is also set by a lost audio focus while the game stays on screen in its pause
+        // menu (emulator, 26.11.: Critical(2) waited there and nothing was saved). In the background no frame runs at all.
+        let Some(alert) = player_battery::take() else { return };
+        let line = match pocket_ui::low_battery::player_act(alert) {
+            pocket_ui::low_battery::PlayerAct::Say(line) => line,
+            pocket_ui::low_battery::PlayerAct::SaveAndClose => {
+                self.battery_close = true;
+                // The saying frame is drawn now; the next one acts.
+                let _ = pocket_ui::platform::android::strings("wakeFrame", &[]);
+                pocket_ui::low_battery::EMPTY_TEXT.to_string()
+            }
+        };
+        self.note = vec![line];
+        self.note_until = None;
+        self.overlay_size = None;
     }
     /// Save & quit: the launcher's way back gets the game's last picture (the auto state's preview, just written) and
     /// where it stood on the screen (`eject::LastPicture`). The time is the quit's, for its measurement in the log.
@@ -854,7 +992,10 @@ impl Player {
     fn pause(&mut self, on: bool) {
         if !on && self.recovery_required { return; }
         // The menu stops every motor, as pocket-core's (a rumble left on is a lease that runs out anyway).
-        if on { pocket_ui::rumble::stop(); }
+        if on {
+            self.capture_picture();
+            pocket_ui::rumble::stop();
+        }
         if !on {self.suspended=false;self.fps.restart();}
         if !on && self.audio.is_none() {
             self.audio = pocket_ui::audio::Audio::open(self.core.av.timing.sample_rate, pocket_ui::audio::needs_jitter_reserve(&self.system));
@@ -907,6 +1048,7 @@ impl Player {
         self.scroll = 0;
         self.swallow = None;
         self.list_sel = 0;
+        self.from_start = false;
         self.from_options = false;
         self.previews.clear();
         self.nav.reset();
@@ -1227,6 +1369,12 @@ impl Player {
         };
         let mut step: Option<&'static str> = None;
         let window = match item {
+            // From the start: no state, no picture; the window says what the stop does (Linux's).
+            Some(pause_list::Item::Load) if self.at_start() => {
+                step = Some("Slot");
+                let note = if self.message.is_empty() { pause_list::FROM_START_NOTE.to_string() } else { self.message.clone() };
+                Some(ListWindow { picture: None, empty: pause_list::FROM_START, note, slots: true })
+            }
             Some(item @ (pause_list::Item::Save | pause_list::Item::Load)) => {
                 let path = self.place_path();
                 let saved = if path.is_file() { age(&path) } else { None };
@@ -1296,7 +1444,7 @@ impl Player {
         };
         let (window, note) = if window.is_none() && pocket_ui::pause_page::shows_game(kind, false, self.frame.is_some()) {
             let line = note.unwrap_or_else(|| pocket_ui::pause_page::paused_here(None, self.clock.elapsed().as_secs()));
-            (Some(ListWindow { picture: self.frame.clone(), empty: "No picture", note: line, slots: false }), None)
+            (Some(ListWindow { picture: self.shaped_frame(), empty: "No picture", note: line, slots: false }), None)
         } else {
             (window, note)
         };
@@ -1312,7 +1460,9 @@ impl Player {
             .into_iter()
             .map(|r| {
                 let widest = match r.item {
-                    pause_list::Item::Save | pause_list::Item::Load if r.steps => widest_place.clone().or_else(|| r.chip.clone()),
+                    // Load's window is as wide as its longest stop, From the start among them.
+                    pause_list::Item::Load if r.steps => widest_place.iter().cloned().chain([pause_list::FROM_START.to_string()]).max_by_key(|t| t.chars().count()),
+                    pause_list::Item::Save if r.steps => widest_place.clone().or_else(|| r.chip.clone()),
                     _ => r.chip.clone(),
                 };
                 pocket_ui::pause_page::MainRow { label: r.label, icon: r.item.icon(), enabled: r.enabled, opens: r.item.opens_page(), chip: r.chip, widest, arrows: r.steps }
@@ -1342,7 +1492,8 @@ impl Player {
             .map(|item| match item {
                 Item::Continue => row(item, item.label(), None, false, true),
                 Item::Save => row(item, item.label(), chip.clone(), steps, !hardcore && self.slot < self.filled_slots.len()),
-                Item::Load => row(item, item.label(), chip.clone(), steps, !hardcore && pocket_ui::slots::load_refusal(&self.filled_slots, self.slot).is_none()),
+                Item::Load if self.at_start() => row(item, item.label(), Some(pause_list::FROM_START.into()), true, true),
+                Item::Load => row(item, item.label(), chip.clone(), !hardcore && !self.recovery_required, !hardcore && pocket_ui::slots::load_refusal(&self.filled_slots, self.slot).is_none()),
                 // Earlier only while it has a row, as Linux's (`app_earlier`): switched on, or moments of it kept.
                 Item::Earlier => row(item, item.label(), earlier_chip.clone(), !hardcore && self.earlier_row.entries.len() > 1, !hardcore && self.earlier_row.loadable()),
                 Item::Disc => row(item, item.label(), self.disc_row.map(|d| d.chip()), true, true),
@@ -1443,14 +1594,33 @@ impl Player {
     }
     /// A state's picture, read once while the menu is open. Only a picture at least as new as its state: the moment at
     /// a game's start has none, and an older one beside it would show the wrong moment.
+    /// A picture for the pause menu's window in the shape the game is shown at: a core's raw pixels needn't be square
+    /// (Nestopia's NES frame was squashed to half its height there, night QA 27.11.2026). The slot pictures on the card
+    /// stay as the core gave them; this is only how they are shown.
+    fn shaped(&self, image: std::sync::Arc<Image>) -> std::sync::Arc<Image> {
+        image.shaped(self.core.av.geometry.aspect_ratio).map(std::sync::Arc::new).unwrap_or(image)
+    }
+    /// The paused game's picture for the window, made once per frame (the menu paints it every frame).
+    fn shaped_frame(&mut self) -> Option<std::sync::Arc<Image>> {
+        let frame = self.frame.clone()?;
+        if let Some((from, shaped)) = &self.shaped_frame {
+            if std::sync::Arc::ptr_eq(from, &frame) { return Some(shaped.clone()); }
+        }
+        let shaped = self.shaped(frame.clone());
+        self.shaped_frame = Some((frame, shaped.clone()));
+        Some(shaped)
+    }
     fn preview(&mut self, state: &Path) -> Option<std::sync::Arc<Image>> {
+        // Only a picture of the game's present shape: a DS moment saved in another screen layout has its own (Sol, 27.11.).
+        let aspect = self.core.av.geometry.aspect_ratio;
+        let live = self.frame.as_ref().map(|f| (f.w, f.h));
         self.previews
             .entry(state.to_path_buf())
             .or_insert_with(|| {
                 let png = pocket_ui::slots::preview_path(state);
                 let time = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
                 match (time(state), time(&png)) {
-                    (Some(s), Some(p)) if p + Duration::from_secs(2) >= s => pocket_ui::image::load_png(&png).map(std::sync::Arc::new),
+                    (Some(s), Some(p)) if p + Duration::from_secs(2) >= s => pocket_ui::image::load_png(&png).map(|i| std::sync::Arc::new(if live == Some((i.w, i.h)) { i.shaped(aspect).unwrap_or(i) } else { i })),
                     _ => None,
                 }
             })
@@ -1462,6 +1632,13 @@ impl Player {
     fn activate_list(&mut self) {
         let rows = self.list_rows();
         let Some(item) = rows.get(self.list_sel).map(|r| r.item) else { return };
+        // Load on its last stop: the game from its start, and back to it (Linux's `SaveAction::Restart`).
+        if item == pause_list::Item::Load && self.at_start() {
+            self.start_over();
+            self.sound(pocket_ui::ui_sound::Sound::Confirm);
+            self.back_to_game_saying(pause_list::FROM_START_DONE.into());
+            return;
+        }
         let legacy = match item {
             pause_list::Item::Continue => 0,
             pause_list::Item::Save => 1,
@@ -1558,7 +1735,7 @@ impl Player {
         let n = rows.len().max(1);
         self.list_sel = self.list_sel.min(n - 1);
         let item = rows.get(self.list_sel).map(|r| r.item);
-        if matches!(key, 19 | 20 | 21 | 22) {
+        if matches!(key, 19 | 20 | 21 | 22 | 102 | 103) {
             self.message.clear();
         }
         match key {
@@ -1574,7 +1751,12 @@ impl Player {
                 let on_slots = matches!(item, Some(pause_list::Item::Save | pause_list::Item::Load));
                 if matches!(key, 21 | 22) && item == Some(pause_list::Item::Earlier) && !self.earlier_row.entries.is_empty() {
                     self.earlier_row.step(if back { -1 } else { 1 });
+                } else if item == Some(pause_list::Item::Load) && !self.hardcore() && !self.recovery_required {
+                    // Load: the slots, the kept moments, then From the start (Linux's Load).
+                    (self.slot, self.from_start) = pause_list::step_load(self.slot, self.from_start, self.places(), back);
                 } else if (on_slots || matches!(key, 102 | 103)) && self.places() > 0 {
+                    // Save, or L/R elsewhere, steps the slot, and Load follows it (Linux's Save).
+                    self.from_start = false;
                     let places = self.places();
                     self.slot = (self.slot + if back { places - 1 } else { 1 }) % places;
                 }
@@ -1972,6 +2154,25 @@ impl Player {
             None => pocket_ui::slots::state_path(&self.base, self.slot),
         }
     }
+    /// The list menu's Load is on From the start, where it can be: not in Hardcore (Linux's Load row is gone there) and
+    /// not while a load waits to be recovered.
+    fn at_start(&self) -> bool {
+        self.from_start && self.list_menu && !self.hardcore() && !self.recovery_required
+    }
+    /// Load → From the start, as pocket-core's `start_over`: the console's reset button and nothing else. The battery save
+    /// and the cartridge clock stay (`Core::restart`), so do the slots and the moment on the card until the next Save &
+    /// quit replaces it; no Before load is written. Achievements wait for the game again, and rewind forgets the timeline
+    /// left behind.
+    fn start_over(&mut self) {
+        self.core.restart();
+        self.from_start = false;
+        if let Some(ra) = &mut self.ra { ra.reset(); }
+        self.speed.forget();
+        self.held = Default::default();
+        self.buttons = 0;
+        self.core.set_analog([0; 4]);
+        log::info!("player started over");
+    }
     fn change_option(&mut self, delta: i32) {
         // Back, Advanced and the list menu's Zoom and Screenshot have no value to change.
         if self.row >= self.display_options().len() {
@@ -2247,7 +2448,9 @@ impl Player {
                     }
                 }
             }
-            return false;
+            // A tap that went back to the game (Continue, a save, a load, From the start): true asks Java to draw
+            // continuously again, else the game stood still until the next touch.
+            return !self.paused;
         }
         if self.paused && self.menu == Menu::Zoom {
             if phase == 2 && self.hits.iter().any(|(a,_,_)| a.contains(x,y)) {
@@ -2398,6 +2601,7 @@ impl Player {
     }
     fn timeline_capture(&mut self, moment: pocket_ui::timeline::Moment) {
         if !self.core.has_states() { self.timeline.skip(); return; }
+        self.capture_picture();
         let started = Instant::now();
         let Some(bytes) = self.core.save_state() else { self.timeline.failed(); return; };
         let ms = started.elapsed().as_secs_f32() * 1000.0;
@@ -2415,11 +2619,16 @@ impl Player {
         }
     }
     fn frame(&mut self, w: i32, h: i32, density: f32, insets: [i32; 4], hole: [i32; 4], font_scale: f32) -> i32 {
+        self.battery();
         if self.quit {
             self.timeline.wait();
             return 2;
         }
         self.timeline_quiet();
+        if self.hw_picture.is_some() && self.core.hw.as_ref().is_some_and(|hw| !hw.shared()) {
+            self.capture_picture();
+            self.hw_picture = None;
+        }
         if self.last_font_scale != font_scale {self.overlay_size=None;self.last_font_scale=font_scale;}
 
         pocket_ui::type_scale::set_system_scale(font_scale);
@@ -2457,7 +2666,6 @@ impl Player {
         // One core frame per display refresh near the display's rate, as pocket-core on Linux (`core_pacing`): the
         // wall clock against the core's own rate repeated and doubled pictures for seconds every ten (SNES, 17.11.).
         let call = Instant::now();
-        let mut readback_time = Duration::ZERO;
         let due = if !self.paused && self.reminder.is_none() { self.pacer.due(call) } else { 0 };
         if due > 0 {
             self.placement.keep(call);
@@ -2487,10 +2695,7 @@ impl Player {
             if let Some(state) = self.speed.history.step_back() {
                 let _ = self.core.load_state(state);
                 let (frame, _, _, _) = self.core.run(0);
-                if let Some(frame) = core_hw_frame(&self.core).or(frame) {
-                    self.video_frames += 1;
-                    self.frame = Some(player_video::image(frame));
-                }
+                self.accept_picture(frame);
                 if let Some(ra) = &mut self.ra { ra.idle(); }
                 self.speed.hold.rewound += 1;
             }
@@ -2498,8 +2703,8 @@ impl Player {
                 audio.push(&vec![0; self.speed.nominal_samples]);
             }
         }
-        // Fast-forward shows the refresh's last frame: the others run without picture or sound where the core can skip
-        // them (GET_AUDIO_VIDEO_ENABLE), 3D cores make every frame but only the last is read back.
+        // Fast-forward skips picture and sound where the core supports GET_AUDIO_VIDEO_ENABLE. Hardware cores can
+        // duplicate an intermediate delivery, so keep each GPU picture and present only once per refresh.
         let skip = ff.is_some() && self.core.hw.is_none();
         let mut ff_samples = 0;
         while ticks < runs && !back {
@@ -2575,14 +2780,10 @@ impl Player {
             if let Some(geometry) = geometry {
                 self.core.av.geometry = geometry;
             }
-            pocket_ui::mark!("android-readback", "phase=begin frame={}", self.frames);
-            let readback_started = Instant::now();
-            let frame = if last { core_hw_frame(&self.core).or(frame) } else { None };
-            readback_time += readback_started.elapsed();
-            pocket_ui::mark!("android-readback", "phase=end frame={}", self.frames);
-            if let Some(frame) = frame {
-                self.video_frames += 1;
-                self.frame = Some(player_video::image(frame));
+            if last || self.core.hw.as_ref().is_some_and(|hw| hw.shared()) {
+                pocket_ui::mark!("android-picture-handoff", "phase=begin frame={}", self.frames);
+                self.accept_picture(if last { frame } else { None });
+                pocket_ui::mark!("android-picture-handoff", "phase=end frame={}", self.frames);
             }
             self.album_frame();
             if ff.is_some() {
@@ -2632,9 +2833,11 @@ impl Player {
                     }
                     let input_frames = diagnostics["queue"]["input_frames"].as_u64().unwrap_or(0);
                     let resampled_frames = diagnostics["queue"]["resampled_frames"].as_u64().unwrap_or(0);
-                    log::info!("player audio: frames={} underruns={} queue_ms={queue_ms:.2} dropped_frames={dropped} input_rate={:.1} target_ms={:.1} video_frames={} input_frames={input_frames} resampled_frames={resampled_frames}{} read_buffer_overrides={}", self.frames, underruns, audio.input_rate(), audio.target_ms(), self.video_frames, pocket_ui::platform::android::audio_line(), pocket_ui::hw_render::read_buffer_overrides());
+                    let hw_cpu_captures = self.core.hw.as_ref().map_or(0, |hw| hw.captures());
+                    log::info!("player audio: frames={} underruns={} queue_ms={queue_ms:.2} dropped_frames={dropped} input_rate={:.1} target_ms={:.1} video_frames={} input_frames={input_frames} resampled_frames={resampled_frames}{} hw_cpu_captures={hw_cpu_captures} read_buffer_overrides={}", self.frames, underruns, audio.input_rate(), audio.target_ms(), self.video_frames, pocket_ui::platform::android::audio_line(), pocket_ui::hw_render::read_buffer_overrides());
                 }
                 if pocket_ui::platform::android::string("diagnosticAudio") == "true" {
+                    self.capture_picture();
                     let (reads,bits)=self.core.take_input_probe();
                     log::info!("player input diagnostic: buttons_seen={} core_reads={reads} core_bits={bits}",std::mem::take(&mut self.diagnostic_buttons_seen));
                     if let Some(image) = &self.frame {
@@ -2701,6 +2904,10 @@ impl Player {
                 self.overlay_size = None;
             }
         }
+        if self.level_bar.as_ref().is_some_and(|(_, until)| Instant::now() >= *until) {
+            self.level_bar = None;
+            self.overlay_size = None;
+        }
         if self.paused {
             let now = self.clock.elapsed().as_millis() as u64;
             if let Some(step) = self.hat_repeat.due(now) {
@@ -2710,13 +2917,13 @@ impl Player {
         pocket_ui::mark!("android-present", "phase=begin frame={}", self.frames);
         let paint_started = Instant::now();
         self.paint();
-        // Include readback and painting in the cost of normal play, before GLSurfaceView waits for the next refresh.
+        // Include the picture handoff and painting before GLSurfaceView waits for the next refresh.
         if !back && ff.is_none() && ticks > 0 {
             self.pacer.took(call.elapsed() / ticks);
         }
         pocket_ui::mark!("android-present", "phase=end frame={}", self.frames);
         if !self.paused && self.reminder.is_none() {
-            self.pacing.phases(readback_time, paint_started.elapsed());
+            self.pacing.phases(Duration::ZERO, paint_started.elapsed());
         }
         if self.frames > 0 && !self.first_frame {
             // The tests' end of "A or tap to the game's first frame" (the launcher logs the start).
@@ -2772,7 +2979,7 @@ impl Player {
                 nodes.push((self.menu_button, "Pause".into(), false));
             }
             if !self.note.is_empty() {
-                nodes.push((self.note_area, self.note.iter().map(|l| note_text(l)).collect::<Vec<_>>().join(". "), false));
+                nodes.push((self.note_area, play_cards::note_sentences(&self.note.iter().map(|l| note_text(l)).collect::<Vec<_>>()), false));
             }
             if !self.card_label.is_empty() {
                 nodes.push((self.card_area, self.card_label.clone(), false));
@@ -2806,9 +3013,11 @@ impl Player {
             _ => None,
         };
         // Where the picture goes, and in which pixels (`picture::Settings::place`).
-        let space = self.frame.as_deref().map(|image| self.picture.place(
-            (self.window.0 as i32, self.window.1 as i32), self.view, (w,h), (image.w,image.h),
-            self.core.av.geometry.aspect_ratio as f64, self.touch_visible,
+        let shared = self.hw_picture;
+        let picture_size = shared.map(|p| p.size).or_else(|| self.frame.as_ref().map(|p| (p.w, p.h)));
+        let space = picture_size.map(|size| self.picture.place(
+            (self.window.0 as i32, self.window.1 as i32), self.view, (w,h), size,
+            self.core.core.av.geometry.aspect_ratio as f64, self.touch_visible,
         ));
         let game_rect = space.map(|s| s.game);
         let (pic_size, pic_view) = space.map_or(((w, h), self.view), |s| (s.size, s.view));
@@ -2818,7 +3027,7 @@ impl Player {
             Some(rect) if self.picture.frame != 0 && !self.paused => {
                 let pad = if self.touch_visible { self.pad_extent((w, h), rect) } else { (0, pic_size.1) };
                 let room = picture::Settings::frame_room(pic_size, self.touch_visible, rect, pad);
-                self.frame.as_deref().and_then(|image| self.picture.frame_plan(&self.system, pic_size, pic_view, room, rect, image.w))
+                picture_size.and_then(|(width, _)| self.picture.frame_plan(&self.system, pic_size, pic_view, room, rect, width))
             }
             _ => None,
         };
@@ -2865,10 +3074,26 @@ impl Player {
             if changed { log::info!("player picture: system={} logical={}x{} rect={},{},{}x{} physical={}x{} on_window={:?} scaling={} frame={} video={:?} touch={} plan={}", self.system,w,h,rect.x,rect.y,rect.w,rect.h,self.view.2,self.view.3,space.map(|s| s.on_window(self.window.1 as i32)),self.picture.scaling,self.picture.frame,self.picture.video,self.touch_visible,frame_plan.is_some()); }
         }
         self.game_area = game_area;
-        let game = if self.paused { None } else { self.frame.as_deref().zip(game_rect.map(|r| match squeezed { Some((y, h)) => Area { y, h, ..r }, None => r })) };
+        let game = if self.paused { None } else {
+            let picture = self.core.hw.as_ref().zip(shared).map(|(hw, p)| {
+                use pocket_ui::video_program::Effect;
+                let p = match self.gfx.variant.1 {
+                    Effect::Crt | Effect::SoftGlow => hw.picture_for_mipmaps(p).unwrap_or_else(|| {
+                        self.gfx.variant = (self.gfx.variant.0, Effect::None, false);
+                        p
+                    }),
+                    _ => p,
+                };
+                GamePicture::Shared { texture: p.texture, size: p.size, texture_size: p.texture_size, bottom_left: p.bottom_left }
+            }).or_else(|| self.frame.as_deref().map(GamePicture::Software));
+            picture.zip(game_rect.map(|r| match squeezed { Some((y, h)) => Area { y, h, ..r }, None => r }))
+        };
+        let sample = shared.is_some() && game.is_some();
         if !self.paused && self.overlay_size == Some(self.logical) {
             self.core.frontend_current();
-            self.gfx.present(&self.pixels, (w, h), self.view, game, false, &crt, frame_plan.as_ref(), (pic_size, pic_view));
+            let hw = self.core.hw.as_ref().filter(|_| sample);
+            self.gfx.present_frame(&self.pixels, (w, h), self.view, game, false, &crt, frame_plan.as_ref(), (pic_size, pic_view));
+            if let Some(hw) = hw { hw.after_sampling(); }
             return;
         }
         let held_label = self.held.held().map(|b| self.control_label(b as u16).to_string());
@@ -2878,6 +3103,8 @@ impl Player {
         // Hardcore greys Load and Earlier in the sheet (read before the canvas holds the pixels).
         let hardcore = self.hardcore();
         let selected_place_name = self.place_name();
+        // Load on From the start rings no slot (Linux's `on_slot`); Save keeps its ring meanwhile.
+        let at_start = self.at_start() && self.list_rows().get(self.list_sel).map(|r| r.item) == Some(pause_list::Item::Load);
         let mut c = Canvas::new(&mut self.pixels, w as u32, h as u32);
         c.clear(0);
         // Paused backgrounds are painted only when the menu changes; active frames are scaled by GLES.
@@ -2943,7 +3170,7 @@ impl Player {
             match list {
                 ListPaint::Main { rows, sel, window, note, hints } => {
                     let filled: Vec<bool> = self.filled_slots.to_vec();
-                    let ring = (self.slot < filled.len()).then_some(self.slot);
+                    let ring = (self.slot < filled.len() && !at_start).then_some(self.slot);
                     let strip_h = |_: i32| 28;
                     let page = pocket_ui::pause_page::MainPage {
                         title: &self.title,
@@ -3073,9 +3300,15 @@ impl Player {
             let label = self.text.translated("{s} held").replace("{s}", &held);
             play_cards::paint_badge(&mut c,&mut self.text,&label);
         }
+        if let Some((bar, _)) = &self.level_bar {
+            // The volume key's level bar, at the top centre over game and menu (Linux's `overlay` piece 3).
+            paint_level_bar(&mut c, &mut self.text, bar);
+        }
         self.core.frontend_current();
         self.gfx.backdrop = if self.paused { pal().void } else { 0 };
-        self.gfx.present(&self.pixels, (w, h), self.view, game, true, &crt, frame_plan.as_ref(), (pic_size, pic_view));
+        let hw = self.core.hw.as_ref().filter(|_| sample);
+        self.gfx.present_frame(&self.pixels, (w, h), self.view, game, true, &crt, frame_plan.as_ref(), (pic_size, pic_view));
+        if let Some(hw) = hw { hw.after_sampling(); }
         self.overlay_size = if self.paused { None } else { Some(self.logical) };
     }
 }
@@ -3120,8 +3353,28 @@ fn note_text(line: &str) -> String {
 /// The lines about the game's start (and what a save or a load did) in pocket-core's dark pill at the bottom centre of
 /// the screen, as Linux shows its messages over the game (`pause_page::note_pill`, `NOTE_ALPHA` see-through through the
 /// overlay's alpha). Returns what it covers.
+/// The level bar of a volume key (`osd::paint`, Linux's picture), at the top centre where Linux's overlay puts it.
+fn paint_level_bar(c: &mut Canvas, text: &mut Text, bar: &pocket_ui::osd::Data) {
+    use pocket_ui::osd::{H, TOP, W};
+    use pocket_ui::pause_page::{NOTE_ALPHA, NOTE_KEY, NOTE_PILL};
+    let (w, h) = (c.w, c.h);
+    let mut px = vec![NOTE_KEY; (W * H) as usize];
+    pocket_ui::osd::paint(&mut Canvas::new(&mut px, W as u32, H as u32), text, 0, 0, bar, NOTE_PILL);
+    let (x, y) = (((w - W) / 2).max(0), TOP);
+    let alpha = ((NOTE_ALPHA * 255.0) as u32) << 24;
+    let pixels = c.pixels_mut();
+    for row in 0..H {
+        for col in 0..W {
+            let p = px[(row * W + col) as usize];
+            let (sx, sy) = (x + col, y + row);
+            if p != NOTE_KEY && (0..w).contains(&sx) && (0..h).contains(&sy) {
+                pixels[(sy * w + sx) as usize] = alpha | (p & 0xff_ffff);
+            }
+        }
+    }
+}
 fn paint_note_pill(c: &mut Canvas, text: &mut Text, lines: &[String]) -> Area {
-    let msg = lines.iter().map(|l| note_text(l)).collect::<Vec<_>>().join(" ");
+    let msg = play_cards::note_sentences(&lines.iter().map(|l| note_text(l)).collect::<Vec<_>>());
     paint_pill_at(c, text, &msg, |w, h, pw, ph| ((w - pw) / 2, h - pocket_ui::pause_page::NOTE_MARGIN - ph))
 }
 /// `msg` in pocket-core's pill (`pause_page::note_pill`), placed by `at` (canvas width and height, pill width and height →
@@ -3623,7 +3876,7 @@ pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeCreate(
                 player.text_size = serde_json::from_value(prefs["text_size"].clone()).unwrap_or_default();
                 // Options › Controls (Linux's page): the button choices from the game's settings (`ctl.*`).
                 player.load_controls();
-                if player.resumed && player.frame.is_some() {
+                if player.resumed && (player.hw_picture.is_some() || player.frame.is_some()) {
                     let r=&prefs["reminder"];
                     if let Some(ago)=r["ago"].as_str() {
                         log::info!("Android reminder: {ago}");
@@ -3639,10 +3892,18 @@ pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeCreate(
                 player.crt_done = player.paused || !cozy || !extras.tv_switch_on || pocket_ui::platform::android::string("batterySaver") == "true";
                 player.core.frontend_current();
                 *slot.borrow_mut() = Some(player);
+                player_battery::start();
                 String::new()
             }
-            // The dialog "Game couldn't start" shows our sentence, never a library's words (`said`).
-            Err(e) => pocket_ui::i18n::tr(&said(e, pocket_ui::save_trouble::START_FAILED)),
+            // The dialog "Game couldn't start" shows our sentence, never a library's words (`said`). A game from the
+            // Handheld view goes back at once instead and its shelf says it (`save_trouble::report_start_failed`); the
+            // Java side sees `pause_menu` too and shows no dialog then.
+            Err(e) => { let sentence = said(e, pocket_ui::save_trouble::START_FAILED);
+                if prefs["pause_menu"].as_str() == Some("handheld") {
+                    pocket_ui::save_trouble::report_start_failed(&pocket_ui::platform::data_dir().join("player-start-error"), &sentence);
+                }
+                pocket_ui::i18n::tr(&sentence)
+            }
         }
     });
     env.new_string(error).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut())
@@ -3739,13 +4000,41 @@ pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeTouch(_: JNIEn
         })
     }) as jboolean
 }
+/// A parked GL thread has no current context yet. Silence it now and let the
+/// next drawable frame perform the normal suspend/save work.
+#[no_mangle]
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeQuietAudio(_: JNIEnv, _: JObject) {
+    PLAYER.with(|slot| {
+        if let Some(p) = slot.borrow_mut().as_mut() {
+            p.audio.take();
+        }
+    });
+}
+
 #[no_mangle]
 pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeSuspend(_: JNIEnv, _: JObject) {
     PLAYER.with(|slot| {
         if let Some(p) = slot.borrow_mut().as_mut() {
             if p.suspended {return;}
             p.suspended=true;
-            p.pause(true);
+            p.menu_at_suspend = p.paused;
+            if p.paused {
+                // A page of the menu is open (Options, Zoom …): it stays as it is for the wake, only what is held lets go
+                // (`pause` would put the menu back on its first row).
+                p.buttons = 0;
+                p.pulses = 0;
+                p.touch_pulses = 0;
+                p.stick_buttons = 0;
+                p.pads.release_all();
+                p.speed.release_all();
+                p.stick_direction = 0;
+                p.hat_repeat = Default::default();
+                p.held = Default::default();
+                p.fingers.clear();
+                p.core.set_analog([0; 4]);
+            } else {
+                p.pause(true);
+            }
             p.audio.take();
             if let Err(e) = p.automatic() {
                 log::error!("suspend save: {e}");
@@ -3784,6 +4073,30 @@ pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeControllers(_:
         p.core.frontend_current();
     }});
 }
+/// The device's Vol+ / Vol- in a game (PlayerActivity takes them from Android): one step of the media volume as the quick
+/// settings' row makes it (`volume_steps::key_step`), shown in pocket-ui's level bar. False when Android says nothing
+/// about its volume (the key then did nothing).
+#[no_mangle]
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeVolumeKey(_: JNIEnv, _: JObject, up: jboolean) -> jboolean {
+    let levels = pocket_ui::platform::android::strings("volumeLevels", &[]).ok();
+    let Some(now) = levels.as_deref().and_then(pocket_ui::volume_steps::Levels::parse) else { return 0 };
+    let next = pocket_ui::volume_steps::key_step(now, up != 0);
+    if next.index != now.index {
+        if let Err(e) = pocket_ui::platform::android::strings("setVolumeIndex", &[&next.index.to_string()]) {
+            log::warn!("player volume: {e}");
+        }
+    }
+    // The bar shows where Android really stands (it may refuse or limit a step, e.g. the headphones' safe volume).
+    let after = pocket_ui::platform::android::strings("volumeLevels", &[]).ok().as_deref().and_then(pocket_ui::volume_steps::Levels::parse).unwrap_or(next);
+    let pct = if after.muted { 0 } else { after.percent() };
+    PLAYER.with(|slot| {
+        if let Some(p) = slot.borrow_mut().as_mut() {
+            p.level_bar = Some((pocket_ui::osd::Data::percent("Volume", pct), Instant::now() + pocket_ui::osd::SHOW_FOR));
+            p.overlay_size = None;
+        }
+    });
+    1
+}
 #[no_mangle]
 pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeZoom(_: JNIEnv,_:JObject,factor:jfloat) {
     PLAYER.with(|slot|{if let Some(p)=slot.borrow_mut().as_mut(){
@@ -3794,7 +4107,25 @@ pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeZoom(_: JNIEnv
     }});
 }
 
+/// In front again. `screen_was_off`: it went to the background because the screen went off (the power key): the game goes
+/// on as on Linux, without the menu's sound, unless the menu was open (`android_wake`). Home or another app: paused.
 #[no_mangle]
-pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeForeground(_: JNIEnv,_:JObject) {
-    PLAYER.with(|slot|{if let Some(p)=slot.borrow_mut().as_mut(){p.suspended=false;}});
+pub extern "system" fn Java_xyz_pocketui_app_PlayerActivity_nativeForeground(_: JNIEnv,_:JObject,screen_was_off:jboolean) -> jboolean {
+    PLAYER.with(|slot| {
+        let mut player = slot.borrow_mut();
+        let Some(p) = player.as_mut() else { return 0 };
+        let suspended = std::mem::replace(&mut p.suspended, false);
+        let back = pocket_ui::android_wake::Back { screen_was_off: screen_was_off != 0, menu_was_open: p.menu_at_suspend, recovery: p.recovery_required };
+        let goes_on = suspended && p.paused && pocket_ui::android_wake::game_goes_on(back);
+        if goes_on {
+            log::info!("player wake: the game goes on");
+            let quiet = std::mem::replace(&mut p.sounds_muted, true);
+            p.pause(false);
+            p.sounds_muted = quiet;
+        } else if suspended {
+            log::info!("player back in front: {back:?}, paused {}", p.paused);
+        }
+        p.core.frontend_current();
+        goes_on as jboolean
+    })
 }

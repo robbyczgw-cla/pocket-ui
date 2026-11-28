@@ -121,6 +121,47 @@ pub fn fit_parts(line: &str, max: i32, measure: &mut dyn FnMut(&str) -> i32) -> 
     }
     parts.join(" · ")
 }
+/// A title card's name on a tile `max` wide with `rows` lines of room under the console: (type size, lines), in the
+/// largest of 24, 21 and 18 px where its first word fits whole; a long word may break after a hyphen ("Banjo-" /
+/// "Kazooie", Neon's review 26.11.2026: the tile showed the console alone). As many lines as rows under the console, two to four.
+/// The largest size that shows the whole name, else the smallest, ending in "…" at a word. None only where no size takes
+/// the first word: the tile shows the console alone rather than "Ne…".
+pub fn tile_name(title: &str, max: i32, rows: i32, measure: &mut dyn FnMut(&str, u32) -> i32, fit: &mut dyn FnMut(&str, u32, i32) -> String) -> Option<(u32, Vec<String>)> {
+    // Every row under the console's, up to four lines of name (a cover tile has five rows at 1024x768).
+    let lines = (rows - 1).clamp(2, 4) as usize;
+    // The largest size that shows the whole name; where none does, the smallest one, cut at a word's end.
+    let mut last = None;
+    for px in [24u32, 21, 18] {
+        // Words wider than the tile break after their hyphens.
+        let broken: Vec<String> = title
+            .split_whitespace()
+            .flat_map(|w| {
+                if measure(w, px) <= max || !w.contains('-') {
+                    vec![w.to_string()]
+                } else {
+                    let parts: Vec<&str> = w.split_inclusive('-').collect();
+                    parts.into_iter().map(str::to_string).collect()
+                }
+            })
+            .collect();
+        let joined = broken.join(" ");
+        let first = broken.first().map_or("", String::as_str);
+        if first.is_empty() || measure(first, px) > max {
+            continue;
+        }
+        let shown = title_lines(&joined, max, lines, &mut |s| measure(s, px), &mut |s, m| fit(s, px, m));
+        if !shown.is_empty() && rows > shown.len() as i32 {
+            // Rejoin a hyphen's break on one line ("Banjo- Kazooie" read as "Banjo-Kazooie").
+            let shown: Vec<String> = shown.into_iter().map(|l| l.replace("- ", "-")).collect();
+            if shown.iter().all(|l| !l.contains('…')) {
+                return Some((px, shown));
+            }
+            last = Some((px, shown));
+        }
+    }
+    last
+}
+
 
 /// A title in lines at most `max` wide, at most `lines` of them: whole words, a word too long for a line cut with "…",
 /// the last line shown ending with "…" when the title goes on.
@@ -252,6 +293,21 @@ pub fn layout(panel: &Panel, max_w: i32, h: i32, caption_h: i32, measure: &mut d
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tile_always_names_its_game_a_long_word_breaks_after_its_hyphen() {
+        let mut text = crate::text::Text::builtin();
+        text.set_translate(false);
+        let text = std::cell::RefCell::new(text);
+        let mut measure = |s: &str, px: u32| text.borrow_mut().width(crate::text::Face::Title, px, s);
+        let mut fit = |s: &str, px: u32, m: i32| text.borrow_mut().fit(crate::text::Face::Title, px, s, m);
+        for name in ["Banjo-Kazooie", "Castlevania: Symphony of the Night", "Professor Layton and the Curious Village", "EarthBound", "Pikmin"] {
+            let got = tile_name(name, 91, 4, &mut measure, &mut fit);
+            assert!(got.as_ref().is_some_and(|(_, l)| !l.is_empty()), "{name}: {got:?}");
+        }
+        let (_, banjo) = tile_name("Banjo-Kazooie", 91, 4, &mut measure, &mut fit).unwrap();
+        assert!(banjo.iter().all(|l| !l.contains('…')), "{banjo:?}");
+    }
 
     /// Ten pixels a character, about Body 21.
     fn chars(s: &str) -> i32 {

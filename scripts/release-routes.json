@@ -1,0 +1,271 @@
+{
+  "about": "Expected emulator per device family and system for scripts/release-routes.py (docs/DEVICE-TESTS.md \"Emulator routes of the release payloads\"). Each route is [emulator, core, source]: source `payload` = pocket-ui ships the file, `base` = the pinned ROCKNIX or dArkOS system has it, `unsupported` = pocket-ui refuses the system on that device with a message. A 4th element marks a documented exception: the route is green and the run lists it with that reason (Saturn without a BIOS, PICO-8 without the official player). `variants` run the probe again with extra files (absolute paths: their text; else pocket-ui's settings as JSON), `use_variants` names shared ones. `games` gives the test game's extension where the system's first one is not the player's usual game. Sources: docs/user/systems.md, docs/TRIMUI-BRICK-STANDALONE.md, docs/DARKOS.md, the code where they disagree. `null` removes a route of a group.",
+  "groups": {
+    "rocknix-2d": {
+      "gb": ["pocket-core", "gambatte", "base"],
+      "gbc": ["pocket-core", "gambatte", "base"],
+      "gba": ["pocket-core", "mgba", "base"],
+      "nes": ["pocket-core", "nestopia", "base"],
+      "snes": ["pocket-core", "snes9x", "base"],
+      "megadrive": ["pocket-core", "genesis_plus_gx", "base"],
+      "mastersystem": ["pocket-core", "gearsystem", "base"],
+      "gamegear": ["pocket-core", "gearsystem", "base"],
+      "sg-1000": ["pocket-core", "gearsystem", "base"],
+      "pcengine": ["pocket-core", "beetle_pce_fast", "base"],
+      "wonderswan": ["pocket-core", "beetle_wswan", "base"],
+      "wonderswancolor": ["pocket-core", "beetle_wswan", "base"],
+      "atari2600": ["pocket-core", "stella", "base"],
+      "psx": ["pocket-core", "pcsx_rearmed", "base"]
+    },
+    "rocknix-3d": {
+      "n64": ["pocket-core", "mupen64plus_next", "base"],
+      "psp": ["pocket-core", "ppsspp", "base"],
+      "dreamcast": ["pocket-core", "flycast", "base"]
+    },
+    "rocknix-small-3d": {
+      "n64": ["retroarch", "mupen64plus_next", "base"],
+      "psp": ["ppsspp", "ppsspp-sa", "base"],
+      "dreamcast": ["retroarch", "flycast2021", "base"]
+    },
+    "rocknix-standalone": {
+      "ps2": ["armsx2", "armsx2-sa", "base"],
+      "gamecube": ["dolphin", "dolphin-sa-gc", "base"],
+      "wii": ["dolphin", "dolphin-sa-wii", "base"],
+      "3ds": ["azahar", "azahar-sa", "base"]
+    },
+    "rocknix-more": {
+      "saturn": ["yabasanshiro", "yabasanshiro-sa", "base", "no Saturn BIOS on a fresh card: standalone YabaSanshiro with its own HLE BIOS, and pocket-ui says so at the start (hostsys.rs default_without_bios, docs/user/systems.md \"Sega Saturn\")"],
+      "pc": ["pocket-core", "dosbox_pure", "base"],
+      "scummvm": ["pocket-core", "scummvm", "base"],
+      "pico-8": ["pocket-core", "fake08", "base", "no official PICO-8 on the card: FAKE-08 in pocket-core stands in for ROCKNIX's start_pico8.sh, and pocket-ui says so (hostsys.rs Official, docs/user/systems.md \"PICO-8 and TIC-80\")"],
+      "ports": ["portmaster", "portmaster", "base"]
+    },
+    "darkos-pocket-core": {
+      "gb": ["pocket-core", "gambatte", "base"],
+      "gbc": ["pocket-core", "gambatte", "base"],
+      "gba": ["pocket-core", "gpsp", "base"],
+      "nes": ["pocket-core", "fceumm", "base"],
+      "snes": ["pocket-core", "snes9x", "base"],
+      "megadrive": ["pocket-core", "genesis_plus_gx", "base"],
+      "mastersystem": ["pocket-core", "genesis_plus_gx", "base"],
+      "gamegear": ["pocket-core", "genesis_plus_gx", "base"],
+      "sg-1000": ["pocket-core", "genesis_plus_gx", "base"],
+      "pcengine": ["pocket-core", "mednafen_pce_fast", "base"],
+      "wonderswan": ["pocket-core", "mednafen_wswan", "base"],
+      "wonderswancolor": ["pocket-core", "mednafen_wswan", "base"],
+      "atari2600": ["pocket-core", "stella2014", "base"],
+      "psx": ["pocket-core", "pcsx_rearmed", "base"],
+      "n64": ["pocket-core", "mupen64plus_next", "base"],
+      "psp": ["pocket-core", "ppsspp", "base"],
+      "dreamcast": ["pocket-core", "flycast", "base"],
+      "nds": ["pocket-core", "dsperate", "payload"],
+      "saturn": ["pocket-core", "yabause", "base"],
+      "pc": ["pocket-core", "dosbox_pure", "base"],
+      "scummvm": ["pocket-core", "scummvm", "base"],
+      "pico-8": ["darkos", "", "base"],
+      "ports": ["darkos", "", "base"],
+      "gamecube": ["darkos", "", "base"],
+      "wolf": ["pocket-core", "ecwolf", "base"],
+      "alg": ["darkos", "", "base"]
+    }
+  },
+  "families": {
+    "ROCKNIX SM8250": {
+      "base": "SM8250-20261001",
+      "devices": ["miniv2", "rp5"],
+      "hakux_devices": ["miniv2", "rp5"],
+      "payloads": ["rocknix-install", "rocknix-card", "rocknix-ota", "rocknix-update"],
+      "exe": "/storage/pocket-ui/pocket-ui",
+      "config_mirror": true,
+      "use": ["rocknix-2d", "rocknix-3d", "rocknix-standalone", "rocknix-more"],
+      "routes": {
+        "nds": ["pocket-core", "melondsds", "base"],
+        "xbox": ["hakux", "hakux", "payload"]
+      },
+      "variants": {
+        "mode7-hd": {
+          "files": {
+            "game-settings/snes.json": {
+              "mode7": "hd"
+            }
+          },
+          "routes": {
+            "snes": ["pocket-core", "bsnes_hd_beta", "base"]
+          }
+        }
+      },
+      "use_variants": ["saturn-bios", "pico8-official"]
+    },
+    "ROCKNIX SM8550": {
+      "base": "SM8550-20261001",
+      "devices": ["rp6", "odin2"],
+      "hakux_devices": ["rp6", "odin2"],
+      "payloads": ["rocknix-install", "rocknix-card", "rocknix-ota", "rocknix-update"],
+      "exe": "/storage/pocket-ui/pocket-ui",
+      "config_mirror": true,
+      "use": ["rocknix-2d", "rocknix-3d", "rocknix-standalone", "rocknix-more"],
+      "routes": {
+        "nds": ["pocket-core", "melondsds", "base"],
+        "xbox": ["hakux", "hakux", "payload"]
+      },
+      "variants": {
+        "mode7-hd": {
+          "files": {
+            "game-settings/snes.json": {
+              "mode7": "hd"
+            }
+          },
+          "routes": {
+            "snes": ["pocket-core", "bsnes_hd_beta", "base"]
+          }
+        }
+      },
+      "use_variants": ["saturn-bios", "pico8-official"]
+    },
+    "ROCKNIX SM4450": {
+      "base": "SM4450-20261101",
+      "devices": ["rp-classic"],
+      "payloads": ["rocknix-install", "rocknix-card", "rocknix-ota", "rocknix-update"],
+      "exe": "/storage/pocket-ui/pocket-ui",
+      "config_mirror": true,
+      "use": ["rocknix-2d", "rocknix-3d", "rocknix-standalone", "rocknix-more"],
+      "routes": {
+        "nds": ["pocket-core", "melondsds", "base"]
+      },
+      "use_variants": ["saturn-bios", "pico8-official"]
+    },
+    "ROCKNIX H700": {
+      "base": "H700-20261001",
+      "devices": ["rg35xx-plus"],
+      "payloads": ["rocknix-install", "rocknix-card", "rocknix-ota", "rocknix-update"],
+      "exe": "/storage/pocket-ui/pocket-ui",
+      "config_mirror": true,
+      "use": ["rocknix-2d", "rocknix-small-3d", "rocknix-more"],
+      "routes": {
+        "gba": ["pocket-core", "gpsp", "payload"],
+        "nds": ["pocket-core", "dsperate", "payload"]
+      },
+      "use_variants": ["saturn-bios", "pico8-official"]
+    },
+    "ROCKNIX RK3566": {
+      "base": "RK3566-20261101",
+      "devices": ["rg353m", "rgdsplus"],
+      "payloads": ["rocknix-install", "rocknix-card", "rocknix-ota", "rocknix-update"],
+      "exe": "/storage/pocket-ui/pocket-ui",
+      "config_mirror": true,
+      "use": ["rocknix-2d", "rocknix-small-3d", "rocknix-more"],
+      "routes": {
+        "nds": ["pocket-core", "dsperate", "payload"],
+        "ps2": ["armsx2", "armsx2-sa", "base"]
+      },
+      "use_variants": ["saturn-bios", "pico8-official"]
+    },
+    "ROCKNIX RK3326": {
+      "base": "RK3326-20261101",
+      "devices": ["r36s"],
+      "payloads": ["rocknix-install", "rocknix-card", "rocknix-ota", "rocknix-update"],
+      "exe": "/storage/pocket-ui/pocket-ui",
+      "config_mirror": true,
+      "use": ["rocknix-2d", "rocknix-small-3d", "rocknix-more"],
+      "routes": {
+        "gba": ["pocket-core", "gpsp", "payload"],
+        "nds": ["pocket-core", "dsperate", "payload"]
+      },
+      "use_variants": ["saturn-bios", "pico8-official"]
+    },
+    "TrimUI Brick": {
+      "devices": ["brick"],
+      "payloads": ["brick-card", "brick-update"],
+      "exe": "/mnt/SDCARD/pocket-ui/app/bin/pocket-ui",
+      "binds": {
+        "/mnt/SDCARD/pocket-ui/storage": "/storage",
+        "/mnt/SDCARD/Roms": "/storage/roms",
+        "/mnt/SDCARD/pocket-ui/app/cores": "/storage/cores"
+      },
+      "copies": {
+        "/mnt/SDCARD/pocket-ui/app/es_systems.cfg": "/storage/.config/emulationstation/es_systems.cfg"
+      },
+      "env": {
+        "POCKETUI_HOST_BIN": "/mnt/SDCARD/pocket-ui/app/bin/pocket-core",
+        "POCKETUI_BRICK_STANDALONE": "1",
+        "POCKETUI_BRICK_CARD": "/mnt/SDCARD/pocket-ui"
+      },
+      "routes": {
+        "gb": ["pocket-core", "gambatte", "payload"],
+        "gbc": ["pocket-core", "gambatte", "payload"],
+        "gba": ["pocket-core", "gpsp", "payload"],
+        "nes": ["pocket-core", "nestopia", "payload"],
+        "snes": ["pocket-core", "snes9x", "payload"],
+        "megadrive": ["pocket-core", "picodrive", "payload"],
+        "mastersystem": ["pocket-core", "picodrive", "payload"],
+        "gamegear": ["pocket-core", "picodrive", "payload"],
+        "pcengine": ["pocket-core", "beetle_pce_fast", "payload"],
+        "psx": ["pocket-core", "pcsx_rearmed", "payload"],
+        "n64": ["pocket-core", "mupen64plus_next", "payload"],
+        "psp": ["pocket-core", "ppsspp", "payload"],
+        "dreamcast": ["pocket-core", "flycast", "payload"],
+        "nds": ["pocket-core", "dsperate", "payload"],
+        "saturn": ["pocket-core", "yabause", "payload"],
+        "pc": ["pocket-core", "dosbox_pure", "payload"],
+        "scummvm": ["pocket-core", "scummvm", "payload"],
+        "pico-8": ["pocket-core", "fake08", "payload"],
+        "ports": ["sh", "", "payload"]
+      }
+    },
+    "dArkOS RK3566": {
+      "base": "dArkOS-RG353M-v08272026",
+      "devices": ["darkos-rg353m"],
+      "payloads": ["darkos-zip", "darkos-update"],
+      "exe": "/roms/ports/pocket-ui/app/bin/pocket-ui",
+      "binds": {
+        "/roms/ports/pocket-ui/storage": "/storage"
+      },
+      "darkos": {
+        "app": "/roms/ports/pocket-ui/app",
+        "es_systems": ["~ark/.emulationstation/es_systems.cfg", "/etc/emulationstation/es_systems.cfg"],
+        "cores": "~ark/.config/retroarch/cores"
+      },
+      "use": ["darkos-pocket-core"],
+      "routes": {}
+    },
+    "dArkOS RK3326": {
+      "base": "dArkOS-RG351MP-v08272026",
+      "devices": ["darkos-rg351mp", "darkos-r36s"],
+      "payloads": ["darkos-zip", "darkos-update"],
+      "exe": "/roms/ports/pocket-ui/app/bin/pocket-ui",
+      "binds": {
+        "/roms/ports/pocket-ui/storage": "/storage"
+      },
+      "darkos": {
+        "app": "/roms/ports/pocket-ui/app",
+        "es_systems": ["~ark/.emulationstation/es_systems.cfg", "/etc/emulationstation/es_systems.cfg"],
+        "cores": "~ark/.config/retroarch/cores"
+      },
+      "use": ["darkos-pocket-core"],
+      "routes": {
+        "gamecube": null
+      }
+    }
+  },
+  "games": {
+    "scummvm": ".scummvm"
+  },
+  "variants": {
+    "saturn-bios": {
+      "files": {
+        "/storage/roms/bios/saturn_bios.bin": "route test BIOS"
+      },
+      "routes": {
+        "saturn": ["pocket-core", "yabasanshiro", "base"]
+      }
+    },
+    "pico8-official": {
+      "files": {
+        "/storage/roms/pico-8/pico8_64": "route test PICO-8"
+      },
+      "routes": {
+        "pico-8": ["pico-8", "pico8", "base"]
+      }
+    }
+  }
+}

@@ -1,0 +1,102 @@
+# Japanese lines the Brick build says instead (see brick-it.tsv).
+Back to NextUI	NextUI に戻る
+Back to NextUI?	NextUI に戻りますか？
+Back to NextUI. Your games, saves and settings stay as they are.	NextUI に戻ります。ゲーム、セーブデータ、設定はそのまま残ります。
+Couldn't reach the update server over Tailscale. Is Tailscale on and connected?	Tailscale 経由で更新サーバーに接続できませんでした。Tailscale がオンで接続中か確認してください。
+The SD card is too full for this update: it needs {n} MB more. Nothing was changed.	このアップデートには SD カードの空き容量が {n} MB 不足しています。変更は行っていません。
+The update list names no usable version. Nothing was changed.	更新一覧に利用可能なバージョンがありません。変更は行っていません。
+The update is missing {s}. Nothing was changed.	アップデートに {s} が不足しています。変更は行っていません。
+The update is not version {s} inside. Nothing was changed.	アップデートの中身がバージョン {s} ではありません。変更は行っていません。
+The update's start script is broken. Nothing was changed.	アップデートの起動スクリプトが破損しています。変更は行っていません。
+Couldn't switch to the new version: {s}. Nothing was changed.	新しいバージョンに切り替えられませんでした：{s}。変更は行っていません。
+No space left to unpack the download.	ダウンロードを展開する空き容量がありません。
+Battery & charging	バッテリーと充電
+Like the rest	他と同じ
+Customised	カスタム
+How bright the lights glow.	ライトの明るさを設定します。
+Colour, effect and brightness of the grips, the middle and the two F keys one by one. A: open.	左右グリップ、中央、2 つの F キーの色・演出・明るさを個別に設定します。A：開く。
+Quick save, quick load, screenshot, Recent games, the pause menu, or nothing.	クイックセーブ、クイックロード、スクリーンショット、最近のゲーム、一時停止メニュー、またはなし。
+The slider on the side mutes the sound, or does nothing.	側面のスライダーで消音するか、何もしないかを選びます。
+Which light to set.	設定するライトを選びます。
+Its own colour, or the one above.	個別の色、または上の設定に合わせます。
+Steady, breathing, fading, pulsing or off; "Like the rest" follows the colour above.	常時点灯、呼吸、フェード、点滅、またはオフ。「他と同じ」は上の色に合わせます。
+Its own brightness, or the one above.	個別の明るさ、または上の設定に合わせます。
+Lights & buttons	ライトとボタン
+F1/F2 are shortcuts, not game buttons.	F1/F2 はショートカット専用で、ゲームボタンではありません。
+Set them in Settings › Controls › Lights & buttons.	設定 › 操作 › ライトとボタンで変更できます。
+Shortcuts for all games; not game buttons. Choose their action here.	すべてのゲーム共通のショートカットです（ゲームボタンではありません）。ここで動作を選びます。
+Each light	各ライト
+F1 button	F1 ボタン
+F2 button	F2 ボタン
+Mute slider	消音スライダー
+The Brick's lights, the F1 and F2 keys and the mute slider.	Brick のライト、F1・F2 キー、消音スライダーを設定します。
+Lights off	ライトオフ
+Light tactile clicks as you browse, and their strength. Game rumble is set in Options.	メニュー操作時の軽い振動と強さを設定します。ゲームの振動はオプションで設定します。
+Left grip	左グリップ
+Right grip	右グリップ
+Middle	中央
+F1 key	F1 キー
+F2 key	F2 キー
+Nothing	なし
+Quick save	クイックセーブ
+Quick load	クイックロード
+Pause menu	一時停止メニュー
+Mutes	消音する
+Does nothing	何もしない
+Steady	常時点灯
+Breathing	呼吸
+Fading	フェード
+Pulsing	点滅
+{s} (heavy)	{s}（高負荷）
+Warm light in the menus. While a game runs, the main colour of its cover.	メニューでは温かみのある光、ゲーム中はカバーの代表色で光ります。
+The colour of the Brick's lights.	Brick のライトの色を設定します。
+The Brick's lights stay dark.	Brick のライトは消灯したままになります。
+The grips, the middle and the F keys glow in the colour you pick.	グリップ、中央、F キーが選んだ色で光ります。
+Dark while all is well. Orange breathing while it charges, green when it is full, red breathing when it runs low.	通常時は消灯。充電中はオレンジの呼吸、満充電で緑、残量低下時は赤の呼吸になります。
+That cover is not a PNG picture.	このカバーは PNG 画像ではありません。
+No game called {s} is on the card. Send the game first, then its cover with the same name.	カードに {s} というゲームがありません。先にゲームを送り、同じ名前でカバーを送ってください。
+Several systems take this cover: more than one has a game with that name.	複数の機種に同名のゲームがあるため、このカバーの送信先を特定できません。
+The time zone could not be kept on the card: {s}	タイムゾーンをカードに保存できませんでした：{s}
+The system didn't take the new time zone: {s}	システムが新しいタイムゾーンを適用できませんでした：{s}
+PC Engine CD needs a BIOS file in Roms/bios: syscard3.pce	PC Engine CD には Roms/bios 内の BIOS ファイルが必要です：syscard3.pce
+Switched off after {n} min asleep to save the battery.	バッテリー節約のため、スリープ {n} 分後に電源を切りました。
+Switched off after {n} min with the screen off to save the battery.	バッテリー節約のため、画面オフ {n} 分後に電源を切りました。
+Hue	色相
+Saturation	彩度
+Own colour	カスタム色
+Colour cycle	カラーサイクル
+Slow	遅い
+Its own colour, or the one above. Own colour: pick the hue and the saturation below.	個別の色、または上の設定に合わせます。カスタム色では下の色相と彩度を選びます。
+Round the colour wheel: red, yellow, green, blue, violet and back.	色相環を一周します（赤、黄、緑、青、紫の順）。
+From pale to full colour.	淡い色から鮮やかな色まで調整します。
+Steady, breathing, fading, pulsing, a colour cycle, the battery and charger, or off; "Like the rest" follows the colour above.	常時点灯、呼吸、フェード、点滅、カラーサイクル、バッテリーと充電、またはオフ。「他と同じ」は上の色に合わせます。
+How fast it breathes, fades, pulses or cycles.	呼吸、フェード、点滅、サイクルの速さを設定します。
+Not saved.	保存されませんでした。
+The emulator choice couldn't be saved on the card. Nothing was changed.	エミュレーターの選択をカードに保存できませんでした。変更は行っていません。
+Wireless pads and headphones. Connected headphones take all audio and hand it back to the speaker on disconnect.	ワイヤレスコントローラーやヘッドホン。ヘッドホン接続中はすべての音声が出力され、切断するとスピーカーに戻ります。
+Restart pocket-ui?	pocket-ui を再起動しますか？
+Restarts pocket-ui in seconds. Your games, saves and settings stay untouched.	数秒で pocket-ui を再起動します。ゲーム、セーブ、設定はそのまま残ります。
+New versions of pocket-ui.	pocket-ui の新しいバージョンを確認します。
+User	ユーザー
+(unchanged)	（変更なし）
+CPU speed limits for games and menus.	ゲームやメニューでの CPU 速度上限を設定します。
+Battery saves and save states. No games, no BIOS files.	ゲーム内セーブとステートセーブのみ。ゲーム本体や BIOS は含みません。
+To {s} on the SD card. Copy it to a computer too.	SD カードの {s} に保存します。パソコンにもコピーしておいてください。
+Turns the screen off and pauses the game. Power wakes it.	画面を消してゲームを一時停止します。電源ボタンで復帰します。
+Saves your game and puts the Brick to sleep. Power wakes it straight to the pause menu.	ゲームを保存して Brick をスリープさせます。電源ボタンで一時停止メニューに復帰します。
+Turns off only the screen while pausing your game. Power turns it back on.	ゲームを一時停止して画面だけ消します。電源ボタンで再点灯します。
+Saves the game. The power button wakes it.	ゲームを保存します。電源ボタンで復帰します。
+The power button wakes it.	電源ボタンで復帰します。
+Back to EmulationStation	EmulationStation に戻る
+Back to EmulationStation?	EmulationStation に戻りますか？
+pocket-ui closes and EmulationStation comes back. Your games, saves and settings stay as they are.	pocket-ui を終了して EmulationStation に戻ります。ゲーム、セーブ、設定はそのまま残ります。
+The starter pack isn't available on dArkOS (pocket-ui only reads dArkOS's folders). Copy games into EASYROMS instead.	dArkOS ではスターターパックを利用できません（pocket-ui は dArkOS のフォルダを読み取るのみです）。ゲームは EASYROMS にコピーしてください。
+Set up Wi-Fi in dArkOS. pocket-ui uses the connection dArkOS makes.	Wi-Fi は dArkOS 側で設定します。pocket-ui は dArkOS の接続を使用します。
+Connected · {s}	接続済み · {s}
+Set up in dArkOS. Shows whether it is connected.	dArkOS 側で設定します。接続状態を表示します。
+The clock looks wrong. Play history and the dates on saves will be off until it is set. Set it in dArkOS.	時計がずれているようです。合わせるまでプレイ履歴やセーブの日時が正しくなりません。dArkOS で設定してください。
+The clock looks wrong, so the update server can't be checked. Set it in dArkOS, or wait for network time over Wi-Fi.	時計がずれているため更新サーバーを確認できません。dArkOS で設定するか、Wi-Fi 経由の時刻同期を待ってください。
+It listens on your Wi-Fi. Set up Wi-Fi in dArkOS; Settings › Connections › Wi-Fi shows the connection.	同じ Wi-Fi 上で待機します。Wi-Fi は dArkOS で設定し、接続状態は設定 › 接続 › Wi-Fi で確認できます。
+Turn on to browse your library in any browser on your Wi-Fi. The URL appears here.	オンにすると、同じ Wi-Fi のブラウザからライブラリを閲覧できます。URL がここに表示されます。
+Pair one in dArkOS, or plug one into the USB-C port. This handheld's own buttons show up here too.	dArkOS でペアリングするか、USB-C ポートに接続してください。この携帯機本体のボタンも表示されます。
+Copy games into dArkOS's EASYROMS folders (one per system), then restart pocket-ui.	dArkOS の EASYROMS フォルダ（機種ごとに 1 つ）にゲームをコピーして、pocket-ui を再起動してください。

@@ -565,7 +565,7 @@ impl App {
             self.settings_page = Some(super::SettingsPage::Sync);
             return true;
         }
-        let Some((s, g)) = self.systems.iter().enumerate().find(|(_, s)| s.name == system).and_then(|(i, s)| (!s.games.is_empty()).then_some((i, 0))) else {
+        let Some((s, g)) = self.systems.iter().enumerate().find(|(_, s)| pocket_ui::region_pairs::same_shelf(&s.name, &system)).and_then(|(i, s)| (!s.games.is_empty()).then_some((i, 0))) else {
             eprintln!("conflicts:{rest}: no {system} game in the library");
             return true;
         };
@@ -596,7 +596,7 @@ impl App {
         let groups: Vec<Group> = ["gba", "ps2"]
             .into_iter()
             .filter_map(|system| {
-                let game = self.systems.iter().find(|s| s.name == system).and_then(|s| s.games.first())?;
+                let game = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system)).and_then(|s| s.games.first())?;
                 Some(demo_group(system, &game.path))
             })
             .collect();

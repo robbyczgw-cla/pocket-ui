@@ -122,6 +122,8 @@ pub struct Program {
     src: Option<glow::UniformLocation>,
     scale: Option<glow::UniformLocation>,
     swizzle: Option<glow::UniformLocation>,
+    flip_y: Option<glow::UniformLocation>,
+    active_uv: Option<glow::UniformLocation>,
     tex: Option<glow::UniformLocation>,
     rot: Option<glow::UniformLocation>,
     lines: Option<glow::UniformLocation>,
@@ -172,12 +174,18 @@ impl Program {
                 return Err(log);
             }
             let loc = |name: &str| gl.get_uniform_location(program, name);
-            Ok(Program { program, rect: loc("rect"), src: loc("src"), scale: loc("scale"), swizzle: loc("swizzle"), tex: loc("tex"), rot: loc("rot"), lines: loc("lines") })
+            Ok(Program { program, rect: loc("rect"), src: loc("src"), scale: loc("scale"), swizzle: loc("swizzle"), flip_y: loc("flip_y"), active_uv: loc("active_uv"), tex: loc("tex"), rot: loc("rot"), lines: loc("lines") })
         }
     }
 
     /// Draws one pass with the texture bound to unit 0 (the caller binds it, sets the viewport and filters).
     pub fn draw(&self, gl: &glow::Context, p: &Pass) {
+        self.draw_region(gl, p, false, (1.0, 1.0));
+    }
+
+    /// Draw the visible region of a texture, which can have extra rows or
+    /// columns and can be stored with its first row at the bottom.
+    pub fn draw_region(&self, gl: &glow::Context, p: &Pass, flip_y: bool, active_uv: (f32, f32)) {
         unsafe {
             gl.use_program(Some(self.program));
             gl.uniform_4_f32(self.rect.as_ref(), p.rect[0], p.rect[1], p.rect[2], p.rect[3]);
@@ -186,6 +194,8 @@ impl Program {
             gl.uniform_2_f32(self.scale.as_ref(), p.scale.0, p.scale.1);
             gl.uniform_1_i32(self.rot.as_ref(), (p.turns & 3) as i32);
             gl.uniform_1_i32(self.swizzle.as_ref(), i32::from(p.bgr));
+            gl.uniform_1_i32(self.flip_y.as_ref(), i32::from(flip_y));
+            gl.uniform_2_f32(self.active_uv.as_ref(), active_uv.0, active_uv.1);
             gl.uniform_1_f32(self.lines.as_ref(), p.lines);
             gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
         }

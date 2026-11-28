@@ -127,6 +127,8 @@ pub fn from_picture(bytes: &[u8]) -> Result<Vec<u8>, Refused> {
 }
 
 pub fn path(data: &Path, system: &str, rom: &Path) -> PathBuf {
+    // Keyed by the game's own system: a game in `genesis/` keeps its cover on the merged Mega Drive shelf (`region_pairs`).
+    let system = crate::region_pairs::own_system(system, rom);
     let mut key = Sha256::new();
     key.update(system.as_bytes());
     key.update([0]);

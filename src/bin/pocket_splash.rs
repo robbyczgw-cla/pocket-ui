@@ -34,11 +34,20 @@ fn main() {
         return;
     }
     if args.iter().any(|a| a == "-h" || a == "--help") {
-        println!("pocket-splash [--version | --snapshot OUT.png [--size WxH] [--at S] [--stop-at S] [--first-start] [--motion full|reduced|off]]");
+        println!("pocket-splash [--version | --android-icon OUT.png | --snapshot OUT.png [--size WxH] [--at S] [--stop-at S] [--first-start] [--motion full|reduced|off]]");
         return;
     }
     let dir = data_dir();
     pocket_ui::i18n::set(pocket_ui::settings::language(&dir));
+    // The Android app's start picture (`splash::android_icon`, docs/BOOT-SPLASH.md "On Android").
+    if let Some(out) = arg("--android-icon") {
+        let (side, px) = splash::android_icon();
+        let rgb: Vec<u8> = px.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8]).collect();
+        let png = pocket_ui::screenshot::encode_rgb(side, side, &rgb).expect("encode");
+        std::fs::write(out, png).expect("write the picture");
+        println!("wrote {out} ({side}x{side})");
+        return;
+    }
     if let Some(out) = arg("--snapshot") {
         let (w, h) = arg("--size").and_then(|s| s.split_once('x')).and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?))).unwrap_or((1240, 1080));
         let secs = |name| arg(name).and_then(|s| s.parse::<f32>().ok()).map(Duration::from_secs_f32);

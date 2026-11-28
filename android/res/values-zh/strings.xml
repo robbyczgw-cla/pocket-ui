@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android extras: the pause menu's service as Android's accessibility page describes it (PadWatch). -->
+<resources>
+    <string name="pad_watch_description">在 pocket-ui 于其他模拟器应用中启动的游戏上打开 pocket-ui 暂停菜单：HOME 或 SELECT + START。它只读取前台应用和手柄按键，不读取其他内容；在这些游戏之外，所有按键照常传递。</string>
+</resources>

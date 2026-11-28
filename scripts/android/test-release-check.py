@@ -43,7 +43,8 @@ def make_apk(path, *, align=16384, skew=0, extra=None, source=True, core_hash_ok
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         for name in ["classes.dex", "AndroidManifest.xml", "assets/licences/LICENSE", "assets/licences/NOTICE.md", "assets/licences/ANDROID-CORES.md",
                      "assets/licences/RUST-LICENSES.txt", "assets/licences/PLAYER-RUST-LICENSES.txt", "assets/licences/SOURCE-OFFER.txt",
-                     "assets/core-channel.url", "assets/fonts/FusionPixel12-zh_hans-CJK.otf", "assets/fonts/NotoSansSC-Regular-CJK.otf"]:
+                     "assets/core-channel.url", "assets/fonts/FusionPixel12-zh_hans-CJK.otf", "assets/fonts/NotoSansSC-Regular-CJK.otf",
+                     "assets/fonts/FusionPixel12-ja-CJK.otf", "assets/fonts/NotoSansJP-Regular-CJK.otf"]:
             z.writestr(name, b"x")
         if licences:
             z.writestr("assets/licences/CORES.tsv", cid + "\tgba\tMPL-2.0\thttps://x\t" + "a" * 40 + "\tapk\t\n")

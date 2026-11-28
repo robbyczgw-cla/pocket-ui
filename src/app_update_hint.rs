@@ -105,6 +105,23 @@ impl UpdateHintUi {
 mod characterisation {
     use super::*;
 
+    /// The look leaves the shelf's jobs running (ScreenScraper's run, covers, Identify): it takes no card pause, neither
+    /// when it starts nor on its thread. Counted per thread, so the other tests' pauses beside it don't count.
+    #[test]
+    fn the_shelf_look_keeps_background_jobs_running() {
+        use pocket_ui::background_io::pauses_taken_here;
+        let before = pauses_taken_here();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let fake = |_: &str| -> Result<Manifest, String> { Ok(Manifest { format: 1, ..Default::default() }) };
+        look("https://example.invalid/manifest.json".into(), move |url| (pauses_taken_here(), fake(url)), move |(taken, result)| {
+            let _ = tx.send((taken, pauses_taken_here(), result.is_ok()));
+        });
+        let (in_fetch, after_fetch, ok) = rx.recv_timeout(Duration::from_secs(10)).expect("the look answers");
+        assert!(ok);
+        assert_eq!((in_fetch, after_fetch), (0, 0), "the look's thread took the card from the shelf's jobs");
+        assert_eq!(pauses_taken_here(), before, "starting the look took the card from the shelf's jobs");
+    }
+
     #[test]
     fn suppression_never_hides_a_request_that_is_still_in_flight() {
         let now = Instant::now();
@@ -209,10 +226,7 @@ impl App {
             update_hint::Step::Look => {
                 self.update_hint.phase = HintPhase::Checking { resume: Some(due) };
                 let (url, proxy, job_at_start) = (self.hint_url(), self.proxy.clone(), self.updates.next_job);
-                let pause = pocket_ui::background_io::pause_for_update();
-                std::thread::spawn(move || {
-                    let result = fetch(&url);
-                    drop(pause);
+                look(url, fetch, move |result| {
                     let _ = proxy.send_event(UserEvent::Update(UpdateEvent::Looked { job_at_start, result }));
                 });
                 None
@@ -418,6 +432,19 @@ fn hint_wifi() -> bool {
     return super::app_android::unmetered_wifi();
     #[cfg(not(all(target_os = "android", feature = "handheld")))]
     { !pocket_ui::device::no_wifi_chip() && pocket_ui::status_corner::status().wifi }
+}
+
+/// The look's request on a thread of its own. It only reads the signed list over HTTPS, so it leaves the card to the
+/// shelf's jobs: no `background_io::pause_for_update` (that is for looking on the card and installing, `App::updates`).
+/// Until 27.11.2026 it took one, and the look a minute after the start stopped a running ScreenScraper run, which then
+/// only came back when the library was read again (Sol, the 0.8 check).
+fn look<T, F, D>(url: String, fetch: F, done: D)
+where
+    T: Send + 'static,
+    F: FnOnce(&str) -> T + Send + 'static,
+    D: FnOnce(T) + Send + 'static,
+{
+    std::thread::spawn(move || done(fetch(&url)));
 }
 
 /// The signed list, on the look's thread (and the Updates page's "Check again").

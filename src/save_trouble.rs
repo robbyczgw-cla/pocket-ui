@@ -200,6 +200,20 @@ pub fn take_moment(file: &Path) -> Option<String> {
     Some(line)
 }
 
+/// Android's player couldn't start a game from the Handheld view: it goes back at once and leaves why in `file`
+/// (`player-start-error`), and the shelf says it in its notice, as pocket-ui says a pocket-core start that failed
+/// (docs/user/android-playing.md.inc "Starting a game"); no Android dialog. Only our own sentences: anything else is [`START_FAILED`].
+pub fn report_start_failed(file: &Path, sentence: &str) {
+    let _ = std::fs::write(file, shown(sentence, START_FAILED));
+}
+
+/// The shelf, back in front: the start failure the player left, once (see [`report_start_failed`]).
+pub fn take_start_failed(file: &Path) -> Option<String> {
+    let line = std::fs::read_to_string(file).ok()?;
+    let _ = std::fs::remove_file(file);
+    Some(shown(line.trim(), START_FAILED))
+}
+
 /// pocket-ui: what pocket-core left in `file`; None when its saves are fine (or it said nothing).
 pub fn read_from(file: &Path) -> Option<Trouble> {
     Trouble::from_word(&std::fs::read_to_string(file).ok()?)
@@ -341,4 +355,18 @@ mod tests {
         }
         assert!(Trouble::Full.line().contains("Free some space"));
     }
+    #[test]
+    fn a_start_failure_reaches_the_shelf_once_and_only_in_our_words() {
+        let dir = crate::testutil::TestDir::new("start-failed");
+        let file = dir.join("player-start-error");
+        assert_eq!(take_start_failed(&file), None, "nothing left: nothing said");
+        report_start_failed(&file, START_FAILED);
+        assert_eq!(take_start_failed(&file).as_deref(), Some(START_FAILED));
+        assert_eq!(take_start_failed(&file), None, "said once");
+        report_start_failed(&file, "load libmgba.so: dlopen failed");
+        assert_eq!(take_start_failed(&file).as_deref(), Some(START_FAILED), "a library's words never reach the shelf");
+        std::fs::write(&file, "anything a file may hold").unwrap();
+        assert_eq!(take_start_failed(&file).as_deref(), Some(START_FAILED));
+    }
+
 }

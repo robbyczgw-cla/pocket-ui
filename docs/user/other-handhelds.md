@@ -2,7 +2,7 @@
 
 The quick two-file setup in [Getting started](getting-started.md) targets the Retroid Pocket Mini V2. This page covers
 handhelds supported as **experimental**: other Retroid models, Snapdragon 8 Gen 2 (SM8550) devices, the Anbernic H700
-lineup, the R36S (beta), TrimUI Brick Pro and Retroid Pocket Classic.
+lineup, the R36S and R36XX (beta, same card), TrimUI Brick Pro and Retroid Pocket Classic.
 
 ## Other Retroid devices
 
@@ -134,7 +134,7 @@ All H700 models have 1 GB RAM, no touchscreen and no fan. RG40XX RGB rings stay 
 
 ## R36S (beta)
 
-The R36S has its own pocket-ui card, a beta for genuine R36S handhelds (clones aren't covered yet). Already running dArkOS?
+The R36S has its own pocket-ui card, a beta for genuine R36S handhelds; the R36XX uses the same card (other clones aren't covered yet). Already running dArkOS?
 The [pocket-ui beta for dArkOS](https://pocketui.xyz/install#darkos) needs no extra card.
 
 1. Flash the R36S image from the [install page](https://pocketui.xyz/install#r36s) to a spare microSD card (8 GB or larger)
@@ -161,6 +161,10 @@ you may need to open the back. Then copy the matching file from the `r36s-panels
 This is the closest file we found, not a promise. If the picture stays black or garbled, delete the copy and try the next
 file in the README next to them. Another board, or a clone? Then no file is known to fit, and the safe way is your original
 card in TF2.
+
+**R36XX:** use the same R36S card. If the screen stays dark, copy `r36s-panel4` from the `r36s-panels` folder into
+`overlays`, renamed to `mipi-panel.dtbo` (see the table above). pocket-ui beta for dArkOS runs on the R36XX too. If games
+on your second card don't show up, send a report from Settings → Help & tools → Report a problem.
 
 ## TrimUI Brick Pro (experimental)
 

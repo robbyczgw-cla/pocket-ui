@@ -5,6 +5,8 @@
   python3 -I scripts/package-complete.py android pocket-ui-android.apk
   python3 -I scripts/package-complete.py darkos  pocket-ui-darkos-*.zip
   python3 -I scripts/package-complete.py tree    ROOT --cores REL --system REL   (an unpacked image or a device's files)
+  python3 -I scripts/package-complete.py rocknix PACKAGE   (install zip, card zip or its pocket-ui-seed.tar.gz, OTA
+                                                            pocket-ui-*-aarch64.tar.gz, offline update zip, or a folder)
 
 Runs without a device and without a build: it only reads a finished card folder, zip or APK. Exit 0 = complete,
 1 = something is missing (each gap on its own line), 2 = wrong call.
@@ -21,6 +23,10 @@ the packages. Checks here, per package:
     tree     <ROOT>/<system>/<file>
 - brick: every core es_systems.cfg names is on the card; android: every core assets/cores.json lists is in lib/.
 User-owned BIOS files (PS1, Neo Geo, ...) are not ours to ship and stay out: the app asks the player for them.
+
+rocknix (25.11.2026, AUDIT-071): every ROCKNIX package carries pocket-ui's own emulators beside each copy of the programs
+(ROCKNIX_BUNDLE): hakuX (Xbox), gpSP (H700 GBA), DSperate (DS) and bsnes-hd (Mode 7 HD). hakuX was missing from every
+package from 0.2.1 to 0.7.2 and Xbox went to a crashing xemu without a word; no test looked at the real archives.
 """
 import io
 import json
@@ -167,15 +173,74 @@ def check_tree(pkg, cores_rel, system_rel):
     return problems, sorted(cores)
 
 
+# What every ROCKNIX package carries beside the programs (pocket-ui, pocket-core): path, and what it is. hakuX sits beside
+# the programs (seed, OTA) or beside their files/ folder (install zip: hakux/ next to files/).
+ROCKNIX_BUNDLE = [
+    ('hakux/hakux_libretro.so', 'hakuX (Xbox)'), ('hakux/hakux_libretro.info', 'hakuX (Xbox)'),
+    ('cores/gpsp_libretro.so', 'gpSP (H700 GBA)'), ('cores/gpsp/source.tar.gz', 'gpSP (H700 GBA)'),
+    ('cores/dsperate_libretro.so', 'DSperate (DS)'), ('cores/dsperate/source.tar.gz', 'DSperate (DS)'),
+    ('cores/bsnes_hd_beta_libretro.so', 'bsnes-hd (Mode 7 HD)'), ('cores/bsnes-hd/source.tar.gz', 'bsnes-hd (Mode 7 HD)'),
+    ('cores/bsnes-hd/LICENSE', 'bsnes-hd (Mode 7 HD)'),
+]
+
+
+def rocknix_files(path):
+    """{name: size} of a folder, zip or .tar.gz, with the tarballs inside a zip (card seed, offline update) opened too."""
+    path = Path(path)
+    if path.is_dir():
+        return {p.relative_to(path).as_posix(): p.stat().st_size for p in path.rglob('*') if p.is_file()}
+
+    def from_tar(data, prefix):
+        with tarfile.open(fileobj=io.BytesIO(data)) as t:
+            return {prefix + m.name.removeprefix('./'): m.size for m in t.getmembers() if m.isfile()}
+
+    if path.name.endswith(('.tar.gz', '.tgz')):
+        return from_tar(path.read_bytes(), '')
+    files = {}
+    with zipfile.ZipFile(path) as z:
+        for i in z.infolist():
+            if i.is_dir():
+                continue
+            # Only a tarball at the top (the card's seed, the offline update's app): a source.tar.gz is a file of the package.
+            if '/' not in i.filename and i.filename.endswith(('.tar.gz', '.tgz')):
+                files.update(from_tar(z.read(i), i.filename + '!/'))
+            else:
+                files[i.filename] = i.file_size
+    return files
+
+
+def check_rocknix(path):
+    files = rocknix_files(path)
+    homes = sorted({n[:-len('pocket-ui')] for n in files if n.endswith('pocket-ui') and n[:-len('pocket-ui')] + 'pocket-core' in files
+                    and (n == 'pocket-ui' or n.endswith('/pocket-ui'))})
+    if not homes:
+        return ['no pocket-ui and pocket-core side by side: not a ROCKNIX package'], []
+    problems = []
+    for home in homes:
+        parent = home[:home.rstrip('/').rfind('/') + 1] if '/' in home.rstrip('/') else ''
+        for rel, what in ROCKNIX_BUNDLE:
+            where = [home + rel] + ([parent + rel] if rel.startswith('hakux/') else [])
+            if not any(files.get(w, 0) > 0 for w in where):
+                problems.append(f'{what}: {home + rel} (beside {home or "./"}pocket-ui)')
+    return problems, homes
+
+
 def main(argv):
     args = argv[1:]
-    if len(args) < 2 or args[0] not in ('brick', 'android', 'darkos', 'tree'):
+    if len(args) < 2 or args[0] not in ('brick', 'android', 'darkos', 'tree', 'rocknix'):
         print(__doc__.strip(), file=sys.stderr)
         return 2
     kind, path = args[0], args[1]
     if not Path(path).exists():
         print(f'package-complete: {path} does not exist', file=sys.stderr)
         return 2
+    if kind == 'rocknix':
+        problems, homes = check_rocknix(path)
+        for line in problems:
+            print('MISSING ' + line)
+        print(f'rocknix {Path(path).name}: ' + ('hakuX, gpSP, DSperate and bsnes-hd beside the programs' if not problems
+                                                 else f'{len(problems)} gaps') + f' ({len(homes)} program folder(s))')
+        return 1 if problems else 0
     pkg = Package(path)
     if kind == 'tree':
         opts = dict(zip(args[2::2], args[3::2]))

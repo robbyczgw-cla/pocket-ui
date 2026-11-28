@@ -64,13 +64,16 @@ Settings → **System** covers updates, language, sleep/power, battery stats, cl
 |---|---|
 | **Back to EmulationStation** | pocket-ui beta for dArkOS only ([DARKOS.md](../DARKOS.md)): closes pocket-ui immediately and returns to dArkOS's own menu with no extra prompt (saving and closing any running game first). Also in Quick settings; holding SELECT + START still opens its dialog |
 | **Updates** | Download and install pocket-ui updates over Wi-Fi or from your SD card. See [Updates](updates.md) |
-| **Language** | Switch menus, hints and notices between **English**, **Deutsch**, **Español**, **Português (Brasil)**, **Français**, **Italiano** and **한국어**. See [Language](language.md) |
+| **Language** | Switch menus, hints and notices between **English**, **Deutsch**, **Español**, **Português (Brasil)**, **Français**, **Italiano**, **한국어**, **简体中文**, **Tiếng Việt** and **日本語**. See [Language](language.md) |
 | **View** | pocket-ui for Android only: flip between **Handheld** (controller-first shelf) and **Mobile** (touch-first view). First start opens Handheld; your chosen view is remembered |
+| **Home app** | pocket-ui for Android only: **On** makes pocket-ui your handheld's Home app (Android asks once), so it starts on the shelf after switching on, and the Home button in a game brings you back to its pause menu. A on **On** opens Android's list of Home apps to choose another |
+| **Android extras** | pocket-ui for Android only, optional: more of Android with a one-time ADB grant, Shizuku or root (no pop-up notifications, no animations, screen on while charging, pocket-ui's pause menu over other emulator apps). Off until you set it up. See [Android extras](android-mvp.md#android-extras) |
 | **Sleep & power** | Screen-off timeout, sleep timer, auto-power-off after sleeping and Power button actions (shows current screen-off time, e.g. "2 min"). See [Sleep & power](#sleep--power) |
 | **Battery** | Live charge, runtime estimate, 48-hour graph and per-console battery draw. See [Battery](#battery) |
 | **Time** | Time zone search, network time sync and manual clock setup. See [Time](#time) |
 | **Storage** | Space breakdown across games, saves, states, art and hidden games (shows free space, e.g. "41.2 GB free"). See [Storage](storage.md) |
 | **Backup & reset** | Back up or restore saves and settings to your SD card, or reset settings to defaults. See [Backup & reset](#backup--reset) |
+| **Run in background** | pocket-ui for Android only: **On** takes pocket-ui off Android's battery optimisation (Android asks once, no USB debugging), so Android doesn't hold it back in the background, for example a download with the screen off. Android can still close it when it needs the memory. Your progress is saved every time you leave a game either way. A on **On** opens pocket-ui's App info in Android, where **App battery usage** sets it back |
 | **Kids mode** | Curated, PIN-locked shelf for kids with daily play limits and max volume. See [Kids mode](kids-mode.md) |
 
 ### Time
@@ -115,6 +118,12 @@ Settings → System → **Battery** shows your current charge, estimated runtime
 - **Live stats & console draw:** voltage, current, wattage and battery temperature, plus per-system estimates once
   you've logged 15+ minutes on battery ("PS2 uses about 9% an hour, 3.6 W" and estimated runtime).
 - Sleep timers now live under Settings → System → [Sleep & power](#sleep--power) (linked below the graph).
+- **Reset battery reading (X):** on the R36S, R36XX and other handhelds with the RK817 power chip (RK3326 and RK3566,
+  pocket-ui OS and the pocket-ui beta for dArkOS) only. Use it when the level is clearly wrong, for example 0% on a full
+  battery. pocket-ui asks first; A resets the reading and switches the handheld off (a game under Settings is saved
+  first), B keeps everything. Switch it on again: the level is measured anew from the battery's voltage. The next
+  start reminds you to charge it until it is full once; until then the percentage can be a few points off, because
+  the chip relearns the battery's capacity on that full charge.
 
 The display and the low-battery safeguard check the Pocket's power inputs when the system reports whether they are
 online. On models that only report the battery status, both use that status. Connected controllers have their own
@@ -165,7 +174,7 @@ Settings → **Help & tools** holds this manual, the Tour, setup profiles, ROCKN
 | **First-start setup** | Re-run the welcome wizard (language, Wi-Fi on Linux, games, layout) without touching games, saves or settings. See [Getting started](getting-started.md#3-first-start) |
 | **Tools** | Launch ROCKNIX utilities: emulator menus, RetroArch, gamepad test/calibration, file manager, terminal and installed tools. See [Tools](#tools) |
 | **Report a problem** | Jumps to About with Report a problem highlighted; press A to save a diagnostic bundle into `reports` on the games share ([Report a problem](troubleshooting.md#report-a-problem)). Also available from SELECT + START held |
-| **About** | Version, base OS (e.g. "pocket-ui OS 0.7.2 · built on ROCKNIX 20261001 (SM8250)" on SD images, or ROCKNIX version on add-on installs), game count, free space, IP, battery, log paths and open-source licences (`/storage/pocket-ui/licences`). Marks experimental Retroid models ([Other handhelds](other-handhelds.md#other-retroid-devices)). Includes **Report a problem** and **Open EmulationStation…** (with warning, [Safe mode](safe-mode.md#opening-rocknixs-own-menu); omitted on TrimUI Brick) |
+| **About** | Version, base OS (e.g. "pocket-ui OS 0.8.0 · built on ROCKNIX 20261001 (SM8250)" on SD images, or ROCKNIX version on add-on installs), game count, free space, IP, battery, log paths and open-source licences (`/storage/pocket-ui/licences`). Marks experimental Retroid models ([Other handhelds](other-handhelds.md#other-retroid-devices)). Includes **Report a problem** and **Open EmulationStation…** (with warning, [Safe mode](safe-mode.md#opening-rocknixs-own-menu); omitted on TrimUI Brick) |
 
 ### How you like to play
 

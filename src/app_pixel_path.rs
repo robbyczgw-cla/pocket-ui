@@ -181,7 +181,7 @@ impl App {
     fn system_name(&self, system: &str) -> String {
         self.systems
             .iter()
-            .find(|s| s.name == system)
+            .find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system))
             .map_or_else(|| system.to_uppercase(), |s| s.fullname.clone())
     }
 

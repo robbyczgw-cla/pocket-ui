@@ -177,6 +177,8 @@ pub(crate) fn canonical(system: &str) -> &str {
         "megacd" => "segacd",
         "sg1000" => "sg-1000",
         "n3ds" => "3ds",
+        // ES-DE and some cards name the GameCube folder "gc" (Super Mario Sunshine had no year nor series there).
+        "gc" | "ngc" => "gamecube",
         "amigacd32" => "amiga",
         other => other,
     }

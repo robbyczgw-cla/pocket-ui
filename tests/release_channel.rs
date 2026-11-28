@@ -152,7 +152,7 @@ fn builds_a_signed_list_that_names_the_files_of_the_github_release() {
     let listing = Command::new("tar").arg("-tzf").arg(&tarball).output().unwrap();
     let mut names: Vec<String> = String::from_utf8_lossy(&listing.stdout).lines().map(str::to_string).collect();
     names.sort();
-    assert_eq!(names, ["fonts/", "fonts/FusionPixel12-zh_hans-CJK.otf", "fonts/NotoSansSC-Regular-CJK.otf", "pocket-core", "pocket-ui", "portmaster-setup.sh"]);
+    assert_eq!(names, ["fonts/", "fonts/FusionPixel12-ja-CJK.otf", "fonts/FusionPixel12-zh_hans-CJK.otf", "fonts/NotoSansJP-Regular-CJK.otf", "fonts/NotoSansSC-Regular-CJK.otf", "pocket-core", "pocket-ui", "portmaster-setup.sh"]);
     // The device resolves the URL as it stands: absolute, on https.
     assert_eq!(pocket_ui::update::resolve(pocket_ui::update::DEFAULT_URL, &app.url), app.url);
     assert!(m.os.is_none(), "no system update without --os-tar");

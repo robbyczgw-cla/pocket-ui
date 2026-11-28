@@ -46,7 +46,8 @@ fn one_broken_entry_keeps_games_before_and_after_it() {
 fn a_damaged_entry_cannot_hide_valid_comments_cdata_or_namespaced_neighbours() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = dir.path().join("es_systems.cfg");
-    let good = entry(dir.path(), "nes", "<![CDATA[Game & Watch <3]]>").replace("<system>", "<system xsi:type=\"console\">");
+    // A system without regional names (`region_pairs` names the NES's shelf itself): the list's own name is what is checked.
+    let good = entry(dir.path(), "gameandwatch", "<![CDATA[Game & Watch <3]]>").replace("<system>", "<system xsi:type=\"console\">");
     let damaged = ["<system/>", "<system<name>bad</name>", "<system><name>bad</name><path>", "<system><name>bad</name><emulator name=\"oops>", "<system><!-- unclosed", "<system><fullname>&#0;</fullname></system>"];
     for bad in damaged {
         std::fs::write(&cfg, format!("<systemList xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><!-- <system><name>fake</name></system> -->{bad}{good}</systemList>")).unwrap();
@@ -76,7 +77,7 @@ fn special_characters_keep_their_spelling_and_paths() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = dir.path().join("es_systems.cfg");
     for (encoded, shown) in [("Game &amp; Watch", "Game & Watch"), ("A &lt; B &gt; C", "A < B > C"), ("A < B", "A < B"), ("Game &Unknown; Watch", "Game &Unknown; Watch"), ("L&apos;été &quot;Österreich&quot;", "L'été \"Österreich\""), ("Pokémon – für ÄÖÜ äöü ß", "Pokémon – für ÄÖÜ äöü ß"), ("A &#38; B &#x26; C", "A & B & C")] {
-        let xml = entry(dir.path(), "nes", encoded);
+        let xml = entry(dir.path(), "gameandwatch", encoded);
         std::fs::write(&cfg, format!("<systemList>{xml}</systemList>")).unwrap();
         assert_eq!(library::load(&cfg).unwrap()[0].fullname, shown);
         assert_eq!(library::all_systems(&cfg).unwrap()[0].name, shown);

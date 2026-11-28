@@ -796,7 +796,7 @@ impl App {
             let id = parts.next().unwrap_or_default();
             let presses: usize = parts.next().and_then(|n| n.parse().ok()).unwrap_or(1);
             self.theme = snapshot_theme(parts.next());
-            let Some(s) = self.systems.iter().position(|sys| sys.name == id) else { return false };
+            let Some(s) = self.systems.iter().position(|sys| pocket_ui::region_pairs::same_shelf(&sys.name, &id)) else { return false };
             self.screen = Screen::Games(s);
             self.rebuild();
             self.sel = 0;

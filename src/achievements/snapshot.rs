@@ -149,6 +149,7 @@ pub struct Summary {
 
 impl Summary {
     pub fn path(data_dir: &Path, system: &str, rom: &Path) -> PathBuf {
+        let system = crate::region_pairs::own_system(system, rom);
         let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or("game");
         data_dir.join("achievements").join("games").join(system).join(format!("{stem}.json"))
     }

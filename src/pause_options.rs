@@ -329,12 +329,14 @@ pub fn resolution_index(range: Option<crate::render_scale::Range>, chosen: Optio
 }
 
 /// Whether the Picture page of Android's player shows a row for `system`: Resolution where `range` says, Mode 7 where this
-/// handheld offers it for the console (`mode7_hd::here_for`), every other row as Linux's (`applies_in`, Android's profile).
+/// handheld offers it for the console (`mode7_hd::here_for`), Widescreen for the Dreamcast (`dc_widescreen`), every other row as Linux's (`applies_in`, Android's profile).
 fn picture_row_shown(key: &str, system: &str, range: Option<crate::render_scale::Range>) -> bool {
     if key == crate::render_scale::KEY {
         range.is_some()
     } else if key == crate::mode7_hd::KEY {
         crate::mode7_hd::here_for(system).is_some()
+    } else if key == crate::dc_widescreen::KEY {
+        crate::dc_widescreen::applies(system)
     } else {
         crate::option_table::applies_in(key, system, true)
     }
@@ -690,6 +692,26 @@ mod tests {
         });
     }
 
+    /// Widescreen on Android's Picture page (`dc_widescreen`): the row for the Dreamcast, Linux's name, values and labels
+    /// and line, Off where nothing is chosen; Left/Right step round; nothing on other consoles.
+    #[test]
+    fn dreamcast_widescreen_is_on_the_picture_page() {
+        use crate::dc_widescreen::{DESC, KEY};
+        let values = BTreeMap::new();
+        let keys: Vec<_> = picture_settings("dreamcast", None, &values).iter().map(|s| s.key).collect();
+        assert_eq!(keys.last(), Some(&KEY), "{keys:?}");
+        for other in ["snes", "n64", "psp", "saturn", "naomi"] {
+            assert!(!picture_settings(other, None, &values).iter().any(|s| s.key == KEY), "{other}: Dreamcast only");
+        }
+        assert_eq!(setting_value_of(KEY, "dreamcast", None, &values), "off", "nothing chosen: the console's 4:3");
+        let choices: Vec<_> = setting_choices(KEY, "dreamcast", None).iter().map(|c| (c.value, c.label)).collect();
+        assert_eq!(choices, [("off", "Off"), ("patch", "Patch"), ("hack", "Hack")]);
+        assert_eq!(setting_step(KEY, "dreamcast", None, &values, 1), vec![(KEY, "patch".to_string())]);
+        assert_eq!(setting_step(KEY, "dreamcast", None, &values, -1), vec![(KEY, "hack".to_string())], "round");
+        assert_eq!(setting_desc(KEY, "dreamcast", None, &values), DESC, "Linux's line");
+        assert!(crate::option_table::applies_in(KEY, "dreamcast", false) && !crate::option_table::applies_in(KEY, "psx", false));
+    }
+
     /// Linux's rows the player has no counterpart for, each with why. Every other row of Linux's Options page on the same
     /// handheld is on Android's page too (`android_s_page_has_linux_s_rows_on_the_same_handheld`).
     const NOT_ON_ANDROID: &[(&str, &str)] = &[
@@ -724,6 +746,7 @@ mod tests {
                 crate::render_scale::KEY => class.and_then(|c| crate::render_scale::range(c, system)).is_some(),
                 "fan" => class.is_some(),
                 crate::mode7_hd::KEY => crate::mode7_hd::is_snes(system) && class.is_some(),
+                crate::dc_widescreen::KEY => crate::dc_widescreen::applies(system),
                 key => options::applies_in(key, system, false),
             };
             if shown {
@@ -747,6 +770,7 @@ mod tests {
                     rows.extend(group.settings.iter().map(|s| s.key).filter(|k| match *k {
                         crate::render_scale::KEY => range.is_some(),
                         crate::mode7_hd::KEY => crate::mode7_hd::is_snes(system) && class.is_some(),
+                        crate::dc_widescreen::KEY => crate::dc_widescreen::applies(system),
                         k => options::applies_in(k, system, true),
                     }));
                 }
@@ -811,7 +835,7 @@ mod tests {
         }
         // On a handheld with Mode 7 HD (`mode7_hd`), so its line is among them.
         let mode7 = Some(crate::mode7_hd::Offer { scale: 2, wide: false });
-        for system in ["gba", "gb", "snes", "n64"] {
+        for system in ["gba", "gb", "snes", "n64", "dreamcast"] {
             for d in crate::mode7_hd::with_offer(mode7, || picture_descs(system, crate::render_scale::range(crate::render_scale::Class::Sm8250, system))) {
                 if !descs.iter().any(|(x, _)| x == d) {
                     descs.push((d.to_string(), "On"));

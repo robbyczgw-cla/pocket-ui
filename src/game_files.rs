@@ -122,6 +122,8 @@ pub struct Places<'a> {
 /// What deleting the game `path` of `system` would take, with sizes. Reads a sheet or two and lists two folders: run
 /// it on a thread.
 pub fn plan(system: &str, path: &Path, places: &Places) -> Result<Plan, String> {
+    // A game in another folder of a merged shelf keeps that folder's states and pictures (`region_pairs`).
+    let system = crate::region_pairs::own_system(system, path);
     if is_protected(path, places.protected) {
         return Err("This is a folder on the SD card, not a game.".into());
     }

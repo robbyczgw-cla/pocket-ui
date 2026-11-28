@@ -100,6 +100,9 @@ pub enum Refused {
     NoSpace(String),
     /// The browser sent less than it announced.
     Short,
+    /// A piece of an upload in pieces ([`Partial`]) that does not start where the upload stands: the bytes the Pocket
+    /// has, so the browser can go on from there.
+    Offset(u64),
     Io(String),
 }
 
@@ -111,6 +114,7 @@ impl Refused {
             Refused::TooBig(_) => 413,
             Refused::NoSpace(_) => 507,
             Refused::Short => 400,
+            Refused::Offset(_) => 416,
             Refused::Io(_) => 500,
         }
     }
@@ -119,6 +123,7 @@ impl Refused {
         match self {
             Refused::NotAllowed(m) | Refused::Exists(m) | Refused::TooBig(m) | Refused::NoSpace(m) | Refused::Io(m) => m.clone(),
             Refused::Short => "The upload was cut off. Nothing was kept.".into(),
+            Refused::Offset(at) => format!("That piece does not follow the {at} bytes the Pocket has."),
         }
     }
 }
@@ -491,7 +496,7 @@ pub fn receive(r: &mut impl Read, target: &Path, tmp_dir: &Path, len: u64, overw
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open(&tmp)
         .map_err(|e| Refused::Io(format!("Can't write there: {e}")))?;
-    let result = copy(r, &mut f, len, gate).and_then(|n| {
+    let result = copy(r, &mut f, len, gate, &mut Vec::new()).and_then(|n| {
         f.sync_all().map_err(|e| Refused::Io(format!("The SD card refused the write: {e}")))?;
         drop(f);
         unchanged_folder(target)?;
@@ -507,6 +512,237 @@ pub fn receive(r: &mut impl Read, target: &Path, tmp_dir: &Path, len: u64, overw
     result
 }
 
+// --- uploads in pieces -----------------------------------------------------------------------------------------
+
+/// The size of the pieces the pages send: small enough that a phone's browser reads each into memory before it sends
+/// it (Chrome on Android streams a large file straight from the file picker and breaks off at once; 25.11.2026, a
+/// 1.62 GB PS2 disc), large enough that such a disc takes about 200 requests.
+pub const PIECE: u64 = 8 << 20;
+/// An upload in pieces that got nothing for this long is dropped with its temporary file: the browser has left.
+pub const PIECE_IDLE: Duration = Duration::from_secs(60 * 60);
+
+/// An upload that arrives in pieces, each its own request (`/api/upload/start` + `/api/upload/part`, the phone
+/// page's `start` + `part`). The same rules as [`receive`]: the size is fixed by the first request and the room for it
+/// held ([`Reservation`]) until it ends; the bytes go to a temporary file in the uploads folder; each piece must start
+/// exactly where the file stands; the file is put in place only after the last byte, the same way. Dropped before
+/// that (cancelled, refused, left for [`PIECE_IDLE`], the server stopped), the temporary file goes: nothing is kept.
+#[derive(Debug)]
+pub struct Partial {
+    target: PathBuf,
+    tmp: PathBuf,
+    file: Option<std::fs::File>,
+    total: u64,
+    received: u64,
+    overwrite: bool,
+    no_programs: bool,
+    /// The file's first bytes, for the program check across pieces.
+    head: Vec<u8>,
+    placed: bool,
+    _room: Reservation,
+}
+
+impl Partial {
+    /// Starts an upload of `total` bytes to `target` (checked by the caller, as for [`receive`]) with the room the
+    /// caller reserved. Refused like [`receive`] when a file of that name is there and `overwrite` is not set.
+    pub fn begin(target: &Path, tmp_dir: &Path, total: u64, overwrite: bool, no_programs: bool, room: Reservation) -> Result<Partial, Refused> {
+        use std::os::unix::fs::OpenOptionsExt;
+        let exists = std::fs::symlink_metadata(target).is_ok();
+        if exists && !overwrite {
+            return Err(Refused::Exists(format!("{} is there already.", target.file_name().unwrap_or_default().to_string_lossy())));
+        }
+        if std::fs::symlink_metadata(target).is_ok_and(|m| !m.is_file()) {
+            return Err(Refused::NotAllowed("Something that is not a file has that name.".into()));
+        }
+        uploads_dir(tmp_dir)?;
+        sweep_leftovers(tmp_dir);
+        let tmp = temp_path(tmp_dir, target, TEMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o644)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&tmp)
+            .map_err(|e| Refused::Io(format!("Can't write there: {e}")))?;
+        Ok(Partial { target: target.to_path_buf(), tmp, file: Some(file), total, received: 0, overwrite, no_programs, head: Vec::new(), placed: false, _room: room })
+    }
+
+    pub fn target(&self) -> &Path {
+        &self.target
+    }
+
+    pub fn total(&self) -> u64 {
+        self.total
+    }
+
+    /// The bytes the Pocket has: where the next piece must start.
+    pub fn received(&self) -> u64 {
+        self.received
+    }
+
+    pub fn complete(&self) -> bool {
+        self.received == self.total
+    }
+
+    /// Adds the piece of `len` bytes read from `r` that starts at `offset`. A piece that does not start where the
+    /// file stands is refused ([`Refused::Offset`], nothing read) and one that goes past the announced size too. A
+    /// piece cut off on the way is taken back (the file is cut to where it stood) and may come again
+    /// ([`Refused::Short`]); after any other refusal the upload is over: drop it ([`Partial::goes_on`]).
+    pub fn append(&mut self, r: &mut impl Read, offset: u64, len: u64, gate: &Gate) -> Result<(), Refused> {
+        use std::io::{Seek, SeekFrom};
+        if offset != self.received {
+            return Err(Refused::Offset(self.received));
+        }
+        if len > self.total - self.received {
+            return Err(Refused::TooBig("That piece goes past the end of the file. Nothing was kept.".into()));
+        }
+        #[cfg(feature = "brick")]
+        let _idle = crate::update::brick_io::IdleIo::enter().map_err(|e| Refused::Io(e.to_string()))?;
+        let gate = Gate { wait: gate.wait, abort: gate.abort, no_programs: self.no_programs };
+        let Some(f) = self.file.as_mut() else { return Err(Refused::Short) };
+        match copy(r, f, len, &gate, &mut self.head) {
+            Ok(n) => {
+                self.received += n;
+                Ok(())
+            }
+            Err(Refused::Short) => {
+                f.set_len(self.received).and_then(|()| f.seek(SeekFrom::Start(self.received)).map(drop)).map_err(|e| Refused::Io(format!("The SD card refused the write: {e}")))?;
+                self.head.truncate(self.received.min(ELF.len() as u64) as usize);
+                Err(Refused::Short)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// After this refusal from [`Partial::append`] the upload may go on (the browser sends the piece again).
+    pub fn goes_on(e: &Refused) -> bool {
+        matches!(e, Refused::Short | Refused::Offset(_))
+    }
+
+    /// Puts the whole file in place as [`receive`] does: synced, `check`ed (the phone page reads a disc sheet again),
+    /// renamed over an existing file only with `overwrite`.
+    pub fn finish(&mut self, check: impl FnOnce(&Path) -> Result<(), Refused>) -> Result<Written, Refused> {
+        if !self.complete() || self.file.is_none() {
+            return Err(Refused::Short);
+        }
+        if let Some(f) = self.file.take() {
+            f.sync_all().map_err(|e| Refused::Io(format!("The SD card refused the write: {e}")))?;
+        }
+        check(&self.tmp)?;
+        unchanged_folder(&self.target)?;
+        let exists = std::fs::symlink_metadata(&self.target).is_ok();
+        place(&self.tmp, &self.target, self.overwrite)?;
+        self.placed = true;
+        sync_dir(&self.target);
+        Ok(Written { bytes: self.total, replaced: exists })
+    }
+}
+
+impl Drop for Partial {
+    fn drop(&mut self) {
+        if !self.placed {
+            drop(self.file.take());
+            let _ = std::fs::remove_file(&self.tmp);
+        }
+    }
+}
+
+/// The uploads in pieces under way on one server, by the id its first answer gave the browser (random: one browser
+/// can't add to another's file by counting).
+pub struct Pieces<S> {
+    map: std::sync::Mutex<std::collections::HashMap<String, (std::time::Instant, std::sync::Arc<std::sync::Mutex<S>>)>>,
+    idle: Duration,
+}
+
+impl<S> Default for Pieces<S> {
+    fn default() -> Self {
+        Pieces::with_idle(PIECE_IDLE)
+    }
+}
+
+impl<S> Pieces<S> {
+    /// Uploads are dropped after `idle` without a piece (tests make it short).
+    pub fn with_idle(idle: Duration) -> Self {
+        Pieces { map: std::sync::Mutex::new(std::collections::HashMap::new()), idle }
+    }
+
+    fn map(&self) -> std::sync::MutexGuard<'_, std::collections::HashMap<String, (std::time::Instant, std::sync::Arc<std::sync::Mutex<S>>)>> {
+        self.map.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Drops the uploads left for longer than `idle` and those `stale` says a new one replaces (the browser started
+    /// the same file again): their temporary files go and their room is free. One that a request is adding to right
+    /// now stays. Called before a new upload reserves its room. Gives the dropped ones to the caller, outside the
+    /// lock (the phone page marks their rows; dropping them removes the temporary files).
+    pub fn sweep(&self, stale: impl Fn(&S) -> bool) -> Vec<S> {
+        let mut map = self.map();
+        let gone: Vec<String> = map
+            .iter()
+            .filter(|(_, (at, p))| std::sync::Arc::strong_count(p) == 1 && (at.elapsed() >= self.idle || p.try_lock().is_ok_and(|g| stale(&g))))
+            .map(|(k, _)| k.clone())
+            .collect();
+        let dropped: Vec<_> = gone.iter().filter_map(|k| map.remove(k)).collect();
+        drop(map);
+        dropped.into_iter().filter_map(|(_, p)| std::sync::Arc::try_unwrap(p).ok()).map(|m| m.into_inner().unwrap_or_else(|e| e.into_inner())).collect()
+    }
+
+    /// Keeps `s` and gives its id.
+    pub fn add(&self, s: S) -> String {
+        let id = piece_id();
+        self.map().insert(id.clone(), (std::time::Instant::now(), std::sync::Arc::new(std::sync::Mutex::new(s))));
+        id
+    }
+
+    /// The upload `id`, its clock started again; None when it is unknown or was left too long (and is dropped now).
+    pub fn get(&self, id: &str) -> Option<std::sync::Arc<std::sync::Mutex<S>>> {
+        let mut map = self.map();
+        let (at, p) = map.get_mut(id)?;
+        if at.elapsed() >= self.idle && std::sync::Arc::strong_count(p) == 1 {
+            let old = map.remove(id);
+            drop(map);
+            drop(old);
+            return None;
+        }
+        *at = std::time::Instant::now();
+        Some(p.clone())
+    }
+
+    /// Takes the upload `id` out: done, refused or cancelled. It is dropped when the last request holding it ends.
+    pub fn remove(&self, id: &str) -> Option<std::sync::Arc<std::sync::Mutex<S>>> {
+        self.map().remove(id).map(|(_, p)| p)
+    }
+
+    /// Takes every upload out (the server stops); dropped when no request holds them any more.
+    pub fn clear(&self) {
+        let all: Vec<_> = self.map().drain().collect();
+        drop(all);
+    }
+
+    pub fn len(&self) -> usize {
+        self.map().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// Reads and drops the rest of a refused piece (at most 64 MB): a server that closes with a body still unread resets
+/// the connection, and the browser sees "no answer" instead of why (a whole piece sent again after a lost answer would
+/// go again and again).
+pub fn discard(r: &mut impl Read, len: u64) {
+    let _ = io::copy(&mut r.take(len.min(64 << 20)), &mut io::sink());
+}
+
+/// 16 hex digits from the kernel's random source (a clock and a counter where it can't be read).
+fn piece_id() -> String {
+    let mut b = [0u8; 8];
+    if std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut b)).is_err() {
+        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0);
+        b = (t ^ TEMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed).rotate_left(32)).to_le_bytes();
+    }
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
 /// The target's folder, resolved now, is still the path it was written through: no folder on the way became a link.
 fn unchanged_folder(target: &Path) -> Result<(), Refused> {
     let dir = target.parent().unwrap_or(Path::new("/"));
@@ -516,13 +752,14 @@ fn unchanged_folder(target: &Path) -> Result<(), Refused> {
     }
 }
 
-fn copy(r: &mut impl Read, w: &mut std::fs::File, len: u64, gate: &Gate) -> Result<u64, Refused> {
+/// Copies `len` bytes from `r` to `w`. `head` holds the file's first bytes seen so far (an upload in pieces keeps it
+/// between them), for the program check.
+fn copy(r: &mut impl Read, w: &mut std::fs::File, len: u64, gate: &Gate, head: &mut Vec<u8>) -> Result<u64, Refused> {
     #[cfg(feature = "brick")]
     let mut pacer = crate::update::brick_io::Pacer::new();
     let off = || Refused::Io("The web companion was switched off. Nothing was kept.".into());
     let mut buf = vec![0u8; 256 * 1024];
     let mut done = 0u64;
-    let mut head: Vec<u8> = Vec::new();
     // A game that runs for hours: the browser has long given up, so does the upload (after 30 minutes).
     let mut waited = Duration::ZERO;
     while done < len {
@@ -548,7 +785,7 @@ fn copy(r: &mut impl Read, w: &mut std::fs::File, len: u64, gate: &Gate) -> Resu
         };
         if gate.no_programs && head.len() < ELF.len() {
             head.extend_from_slice(&buf[..n.min(ELF.len() - head.len())]);
-            if head.len() == ELF.len() && head == ELF {
+            if head.len() == ELF.len() && head.as_slice() == ELF {
                 return Err(Refused::NotAllowed("That file is a program. Programs don't go into a port's folder. Nothing was kept.".into()));
             }
         }

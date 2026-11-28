@@ -118,8 +118,12 @@ final class ReportSupport {
             }
         }
         List<String> raw = new ArrayList<>();
+        // Android extras (docs/ANDROID-EXTRAS.md): with Shizuku or root the whole system log, so an emulator app's lines are
+        // in it too; only that app's warnings, errors and crash are kept of it (below).
+        String whole = Extras.logcat(a, LOG_LINES);
+        if (whole != null) java.util.Collections.addAll(raw, whole.split("\n"));
         Process process = null;
-        try {
+        if (whole == null) try {
             process = new ProcessBuilder("logcat", "-d", "-t", Integer.toString(LOG_LINES), "-v", "threadtime").redirectErrorStream(true).start();
             final Process watched = process;
             Thread watchdog = new Thread(() -> {
@@ -141,14 +145,25 @@ final class ReportSupport {
         StringBuilder out = new StringBuilder("main=" + main + " player=" + player + "\n");
         // A crash trace is a group of AndroidRuntime lines of one process; it counts when a line names this package.
         Map<String, Boolean> ours = new HashMap<>();
+        // The emulator apps' processes, from Android's "Start proc <pid>:<package>/" lines (only in the whole log).
+        java.util.Set<String> emulators = new java.util.HashSet<>();
         for (String line : raw) {
             String[] f = fields(line);
             if (f != null && f[3].equals("AndroidRuntime") && line.contains(a.getPackageName())) ours.put(f[0], true);
+            int at = line.indexOf("Start proc ");
+            if (whole != null && at >= 0) {
+                String[] proc = line.substring(at + 11).split("[:/ ]", 3);
+                if (proc.length >= 2 && EmulatorKeys.watched(proc[1])) emulators.add(proc[0]);
+            }
+        }
+        for (String line : raw) {
+            String[] f = fields(line);
+            if (f != null && f[3].equals("AndroidRuntime") && emulators.contains(f[0])) ours.put(f[0], true);
         }
         for (String line : raw) {
             String[] f = fields(line);
             if (f == null) continue;
-            boolean mine = f[0].equals(Integer.toString(main)) || f[0].equals(Integer.toString(player));
+            boolean mine = f[0].equals(Integer.toString(main)) || f[0].equals(Integer.toString(player)) || emulators.contains(f[0]);
             boolean written = f[3].equals(TAG);
             boolean trouble = f[2].equals("W") || f[2].equals("E") || f[2].equals("F");
             boolean crash = f[3].equals("AndroidRuntime") && ours.containsKey(f[0]);

@@ -66,8 +66,8 @@ LAYOUT_INPUTS = {
     "list_space": _src(_LISTS),
 }
 # Absolute CPU/frame-time budgets: each runs alone (threads-required) and goes red on an overloaded host (4 red trains in 3 days,
-# 12.-14.11., none a real slowdown). They are measurements like the timing tier: nightly and before a release, never in the merge
-# gate, not even when their own file changes (preflight-air.sh runs a changed one on the Air).
+# 12.-14.11., none a real slowdown). They are measurements like the timing tier: never in the merge gate, not even when their
+# own file changes; since 25.11.2026 warnings everywhere (scripts/host-budgets.txt, run by scripts/host-budgets.sh nightly).
 BUDGET = ["launch_frames", "shelf_moves"]
 # Single tests the merge gate leaves to the nightly run and the release check: the Android twin of a check the Linux suite makes
 # in every merge gate (eject::the_way_back_hands_over_…, 31 of 59 flake entries 12.-14.11.), and the case's gap on the way back,
@@ -89,7 +89,11 @@ SHELL = re.compile(r"^(deploy|scripts)/|(^|/)(LICEN[CS]E[^/]*|COPYING[^/]*|NOTIC
 # touched file that day, started the 4-7 min shell lanes in every gate).
 # 20.11.: the CHANGELOG guard, its tests and its record run in gate.sh's fast checks only.
 NOT_SHELL = {"scripts/reader-inventory.py", "scripts/check-changelog.py", "scripts/test-check-changelog.py",
-             "scripts/changelog-published.txt"}
+             "scripts/changelog-published.txt",
+             # 25.11.2026: their own tests run in gate.sh's fast checks; no shell suite reads them (a kern-walk.py change
+             # started both shell lanes, ~6 min, on 25.11.).
+             "scripts/test-reader-inventory.py", "scripts/test-i18n-extract.py", "scripts/kern-walk.py",
+             "scripts/host-budgets.sh", "scripts/host-budgets.txt", "scripts/test-host-budgets.sh"}
 # Fixtures only tests/data_sources.rs (through scripts/reader-inventory.py) reads: no layout suite draws from them, so they
 # don't start every slow suite as other fixtures do.
 READER_FIXTURES = re.compile(r"^tests/fixtures/reader-(inventory|coverage|audit)\.tsv$")

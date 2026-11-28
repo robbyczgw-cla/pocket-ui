@@ -6,3 +6,7 @@ packages omit the licence files. These are the upstream MIT texts from the exact
 MIT is the selected option for these dependencies in the separate GPL-compatible player library.
 
 `Handy-LGPL-2.1.txt` is the standard LGPL 2.1 text for Handy’s Blip_Buffer, copied verbatim from the system common-licenses package. Handy’s Stereo_Buffer is GPL-2.0-or-later; its source notices are retained separately.
+
+`SHIZUKU-API.txt` is the MIT licence of RikkaApps/Shizuku-API (commit 5ab1d6f8): its binder interfaces
+(`android/aidl/moe/shizuku/server`, made into `android/java/moe/shizuku/server` by `scripts/android/shizuku-aidl.sh`) and its
+`BinderContainer` are in the APK for Settings → System → Android extras (docs/ANDROID-EXTRAS.md).

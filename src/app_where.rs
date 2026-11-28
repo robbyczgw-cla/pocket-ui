@@ -42,6 +42,8 @@ pub(crate) enum Place {
     /// "Runs on", over the card or the console page.
     RunsOn,
     ThisGame,
+    /// The game's real manual, over its card (`app_manual`).
+    GameManual,
     PortPerf,
     /// A game's screenshots, over its card.
     Gallery,
@@ -52,6 +54,8 @@ pub(crate) enum Place {
     /// The box, open over the card (X on a game, `game_box`).
     Box,
     Console,
+    /// The series card (`app_series`).
+    Series,
     Search,
     /// Recent games, on the shelf or over a game.
     Switcher { over_game: bool },
@@ -72,6 +76,8 @@ pub(crate) enum Cover {
     Time(&'static str),
     Power,
     Leave,
+    /// Settings > Battery's "Reset the battery reading?" (`app_battery_reset`).
+    BatteryReset,
 }
 
 impl Cover {
@@ -83,6 +89,7 @@ impl Cover {
             Cover::Time(view) => view,
             Cover::Power => "power",
             Cover::Leave => "leave",
+            Cover::BatteryReset => "reset battery reading",
         }
     }
 }
@@ -128,6 +135,7 @@ fn settings_name(page: SettingsPage) -> String {
         Gamelist => "Gamelist",
         Screenshots => "Screenshots",
         AndroidGames => "Android games",
+        AndroidExtras => "Android extras",
         SleepPower => "SleepPower",
     }
     .into()
@@ -209,6 +217,7 @@ fn shelf_name(screen: Screen) -> String {
         Screen::Connection => "Connection".into(),
         Screen::Rediscover => "Rediscover".into(),
         Screen::Crate => "Crate".into(),
+        Screen::Series(i) => format!("Series({i})"),
     }
 }
 
@@ -243,6 +252,7 @@ impl fmt::Display for Place {
             Place::Curator(page) => write!(f, "curator:{page}"),
             Place::RunsOn => f.write_str("runs on"),
             Place::ThisGame => f.write_str("this game"),
+            Place::GameManual => f.write_str("game manual"),
             Place::PortPerf => f.write_str("port performance"),
             Place::Gallery => f.write_str("screenshots"),
             Place::Conflicts => f.write_str("save versions"),
@@ -250,6 +260,7 @@ impl fmt::Display for Place {
             Place::Card(Some(mode)) => write!(f, "card:{mode}"),
             Place::Box => f.write_str("box"),
             Place::Console => f.write_str("console"),
+            Place::Series => f.write_str("series"),
             Place::Search => f.write_str("search"),
             Place::Switcher { over_game: false } => f.write_str("recent games"),
             Place::Switcher { over_game: true } => f.write_str("recent games (game)"),
@@ -285,11 +296,13 @@ pub(crate) enum Painter {
     Curator,
     RunsOn,
     ThisGame,
+    GameManual,
     PortPerf,
     Gallery,
     Conflicts,
     Card,
     Console,
+    Series,
     Search,
     Switcher,
     Pause,
@@ -312,11 +325,13 @@ impl Painter {
             Painter::Curator => "curator",
             Painter::RunsOn => "runs on",
             Painter::ThisGame => "this game",
+            Painter::GameManual => "game manual",
             Painter::PortPerf => "port perf",
             Painter::Gallery => "gallery",
             Painter::Conflicts => "conflicts",
             Painter::Card => "card",
             Painter::Console => "console",
+            Painter::Series => "series",
             Painter::Search => "search",
             Painter::Switcher => "switcher",
             Painter::Pause => "pause",
@@ -341,11 +356,13 @@ impl Place {
             Place::Curator(_) => Painter::Curator,
             Place::RunsOn => Painter::RunsOn,
             Place::ThisGame => Painter::ThisGame,
+            Place::GameManual => Painter::GameManual,
             Place::PortPerf => Painter::PortPerf,
             Place::Gallery => Painter::Gallery,
             Place::Conflicts => Painter::Conflicts,
             Place::Card(_) | Place::Box => Painter::Card,
             Place::Console => Painter::Console,
+            Place::Series => Painter::Series,
             Place::Search => Painter::Search,
             Place::Switcher { .. } => Painter::Switcher,
             Place::Pause(None) => Painter::BigPause,
@@ -390,6 +407,9 @@ impl App {
         if self.emu_choice_on_shelf() {
             return Place::RunsOn;
         }
+        if self.game_manual_open() {
+            return Place::GameManual;
+        }
         if self.this_game_on_shelf() {
             return Place::ThisGame;
         }
@@ -407,6 +427,9 @@ impl App {
         }
         if shelf && self.console.is_some() {
             return Place::Console;
+        }
+        if shelf && self.series_card_open() {
+            return Place::Series;
         }
         if shelf && self.find.is_open() {
             return Place::Search;
@@ -451,6 +474,9 @@ impl App {
         }
         if self.leave.is_some() {
             covers.push(Cover::Leave);
+        }
+        if matches!(place, Place::Settings { page: SettingsPage::Battery(_), .. }) && self.battery_reset.is_open() {
+            covers.push(Cover::BatteryReset);
         }
         Where { place, covers }
     }
@@ -541,6 +567,7 @@ impl App {
                 Cover::Quick | Cover::Time(_) | Cover::Power => self.sys.ui_mark().hash(&mut h),
                 Cover::Leave => self.leave.as_ref().map(|d| d.sel).hash(&mut h),
                 Cover::WhereWasI | Cover::Notice => {}
+                Cover::BatteryReset => self.battery_reset.hash(&mut h),
             }
         }
         // Values the rows show (Settings, the quick settings, a card's facts), and the toast an input may say.
@@ -576,7 +603,7 @@ impl App {
                 (self.updates.sel, self.sleep_page.sel, self.about_mark(), self.sync_row(), self.tailscale_row(), self.romm_row(), self.bluetooth_row(), self.perf_fan_row(), self.achievements_row(), self.starter.mark()).hash(h);
                 self.pocket_sync_row().hash(h);
                 (self.tools_row(), self.pc_streaming_row(), self.backup_row(), self.web_row(), self.night_light_row(), self.storage_row(), self.gamelist_row(), self.gallery_row(), self.game_check_mark(), self.conflicts_mark(), self.curator_mark()).hash(h);
-                self.android_games_row().hash(h);
+                (self.android_games_row(), self.android_extras_row()).hash(h);
             }
             Place::Tour => self.tour_mark().hash(h),
             Place::Setup { .. } => self.setup.as_ref().map(|s| s.ui_mark()).hash(h),
@@ -584,6 +611,7 @@ impl App {
             Place::Curator(_) => self.curator_mark().hash(h),
             Place::RunsOn => self.emu_choice_mark().hash(h),
             Place::ThisGame => self.this_game_mark().hash(h),
+            Place::GameManual => self.game_manual_mark().hash(h),
             Place::PortPerf => self.port_perf_mark().hash(h),
             Place::Gallery => self.gallery_row().hash(h),
             Place::Conflicts => self.conflicts_mark().hash(h),
@@ -594,6 +622,7 @@ impl App {
                 self.curator_mark().hash(h);
             }
             Place::Console => self.console.as_ref().map(|o| (o.system, o.page.mark())).hash(h),
+            Place::Series => self.series.page.as_ref().map(|o| (o.shelf, o.page.scroll)).hash(h),
             Place::Search => self.find_mark().hash(h),
             Place::Switcher { .. } => {
                 if let Some(sw) = &self.switcher {

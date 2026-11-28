@@ -7,7 +7,11 @@ import java.net.*;
 final class ResumableDownload {
     interface Open { HttpURLConnection open(URL url) throws IOException; }
     interface Hooks { void check() throws IOException; void progress(long bytes); }
+    /** The screen stays on meanwhile (`Awake`). */
     static void fetch(String address, File file, long size, Open open, Hooks hooks) throws IOException {
+        try (Awake.Hold awake = Awake.during()) { transfer(address, file, size, open, hooks); }
+    }
+    private static void transfer(String address, File file, long size, Open open, Hooks hooks) throws IOException {
         if(size<=0||size>128L*1024*1024)throw new IOException("Invalid download size");
         if(file.length()>size&&!file.delete())throw new IOException("Partial file unavailable");
         hooks.check();hooks.progress(file.length());

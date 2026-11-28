@@ -4,7 +4,8 @@
 # The hook runs under BusyBox sh with a PATH that holds ONLY the applets ROCKNIX's initramfs has (read from its busybox),
 # so a tool that is missing there (find, cmp, date, chmod, touch, mktemp ...) fails here too. mount_part, mount and
 # progress are fakes that log their calls, as ROCKNIX's init would provide them; PU_FLASH / PU_STORAGE point the hook at
-# the fake folders. POCKETUI_FAT_DIR=<folder of make-fat-install.sh's output> adds a run with the real two files. The tar is built as scripts/make-fat-install.sh does. About 2 s, part of the gate.
+# the fake folders. POCKETUI_FAT_DIR=<folder of make-fat-install.sh's output> adds a run with the real two files, red when the seed lacks hakuX,
+# gpSP, DSperate or bsnes-hd. The tar is built as scripts/make-fat-install.sh does. About 2 s, part of the gate.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 command -v busybox >/dev/null || { echo "busybox is needed for this test"; exit 1; }
@@ -249,10 +250,11 @@ if [ -n "${POCKETUI_FAT_DIR:-}" ]; then
   cp "$POCKETUI_FAT_DIR/mount-storage.sh" "$POCKETUI_FAT_DIR/pocket-ui-seed.tar.gz" "$T/flash/"
   boot
   check "installed: programs, links, drop-in; hook and tar gone" '[ -x "$T/storage/pocket-ui/current/pocket-ui" ] && [ -x "$T/storage/pocket-ui/pocket-core" ] && [ -f "$T/storage/.config/system.d/essway.service.d/10-pocket-ui.conf" ] && [ ! -e "$T/flash/mount-storage.sh" ] && [ ! -e "$T/flash/pocket-ui-seed.tar.gz" ]'
-  # make-fat-install.sh --hakux (the card zip): the Xbox core has to arrive as in the SSH package.
-  if tar -tzf "$POCKETUI_FAT_DIR/pocket-ui-seed.tar.gz" | grep -q '^./pocket-ui/releases/[^/]*/hakux/hakux_libretro.so$'; then
-    check "Xbox core from the tar (--hakux): installed, with its licences" '[ -x "$T/storage/pocket-ui/current/hakux/hakux_libretro.so" ] && [ -f "$T/storage/pocket-ui/current/hakux/licenses/COPYING" ] && (cd "$T/storage/pocket-ui/current/hakux" && sha256sum -c SHA256SUMS >/dev/null)'
-  fi
+  # Every real card carries pocket-ui's own emulators (scripts/package-complete.py rocknix): red when one is missing, not only
+  # checked when it happens to be there (25.11.2026: hakuX was in no seed from 0.2.1 to 0.7.2, and this test stayed green).
+  check "the seed carries hakuX, gpSP, DSperate and bsnes-hd" 'python3 -I "$HERE/../../scripts/package-complete.py" rocknix "$POCKETUI_FAT_DIR/pocket-ui-seed.tar.gz"'
+  check "Xbox core from the tar (--hakux): installed, with its licences" '[ -x "$T/storage/pocket-ui/current/hakux/hakux_libretro.so" ] && [ -f "$T/storage/pocket-ui/current/hakux/licenses/COPYING" ] && (cd "$T/storage/pocket-ui/current/hakux" && sha256sum -c SHA256SUMS >/dev/null)'
+  check "gpSP, DSperate and bsnes-hd from the tar: installed beside the programs" '(for c in gpsp dsperate bsnes_hd_beta; do [ -s "$T/storage/pocket-ui/current/cores/${c}_libretro.so" ] || exit 1; done)'
 fi
 
 echo

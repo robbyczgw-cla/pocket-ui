@@ -24,6 +24,11 @@ JIT, bundled ffmpeg for linux/aarch64), Flycast `-DLIBRETRO=ON -DUSE_GLES=ON`. T
 On the Brick card (Brick and Smart Pro) PPSSPP starts with Frameskip 1 (number of frames, auto frameskip off), the PSP's own
 480x272, the JIT and fast memory (`BRICK_PPSSPP` in `src/core_options.rs`): at full rate it is too slow there, and Chinatown Wars
 plays acceptably with one skipped frame. These are defaults only; a value chosen in Options › Emulator for the game or the console wins.
+Mupen64Plus-Next starts there with "Color buffer to RDRAM" Off, the threaded renderer and the N64's own resolution (native factor 1,
+ROCKNIX's H700 and RK3326 values; `BRICK_MUPEN64`): GLideN64's copy of each picture back into the N64's memory cost ~2.7 ms a frame on the
+GE8300 and left old pictures in the black frame around the N64 picture, and at 640x480 busy scenes waited for the GPU (Banjo-Kazooie's
+intro 37 → 53 fps). A game whose effect needs the copy gets it back in Options › Emulator. pocket-core also clears each new picture
+texture GLideN64 makes (`brick_gles::tex_storage_2d`; the PowerVR driver hands out old memory, GLideN64 doesn't clear it).
 melonDS DS has a software renderer, but full-speed A53 performance has not been
 established and the Brick has neither a touchscreen nor sticks for the current pointer mapping.
 DraStic performance is not evidence for melonDS performance.

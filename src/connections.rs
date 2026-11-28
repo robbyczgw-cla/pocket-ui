@@ -59,6 +59,8 @@ pub struct Entry {
     pub year: Option<u16>,
     /// The values as the data writes them, by [`Kind`]: several, or one with commas ("Racing, Driving").
     pub values: [Vec<String>; 4],
+    /// Its place in its series, where ScreenScraper's cache has it (`series_shelf`'s order).
+    pub number: Option<u32>,
 }
 
 /// One game in the index.
@@ -103,6 +105,11 @@ pub struct Index {
     derived: HashMap<usize, String>,
     /// Per game: its title as [`key`] gives it, to tell one title on two systems from two titles.
     title_keys: Vec<String>,
+    /// Per game: its series as written (the data's, then the one its title gives) and its number in it, for the shelf
+    /// by series.
+    series: Vec<(Vec<String>, Option<u32>)>,
+    /// The shelf by series (`series_shelf`), arranged with the index on Curator's thread.
+    pub arranged: crate::series_shelf::Arrangement,
 }
 
 /// Words a company's name may end in without being another company.
@@ -301,7 +308,33 @@ impl Index {
             }
         }
         let by_path = games.iter().enumerate().map(|(i, g)| (g.path.clone(), i)).collect();
-        Index { games, by_path, by_key, derived, title_keys }
+        let series: Vec<(Vec<String>, Option<u32>)> = entries
+            .into_iter()
+            .enumerate()
+            .map(|(i, e)| {
+                let [_, _, mut written, _] = e.values;
+                written.extend(derived.get(&i).cloned());
+                (written, e.number)
+            })
+            .collect();
+        let mut ix = Index { games, by_path, by_key, derived, title_keys, series, arranged: Default::default() };
+        ix.arranged = crate::series_shelf::arrange(&ix.members());
+        ix
+    }
+
+    /// The games as the shelf by series takes them.
+    fn members(&self) -> Vec<crate::series_shelf::Member<'_>> {
+        self.games
+            .iter()
+            .zip(&self.series)
+            .zip(&self.title_keys)
+            .map(|((g, (series, number)), title)| crate::series_shelf::Member { name: &g.name, year: g.year, number: *number, series, title })
+            .collect()
+    }
+
+    /// Home's shelves by series with only the games `keep` lets on (`series_shelf::Arrangement::shown`).
+    pub fn series_shelves(&self, keep: impl Fn(&Game) -> bool) -> Vec<crate::series_shelf::Shown> {
+        self.arranged.shown(|i| keep(&self.games[i]), &self.members())
     }
 
     pub fn len(&self) -> usize {
@@ -399,6 +432,7 @@ mod tests {
             name: name.into(),
             year,
             values: [dev.iter().map(|s| s.to_string()).collect(), Vec::new(), series.iter().map(|s| s.to_string()).collect(), genre.iter().map(|s| s.to_string()).collect()],
+            number: None,
         }
     }
 

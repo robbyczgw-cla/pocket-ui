@@ -162,6 +162,19 @@ pub struct Ctx {
     pub deadline: Duration,
     /// `Shared::trust_epoch` when the whois answers were kept: a change of "Your Tailscale devices" drops them.
     whois_epoch: AtomicU64,
+    /// Uploads in pieces under way (`/api/upload/start`); tests make their idle time short.
+    pub pieces: files::Pieces<PieceUpload>,
+}
+
+/// An upload in pieces of the upload page: the file, what its end does (`kind`), and who started it (only that
+/// browser or device adds to it).
+pub struct PieceUpload {
+    part: files::Partial,
+    kind: String,
+    owner: String,
+    /// A save or state put back in pieces (`/api/saves/upload/start`): its end is the put-back's, and a game that
+    /// starts ends it instead of pausing it.
+    save: Option<super::saves::PieceSave>,
 }
 
 impl Ctx {
@@ -181,6 +194,7 @@ impl Ctx {
             stopped: Arc::new(AtomicBool::new(false)),
             deadline: HEAD_DEADLINE,
             whois_epoch: AtomicU64::new(0),
+            pieces: files::Pieces::default(),
         }
     }
 
@@ -317,7 +331,7 @@ pub fn handle(ctx: &Ctx, conn: &Conn, stream: TcpStream) {
         Ok(req) => {
             // A game-file upload can take hours (a minute per read at most). Other requests, including cover
             // uploads, have the same short deadline as the head so slow bodies cannot keep a worker.
-            reader.get_mut().until = if req.method == "POST" && matches!(req.path.as_str(), "/api/upload" | "/api/saves/upload") { None } else { Some(Instant::now() + ctx.deadline) };
+            reader.get_mut().until = if req.method == "POST" && matches!(req.path.as_str(), "/api/upload" | "/api/upload/part" | "/api/saves/upload") { None } else { Some(Instant::now() + ctx.deadline) };
             let resp = respond(ctx, conn, &req, &mut reader);
             (resp, req.method == "HEAD", Some(format!("{} {}", req.method, req.path)))
         }
@@ -326,7 +340,8 @@ pub fn handle(ctx: &Ctx, conn: &Conn, stream: TcpStream) {
     };
     ctx.shared.requests.fetch_add(1, Ordering::Relaxed);
     // The log names the route and the outcome, never a cookie, a code, a query or an address.
-    if resp.status >= 400 || line.as_deref().is_some_and(|l| l.contains("/api/") && !l.ends_with("/api/status")) {
+    // A piece that went through is not a line of its own (a 1.6 GB disc is 200 of them): the upload logs its start and end.
+    if resp.status >= 400 || line.as_deref().is_some_and(|l| l.contains("/api/") && !l.ends_with("/api/status") && !l.ends_with("/api/upload/part")) {
         println!("web: {} {} ({} ms)", line.as_deref().unwrap_or("?"), resp.status, t0.elapsed().as_millis());
     }
     if http::write_response(&mut writer, &resp, head_only).is_ok() {
@@ -401,7 +416,9 @@ pub fn respond(ctx: &Ctx, conn: &Conn, req: &Request, body: &mut impl BufRead) -
     if m == "POST" && !ctx.shared.sessions.lock().unwrap().csrf_ok(&who.id(), req.header("x-csrf-token")) {
         return Response::error(403, "Refused: the page is out of date. Reload it.");
     }
-    if ctx.shared.playing() && !small(path) {
+    // A piece of an upload already under way waits inside its request while a game runs (`files::Gate`), as a whole
+    // upload does: the page sees no difference.
+    if ctx.shared.playing() && !small(path) && !(m == "POST" && matches!(path, "/api/upload/part" | "/api/upload/cancel")) {
         return Response::json(503, &json!({ "error": "A game is running. The companion waits until it ends.", "playing": true })).with("Retry-After", "10");
     }
     let r = match (m, path) {
@@ -429,6 +446,9 @@ pub fn respond(ctx: &Ctx, conn: &Conn, req: &Request, body: &mut impl BufRead) -
         (_, "/api/uploads") => Ok(uploads(ctx)),
         ("POST", "/api/upload/check") => Ok(upload_check(ctx, req)),
         ("POST", "/api/upload") => Ok(upload(ctx, req, body)),
+        ("POST", "/api/upload/start") => Ok(upload_start(ctx, req, &who)),
+        ("POST", "/api/upload/part") => Ok(upload_part(ctx, req, body, &who)),
+        ("POST", "/api/upload/cancel") => Ok(upload_cancel(ctx, req, &who)),
         ("POST", "/api/logout") => Ok(logout(ctx, &who)),
         // Saves and states, Pocket Sync (`saves.rs`, `pockets.rs`).
         (_, "/api/saves") => super::saves::list(ctx, req),
@@ -437,6 +457,7 @@ pub fn respond(ctx: &Ctx, conn: &Conn, req: &Request, body: &mut impl BufRead) -
         (_, "/api/saves/all") => Ok(super::saves::summary(ctx)),
         ("POST", "/api/saves/check") => super::saves::check(ctx, req),
         ("POST", "/api/saves/upload") => Ok(super::saves::upload(ctx, req, body)),
+        ("POST", "/api/saves/upload/start") => Ok(saves_upload_start(ctx, req, &who)),
         (_, "/api/pockets") => Ok(Response::json(200, &super::pockets::overview(ctx))),
         ("POST", p) if p.starts_with("/api/") => edit(ctx, p, req, body),
         _ => Err(Response::error(404, "Not found.")),
@@ -524,7 +545,7 @@ fn status(ctx: &Ctx) -> Response {
     // The system's full name from the library when it was read already: status never reads it (it answers in games).
     let cached = ctx.cache.lock().unwrap().clone();
     let playing = now.map(|n| {
-        let full = cached.as_ref().and_then(|c| c.systems.iter().find(|s| s.name == n.system).map(|s| s.fullname.clone())).unwrap_or_else(|| n.system.clone());
+        let full = cached.as_ref().and_then(|c| c.systems.iter().find(|s| crate::region_pairs::same_shelf(&s.name, &n.system)).map(|s| s.fullname.clone())).unwrap_or_else(|| n.system.clone());
         json!({ "id": game_id(&n.path), "name": n.name, "system": n.system, "systemName": full, "stripe": stripe(&n.system), "since": n.since })
     });
     Response::json(200, &json!({ "playing": playing, "gameRunning": ctx.shared.playing() }))
@@ -628,7 +649,7 @@ fn games(ctx: &Ctx, req: &Request) -> Result<Response, Response> {
     let p = player(&ctx.shared.data_dir);
     let offset: usize = req.query("offset").and_then(|o| o.parse().ok()).unwrap_or(0);
     let (title, list): (String, Vec<(usize, usize)>) = if let Some(id) = req.query("system") {
-        let s = lib.systems.iter().position(|s| s.name == id).ok_or_else(|| Response::error(404, "No such system."))?;
+        let s = lib.systems.iter().position(|s| crate::region_pairs::same_shelf(&s.name, &id)).ok_or_else(|| Response::error(404, "No such system."))?;
         (lib.systems[s].fullname.clone(), (0..lib.systems[s].games.len()).map(|g| (s, g)).collect())
     } else if req.query("favorites").is_some() {
         let mut l: Vec<(usize, usize)> = p.favorites.iter().filter_map(|f| lib.by_path.get(f).copied()).collect();
@@ -953,11 +974,13 @@ pub fn shrink_png(img: &crate::image::Image) -> Option<Vec<u8>> {
 
 fn uploads(ctx: &Ctx) -> Response {
     let lib = ctx.library();
-    let systems: Vec<Value> = lib
-        .info
-        .iter()
-        .filter(|s| files::system_folder_ok(&ctx.roots, s))
-        .map(|s| json!({ "id": s.id, "name": s.name, "folder": s.folder, "extensions": s.extensions }))
+    // One folder per console sold under regional names (`library::upload_folders`): a Genesis file isn't asked about.
+    let offered = library::upload_folders(lib.info.iter().filter(|s| files::system_folder_ok(&ctx.roots, s)));
+    let systems: Vec<Value> = offered.iter().map(|s| json!({ "id": s.id, "name": s.name, "folder": s.folder, "extensions": s.extensions })).collect();
+    // What a file type means where several systems take it (`.md` is the Mega Drive, not its hacks folder), as the phone's
+    // upload page decides (`phone_upload::PREFER`); a console's other folder when it is the one offered (`genesis`).
+    let prefer: std::collections::BTreeMap<String, String> = crate::phone_upload::prefer_map().into_iter()
+        .map(|(ext, id)| { let id = offered.iter().find(|s| crate::region_pairs::same_shelf(&s.id, &id)).map_or(id, |s| s.id.clone()); (ext, id) })
         .collect();
     let bios: Vec<Value> = files::bios_report(&ctx.roots.bios)
         .into_iter()
@@ -969,6 +992,7 @@ fn uploads(ctx: &Ctx) -> Response {
         200,
         &json!({
             "systems": systems,
+            "prefer": prefer,
             "bios": bios,
             "ports": ports,
             "free": free,
@@ -985,7 +1009,8 @@ fn target(ctx: &Ctx, req: &Request) -> Result<(PathBuf, u64), Refused> {
         Some("rom") => {
             let lib = ctx.library();
             let id = req.query("system").unwrap_or("");
-            let sys = lib.info.iter().find(|s| s.id == id).ok_or_else(|| Refused::NotAllowed("Choose a system for this file.".into()))?;
+            let offered = library::upload_folders(lib.info.iter().filter(|s| files::system_folder_ok(&ctx.roots, s)));
+            let sys = offered.iter().find(|s| s.id == id).or_else(|| lib.info.iter().find(|s| s.id == id)).ok_or_else(|| Refused::NotAllowed("Choose a system for this file.".into()))?;
             Ok((files::rom_target(&ctx.roots, sys, name)?, files::MAX_ROM))
         }
         Some("bios") => Ok((files::bios_target(&ctx.roots, name, req.query("sub"))?, files::MAX_BIOS)),
@@ -1039,24 +1064,170 @@ fn upload(ctx: &Ctx, req: &Request, body: &mut impl BufRead) -> Response {
     let (wait, abort) = (|| ctx.shared.playing(), || ctx.stopped.load(Ordering::Relaxed));
     let gate = files::Gate { wait: &wait, abort: &abort, no_programs: req.query("kind") == Some("port") };
     match files::receive(body, &t, &ctx.roots.uploads, len, overwrite, &gate) {
-        Ok(w) => {
-            let kind = req.query("kind").unwrap_or("");
-            let mut v = json!({ "ok": true, "path": shown(ctx, &t), "bytes": w.bytes, "replaced": w.replaced });
-            if kind == "rom" {
-                // Read here, on this low-priority thread: the App only swaps the list in (`app_web.rs`).
-                ctx.stale.store(true, Ordering::Relaxed);
-                let lib = ctx.library();
-                let _ = ctx.shared.edit(Edit::LibraryChanged(super::Systems(Arc::new(lib.systems.clone()))));
-            }
-            if kind == "bios" {
-                let rel = t.strip_prefix(&ctx.roots.bios).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
-                v["bios"] = json!(files::bios_for(&rel));
-            }
-            println!("web: uploaded {} ({} bytes)", shown(ctx, &t), w.bytes);
-            Response::json(200, &v)
-        }
+        Ok(w) => uploaded(ctx, req.query("kind").unwrap_or(""), &t, &w),
         Err(e) => Response::json(e.status(), &json!({ "ok": false, "error": e.message() })),
     }
+}
+
+/// The answer to a finished upload, whole or in pieces: where it went; the library read again for a game, the
+/// system named for a BIOS file.
+fn uploaded(ctx: &Ctx, kind: &str, t: &Path, w: &files::Written) -> Response {
+    let mut v = json!({ "ok": true, "path": shown(ctx, t), "bytes": w.bytes, "replaced": w.replaced });
+    if kind == "rom" {
+        // Read here, on this low-priority thread: the App only swaps the list in (`app_web.rs`).
+        ctx.stale.store(true, Ordering::Relaxed);
+        let lib = ctx.library();
+        let _ = ctx.shared.edit(Edit::LibraryChanged(super::Systems(Arc::new(lib.systems.clone()))));
+    }
+    if kind == "bios" {
+        let rel = t.strip_prefix(&ctx.roots.bios).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+        v["bios"] = json!(files::bios_for(&rel));
+    }
+    println!("web: uploaded {} ({} bytes)", shown(ctx, t), w.bytes);
+    Response::json(200, &v)
+}
+
+fn refused(e: &Refused) -> Response {
+    let mut v = json!({ "ok": false, "error": e.message() });
+    if let Refused::Offset(at) = e {
+        v["received"] = json!(at);
+    }
+    Response::json(e.status(), &v)
+}
+
+/// Starts an upload in pieces (`kind`, `name`, … as for `/api/upload`, `size` the whole file's bytes, fixed here):
+/// every check of a whole upload, the room held, the temporary file made. Answers its `id` and the piece size.
+/// Browsers send large files this way: Chrome on Android can't send a 1.6 GB file in one request (25.11.2026).
+fn upload_start(ctx: &Ctx, req: &Request, who: &Principal) -> Response {
+    let Some(size) = req.query("size").and_then(|s| s.parse::<u64>().ok()) else {
+        return Response::error(411, "The browser did not say how large the file is.");
+    };
+    let overwrite = req.query("overwrite") == Some("1");
+    let kind = req.query("kind").unwrap_or("").to_string();
+    let (t, max) = match target(ctx, req) {
+        Ok(t) => t,
+        Err(e) => return refused(&e),
+    };
+    // A file the browser starts again replaces its own upload of it that was left: its room is free again.
+    let owner = who.id();
+    drop(ctx.pieces.sweep(|u: &PieceUpload| u.owner == owner && u.save.is_none() && u.part.target() == t));
+    let room = match files::reserve(&t, size, max) {
+        Ok(r) => r,
+        Err(e) => return refused(&e),
+    };
+    let part = match files::Partial::begin(&t, &ctx.roots.uploads, size, overwrite, kind == "port", room) {
+        Ok(p) => p,
+        Err(e) => return refused(&e),
+    };
+    let id = ctx.pieces.add(PieceUpload { part, kind, owner, save: None });
+    println!("web: upload in pieces started ({size} bytes)");
+    Response::json(200, &json!({ "ok": true, "id": id, "piece": files::PIECE, "path": shown(ctx, &t) }))
+}
+
+/// Starts putting a save or state back in pieces (`saves::begin_pieces`: the checks of `/api/saves/upload`); its
+/// pieces go to `/api/upload/part` and `/api/upload/cancel` as a game file's do. Answers its `id` and the piece size.
+fn saves_upload_start(ctx: &Ctx, req: &Request, who: &Principal) -> Response {
+    let owner = who.id();
+    let size = req.query("size").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+    // The same file for the same place started again replaces the one this browser left: its room is free again.
+    let stale = |t: &Path| drop(ctx.pieces.sweep(|u: &PieceUpload| u.owner == owner && u.save.as_ref().is_some_and(|s| s.target == t)));
+    let (save, part) = match super::saves::begin_pieces(ctx, req, stale) {
+        Ok(s) => s,
+        Err(r) => return r,
+    };
+    let id = ctx.pieces.add(PieceUpload { part, kind: "save".into(), owner, save: Some(save) });
+    println!("web: putting a save back in pieces ({size} bytes)");
+    Response::json(200, &json!({ "ok": true, "id": id, "piece": files::PIECE }))
+}
+
+/// One piece of an upload in pieces: `id`, `offset` (where it starts; must be exactly the bytes the Pocket has) and
+/// the bytes as the body. The last one puts the file in place and answers as `/api/upload` does. A piece at the
+/// wrong place is refused with the bytes the Pocket has (`received`), so the browser can go on from there.
+fn upload_part(ctx: &Ctx, req: &Request, body: &mut impl BufRead, who: &Principal) -> Response {
+    let Some(len) = req.content_length else {
+        return Response::error(411, "The browser did not say how large the piece is.");
+    };
+    let id = req.query("id").unwrap_or("");
+    let Some(offset) = req.query("offset").and_then(|s| s.parse::<u64>().ok()) else {
+        return Response::error(400, "Where does this piece go?");
+    };
+    let gone = || Response::json(404, &json!({ "ok": false, "error": "That upload is not on the Pocket any more. Nothing was kept.", "gone": true }));
+    let Some(slot) = ctx.pieces.get(id) else {
+        files::discard(body, len);
+        return gone();
+    };
+    let mut up = slot.lock().unwrap_or_else(|e| e.into_inner());
+    if up.owner != who.id() {
+        drop(up);
+        files::discard(body, len);
+        return gone();
+    }
+    // A game file's piece waits while a game runs; a save's ends the put-back (its saves are the game's now), also
+    // when a game started and ended since its last piece (`saves::PieceSave::stopped`).
+    let added = {
+        let PieceUpload { part, save, .. } = &mut *up;
+        let save = save.as_ref();
+        let (wait, abort) = (|| save.is_none() && ctx.shared.playing(), || ctx.stopped.load(Ordering::Relaxed) || save.is_some_and(|s| s.stopped(ctx)));
+        let gate = files::Gate { wait: &wait, abort: &abort, no_programs: false };
+        part.append(body, offset, len, &gate)
+    };
+    match added {
+        Ok(()) if !up.part.complete() => Response::json(200, &json!({ "ok": true, "received": up.part.received() })),
+        Ok(()) if up.save.is_some() => {
+            ctx.pieces.remove(id);
+            let PieceUpload { part, save, .. } = &mut *up;
+            let done = super::saves::end_pieces(ctx, part, save.as_ref().unwrap());
+            drop(up);
+            done
+        }
+        Ok(()) => {
+            ctx.pieces.remove(id);
+            let (kind, t) = (up.kind.clone(), up.part.target().to_path_buf());
+            let done = up.part.finish(|_| Ok(()));
+            drop(up);
+            match done {
+                Ok(w) => uploaded(ctx, &kind, &t, &w),
+                Err(e) => {
+                    println!("web: upload in pieces refused at the end ({})", e.status());
+                    refused(&e)
+                }
+            }
+        }
+        Err(e) if files::Partial::goes_on(&e) => {
+            if matches!(e, Refused::Offset(_)) {
+                files::discard(body, len);
+            }
+            let mut v = json!({ "ok": false, "error": e.message(), "received": up.part.received() });
+            if matches!(e, Refused::Short) {
+                v["error"] = json!("The piece was cut off. Send it again.");
+            }
+            Response::json(e.status(), &v)
+        }
+        Err(e) => {
+            println!("web: upload in pieces stopped at {} of {} bytes ({})", up.part.received(), up.part.total(), e.status());
+            let answer = match up.save.as_ref() {
+                Some(save) => super::saves::stopped_piece(ctx, save, e),
+                None => refused(&e),
+            };
+            drop(up);
+            ctx.pieces.remove(id);
+            answer
+        }
+    }
+}
+
+/// The page gave up on an upload in pieces: its temporary file goes, its room is free.
+fn upload_cancel(ctx: &Ctx, req: &Request, who: &Principal) -> Response {
+    let id = req.query("id").unwrap_or("");
+    if let Some(slot) = ctx.pieces.get(id) {
+        let mine = slot.lock().unwrap_or_else(|e| e.into_inner()).owner == who.id();
+        drop(slot);
+        if mine {
+            ctx.pieces.remove(id);
+            println!("web: upload in pieces cancelled");
+        }
+    }
+    Response::json(200, &json!({ "ok": true }))
 }
 
 // --- edits -----------------------------------------------------------------------------------------------------

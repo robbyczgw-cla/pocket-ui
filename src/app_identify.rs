@@ -67,6 +67,12 @@ impl Identify {
     pub(crate) fn due(&self) -> bool {
         self.due && !self.running
     }
+
+    /// A run (or a "Look up again") is out: the covers' run follows it, and ScreenScraper's after that
+    /// (`screenscraper_resume` waits for it).
+    pub(crate) fn busy(&self) -> bool {
+        self.running || self.looking.is_some()
+    }
 }
 
 impl App {

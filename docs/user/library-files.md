@@ -57,8 +57,8 @@ Serial matching feeds both the game card and Curator for PlayStation (PS1) and P
 ## Matching your files
 
 To match games with metadata and box art, pocket-ui cleans up filenames automatically: region/revision tags like
-"(USA, Europe) (Rev 2)", dump tags in square brackets, scene release numbers ("0902 - ") and trailing versions
-("Pipes.v1.02") are ignored; "Legend of Zelda, The" normalises to "The Legend of Zelda"; accents, "&"/"and" and Roman
+"(USA, Europe) (Rev 2)", dump tags in square brackets, scene release numbers ("0902 - ", "1572-") and trailing versions
+("Pipes.v1.02", "4.5.3") are ignored, also in the name you see; "Legend of Zelda, The" normalises to "The Legend of Zelda"; accents, "&"/"and" and Roman
 numerals ("III" = "3") match interchangeably. No-Intro and Redump naming gives the best results. Sequel numbers stay
 strict: "Crash Bandicoot 3" will never match "Crash Bandicoot 2".
 

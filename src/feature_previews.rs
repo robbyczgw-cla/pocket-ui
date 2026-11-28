@@ -339,6 +339,7 @@ fn card(c: &mut Canvas, text: &mut Text, focus: usize) {
         surprise: None,
         look_up: true,
         from_gamelist: false,
+        from_screenscraper: false,
         patch: None,
         broken: None,
         favorite: false,
@@ -903,6 +904,121 @@ pub fn console_credits(c: &mut Canvas, text: &mut Text) {
     };
     let bg = pal().void;
     CreditsPage::new(data).paint(c, text, None, bg);
+}
+
+// ---- 0.8.0 ----------------------------------------------------------------------------------------------------
+
+/// A printed spine as ScreenScraper brings it, standing: the console's band on top, the box's art, a logo, the
+/// publisher's mark at the foot. Printed colours, not the palette's: a photo of a box looks the same in both appearances.
+/// `kind` varies the print as real boxes do: art on top, the logo on top, or a plain spine with a long title band.
+fn printed_spine(c: &mut Canvas, art: &Image, (x, y, w, h): (i32, i32, i32, i32), (base, logo): (u32, u32), system: &str, kind: usize) {
+    c.rect(x, y, w, h, base);
+    c.rect(x, y, w, h / 9, stripe(system));
+    let body = y + h / 9;
+    match kind % 3 {
+        0 => {
+            c.rect(x + 4, body + 6, w - 8, 4, logo);
+            c.blit_scaled(art, x + 8, body + 18, w - 16, h * 2 / 5);
+            c.round_rect(x + 10, y + h * 3 / 5 + 8, w - 20, h / 5, 10, logo);
+            c.rect(x + 18, y + h * 3 / 5 + 8 + h / 10 - 3, w - 36, 6, base);
+        }
+        1 => {
+            c.round_rect(x + 10, body + 16, w - 20, h / 6, 10, logo);
+            c.rect(x + 18, body + 16 + h / 12 - 3, w - 36, 6, base);
+            c.blit_scaled(art, x + 8, body + 28 + h / 6, w - 16, h / 3);
+            c.rect(x + 4, y + h * 4 / 5 - 10, w - 8, 4, logo);
+        }
+        _ => {
+            // A long title printed down the spine, as a band of letters.
+            c.rect(x + w / 2 - 14, body + 20, 28, h * 3 / 5, logo);
+            for k in 0..8 {
+                c.rect(x + w / 2 - 8, body + 30 + k * h * 3 / 40, 16, h / 30, base);
+            }
+        }
+    }
+    c.disc(x + w / 2, y + h - h / 14, w / 5, logo);
+    // The edge between two boxes.
+    c.rect(x + w - 2, y, 2, h, mix(base, 0x000000, 90));
+}
+
+/// ScreenScraper (0.8.0): the shelf with real spines standing, a cartridge with its real label, and a box's real back.
+pub fn screenscraper(c: &mut Canvas, text: &mut Text) {
+    c.clear(pal().void);
+    let art = sample_scene(120, 90);
+    // The shelf: nine boxes of three consoles on a board.
+    let (top, h, w) = (90, 420, 112);
+    let x0 = (c.w - 9 * w) / 2;
+    let boxes = [
+        (0x1d3f8f, 0xf2f2f2, "snes"),
+        (0xb8222a, 0xffd34a, "snes"),
+        (0x101418, 0xe8e8e8, "megadrive"),
+        (0x22303c, 0xff8a2a, "gba"),
+        (0xe9e4d8, 0x2a2a2a, "gba"),
+        (0x2c6b3a, 0xf6efe0, "megadrive"),
+        (0x5a2a7a, 0xf0d060, "snes"),
+        (0x0f0f10, 0xd8263a, "gba"),
+        (0xd6d2c8, 0x1d3f8f, "snes"),
+    ];
+    for (k, (base, logo, system)) in boxes.iter().enumerate() {
+        printed_spine(c, &art, (x0 + k as i32 * w, top, w, h), (*base, *logo), system, [0, 2, 1, 0, 1, 2, 0, 2, 1][k]);
+    }
+    c.rect(x0 - 24, top + h, 9 * w + 48, 26, mix(pal().spine, pal().label, 60));
+    game_card::lift_shadow(c, x0 - 24, top + h + 26, 9 * w + 48, pal().t);
+
+    // A cartridge with its real label.
+    let (cx, cy, cw, ch) = (MARGIN, 600, 500, 360);
+    c.round_rect(cx, cy, cw, ch, 28, 0x8c8f96);
+    c.round_rect(cx + 14, cy + 14, cw - 28, ch - 28, 22, 0x9a9da4);
+    let (lx, ly, lw, lh) = (cx + 60, cy + 40, cw - 120, ch - 120);
+    c.round_rect(lx - 8, ly - 8, lw + 16, lh + 16, 12, 0x6c6f76);
+    c.blit_scaled(&art, lx, ly, lw, lh);
+    c.rect(lx, ly + lh - 64, lw, 64, 0x1d3f8f);
+    text.draw(c, Face::Title, 37, lx + 20, ly + lh - 20, 0xf2f2f2, "Sample game");
+    for k in 0..6 {
+        c.rect(cx + 70 + k * 64, cy + ch - 40, 36, 24, 0x7a7d84);
+    }
+
+    // The box's real back: two screenshots, the blurb, the marks at the foot.
+    let (bx, by, bw, bh) = (cx + cw + 60, 580, c.w - MARGIN - (cx + cw + 60), 400);
+    c.rect(bx, by, bw, bh, 0x14295e);
+    game_card::lift_shadow(c, bx, by + bh, bw, pal().t);
+    let shot_w = (bw - 60) / 2;
+    for k in 0..2 {
+        let sx = bx + 20 + k * (shot_w + 20);
+        c.rect(sx - 4, by + 26, shot_w + 8, shot_w * 3 / 4 + 8, 0xf2f2f2);
+        c.blit_scaled(&art, sx, by + 30, shot_w, shot_w * 3 / 4);
+    }
+    let mut y = by + 50 + shot_w * 3 / 4;
+    for k in 0..4 {
+        c.rect(bx + 20, y, bw - 40 - (k % 2) * 80, 12, 0xc8cfe6);
+        y += 28;
+    }
+    c.rect(bx + 20, by + bh - 70, 56, 56, 0xf2f2f2);
+    c.rect(bx + 30, by + bh - 60, 36, 36, 0x101418);
+    c.rect(bx + bw - 200, by + bh - 50, 180, 30, 0xf2f2f2);
+}
+
+/// Shelves by series (0.8.0): Home ordered by series, a series' games from every console in release order, each with
+/// its console's stripe, and the games of no series under One of a kind.
+pub fn shelf_by_series(c: &mut Canvas, text: &mut Text) {
+    c.clear(pal().void);
+    page_top(c, text, "Home");
+    let shelves: [(&str, &[(&str, &str, &str)]); 2] = [
+        ("Sample series", &[("Sample game", "1987", "nes"), ("Sample game 2", "1991", "snes"), ("Sample game 3", "1998", "gbc"), ("Sample game 4", "2002", "gba")]),
+        ("One of a kind", &[("Sample game 5", "1990", "megadrive"), ("Sample game 6", "1996", "psx")]),
+    ];
+    let mut y = 150;
+    for (k, (name, games)) in shelves.iter().enumerate() {
+        text.draw(c, Face::Title, 50, MARGIN, y, if k == 0 { pal().chalk } else { pal().dust }, name);
+        text.draw_right(c, Face::Body, 28, c.w - MARGIN, y, pal().dust, &games.len().to_string());
+        y += 24;
+        for (title, year, system) in games.iter() {
+            spine(c, text, y, title, year, system);
+            y += 80;
+        }
+        y += 56;
+    }
+    hints(c, text, &[("A", "Open"), ("X", "Details"), ("START", "Settings")]);
 }
 
 #[cfg(test)]

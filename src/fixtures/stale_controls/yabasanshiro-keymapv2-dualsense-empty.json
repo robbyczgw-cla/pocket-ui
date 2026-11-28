@@ -1,0 +1,100 @@
+{
+  "0_Sony Interactive Entertainment DualSense Wireless Controller_0300fd574c050000e60c000011810000": {
+    "a": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    },
+    "analogleft": {
+      "id": 4,
+      "type": "axis",
+      "value": 0
+    },
+    "analogright": {
+      "id": 5,
+      "type": "axis",
+      "value": 0
+    },
+    "analogx": {
+      "id": 0,
+      "type": "axis",
+      "value": 0
+    },
+    "analogy": {
+      "id": 1,
+      "type": "axis",
+      "value": 0
+    },
+    "b": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    },
+    "c": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    },
+    "down": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    },
+    "l": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    },
+    "left": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    },
+    "r": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    },
+    "right": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    },
+    "select": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    },
+    "start": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    },
+    "up": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    },
+    "x": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    },
+    "y": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    },
+    "z": {
+      "id": -1,
+      "type": "",
+      "value": -999
+    }
+  },
+  "player1": {
+    "DeviceID": 0,
+    "deviceGUID": "0300fd574c050000e60c000011810000",
+    "deviceName": "Sony Interactive Entertainment DualSense Wireless Controller",
+    "padmode": 0
+  }
+}

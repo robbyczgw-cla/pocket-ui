@@ -59,6 +59,7 @@ impl Kind {
 /// Where the picture of a game is kept, whether or not it is there yet. The same stem rule as the box art
 /// (`covers::cover_path`).
 pub fn path(data_dir: &Path, kind: Kind, system: &str, rom: &Path) -> PathBuf {
+    let system = crate::region_pairs::own_system(system, rom);
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
     data_dir.join(kind.folder()).join(system).join(format!("{stem}.png"))
 }

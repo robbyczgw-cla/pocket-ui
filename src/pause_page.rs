@@ -20,6 +20,8 @@ use crate::text::{Face, Text};
 use crate::touch::{Area, HitMap};
 use crate::type_scale;
 
+/// The dark rim round the selected row's paper pill in the light appearance (`paint_main`), in pixels.
+const SELECT_RIM: i32 = 3;
 /// Retro's pause menu: how far a row's name and value end before its window's right edge (the selection bar ends
 /// three frame pixels in, the text three more), and the gap between the rows' window and the preview window.
 pub const RETRO_ROW_END: i32 = 6 * retro::U;
@@ -75,7 +77,7 @@ pub fn trouble_line(c: &mut Canvas, text: &mut Text, line: &str) -> i32 {
     let first = kit::header_bottom(c.h) + px * 2 / 3 + rise;
     c.disc(x + 8, first - px * 3 / 10, 8, crate::palette::ALERT);
     for (i, l) in lines.iter().enumerate() {
-        text.draw(c, Face::Body, SMALL, x + 28, first + i as i32 * line_h, 0xffffff, l);
+        text.draw(c, Face::Body, SMALL, x + 28, first + i as i32 * line_h, pal().pick(0xffffff, pal().text), l);
     }
     first + (lines.len() as i32 - 1) * line_h + px / 3
 }
@@ -87,14 +89,29 @@ pub fn menu_note(c: &mut Canvas, text: &mut Text, note: &str, room: i32) {
     let line_h = SMALL as i32 * 4 / 3;
     let top = c.h / 2 - (lines.len() as i32 - 1) * line_h / 2;
     for (i, line) in lines.iter().enumerate() {
-        text.draw_right(c, Face::Body, SMALL, c.w - PAD - BTN_PAD, top + i as i32 * line_h, 0xcccccc, line);
+        text.draw_right(c, Face::Body, SMALL, c.w - PAD - BTN_PAD, top + i as i32 * line_h, page_note(), line);
     }
 }
 
 /// `msg` in the middle of the box (x, y, w, h).
-fn centered(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i32), msg: &str) {
-    let tw = text.width(Face::Body, FONT, msg);
-    text.draw(c, Face::Body, FONT, x + (w - tw) / 2, y + h / 2 + type_scale::mid(FONT), pal().text, msg);
+/// A size or two smaller where it is wider than the box ("Desde el principio" ran over Retro's frame at Large text).
+fn centered(c: &mut Canvas, text: &mut Text, (x, y, w, h): (i32, i32, i32, i32), msg: &str, color: u32) {
+    let (px, msg) = text.fit_sizes(Face::Body, &[FONT, FONT * 5 / 6, FONT * 2 / 3, SMALL * 5 / 6], msg, w - 32);
+    let tw = text.width(Face::Body, px, &msg);
+    text.draw(c, Face::Body, px, x + (w - tw) / 2, y + h / 2 + type_scale::mid(px), color, &msg);
+}
+
+/// The quiet lines on the page itself (under the window, beside the rows, Quit's words): Linux's light grey on its
+/// always dark menu; in Android's light appearance (its player follows the app's) the page's secondary text, as the
+/// grey all but vanished on the paper (27.11.2026).
+fn page_note() -> u32 {
+    pal().pick(0xcccccc, pal().dust)
+}
+
+/// The words in the window without a picture ("From the start", "Empty"): the window is black in both appearances, so
+/// they are the dark appearance's text always; the light one's dark text was all but invisible on it (27.11.2026).
+fn on_window() -> u32 {
+    crate::palette::scoped(0, || pal().text)
 }
 
 // ---- The main page ----
@@ -190,6 +207,8 @@ pub struct MainOut {
     pub rows: Vec<Area>,
     pub picture: Option<(i32, i32, i32, i32)>,
     pub slots: Option<SlotsAt>,
+    /// The window's black inside (x, y, w, h), where the picture or its words go.
+    pub window: Option<(i32, i32, i32, i32)>,
     /// The line under the window: its left edge, width and first baseline, and how wide it may wrap.
     note_at: Option<(i32, i32, i32, i32)>,
     list_w: i32,
@@ -304,18 +323,21 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &MainPage) -> MainOut {
                 i32::MAX / 2
             };
             let full = if arrows { format!("‹ {name} ›") } else { name.clone() };
-            // Whole when it fits; else the name alone, cut short (the arrows are in the hint bar's "Estado").
+            // Whole when it fits; else the name alone (the arrows are in the hint bar's "Estado"), a size or two smaller
+            // before it is ever cut short (0.8 check video on the Brick: "Load From the…").
             if text.width(Face::Body, FONT, &full) <= room {
-                full
+                (FONT, full)
             } else {
-                text.fit(Face::Body, FONT, name, room.max(0))
+                text.fit_sizes(Face::Body, &[FONT, FONT * 5 / 6, FONT * 2 / 3, SMALL * 5 / 6], name, room.max(0))
             }
         });
-        let chip_w = chip.as_ref().map_or(0, |t| SMALL as i32 / 2 + text.width(Face::Body, FONT, t));
+        let (chip_px, chip) = chip.map_or((FONT, None), |(px, t)| (px, Some(t)));
+        let chip_w = chip.as_ref().map_or(0, |t| SMALL as i32 / 2 + text.width(Face::Body, chip_px, t));
         // A row that opens a page ends in the drawn angle on every row: Retro's at the window's right edge, as a
         // Settings list's; the plain look's after the name, inside the selected pill.
         let angle_w = if row.opens { SMALL as i32 / 2 + text.width(Face::Body, FONT, ">") } else { 0 };
-        let fg = if i == sel { pal().ink } else if !row.enabled { if retro { pal().off } else { 0x7f7f7f } } else if retro { pal().text } else { 0xffffff };
+        // Barlow: Linux's white and grey on its always dark menu; Android's light appearance the page's own (27.11.2026).
+        let fg = if i == sel { pal().ink } else if !row.enabled { if retro { pal().off } else { 0x7f7f7f } } else if retro { pal().text } else { pal().pick(0xffffff, pal().text) };
         if retro {
             if i == sel {
                 retro::bar(c, pad + 3 * u, y + 2, list_w - 6 * u, step - 4);
@@ -325,8 +347,13 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &MainPage) -> MainOut {
             let label = text.fit(Face::Body, FONT, label, pad + list_w - RETRO_ROW_END - text_x - angle_w);
             text.draw(c, Face::Body, FONT, text_x, baseline, fg, &label);
         } else if i == sel {
-            crate::nav_probe::focus(c, (pad, y, label_w + chip_w + angle_w + 2 * BTN_PAD, step));
-            c.round_rect(pad, y, label_w + chip_w + angle_w + 2 * BTN_PAD, step, step / 2, pal().select);
+            let pill_w = label_w + chip_w + angle_w + 2 * BTN_PAD;
+            crate::nav_probe::focus(c, (pad, y, pill_w, step));
+            // Light: the white paper pill on the paper page all but vanished (Android, 27.11.2026); a dark rim holds it.
+            if pal().is_light() {
+                c.round_rect(pad - SELECT_RIM, y - SELECT_RIM, pill_w + 2 * SELECT_RIM, step + 2 * SELECT_RIM, step / 2 + SELECT_RIM, pal().label_dust);
+            }
+            c.round_rect(pad, y, pill_w, step, step / 2, pal().select);
             text.draw(c, Face::Body, FONT, pad + BTN_PAD, baseline, pal().ink, label);
         } else {
             text.draw(c, Face::Body, FONT, pad + BTN_PAD, baseline, fg, label);
@@ -337,9 +364,9 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &MainPage) -> MainOut {
         }
         if let Some(chip) = chip {
             // Its arrows drawn, as every list's (`kit::row_value`).
-            let (x, color) = (text_x + label_w + SMALL as i32 / 2, if i == sel { pal().label_dust } else if retro { pal().dust } else { 0x9a9a9a });
-            let right = x + text.width(Face::Body, FONT, &chip);
-            kit::row_value_in(c, text, FONT, right, baseline, &chip, (color, color));
+            let (x, color) = (text_x + label_w + SMALL as i32 / 2, if i == sel { pal().label_dust } else if retro { pal().dust } else { pal().pick(0x9a9a9a, pal().dust) });
+            let right = x + text.width(Face::Body, chip_px, &chip);
+            kit::row_value_in(c, text, chip_px, right, baseline, &chip, (color, color));
         }
     }
 
@@ -373,6 +400,7 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &MainPage) -> MainOut {
         }
         c.rect(ox + r, oy + r, hw, hh, 0x000000);
         crate::shares::mark("pause-preview", ox + r, oy + r, hw, hh);
+        out.window = Some((ox + r, oy + r, hw, hh));
         match win.picture {
             Some(img) => {
                 // The picture keeps its shape inside the window.
@@ -380,7 +408,7 @@ pub fn paint_main(c: &mut Canvas, text: &mut Text, v: &MainPage) -> MainOut {
                 out.picture = Some((ox + r + (hw - iw) / 2, oy + r + (hh - ih) / 2, iw, ih));
                 c.blit_scaled(img, ox + r + (hw - iw) / 2, oy + r + (hh - ih) / 2, iw, ih);
             }
-            None => centered(c, text, (ox + r, oy + r, hw, hh), win.empty),
+            None => centered(c, text, (ox + r, oy + r, hw, hh), win.empty, on_window()),
         }
         let mut note_y = oy + hh + 2 * r + 48;
         if win.slots {
@@ -405,11 +433,11 @@ pub fn finish_main(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, v: &MainP
     if let (Some(win), Some((ox, ww, note_y, room))) = (&v.window, out.note_at) {
         for (k, line) in text.wrap_prose_at_most(Face::Body, SMALL, &win.note, room, 2).iter().enumerate() {
             let w = text.width(Face::Body, SMALL, line);
-            text.draw(c, Face::Body, SMALL, ox + (ww - w) / 2, note_y + k as i32 * type_scale::line(SMALL, 8), 0xcccccc, line);
+            text.draw(c, Face::Body, SMALL, ox + (ww - w) / 2, note_y + k as i32 * type_scale::line(SMALL, 8), page_note(), line);
         }
     }
     if let Some(msg) = v.quitting {
-        text.draw_right(c, Face::Body, FONT, c.w - pad - BTN_PAD, c.h / 2, 0xcccccc, msg);
+        text.draw_right(c, Face::Body, FONT, c.w - pad - BTN_PAD, c.h / 2, page_note(), msg);
         return;
     }
     if let Some(note) = &v.note {
@@ -794,6 +822,141 @@ mod tests {
         }
         assert!(include_str!("app_zoom.rs").contains("pocket_ui::pause_page::paint_zoom("));
         assert!(!include_str!("pause_list.rs").contains("fn paint"), "pause_list paints again");
+    }
+
+    /// Android's list menu follows the app's light appearance (Linux's is always dark): the words in the empty window
+    /// ("From the start", "Empty", "No picture", "None yet") were the light text on the always black window, and the
+    /// line under it, the one beside the rows, Quit's words, the save trouble line and Barlow's rows and values Linux's
+    /// white and greys on the paper, all but invisible (27.11.2026). No test painted the main page in the light
+    /// appearance. Every state, every set of colours, Barlow and Retro, dark and light: the words in the window, the
+    /// rows and the lines on the page keep WCAG AA (4.5:1) to what they stand on.
+    /// Barlow light, 27.11.2026: the selected row's white pill on the paper page was barely there (1.1:1). In every set of
+    /// colours its edge stands out from the page at least as a control must (WCAG 3:1); dark keeps its pill as it was.
+    #[test]
+    fn the_selected_row_stands_out_on_the_light_page() {
+        use crate::font_style::{for_this_thread, FontStyle, RetroLetters};
+        use crate::palette::contrast;
+        let _style = for_this_thread(FontStyle::Barlow, RetroLetters::default());
+        let (w, h) = (1240, 1080);
+        let mut text = Text::builtin();
+        text.set_translate(false);
+        let rows: Vec<MainRow> = ["Continue", "Save", "Save & quit"]
+            .iter().map(|&label| MainRow { label: label.into(), icon: retro::Icon::Continue, enabled: true, opens: false, chip: None, widest: None, arrows: false }).collect();
+        let hints = main_hints(None, false, false, false);
+        for &colours in crate::palette::Colours::ALL.iter() {
+            crate::palette::set_colours(colours);
+            for t in [0u8, 255] {
+                crate::palette::scoped(t, || {
+                    let mut px = vec![0u32; (w * h) as usize];
+                    let mut c = Canvas::new(&mut px, w as u32, h as u32);
+                    c.clear(pal().void);
+                    let page = MainPage { title: "Kirby's Adventure", battery: None, trouble: None, rows: &rows, sel: 1, window: None, quitting: None, note: None, hints: &hints };
+                    let out = paint_main(&mut c, &mut text, &page);
+                    let a = out.rows[1];
+                    // Along the row's middle line, from the page left of the pill into it: the strongest step from the page.
+                    let mid = (a.y + a.h / 2) as usize * w + 2;
+                    let edge = px[mid..mid + 120].iter().map(|&p| contrast(p, pal().void)).fold(0.0, f64::max);
+                    if t == 255 {
+                        assert!(edge >= 3.0, "{colours:?} light: the selected pill's edge is {edge:.2}:1 to the page");
+                    }
+                });
+            }
+        }
+        crate::palette::set_colours(crate::palette::Colours::default());
+    }
+
+    #[test]
+    fn the_window_s_words_and_the_lines_on_the_page_read_in_both_appearances() {
+        use crate::font_style::{for_this_thread, FontStyle, RetroLetters};
+        use crate::palette::contrast;
+        let (w, h) = (1240, 1080);
+        let mut text = Text::builtin().following_font();
+        text.set_translate(false);
+        let rows: Vec<MainRow> = [("Continue", retro::Icon::Continue, None), ("Save", retro::Icon::Save, Some("2")), ("Load", retro::Icon::Load, Some("From the start")), ("Earlier", retro::Icon::Load, Some("12 min ago")), ("Save & quit", retro::Icon::Quit, None)]
+            .iter().map(|&(label, icon, chip)| MainRow { label: label.into(), icon, enabled: true, opens: false, chip: chip.map(Into::into), widest: chip.map(Into::into), arrows: false }).collect();
+        // What a region stands on (its commonest colour) and its ink (the pixel furthest from that).
+        let read = |px: &[u32], (x, y, rw, rh): (i32, i32, i32, i32), ground: Option<u32>| {
+            let all: Vec<u32> = (y.max(0)..(y + rh).min(h)).flat_map(|py| (x.max(0)..(x + rw).min(w)).map(move |qx| px[(py * w + qx) as usize])).collect();
+            let ground = ground.unwrap_or_else(|| {
+                let mut counts = std::collections::HashMap::new();
+                for p in &all {
+                    *counts.entry(*p).or_insert(0) += 1;
+                }
+                *counts.iter().max_by_key(|(_, n)| **n).unwrap().0
+            });
+            let ink = all.iter().copied().max_by(|a, b| contrast(*a, ground).total_cmp(&contrast(*b, ground))).unwrap_or(ground);
+            (ink, ground, contrast(ink, ground))
+        };
+        let mut faults = Vec::new();
+        let mut check = |what: String, (ink, ground, k): (u32, u32, f64)| {
+            if k < 4.5 {
+                faults.push(format!("{what}: {ink:06x} on {ground:06x}, {k:.2}:1"));
+            }
+        };
+        for style in [FontStyle::Barlow, FontStyle::Retro] {
+            let _style = for_this_thread(style, RetroLetters::default());
+            let sets: Vec<(String, Box<dyn Fn()>)> = if style == FontStyle::Retro {
+                crate::retro::Colours::ALL.iter().map(|&k| (format!("{k:?}"), Box::new(move || crate::retro::set_colours(k)) as Box<dyn Fn()>)).collect()
+            } else {
+                crate::palette::Colours::ALL.iter().map(|&k| (format!("{k:?}"), Box::new(move || crate::palette::set_colours(k)) as Box<dyn Fn()>)).collect()
+            };
+            for (name, set) in sets {
+                set();
+                for t in [0u8, 255] {
+                    crate::palette::scoped(t, || {
+                        let look = format!("{style:?} {name} {}", if t == 0 { "dark" } else { "light" });
+                        let hints = main_hints(Some("Slot"), false, false, false);
+                        let paint = |text: &mut Text, page: &MainPage| {
+                            let mut px = vec![0u32; (w * h) as usize];
+                            let mut c = Canvas::new(&mut px, w as u32, h as u32);
+                            c.clear(pal().void);
+                            let out = paint_main(&mut c, text, page);
+                            let before = px.clone();
+                            let mut c = Canvas::new(&mut px, w as u32, h as u32);
+                            finish_main(&mut c, text, &mut HitMap::default(), page, &out);
+                            (px, before, out)
+                        };
+                        let strip_h = |_: i32| 28;
+                        for (empty, note) in [("From the start", "Starts over · Quit replaces it"), ("Empty", "Saves here"), ("No picture", "12 min ago"), ("None yet", "Kept while you play")] {
+                            let page = MainPage { title: "Kirby's Adventure", battery: None, trouble: Some("Saves don't reach the card"), rows: &rows, sel: 2,
+                                window: Some(Window { picture: None, empty, note: note.into(), slots: false, strip_h: &strip_h }),
+                                quitting: None, note: None, hints: &hints };
+                            let (px, _, out) = paint(&mut text, &page);
+                            let (x, y, ww, wh) = out.window.expect("the window");
+                            check(format!("{look} \"{empty}\" in the window"), read(&px, (x, y, ww, wh), Some(0x000000)));
+                            check(format!("{look} \"{note}\" under the window"), read(&px, (x - 40, y + wh + 40, ww + 80, kit::hint_bar_top(h) - (y + wh + 40)), None));
+                            // Barlow's rows (no icons, no frame), up to the window: their names and values. Retro's take
+                            // their colours from the palette's tokens (checked for AA there).
+                            if empty == "From the start" && style == FontStyle::Barlow {
+                                for (i, a) in out.rows.iter().enumerate().filter(|&(i, _)| i != page.sel) {
+                                    check(format!("{look} row {:?}", rows[i].label), read(&px, (a.x, a.y, a.w.min(x - 24 - a.x), a.h), Some(pal().void)));
+                                }
+                            }
+                        }
+                        // The save trouble line alone on the page, its words without the alert dot.
+                        {
+                            let mut px = vec![0u32; (w * h) as usize];
+                            let mut c = Canvas::new(&mut px, w as u32, h as u32);
+                            c.clear(pal().void);
+                            trouble_line(&mut c, &mut text, "Saves don't reach the card");
+                            check(format!("{look} the save trouble line"), read(&px, (PAD + BTN_PAD + 24, 0, w, h), Some(pal().void)));
+                        }
+                        // The line beside the rows (a row without the window), and Quit's words: what finish_main adds.
+                        for (quitting, note) in [(None, Some("Saved to slot 2".to_string())), (Some("Saving and quitting…"), None)] {
+                            let page = MainPage { title: "Kirby's Adventure", battery: None, trouble: None, rows: &rows, sel: 0, window: None, quitting, note, hints: &hints };
+                            let (px, before, _) = paint(&mut text, &page);
+                            let top = kit::hint_bar_top(h) as usize * w as usize;
+                            let new = (0..top).filter(|&i| px[i] != before[i]).map(|i| px[i])
+                                .max_by(|a, b| contrast(*a, pal().void).total_cmp(&contrast(*b, pal().void))).unwrap_or(pal().void);
+                            check(format!("{look} {}", if quitting.is_some() { "Quit's words" } else { "the line beside the rows" }), (new, pal().void, contrast(new, pal().void)));
+                        }
+                    });
+                }
+            }
+        }
+        crate::palette::set_colours(crate::palette::Colours::Warm);
+        crate::retro::set_colours(crate::retro::Colours::Cocoa);
+        assert!(faults.is_empty(), "{} pause page lines don't read:\n{}", faults.len(), faults.join("\n"));
     }
 
     #[test]

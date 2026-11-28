@@ -97,7 +97,8 @@ impl Files {
 #[cfg(any(target_os = "linux", target_os = "emscripten", all(target_os = "android", feature = "handheld")))]
 pub fn scan(systems: &[crate::library::System]) -> HashSet<PathBuf> {
     let mut files = Files::default();
-    systems.iter().flat_map(|s| s.games.iter().map(move |g| (&s.name, &g.path)))
+    // Each game as its folder's system (`region_pairs`: a game in `genesis/` keeps its states there).
+    systems.iter().flat_map(|s| s.games.iter().map(move |g| (s.own_id(&g.path), &g.path)))
         .filter_map(|(system, rom)| {
             let base = crate::slots::base(system, rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default());
             (files.of(system, rom, &base) || (system == "nds" && files.of(system, rom, &crate::ds::state_base(&base, "dsperate")))).then(|| rom.clone())

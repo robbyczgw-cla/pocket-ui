@@ -91,7 +91,8 @@ Sleep works in two stages, both configurable under Settings → System → **Sle
   instead. When **Off**, no wake alarm is ever scheduled.
 - **Low battery:** at 5% on battery, a brief alert appears on the shelf and in pocket-core games. At 2%, your Pocket
   saves the running game and powers off cleanly, even from light sleep, so progress is never lost to a dead battery.
-  Skipped while charging. On an R36S, a reading of 2% or less at 3.30 V or higher is ignored by this safeguard.
+  Skipped while charging. The safeguard also ignores a reading of 2% or less if the battery still reads
+  3.70 V or higher (3.30 V on an R36S).
 - If an OS sleep block prevents suspend, the screen stays dark (press any button to wake); pressing Power still suspends
   manually.
 - If suspend fails, the screen stays dark and retries after 4, 8, 16, then every 30 minutes.

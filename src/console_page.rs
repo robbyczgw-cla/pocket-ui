@@ -254,7 +254,7 @@ impl Page {
         if self.sources.is_some() {
             let title = text.fit(Face::Title, 67, "Sources", full_w - corner_w);
             text.draw(c, Face::Title, 67, MARGIN, TITLE_BASE, pal().text, &title);
-            let sub = text.fit(Face::Body, 28, &console.name, full_w);
+            let sub = text.fit(Face::Body, 28, consoles::shown_name(console), full_w);
             text.draw(c, Face::Body, 28, MARGIN, HEAD_BASE, look.dim, &sub);
             let at = self.sources.unwrap_or(0);
             let (height, view) = scrolled(c, BODY_TOP, c.h - BODY_BOTTOM_GAP, at, look.bg, |body, y0| paint_sources(body, text, console, y0));
@@ -265,9 +265,10 @@ impl Page {
         } else {
             // A complete system name in the existing title slot: one size smaller, then a known short alias.
             let room = full_w - corner_w;
-            let name = if text.width(Face::Title, 50, &console.name) > room {
-                console.aka.iter().min_by_key(|name| name.len()).unwrap_or(&console.name)
-            } else { &console.name };
+            let shown = consoles::shown_name(console);
+            let name = if text.width(Face::Title, 50, shown) > room {
+                console.aka.iter().map(String::as_str).min_by_key(|name| name.len()).unwrap_or(shown)
+            } else { shown };
             let (px, title) = text.fit_sizes(Face::Title, &[67, 50], name, room);
             text.draw(c, Face::Title, px, MARGIN, TITLE_BASE, pal().text, &title);
             if let Some(h) = &console.lines.headline {

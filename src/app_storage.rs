@@ -427,7 +427,7 @@ impl App {
         if let Some(why) = self.delete_refused() {
             return Err(why.into());
         }
-        if !self.systems.iter().any(|s| s.name == system && s.games.iter().any(|g| g.path == path)) || std::fs::symlink_metadata(&path).is_err() {
+        if !self.systems.iter().any(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system) && s.games.iter().any(|g| g.path == path)) || std::fs::symlink_metadata(&path).is_err() {
             return Err("That game is not on the Pocket any more.".into());
         }
         if !game_files::can_delete(&path) {
@@ -705,7 +705,7 @@ impl App {
         let Some(rest) = state.strip_prefix("card-manage:") else { return false };
         let parts: Vec<&str> = rest.split(':').collect();
         let (sys, name, mode) = (parts.first().copied().unwrap_or(""), parts.get(1).copied().unwrap_or(""), parts.get(2).copied().unwrap_or("row"));
-        let found = self.systems.iter().position(|s| s.name == sys).and_then(|s| {
+        let found = self.systems.iter().position(|s| pocket_ui::region_pairs::same_shelf(&s.name, &sys)).and_then(|s| {
             let g = self.systems[s].games.iter().position(|g| g.name.to_lowercase().contains(&name.to_lowercase()))?;
             Some((s, g))
         });

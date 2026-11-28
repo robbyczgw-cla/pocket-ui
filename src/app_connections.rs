@@ -59,12 +59,20 @@ struct Back {
 }
 
 /// The catalog's games for the index, with what the player's EmulationStation gamelists add (a developer, a
-/// publisher, a genre, a year). On Curator's thread.
-pub(crate) fn entries(catalog: &Catalog, gamelist: &pocket_ui::gamelist::Index) -> Vec<connections::Entry> {
+/// publisher, a genre, a year) and what ScreenScraper said of them (its series, `familles`, after the game data's, and
+/// the number in it, `numeros`: read from its cache, `screenscraper::series_of`, one file per system, never asked for).
+/// On Curator's thread.
+pub(crate) fn entries(catalog: &Catalog, gamelist: &pocket_ui::gamelist::Index, data_dir: &std::path::Path) -> Vec<connections::Entry> {
+    let mut scraped: std::collections::HashMap<String, std::collections::HashMap<String, (Vec<String>, Option<u32>)>> = std::collections::HashMap::new();
     catalog
         .games
         .iter()
         .map(|f| {
+            let ss = scraped.entry(f.system.clone()).or_insert_with(|| pocket_ui::screenscraper::series_of(data_dir, &f.system));
+            let stem = f.path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+            let (families, number) = ss.get(stem).cloned().unwrap_or_default();
+            let mut series = f.series.clone();
+            series.extend(families.into_iter().filter(|s| !f.series.contains(s)));
             let e = gamelist.get(&f.system, &f.path);
             let more = |own: &[String], es: Option<&String>| own.iter().cloned().chain(es.filter(|s| !s.is_empty()).cloned()).collect::<Vec<_>>();
             connections::Entry {
@@ -75,9 +83,10 @@ pub(crate) fn entries(catalog: &Catalog, gamelist: &pocket_ui::gamelist::Index) 
                 values: [
                     more(&f.developers, e.map(|e| &e.developer)),
                     more(&f.publishers, e.map(|e| &e.publisher)),
-                    f.series.clone(),
+                    series,
                     more(&f.genres, e.map(|e| &e.genre)),
                 ],
+                number,
             }
         })
         .collect()
@@ -187,6 +196,9 @@ impl App {
         let Some(open) = self.card.as_mut() else { return };
         let entry = self.gamelist.index.get(&open.system, &open.path);
         open.refresh_connections(&self.curator.connections.index, entry.map(|e| e.as_ref()));
+        // The facts were rebuilt from their sources: ScreenScraper's join them again (`app_screenscraper`).
+        let (system, path) = (open.system.clone(), open.path.clone());
+        self.screenscraper_card_facts(&system, &path);
     }
 
     /// A on a fact of the card: its list, as a shelf of the player's games. B comes back to the card.
@@ -244,7 +256,7 @@ impl App {
             .systems
             .iter()
             .enumerate()
-            .find(|(_, s)| s.name == system)
+            .find(|(_, s)| pocket_ui::region_pairs::same_shelf(&s.name, &system))
             .and_then(|(s, sys)| sys.games.iter().position(|g| g.path == path).map(|g| (s, g)));
         let Some((s, g)) = game else {
             // The originating game went away while its connection list was open. No saved index is safe now.
@@ -261,12 +273,12 @@ impl App {
         self.screen = match b.screen {
             Screen::Games(_) => b
                 .screen_system
-                .and_then(|name| self.systems.iter().position(|s| s.name == name))
+                .and_then(|name| self.systems.iter().position(|s| pocket_ui::region_pairs::same_shelf(&s.name, &name)))
                 .map_or(Screen::Home, Screen::Games),
             other => other,
         };
         self.home_item = b.home_item.and_then(|p| match p {
-            Picked::System(name) => self.systems.iter().position(|s| s.name == name).map(Item::System),
+            Picked::System(name) => self.systems.iter().position(|s| pocket_ui::region_pairs::same_shelf(&s.name, &name)).map(Item::System),
             Picked::Game(path) => self.recents.list.iter().position(|r| r.path == path).map(Item::Recent),
             Picked::Other(i) => Some(i),
         });
@@ -280,6 +292,19 @@ impl App {
         self.cabinet.dirty = true;
         self.show_card(item, system, name, path);
         true
+    }
+
+    /// The shelves by series were made again (`app_series::series_make`): a way back to a series follows it to its new
+    /// place, or goes Home when it is gone.
+    pub(crate) fn connections_series_moved(&mut self, map: &dyn Fn(usize) -> Option<usize>) {
+        for b in &mut self.curator.connections.back {
+            if let Screen::Series(i) = b.screen {
+                b.screen = map(i).map_or(Screen::Home, Screen::Series);
+            }
+            if let Some(Picked::Other(Item::Series(i))) = b.home_item {
+                b.home_item = map(i).map(|n| Picked::Other(Item::Series(n)));
+            }
+        }
     }
 
     /// A rescan may reorder every system and game. Remap the lists that outlive the swap once, by ROM path.
@@ -315,7 +340,7 @@ impl App {
     /// the second configuration changes system order, available games, or removes the originating system entirely.
     pub(crate) fn connection_rescan_snapshot(&mut self, system: &str, title: &str) {
         self.theme = pocket_ui::settings::Theme::Split;
-        let s = self.systems.iter().position(|s| s.name == system).expect("snapshot's system");
+        let s = self.systems.iter().position(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system)).expect("snapshot's system");
         let g = self.systems[s]
             .games
             .iter()
@@ -333,7 +358,7 @@ impl App {
         let origin = fresh
             .iter()
             .enumerate()
-            .find(|(_, sys)| sys.name == system)
+            .find(|(_, sys)| pocket_ui::region_pairs::same_shelf(&sys.name, &system))
             .and_then(|(s, sys)| sys.games.iter().position(|g| g.path == path).map(|g| (s, g)));
         let surviving = before.iter().filter(|p| fresh.iter().any(|s| s.games.iter().any(|g| &g.path == *p))).count();
         self.library_rescanned(fresh, None);

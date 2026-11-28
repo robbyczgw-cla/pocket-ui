@@ -63,7 +63,11 @@ fn spanish(en: &str) -> String {
 }
 
 /// The rows of Settings → Look → Cozy extras and System → Sleep & power, in their order.
-const COZY: [&str; 17] = ["TV on the cabinet", "TV plays the game", "Stickers on cases", "Printed discs", "Playful cases", "Sealed new games", "Old-TV switch-on", "Old-TV switch-off", "Handheld switch-on", "Power lights", "Light by time of day", "Evening TV glow", "Decorations", "Progress from saves", "Game connections", "Rediscover", "GBA console"];
+const COZY: [&str; 21] = ["TV on the cabinet", "TV plays the game", "Stickers on cases", "Printed discs", "Playful cases", "Sealed new games", "Old-TV switch-on", "Old-TV switch-off", "Handheld switch-on", "Power lights", "Light by time of day", "Evening TV glow", "Decorations", "Progress from saves", "Game connections", "Rediscover", "GBA console", "Mega Drive / Genesis", "SNES / Super Famicom", "NES / Famicom", "PC Engine / TurboGrafx-16"];
+/// The GBA console's row on Cozy extras (the console names follow it).
+fn gba_row() -> usize {
+    COZY.iter().position(|r| *r == "GBA console").unwrap()
+}
 const SLEEP: [&str; 5] = ["Screen off after", "Sleep after", "Switch off after sleeping", "Short press", "Hold"];
 
 /// The symbols, the name and L1/R1 at the top of category `g`'s list (`settings:<g>`, its first row): the name painted whole
@@ -167,7 +171,7 @@ fn every_choice_is_a_row_and_shows_whole() {
                         local.extend(s.faults.iter().map(|f| format!("{lang} {size} {text} {state}:{r}: {f}")));
                     }
                 }
-                let sp = shot(tmp, stub, &format!("cozy:{}::a", COZY.len() - 1), lang, size, text, true);
+                let sp = shot(tmp, stub, &format!("cozy:{}::a", gba_row()), lang, size, text, true);
                 if !sp.visible.iter().any(|line| line.contains("Game Boy Advance SP")) {
                     local.push(format!("{lang} {size} {text}: the full selected SP model name must be readable"));
                 }
@@ -433,4 +437,55 @@ fn the_handheld_switch_on_and_power_lights_rows_are_reached_and_switched_in_ever
         let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(tmp.join(&name).join("settings.json")).unwrap()).unwrap();
         assert_eq!(saved["extras"], serde_json::json!({ key: false }), "{row}: A switches it off and it is kept");
     }
+}
+
+/// 0.8: a console sold under regional names is named on Cozy extras, after the GBA console. Each row is reached with the
+/// D-pad, shows the start's name (outside America), Right and Left step through the names, and the choice is saved.
+#[test]
+fn the_console_name_rows_are_reached_with_the_dpad_and_their_choice_is_kept() {
+    let _guard = tempfile::tempdir().unwrap();
+    let tmp = _guard.path().to_path_buf();
+    std::fs::write(tmp.join("none.cfg"), "<systemList></systemList>").unwrap();
+    let stub = wayland(&tmp);
+    let mut failed = Vec::new();
+    for (row, key, start, right, left) in [
+        ("Mega Drive / Genesis", "megadrive", "Mega Drive", "genesis", "genesis"),
+        ("SNES / Super Famicom", "snes", "SNES", "snes-us", "sfc"),
+        ("NES / Famicom", "nes", "NES", "famicom", "famicom"),
+        ("PC Engine / TurboGrafx-16", "pcengine", "PC Engine", "tg16", "tg16"),
+    ] {
+        let r = COZY.iter().position(|c| *c == row).unwrap();
+        // From the GBA console down, as a player walks there.
+        let s = shot(&tmp, &stub, &format!("cozy:{}::{}", gba_row(), "d".repeat(r - gba_row())), "en", "640x480", "normal", false);
+        // The selected value stands between its arrows: "‹", the name, "›".
+        let selected = s.visible.windows(3).any(|w| w[0] == "‹" && w[1] == start && w[2] == "›");
+        if !s.visible.iter().any(|v| v == row) || !selected {
+            failed.push(format!("{row}: not shown whole with its start {start:?}: {:?}", s.visible));
+        }
+        failed.extend(s.faults.iter().map(|f| format!("{row}: {f}")));
+        for (keys, want) in [("r", right), ("l", left)] {
+            let state = format!("cozy:{r}::{keys}");
+            shot(&tmp, &stub, &state, "en", "640x480", "normal", false);
+            let data = tmp.join(format!("{}-en-640x480-normal", state.replace(':', "_")));
+            let kept: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(data.join("settings.json")).unwrap()).unwrap();
+            if kept["console_names"] != serde_json::json!({ key: want }) {
+                failed.push(format!("{row}: {keys} kept {} (want {key} = {want})", kept["console_names"]));
+            }
+        }
+    }
+    // A saved name is the shelf's from the start on: the list is read on a thread before the settings (`main`), and the
+    // Mega Drive's shelf said "Mega Drive" under a chosen Genesis until the first rescan (seen 26.11. on the snapshot).
+    let ok = Command::new("python3").env("POCKETUI_MOCK_NOW", FIXTURE_NOW)
+        .args(["-I", &format!("{ROOT}/scripts/curator-fake-library.py"), tmp.join("lib").to_str().unwrap(), "dark"])
+        .stdout(std::process::Stdio::null())
+        .status()
+        .expect("python3 for scripts/curator-fake-library.py");
+    assert!(ok.success());
+    let genesis = r#"{"onboarded": true, "theme": "shelf", "console_names": {"megadrive": "genesis"}}"#;
+    let s = shot_with(&tmp, &stub, "shelf:megadrive:shelf", "en", "1280x720", "normal", true, genesis, "-genesis");
+    if !s.visible.iter().any(|v| v == "Genesis") || s.visible.iter().any(|v| v == "Mega Drive") {
+        failed.push(format!("the shelf under a chosen Genesis: {:?}", s.visible));
+    }
+    drop(stub);
+    assert!(failed.is_empty(), "{}", failed.join("\n"));
 }

@@ -50,6 +50,33 @@ fn the_chosen_resolution_is_the_core_s_option_at_the_next_start() {
     }
 }
 
+#[test]
+fn dreamcast_resolution_configures_both_flycast_option_names() {
+    let dir = TestDir::new("android-dreamcast-resolution");
+    let core = Path::new("libflycast_libretro.so");
+    let rom = Path::new(KEY);
+    let load = || picture::Settings::load(&dir, "dreamcast", rom, Default::default());
+    let r = range(Class::Sm8250, "dreamcast");
+    let keys = ["flycast_internal_resolution", "reicast_internal_resolution"];
+    let saved = [(keys[1], "640x480")];
+    let start = |settings: &picture::Settings, previous: &[(&'static str, &'static str)]| {
+        let resolution = settings.start_resolution(r, core).expect("Dreamcast has a Resolution row");
+        let mut options = previous.to_vec();
+        resolution.place(&mut options);
+        options.sort_unstable_by_key(|(key, _)| *key);
+        options.into_iter().map(|(key, value)| (key.to_owned(), value.to_owned())).collect::<Vec<_>>()
+    };
+    let chosen = |value: &str| keys.map(|key| (key.to_owned(), value.to_owned()));
+
+    assert_eq!(start(&load(), &[]), chosen("1280x960"));
+    assert_eq!(start(&load(), &saved), [(keys[0].into(), "1280x960".into()), (keys[1].into(), "640x480".into())]);
+    for (factor, value) in [(1, "640x480"), (2, "1280x960")] {
+        load().set_resolution(factor).unwrap();
+        assert_eq!(start(&load(), &saved), chosen(value));
+    }
+    assert!(keys.iter().all(|key| crate::render_scale::CORE_KEYS.contains(key)));
+}
+
 /// Earlier states starts as Linux's does (Off for the big states) and a choice is kept; Restore defaults takes every
 /// choice of the console and the game away.
 #[test]

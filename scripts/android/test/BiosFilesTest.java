@@ -39,6 +39,15 @@ public class BiosFilesTest {
                     if(new File(target.getPath()+".part").exists())throw new AssertionError("Partial BIOS kept");
                 }
             }
+            // PC Engine CD's System Cards and the Game Boys' boot files: kept at their exact size, refused at any other.
+            for(String name:new String[]{"syscard3.pce","syscard2.pce","syscard1.pce","gexpress.pce","gb_bios.bin","gbc_bios.bin","gba_bios.bin"}) {
+                if(BiosFiles.size(name)==0)throw new AssertionError("Refused: "+name);
+                byte[] original=new byte[BiosFiles.size(name)];Arrays.fill(original,(byte)0x3c);
+                BiosFiles.install(root,name,new ByteArrayInputStream(original));
+                if(!Arrays.equals(original,Files.readAllBytes(new File(root,name).toPath())))throw new AssertionError(name);
+                try {BiosFiles.install(root,name,new ByteArrayInputStream(new byte[original.length-1]));throw new AssertionError("Bad size accepted: "+name);}
+                catch(IOException expected){}
+            }
             if(!BiosFiles.hasDreamcast(root))throw new AssertionError("Imported Dreamcast BIOS not usable");
             byte[] boot=Files.readAllBytes(new File(root,"dc/dc_boot.bin").toPath());
             try {
@@ -51,7 +60,7 @@ public class BiosFilesTest {
                 try {BiosFiles.install(root,name,new ByteArrayInputStream(new byte[0]));throw new AssertionError("Unsafe name accepted");}
                 catch(IOException expected){}
             }
-            System.out.println("BIOS: Saturn/PS1/Dreamcast sizes, private paths and replacement preservation passed"+(args.length>0?"; 66 shared-policy file-fault probes":""));
+            System.out.println("BIOS: Saturn/PS1/Dreamcast/PC Engine CD/boot screen sizes, private paths and replacement preservation passed"+(args.length>0?"; 66 shared-policy file-fault probes":""));
         }finally {
             try(java.util.stream.Stream<Path> paths=Files.walk(root.toPath())) {
                 paths.sorted(java.util.Comparator.reverseOrder()).forEach(p->{try{Files.delete(p);}catch(IOException e){throw new UncheckedIOException(e);}});

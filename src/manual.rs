@@ -120,7 +120,19 @@ pub fn pages() -> &'static [(&'static str, &'static str)] {
 }
 
 /// Pages of `docs/user/` that are not in the manual on the device, because they only make sense on a computer.
-pub const DESKTOP_ONLY: &[&str] = &["android-spike", "android-mvp"];
+/// The website's Devices pages (`devices`, `device-*`) are here too: they sum up and link for pocketui.xyz/docs.
+pub const DESKTOP_ONLY: &[&str] = &[
+    "android-spike",
+    "android-mvp",
+    "devices",
+    "device-retroid-mini-v2",
+    "device-retroid",
+    "device-odin-2",
+    "device-anbernic-h700",
+    "device-r36s",
+    "device-rk3566",
+    "device-android",
+];
 
 /// Pages of `docs/user/` the TrimUI Brick's manual leaves out: installing and running ROCKNIX, its other handhelds, the GAMES drive,
 /// coming from EmulationStation, ROCKNIX's systems and emulators, its safe mode and PC streaming (not on the Brick).
@@ -1747,6 +1759,8 @@ mod tests {
                 crate::i18n::Lang::It => "Italian",
                 crate::i18n::Lang::Ko => "Korean",
                 crate::i18n::Lang::Zh => "Chinese",
+                crate::i18n::Lang::Vi => "Vietnamese",
+                crate::i18n::Lang::Ja => "Japanese",
             };
             assert!(line.contains(english), "{lang:?} is missing: {line}");
         }

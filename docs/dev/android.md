@@ -34,6 +34,15 @@ intent table and build/emulator scripts are documented in [ANDROID-MVP.md](../AN
 N64, PSP and DS remain experimental: `android/src/play_cards.rs` supplies the translated status
 for phone shelves, game cards and Controls; `src/android_02_tests.rs` covers all phone looks and Continue.
 
+The hardware cores render into a colour texture in a shared EGL context. The player draws that texture with the
+same Picture shader as software cores, respecting the core's origin and RGB order. GLES fences confirm GPU writes and reads across the two contexts. A GPU copy retains the last delivered picture
+even if a core writes into its framebuffer and then duplicates. If the driver cannot allocate the shared picture
+or use the fence API on an otherwise working context, the session falls back to CPU capture. Mipmapped effects use a GPU copy sized to the visible area and leave the core framebuffer untouched. The
+player reads pixels for CPU consumers such as pause, moment previews and screenshots. The log's
+`hw_cpu_captures` counter distinguishes those reads from normal play. The player applies its CPU affinity before PPSSPP's bootstrap run so its emulation thread inherits it during boot or Continue.
+A replacement window can use the same EGL share group. If the driver replaces the context itself, the
+dedicated player process closes and the shelf can reopen the last saved moment.
+
 `platform/android_audio_timing.rs` checks presentation estimates before scheduled UI sounds use
 them. `AudioRoute.java` confirms the stream's local output by device ID; contradictory timestamps
 on local Fast routes fall back to Written−Read, while raw values remain in diagnostics. The

@@ -3,3 +3,8 @@ android/patches/clownmdemu-restore-palette.patch whitespace=cr-at-eol,-space-bef
 
 # Blank context lines in unified patches carry a required space prefix.
 *.patch whitespace=-blank-at-eol
+
+# The reader inventory's generated lists (scripts/reader-inventory.py --write; the merge queue refreshes them after a train's
+# rebase): two branches' lines are unioned instead of stopping a rebase or a release pick (25.11.2026, gate false reds).
+tests/fixtures/reader-inventory.tsv merge=union
+tests/fixtures/reader-coverage.tsv merge=union

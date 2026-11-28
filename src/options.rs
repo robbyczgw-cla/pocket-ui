@@ -82,10 +82,10 @@ impl Group {
     }
 }
 
-/// Rows that belong to a console's own values: Resolution and Mode 7 are there only for some consoles on some handhelds (`render_scale`, `mode7_hd`),
+/// Rows that belong to a console's own values: Resolution, Mode 7 and Widescreen are there only for some consoles on some handhelds (`render_scale`, `mode7_hd`, `dc_widescreen`),
 /// so with no values (no console known) it is not counted or shown.
 fn without_console(s: &Setting, values: Option<&GameSettings>) -> bool {
-    values.is_some() || (s.key != crate::render_scale::KEY && s.key != crate::mode7_hd::KEY)
+    values.is_some() || (s.key != crate::render_scale::KEY && s.key != crate::mode7_hd::KEY && s.key != crate::dc_widescreen::KEY)
 }
 
 /// LCD colours also show under Look = Custom while Effect is the LCD grid (the GBA's), not only under the LCD grid Look.

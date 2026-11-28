@@ -28,6 +28,13 @@ static PLAYING: Mutex<Option<(Instant, PathBuf, String)>> = Mutex::new(None);
 static RELEASED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 /// Which start the scene's thread lets go: a cancelled one's thread lets nothing go.
 static LAUNCH_TURN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// The emulator app of the game out in another app (`spawn_app_game`): a quick way back from Azahar asks for its setup.
+static APP_PACKAGE: Mutex<Option<String>> = Mutex::new(None);
+/// Why the Activity didn't open the emulator app after the start's scene (`watch_app_start`), for `game_exited`'s notice.
+static APP_START_FAILED: Mutex<Option<Option<String>>> = Mutex::new(None);
+/// The start (`LAUNCH_TURN`) the Activity handed to another emulator app: this window back in focus is the way back, also
+/// when the app closed before this window went (Azahar before its setup, night QA 27.11.2026: no `resumed` came). 0: none.
+static APP_HANDED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 fn bridge(name: &str, args: &[&str]) -> String {
     pocket_ui::platform::android::strings(name, args).unwrap_or_default()
@@ -105,6 +112,20 @@ fn android_main(app: AndroidApp) {
     super::main();
 }
 
+/// A game handed to another emulator app (`watch_app_start`) and this window has the focus again: the app is gone, also
+/// when Android brought no `resumed` (it closed before this window went).
+fn app_back_in_focus() -> bool {
+    use std::sync::atomic::Ordering;
+    let handed = APP_HANDED.load(Ordering::SeqCst);
+    handed != 0 && handed == LAUNCH_TURN.load(Ordering::SeqCst) && PLAYING.lock().unwrap_or_else(|p| p.into_inner()).is_some()
+}
+
+/// A game is out in the player and the player left a start error (`save_trouble::report_start_failed`): it is over.
+fn start_error_waiting() -> bool {
+    PLAYING.lock().unwrap_or_else(|p| p.into_inner()).is_some()
+        && pocket_ui::platform::android::data_dir().join("player-start-error").is_file()
+}
+
 /// The first start's look at the device (`android_first_start::look`), on a thread: at start, and again when the view comes
 /// back with the right to read the files it hadn't before (All files access given in Android's settings meanwhile).
 fn look_for_games() {
@@ -148,10 +169,12 @@ pub(crate) fn add_games_folder(folder: &Path) {
     }
 }
 
-/// The App's event loop on this Activity (`main` builds it).
+/// The App's event loop on this Activity (`main` builds it). The volume keys are the App's, as on Linux (`quick.rs`):
+/// Vol± steps the media volume with pocket-ui's own level bar, START + Vol the brightness, and Android's volume panel
+/// stays away (winit leaves them to Android unless told).
 pub(crate) fn attach(builder: &mut EventLoopBuilder<UserEvent>) {
     if let Some(app) = ANDROID.lock().unwrap_or_else(|p| p.into_inner()).take() {
-        builder.with_android_app(app);
+        builder.with_android_app(app).handle_volume_keys();
     }
 }
 
@@ -294,21 +317,15 @@ fn game_key(path: &Path, system: &str, core: &str) -> Option<String> {
     pocket_ui::android_handheld::game_key(path, system, core == "gambatte")
 }
 
-/// The BIOS files of `system` in the ROMs folders' `bios` (any case), as the Mobile view hands them over (`bios_file`):
-/// `[{"uri", "name"}]` for the player's own BIOS folder.
+/// The BIOS files of `system` in the ROMs folders' `bios` (any case; Dreamcast's in `bios/dc` too), as the Mobile view hands
+/// them over (`android_handheld::bios_files`): `[{"uri", "name"}]` for the player's own BIOS folder.
 fn bios_for(system: &str) -> String {
-    let mut list = Vec::new();
     let data = std::env::var_os("POCKETUI_DATA").map(PathBuf::from).unwrap_or_default();
-    for root in pocket_ui::android_handheld::roms_roots(Path::new("/storage")).into_iter().chain(pocket_ui::android_first_start::kept_folders(&data)) {
-        let Some(dir) = pocket_ui::android_handheld::child_ci(&root, "bios") else { continue };
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
-        for e in entries.filter_map(|e| e.ok()) {
-            let name = e.file_name().to_string_lossy().into_owned();
-            if pocket_ui::document_library::bios_file(&name).is_some_and(|b| b.0 == system) {
-                list.push(serde_json::json!({"uri": format!("file://{}", e.path().display()), "name": name}));
-            }
-        }
-    }
+    let roots: Vec<PathBuf> = pocket_ui::android_handheld::roms_roots(Path::new("/storage")).into_iter().chain(pocket_ui::android_first_start::kept_folders(&data)).collect();
+    let list: Vec<_> = pocket_ui::android_handheld::bios_files(system, &roots)
+        .into_iter()
+        .map(|(file, name)| serde_json::json!({"uri": format!("file://{}", file.display()), "name": name}))
+        .collect();
     serde_json::Value::from(list).to_string()
 }
 
@@ -386,6 +403,9 @@ fn playing_note() -> PathBuf {
 /// the player is made ready at once and comes when the scene is over or skipped.
 pub(crate) fn spawn_game(proxy: EventLoopProxy<UserEvent>, run: &Run, env: &[(&str, String)]) -> Option<i32> {
     *PROXY.lock().unwrap_or_else(|p| p.into_inner()) = Some(proxy.clone());
+    // Only a game in another emulator app names its app (`spawn_app_game`): a quick way back from our own player is no Azahar's.
+    *APP_PACKAGE.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    APP_HANDED.store(0, std::sync::atomic::Ordering::SeqCst);
     let failed = |why: &str| {
         log::warn!("launch: {why}");
         let _ = proxy.send_event(UserEvent::GameExited { secs: 0, ok: false, pgid: None, start: Default::default(), moments: false });
@@ -462,6 +482,9 @@ fn spawn_app_game(proxy: EventLoopProxy<UserEvent>, run: &Run, package: &str, en
         bridge("holdLaunch", &[]);
     }
     let path = run.path.to_string_lossy().into_owned();
+    // Android extras: the pause menu over the app (PadWatch) speaks the language of now; written on a thread.
+    let texts = pocket_ui::android_extras::texts_tsv(pocket_ui::i18n::tr);
+    std::thread::spawn(move || extras_action("texts", &texts));
     let said = bridge("launchApp", &[&path, package, profile]);
     if !said.is_empty() {
         log::warn!("launch: {said}");
@@ -471,6 +494,9 @@ fn spawn_app_game(proxy: EventLoopProxy<UserEvent>, run: &Run, package: &str, en
     }
     log::info!("launch: {} {path} in {package} hold {hold:?}", run.system);
     *PLAYING.lock().unwrap_or_else(|p| p.into_inner()) = Some((Instant::now(), run.path.clone(), run.system.clone()));
+    *APP_PACKAGE.lock().unwrap_or_else(|p| p.into_inner()) = Some(package.to_string());
+    // This start's number: the watch after the scene acts only while it is the start (`watch_app_start`).
+    let turn = LAUNCH_TURN.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
     let unix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     let _ = pocket_ui::fsutil::write_atomic(&playing_note(), serde_json::json!({"path": run.path, "system": run.system, "at": unix}).to_string().as_bytes());
     if let Some(until) = hold {
@@ -480,9 +506,48 @@ fn spawn_app_game(proxy: EventLoopProxy<UserEvent>, run: &Run, package: &str, en
                 std::thread::sleep(Duration::from_millis(5));
             }
             bridge("releaseLaunch", &[]);
+            watch_app_start(proxy, turn);
         });
+    } else {
+        std::thread::spawn(move || watch_app_start(proxy, turn));
     }
     None
+}
+
+/// After the start's scene the Activity hands the game to the emulator app on its own (`launchApp`), and that can still fail
+/// (`LaunchNote` FAILED, Android refusing the app): then the start ends here and the shelf says why
+/// (`android_handheld::app_start_failed`) instead of waiting for a game that never comes (lead 27.11.2026).
+fn watch_app_start(proxy: EventLoopProxy<UserEvent>, turn: u64) {
+    use std::sync::atomic::Ordering;
+    // Another start, or this one cancelled (`android_suspended`): not this watch's any more.
+    let current = || LAUNCH_TURN.load(Ordering::SeqCst) == turn;
+    let until = Instant::now() + Duration::from_secs(30);
+    while current() && Instant::now() < until && bridge("launchOnItsWay", &[]) == "true" {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    if !current() {
+        return;
+    }
+    if bridge("launchFailed", &[]) != "true" {
+        if bridge("launchOnItsWay", &[]) != "true" {
+            APP_HANDED.store(turn, Ordering::SeqCst);
+        }
+        return;
+    }
+    let file = pocket_ui::platform::android::data_dir().join(pocket_ui::android_handheld::APP_START_ERROR);
+    let why = std::fs::read_to_string(&file).ok();
+    let _ = std::fs::remove_file(&file);
+    log::warn!("launch: the emulator app wasn't opened ({why:?})");
+    *PLAYING.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    let _ = std::fs::remove_file(playing_note());
+    *APP_START_FAILED.lock().unwrap_or_else(|p| p.into_inner()) = Some(why);
+    let _ = proxy.send_event(UserEvent::GameExited { secs: 0, ok: false, pgid: None, start: Default::default(), moments: false });
+}
+
+/// `game_exited`'s notice for a start `watch_app_start` ended, once.
+pub(crate) fn take_app_start_error(name: &str) -> Option<String> {
+    let why = APP_START_FAILED.lock().unwrap_or_else(|p| p.into_inner()).take()?;
+    Some(pocket_ui::android_handheld::app_start_failed(name, why.as_deref()))
 }
 
 /// An Android game of the shelf (`android_games`): Android starts its app at once (no scene, as in the Mobile view); the way
@@ -515,6 +580,16 @@ pub(crate) fn app_cover(package: &str, path: &Path) {
     if !said.is_empty() {
         log::info!("android games: no cover for {package}: {said}");
     }
+}
+
+/// Settings → System → Android extras (`app_android_extras`): what Android gives now, as `Extras.status`'s JSON.
+pub(crate) fn extras_status() -> String {
+    bridge("extrasStatus", &[])
+}
+
+/// A press of the extras' page carried out by `Extras.action`: "" or why not.
+pub(crate) fn extras_action(what: &str, arg: &str) -> String {
+    bridge("extrasAction", &[what, arg])
 }
 
 /// Apps (PC streaming, tools) are Linux's; here they end at once.
@@ -553,6 +628,61 @@ pub(crate) fn unmetered_wifi() -> bool {
 
 pub(crate) fn open_mobile() {
     bridge("setView", &["mobile"]);
+}
+
+/// pocket-ui is Android's Home app (Settings → System → Home app), as last read (`refresh_home_app`).
+static HOME_APP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) fn home_app_held() -> bool {
+    HOME_APP.load(std::sync::atomic::Ordering::Relaxed)
+}
+/// Asks Android whether pocket-ui is its Home app, off the UI thread (a call into Android's role service).
+fn refresh_home_app() {
+    std::thread::spawn(|| {
+        let held = bridge("homeAppHeld", &[]) == "true";
+        if HOME_APP.swap(held, std::sync::atomic::Ordering::Relaxed) != held {
+            log::info!("home app: pocket-ui {}", if held { "is Android's Home app" } else { "is not the Home app" });
+        }
+    });
+}
+/// Settings → System → Home app: Android's question "pocket-ui as your Home app?" (Android 10 and newer), or its own page of
+/// Home apps where it has no such question or pocket-ui already is the one (to choose another). Answered when this view is
+/// in front again (`android_resumed`).
+pub(crate) fn ask_home_app() {
+    let said = bridge("askHomeApp", &[]);
+    if !said.is_empty() {
+        log::warn!("home app: {said}");
+    }
+}
+
+/// pocket-ui is off Android's battery optimisation (Settings → System → Run in background), as last read
+/// (`refresh_battery_exempt`). Android then keeps its network and jobs for it with the screen off (Doze); stock Android
+/// still ends a background game under memory pressure either way (emulator, 26.11.2026: `am kill` ended the player with
+/// and without), so progress never hangs on it: the player saves at every leave (`nativeSuspend`).
+static BATTERY_EXEMPT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) fn battery_exempt() -> bool {
+    BATTERY_EXEMPT.load(std::sync::atomic::Ordering::Relaxed)
+}
+/// Reads Android's answer again (a quick call into its power service); true when it changed, so the row repaints.
+fn read_battery_exempt() -> bool {
+    let exempt = bridge("batteryExempt", &[]) == "true";
+    let changed = BATTERY_EXEMPT.swap(exempt, std::sync::atomic::Ordering::Relaxed) != exempt;
+    if changed {
+        log::info!("battery optimisation: pocket-ui {}", if exempt { "runs in the background" } else { "is optimised by Android" });
+    }
+    changed
+}
+/// Off the UI thread, as the view comes to the front (Android's settings may have changed it meanwhile).
+fn refresh_battery_exempt() {
+    std::thread::spawn(read_battery_exempt);
+}
+/// Settings → System → Run in background: Android's own question, or pocket-ui's App info when it already is off the
+/// optimisation (to set it back). Android's dialog takes the focus; the row reads the answer when the
+/// focus is back (`WindowEvent::Focused`).
+pub(crate) fn ask_battery_exempt() {
+    let said = bridge("askBatteryExempt", &[]);
+    if !said.is_empty() {
+        log::warn!("battery optimisation: {said}");
+    }
 }
 
 /// Painting time per frame, in logcat every 5 s (`paint:`): frames, the frame as the wall clock saw it (from the start of
@@ -681,8 +811,9 @@ impl App {
     pub(crate) fn android_window_event(&mut self, el: &ActiveEventLoop, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::KeyboardInput { event: KeyEvent { physical_key, state, repeat, .. }, .. } => {
-                // The App repeats held buttons itself (`repeat_after`).
-                if *repeat {
+                // The App repeats held buttons itself (`repeat_after`). An F-key the pause menu meant for another emulator
+                // does nothing here (`emulator_f_key`).
+                if *repeat || emulator_f_key(physical_key) {
                     return true;
                 }
                 let button = match physical_key {
@@ -692,6 +823,9 @@ impl App {
                     PhysicalKey::Code(KeyCode::ArrowRight) => Some(Button::Right),
                     PhysicalKey::Code(KeyCode::Enter | KeyCode::Space) => Some(super::CONFIRM),
                     PhysicalKey::Code(KeyCode::Escape | KeyCode::Backspace) => Some(CANCEL),
+                    // The device's volume keys (`attach`): the quick settings' volume and brightness steps.
+                    PhysicalKey::Code(KeyCode::AudioVolumeUp) => Some(Button::VolUp),
+                    PhysicalKey::Code(KeyCode::AudioVolumeDown) => Some(Button::VolDown),
                     // The pad's menu button (KEYCODE_BUTTON_MODE): HOME on a Linux handheld, the quick settings.
                     PhysicalKey::Unidentified(NativeKeyCode::Android(110)) => Some(Button::Mode),
                     // The pad's own keys, L2/R2/L3/R3 included (`pad::android`, the Mobile view's and the player's).
@@ -707,6 +841,29 @@ impl App {
                     self.user_event(el, UserEvent::Pad(e));
                 }
                 true
+            }
+            // Back in focus. A game that couldn't start: the player goes back at once, often before this window was taken
+            // away, so no `resumed` follows (emulator, 26.11.: the shelf stayed dark): the player's start error left is the
+            // same way back (`android_resumed`). And back from an Android dialog over this view (the Home app question): no
+            // suspend and resume came, so the row reads Android's answer here. Not consumed: the App sees it too.
+            WindowEvent::Focused(true) => {
+                if start_error_waiting() {
+                    log::info!("back in focus after a start that failed");
+                    self.android_resumed();
+                } else if app_back_in_focus() {
+                    log::info!("back in focus from the emulator app");
+                    self.android_resumed();
+                }
+                let held = bridge("homeAppHeld", &[]) == "true";
+                if HOME_APP.swap(held, std::sync::atomic::Ordering::Relaxed) != held {
+                    log::info!("home app: pocket-ui {}", if held { "is Android's Home app" } else { "is not the Home app" });
+                    self.request_redraw();
+                }
+                // And Run in background's answer (Android's battery question over this view).
+                if read_battery_exempt() {
+                    self.request_redraw();
+                }
+                false
             }
             WindowEvent::Touch(t) => {
                 use pocket_ui::touch::{Phase, TouchEvent};
@@ -750,7 +907,12 @@ impl App {
     /// Back in front. After a game: its end, as pocket-core's on Linux, and the way back from the picture the player
     /// left (`eject::LastPicture`). Called after the window is made.
     pub(crate) fn android_resumed(&mut self) {
+        // A game handed to another app is back now: a later focus is no second way back (`app_back_in_focus`).
+        APP_HANDED.store(0, std::sync::atomic::Ordering::SeqCst);
         let save_error = pocket_ui::save_trouble::take_moment(&pocket_ui::platform::android::data_dir().join("player-save-error"));
+        // The player couldn't start the game: it came straight back and left why, said here in the shelf's notice as on
+        // Linux (no Android dialog in the player).
+        let start_error = pocket_ui::save_trouble::take_start_failed(&pocket_ui::platform::android::data_dir().join("player-start-error"));
         if let Some(line) = &save_error {
             self.notice = Some(pocket_ui::notice::Notice::new(line.clone()));
             self.request_redraw();
@@ -768,11 +930,21 @@ impl App {
             self.toast = Some((format!("Updated to {installed}"), std::time::Instant::now()));
             log::info!("update notice: {installed}");
         }
+        // Android's Home app may have changed (Settings → System → Home app, or Android's own settings).
+        refresh_home_app();
+        // A game's volume keys (or Android's) may have moved the media volume: the shelf's next Vol± reads it again.
+        self.sys.volume_changed_elsewhere();
+        // Run in background may have changed in Android's own settings meanwhile.
+        refresh_battery_exempt();
         // An app may have been installed or a core downloaded while this view was behind another one.
         refresh_phone();
         look_for_games();
+        // All files access given (or taken) in Android's settings meanwhile: the "Read your games" sheet follows.
+        self.android_files_check();
         // And an Android game installed, renamed or removed, or marked in the Mobile view (`app_android_games`).
         self.android_games_refresh("back in front");
+        // Back from Shizuku's question or Android's accessibility page: the extras' page reads them again (`app_android_extras`).
+        self.android_extras_front();
         // The player may have written moments and slots: they are read from the player's folders next.
         forget_keys();
         let note = pocket_ui::android_handheld::files::take_playing_note(&playing_note());
@@ -806,7 +978,19 @@ impl App {
         log::info!("back from {} after {:?}: last picture {:?}", path.display(), started.elapsed(), note.as_ref().map(|n| (n.saved, n.picture.is_some())));
         // The end before the way back: the shelf after Quit first (`game_exited`), then its scene (`begin_eject`).
         self.game_exited(started.elapsed().as_secs(), true, Default::default(), false);
+        // Back from Azahar at once: most likely it isn't set up yet and closed (night QA 27.11.2026); say what to do.
+        let package = APP_PACKAGE.lock().unwrap_or_else(|p| p.into_inner()).take().unwrap_or_default();
+        if let Some(line) = pocket_ui::android_handheld::quick_return_hint(&package, started.elapsed()) {
+            log::info!("back from {package} after {:?}: asks for its setup", started.elapsed());
+            self.notice = Some(pocket_ui::notice::Notice::new(line));
+        }
         if let Some(line) = save_error { self.notice = Some(pocket_ui::notice::Notice::new(line)); }
+        if let Some(line) = start_error {
+            log::info!("back from {}: it couldn't start ({line})", path.display());
+            self.notice = Some(pocket_ui::notice::Notice::new(line));
+            self.request_redraw();
+            return;
+        }
         let size = self.window.as_ref().map(|w| (w.inner_size().width, w.inner_size().height));
         let frame = note.as_ref().and_then(|n| pocket_ui::android_handheld::files::return_frame(n, size)).map(std::sync::Arc::new);
         // The whole screen as the player left it is the way back's first picture (`begin_eject`, as the pause menu's grab).
@@ -816,4 +1000,18 @@ impl App {
         }
         self.request_redraw();
     }
+}
+
+/// An F-key (F1 to F12) as the pause menu presses it for another emulator (Android extras, `TargetKey.java`): on Android 13
+/// such a press can land in pocket-ui's own window instead (docs/ANDROID-EXTRAS.md), and here it must do nothing at all
+/// (Sol's recheck of b203531cf). Kept the same in android/src/lib.rs and android/handheld/app_android.rs
+/// (`android_extras` tests).
+fn emulator_f_key(key: &PhysicalKey) -> bool {
+    matches!(
+        key,
+        PhysicalKey::Code(
+            KeyCode::F1 | KeyCode::F2 | KeyCode::F3 | KeyCode::F4 | KeyCode::F5 | KeyCode::F6 | KeyCode::F7 | KeyCode::F8
+                | KeyCode::F9 | KeyCode::F10 | KeyCode::F11 | KeyCode::F12
+        ) | PhysicalKey::Unidentified(NativeKeyCode::Android(131..=142))
+    )
 }

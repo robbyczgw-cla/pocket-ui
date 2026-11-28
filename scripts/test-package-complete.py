@@ -156,6 +156,83 @@ class RocknixOnly(unittest.TestCase):
                 self.assertIn('ROCKNIX hakuX bundle', out)
 
 
+class RocknixBundle(unittest.TestCase):
+    """Red before (25.11.2026, AUDIT-071): the real 0.7.1 install zip, card zip, OTA tarball and offline update had no hakuX
+    and no bsnes-hd, and nothing said so; the check on them names both (the 0.7.2 ones: bsnes-hd)."""
+    PARTS = [rel for rel, _ in complete.ROCKNIX_BUNDLE]
+
+    def layouts(self, t, skip=None):
+        """The four ROCKNIX payloads with everything but `skip` (a ROCKNIX_BUNDLE path) in them."""
+        def files(home, hakux_home):
+            names = {home + 'pocket-ui': b'x', home + 'pocket-core': b'x'}
+            for rel in self.PARTS:
+                if rel != skip:
+                    names[(hakux_home if rel.startswith('hakux/') else home) + rel] = b'x'
+            return names
+
+        def tgz(names):
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode='w:gz') as tf:
+                for name, data in names.items():
+                    info = tarfile.TarInfo('./' + name)
+                    info.size = len(data)
+                    tf.addfile(info, io.BytesIO(data))
+            return buf.getvalue()
+
+        out = {}
+        install = Path(t) / 'pocket-ui-9.8.7-rocknix-install.zip'
+        with zipfile.ZipFile(install, 'w') as z:
+            for name, data in files('pocket-ui-9.8.7-rocknix-install/files/', 'pocket-ui-9.8.7-rocknix-install/').items():
+                z.writestr(name, data)
+        out['install zip'] = install
+        seed = tgz(files('pocket-ui/releases/9.8.7/', 'pocket-ui/releases/9.8.7/'))
+        card = Path(t) / 'pocket-ui-9.8.7-rocknix-card.zip'
+        with zipfile.ZipFile(card, 'w') as z:
+            z.writestr('mount-storage.sh', 'hook')
+            z.writestr('pocket-ui-seed.tar.gz', seed)
+        out['card zip'] = card
+        ota = Path(t) / 'pocket-ui-9.8.7-aarch64.tar.gz'
+        ota.write_bytes(tgz(files('', '')))
+        out['OTA tarball'] = ota
+        offline = Path(t) / 'pocket-ui-update-9.8.7-rocknix.zip'
+        with zipfile.ZipFile(offline, 'w') as z:
+            z.writestr('update.json', '{}')
+            z.writestr(ota.name, ota.read_bytes())
+        out['offline update'] = offline
+        return out
+
+    def test_every_rocknix_package_with_all_four_is_complete(self):
+        with tempfile.TemporaryDirectory() as t:
+            for what, path in self.layouts(t).items():
+                with self.subTest(package=what):
+                    rc, out = run('rocknix', path)
+                    self.assertEqual(rc, 0, out)
+                    self.assertIn('hakuX, gpSP, DSperate and bsnes-hd', out)
+
+    def test_each_missing_part_is_red_in_every_package(self):
+        for skip, what in complete.ROCKNIX_BUNDLE:
+            with tempfile.TemporaryDirectory() as t:
+                for package, path in self.layouts(t, skip).items():
+                    with self.subTest(missing=skip, package=package):
+                        rc, out = run('rocknix', path)
+                        self.assertEqual(rc, 1, out)
+                        self.assertIn(f'MISSING {what}: ', out)
+                        self.assertIn(skip, out)
+
+    def test_an_empty_file_counts_as_missing_and_a_non_package_is_red(self):
+        with tempfile.TemporaryDirectory() as t:
+            tree(t, ['pocket-ui', 'pocket-core'] + [rel for rel in self.PARTS if rel != 'cores/gpsp_libretro.so'])
+            tree(t, ['cores/gpsp_libretro.so'], data=b'')
+            rc, out = run('rocknix', t)
+            self.assertEqual(rc, 1)
+            self.assertIn('gpSP', out)
+        with tempfile.TemporaryDirectory() as t:
+            tree(t, ['cores/gpsp_libretro.so'])
+            rc, out = run('rocknix', t)
+            self.assertEqual(rc, 1)
+            self.assertIn('not a ROCKNIX package', out)
+
+
 class Tree(unittest.TestCase):
     def test_unpacked_storage_tree(self):
         with tempfile.TemporaryDirectory() as t:

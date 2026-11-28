@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android extras: the pause menu's service as Android's accessibility page describes it (PadWatch). -->
+<resources>
+    <string name="pad_watch_description">Mở menu tạm dừng của pocket-ui trên các game mà pocket-ui đã chạy trong ứng dụng giả lập khác: HOME hoặc SELECT + START. Dịch vụ chỉ đọc ứng dụng nào đang ở trước và các nút của tay cầm, không gì khác, và ngoài các game đó thì mọi nút đều đi qua bình thường.</string>
+</resources>

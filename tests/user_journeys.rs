@@ -307,6 +307,32 @@ fn a_toast_under_a_notice_does_not_overlap_it() {
     assert!(boxes.is_empty(), "toast and notice overlap: {boxes}");
 }
 
+/// Settings › System › Battery on an R36S (RK817 power chip): X asks before the battery reading is reset, B keeps
+/// everything, and a chip that doesn't take the reset (here: none, on the host) is said on the sheet with the Pocket
+/// left on. Without the chip the page offers nothing of it. 0.7.0 report: 0% on a full R36S battery, no way out.
+#[test]
+fn the_battery_reading_reset_asks_first_and_only_where_the_chip_is() {
+    let card = Card::new("battery-reset");
+    let plain = card.shot("battery:keys=x", "normal");
+    assert!(!plain.contains("Reset reading") && !plain.contains("Reset the battery reading?"), "no chip, no reset: {plain}");
+
+    let page = card.shot("battery:reset", "normal");
+    assert!(page.contains("Reset reading") && page.contains("Hours"), "the hint on an RK817 device: {page}");
+    assert!(!page.contains("Reset the battery reading?"), "{page}");
+
+    let ask = card.shot("battery:reset:keys=x", "normal");
+    for words in ["Reset the battery reading?", "0% while the battery", "switches off", "full once", "Reset and switch off", "Keep"] {
+        assert!(ask.contains(words), "the question says {words:?}: {ask}");
+    }
+
+    let kept = card.shot("battery:reset:keys=xb", "normal");
+    assert!(!kept.contains("Reset the battery reading?") && kept.contains("Reset reading"), "B keeps everything: {kept}");
+
+    let failed = card.shot("battery:reset:keys=xa", "normal");
+    assert!(failed.contains("The battery reading was not reset") && failed.contains("stays on"), "{failed}");
+    assert!(!failed.contains("Switching off"), "no switch-off when the chip did not take it: {failed}");
+}
+
 #[test]
 fn missing_bios_names_the_file() {
     let card = Card::new("bios");
@@ -604,7 +630,7 @@ while [ "$i" -lt 2400 ]; do sleep 0.05; i=$((i+1)); done
         /// (offline), A. B goes back a stage there, as on every stage.
         fn wifi_continue(&mut self) {
             self.send("down\n".repeat(20).trim_end());
-            self.wait(|d| d.frame().lines().any(|l| l == "Continue" || l == "Continue offline"));
+            self.wait(|d| d.frame().lines().any(|l| l == "Next" || l == "Continue offline"));
             self.send("a");
         }
         fn first_start_to_games(&mut self, games: &str) {
@@ -704,7 +730,8 @@ sleep 30
 "#);
             });
             if !continue_row {
-                ui.sees("Fixture console");
+                // The SNES's shelf shows the console's chosen name (`region_pairs`), not the list's.
+                ui.sees(if system == "snes" { "Super Nintendo" } else { "Fixture console" });
                 ui.send("a");
             }
             ui.sees("Game");
@@ -847,6 +874,22 @@ sleep 30
         }
         let shelf = d.frame();
         assert!(!shelf.contains("is ready") && !shelf.contains("Check again"), "{shelf}");
+    }
+
+    #[test]
+    fn android_file_access_keeps_an_update_waiting_until_the_sheet_closes() {
+        for (name, input) in [("pad", "a"), ("touch", "tap 400 240")] {
+            let mut d = update_ready(&format!("android-files-over-update-{name}"));
+            d.sees("pocket-ui 99.0.0 is ready");
+            d.send("page android-files:denied");
+            d.sees("Read your games");
+            d.send(input);
+            d.frame();
+            d.send("page android-files:allowed");
+            let shelf = d.frame();
+            assert!(shelf.contains("pocket-ui 99.0.0 is ready"), "{name}: the update can still be read and chosen: {shelf}");
+            assert!(!shelf.contains("Check again"), "{name}: the permission sheet did not open updates: {shelf}");
+        }
     }
 
     /// 17.11.2026 (Retroid Pocket Mini V2, android.6): the notice counted as said the moment it was put up, also behind
@@ -1280,6 +1323,57 @@ sleep 30
         let s = settings_json(&d);
         assert_eq!(s["seen_version"], "0.3.0", "the card is said once");
         assert_ne!(s["font"], "retro", "B leaves the style as it was");
+    }
+
+    /// A device that had 0.7.2 and now runs 0.8.0 (`POCKETUI_NEW_IN`, mock only; `POCKETUI_SCREENSCRAPER_ROW=1` stands in
+    /// for a build with ScreenScraper, nothing is sent), with a game on the shelf.
+    fn updated_to_0_8(name: &str) -> Driver {
+        Driver::start(name, true, |tmp, cmd| {
+            std::fs::write(tmp.join("gb/Tobu Two.gb"), "game").unwrap();
+            std::fs::write(tmp.join("data/settings.json"), r#"{"onboarded":true,"seen_version":"0.7.2","motion":"off","art":"off"}"#).unwrap();
+            cmd.env("POCKETUI_NEW_IN", "0.8.0").env("POCKETUI_SCREENSCRAPER_ROW", "1");
+        })
+    }
+
+    /// 0.8.0: ScreenScraper stays Off after the update until START on its card, with the kinds of picture ticked there
+    /// (owner 27.11.2026: each kind on its own, with a real example); A only ticks, B ("Not now") leaves it off, and the
+    /// cards come once.
+    #[test]
+    fn after_the_update_to_0_8_start_turns_screenscraper_on_with_the_kinds_ticked_and_b_leaves_it_off() {
+        let mut d = updated_to_0_8("new-ss-a");
+        let card = d.sees("Real box pictures");
+        for words in ["New in pocket-ui 0.8.0", "Turn on", "Not now", "Real spines", "Real labels", "Real box backs", "Real manuals", "Example: Tobu Tobu Girl", "CC\u{a0}BY\u{a0}4.0", "Nothing is sent before START."] {
+            assert!(card.contains(words), "{words}: {card}");
+        }
+        assert!(card.contains("screenscraper.fr"), "the card says where it sends: {card}");
+        assert_ne!(settings_json(&d)["screenscraper"], true, "never on by itself");
+        // Real box backs on (the third row), then START.
+        d.send("down");
+        d.send("down");
+        d.send("a");
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert_ne!(settings_json(&d)["screenscraper"], true, "A only ticks: nothing is sent before START");
+        d.send("start");
+        d.wait(|d| settings_json(d)["screenscraper"] == true);
+        let s = settings_json(&d);
+        assert_eq!(s["screenscraper_backs"], true, "the box backs ticked on the card: {s}");
+        assert_ne!(s["screenscraper_no_spines"], true, "spines stay as they were: {s}");
+        d.sees("Shelves by series");
+        d.send("b");
+        d.wait(|d| !d.frame().contains("New in pocket-ui"));
+        assert_ne!(settings_json(&d)["shelf_order"], "series", "B leaves the order as it was");
+        drop(d);
+
+        let mut d = updated_to_0_8("new-ss-b");
+        d.sees("Real box pictures");
+        d.send("b");
+        d.sees("Shelves by series");
+        d.send("b");
+        d.wait(|d| !d.frame().contains("New in pocket-ui"));
+        let s = settings_json(&d);
+        assert_eq!(s["seen_version"], "0.8.0", "the cards are said once");
+        assert_ne!(s["screenscraper"], true, "Not now leaves ScreenScraper off");
+        assert_ne!(s["screenscraper_backs"], true, "and the kinds as they were");
     }
 
     /// One rule across every look, through the real launch, output writer and exit save.
@@ -2471,6 +2565,26 @@ sleep 30
         );
     }
 
+    /// The FIFO's `play <system> <file>` starts a game through the shelf's own launch on every Linux build (the route starts
+    /// of docs/DEVICE-TESTS.md "Emulator routes on hardware"), and only a file below a `.pocket-ui-test` folder: an owner's
+    /// game elsewhere on the card is never started by it.
+    #[test]
+    fn the_fifo_play_starts_only_a_test_copy_through_the_shelf_launch() {
+        let mut ui = Driver::new("fifo-play", true);
+        ui.sees("Game Boy");
+        let owner = ui.card.tmp.join("gb/Tobu Tobu Girl (World).gb");
+        ui.send(&format!("play gb {}", owner.display()));
+        let test = ui.card.tmp.join(".pocket-ui-test/gb/pocketcheck.gb");
+        std::fs::create_dir_all(test.parent().unwrap()).unwrap();
+        std::fs::copy(&owner, &test).unwrap();
+        ui.send(&format!("play gb {}", test.display()));
+        ui.wait(|d| matches!(std::fs::read_to_string(d.card.tmp.join("run-game.started")).as_deref(), Ok("started\n")));
+        let log = ui.log();
+        let launches: Vec<_> = log.lines().filter(|l| l.starts_with("launch gb ")).collect();
+        assert_eq!(launches.len(), 1, "only the test copy starts: {launches:?}");
+        assert!(launches[0].contains("pocketcheck.gb") && launches[0].contains("(emulator "), "{launches:?}");
+    }
+
     /// The whole way of "This game": card (X), START, change the frame, B, play, and the file the game starts with says the
     /// same: pocket-core reads it with `GameSettings::load`, as the pause menu does (one source of truth).
     #[test]
@@ -3015,6 +3129,35 @@ true
         assert!(gone, "the stand-in game still runs after Quit");
     }
 
+    /// 0.8, no quiet emulator switches (`swap_note`): a Saturn game without a Saturn BIOS plays on the system's YabaSanshiro,
+    /// and the shelf says so while it starts; the card is still up when the game ends. Red before: the start said nothing
+    /// (25.11.2026, AUDIT-071: Saturn, PICO-8, H700 GBA and Mode 7 HD all swapped quietly, as Xbox did for months).
+    #[test]
+    fn a_saturn_game_without_its_bios_says_which_emulator_plays() {
+        let mut ui = Driver::start("saturn-no-bios", true, |tmp, cmd| {
+            add_system(tmp, "saturn", "Sega Saturn", ".chd", &["Nights into Dreams (USA).chd"]);
+            let cfg = tmp.join("es_systems.cfg");
+            let text = std::fs::read_to_string(&cfg).unwrap().replace(
+                "<extension>.chd</extension>",
+                "<extension>.chd</extension><emulators><emulator name=\"yabasanshiro\"><cores><core default=\"true\">yabasanshiro-sa</core></cores></emulator></emulators>",
+            );
+            std::fs::write(&cfg, text).unwrap();
+            std::fs::create_dir_all(tmp.join("bios")).unwrap();
+            cmd.env("POCKETUI_BIOS", tmp.join("bios"));
+        });
+        ui.sees("Game Boy");
+        ui.send("down\ndown\na");
+        ui.sees("Nights into Dreams");
+        ui.send("a");
+        ui.wait(|d| d.card.tmp.join("run-game.started").exists());
+        let text = ui.sees("No Saturn BIOS");
+        // The notice wraps over two lines: its words, whatever the breaks.
+        let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(flat.contains("YabaSanshiro") && flat.contains("built-in BIOS"), "the line says what plays instead: {text}");
+        assert!(flat.contains("it plays in pocket-core with the full pause menu"), "and what a BIOS brings: {text}");
+        assert!(ui.log().contains("launch: No Saturn BIOS in roms/bios"), "{}", ui.log());
+    }
+
     /// A game that never starts says so: the screen does not just fall back to the list (`fallback::not_started_notice`;
     /// pocket-core's own missing-core message is the unit test in `fallback.rs`, pocket-core is not on the host).
     #[test]
@@ -3073,7 +3216,8 @@ true
         ui.send("down");
         ui.wait(|d| {
             let text = d.frame();
-            (text.contains("Game Boy") || text.contains("Sega CD")) && !text.contains("didn't start")
+            // The Sega CD's shelf is named Mega-CD outside America (`region_pairs`).
+            (text.contains("Game Boy") || text.contains("Mega-CD")) && !text.contains("didn't start")
         });
     }
 
@@ -4455,6 +4599,101 @@ true
         }
     }
 
+    /// Options → Picture → Widescreen (`dc_widescreen`), as a player reaches it in every language: a Dreamcast game on the
+    /// Mini V2, the pause menu, Options, Picture, down to Widescreen; its value changes in place (‹ Off ›, "< > Change",
+    /// Right → Patch) and is kept, so the next start sets Flycast's widescreen patches (`dc_widescreen`'s start test takes
+    /// it from the file to the core options).
+    #[test]
+    fn dreamcast_widescreen_is_reached_in_the_pause_menu_in_every_language_and_its_change_is_kept() {
+        let tr = |lang: &str, en: &str| -> String {
+            if lang == "en" {
+                return en.to_string();
+            }
+            let tsv = std::fs::read_to_string(format!("{}/assets/i18n/{lang}.tsv", env!("CARGO_MANIFEST_DIR"))).unwrap();
+            tsv.lines().find_map(|l| l.split_once('\t').filter(|(k, _)| *k == en).map(|(_, v)| v.to_string())).unwrap_or_else(|| en.to_string())
+        };
+        for lang in ["en", "de", "fr", "es", "it", "pt"] {
+            let mut d = Driver::start(&format!("dcws-{lang}"), true, |tmp, cmd| {
+                // A Dreamcast shelf only, a real-looking game.
+                let dc = tmp.join("dreamcast");
+                std::fs::create_dir_all(&dc).unwrap();
+                std::fs::write(dc.join("Sonic Adventure (USA).chd"), "x").unwrap();
+                std::fs::write(tmp.join("es_systems.cfg"), format!("<?xml version=\"1.0\"?>\n<systemList>\n  <system><name>dreamcast</name><fullname>Dreamcast</fullname><path>{}</path><extension>.chd</extension><command>true</command></system>\n</systemList>\n", dc.display())).unwrap();
+                std::fs::write(tmp.join("data/curator.json"), r#"{"lens":false}"#).unwrap();
+                let host = tmp.join("pocket-core-stand-in");
+                std::fs::write(&host, "").unwrap();
+                cmd.env("POCKETUI_HOST_BIN", host).env("POCKETUI_STATES", tmp.join("states")).env("POCKETUI_NAV_PROBE", tmp.join("nav.txt"))
+                    .env("POCKETUI_DEVICE", "miniv2").env("POCKETUI_LANG", lang);
+            });
+            d.sees("Dreamcast");
+            d.send("a");
+            d.sees("Sonic Adventure");
+            d.send("a");
+            d.wait(|d| matches!(std::fs::read_to_string(d.card.tmp.join("run-game.started")).as_deref(), Ok("started\n")));
+            d.send("home");
+            let on = |at: &str| { let at = at.to_string(); move |q: &Record| q.at == at && q.placed.iter().any(|(_, s)| s == "‹nav:focus›") };
+            // Main page: down to Options.
+            let options = tr(lang, "Options");
+            let mut seen = Vec::new();
+            loop {
+                let r = record_until(&mut d, on("pause:Main")).unwrap_or_else(|| panic!("{lang}: the pause menu\n{}", nav_record(&mut d)));
+                let name = r.selected().first().cloned().unwrap_or_default();
+                if name == options {
+                    break;
+                }
+                assert!(!seen.contains(&name) && seen.len() < 12, "{lang}: no {options} on the main page: {seen:?}");
+                seen.push(name);
+                d.send("down");
+            }
+            d.send("a");
+            // Options: Picture.
+            let picture = tr(lang, "Picture");
+            let mut seen = Vec::new();
+            loop {
+                let r = record_until(&mut d, on("pause:Options")).unwrap_or_else(|| panic!("{lang}: Options\n{}", nav_record(&mut d)));
+                let name = r.selected().first().cloned().unwrap_or_default();
+                if name == picture {
+                    break;
+                }
+                assert!(!seen.contains(&name) && seen.len() < 20, "{lang}: no {picture} on Options: {seen:?}");
+                seen.push(name);
+                d.send("down");
+            }
+            d.send("a");
+            let group = record_until(&mut d, |q| q.at.starts_with("pause:Group") && q.placed.iter().any(|(_, s)| s == "‹nav:focus›"))
+                .unwrap_or_else(|| panic!("{lang}: Picture opens\n{}", nav_record(&mut d)));
+            let at = group.at.clone();
+            // Picture: down to Widescreen, the last row.
+            let widescreen = tr(lang, "Widescreen");
+            let mut seen = Vec::new();
+            let row = loop {
+                let r = record_until(&mut d, on(&at)).unwrap_or_else(|| panic!("{lang}: back on {at}"));
+                let row = r.selected();
+                let name = row.first().cloned().unwrap_or_default();
+                if name == widescreen {
+                    assert!(r.says(&tr(lang, "Change")), "{lang}: Widescreen changes in place: {:?}", r.text());
+                    break row;
+                }
+                assert!(name != "Mode 7", "{lang}: Mode 7 is the Super Nintendo's");
+                assert!(!seen.contains(&name) && seen.len() < 20, "{lang}: no {widescreen} on Picture: {seen:?}");
+                seen.push(name);
+                d.send("down");
+            };
+            assert!(row.iter().any(|m| *m == tr(lang, "Off")), "{lang}: Widescreen starts Off: {row:?}");
+            assert!(row.iter().any(|m| m == "‹"), "{lang}: its value between ‹ ›: {row:?}");
+            d.send("right");
+            let patch = tr(lang, "Patch");
+            let on_patch = record_until(&mut d, |q| on(&at)(q) && q.selected().iter().any(|m| *m == patch)).unwrap_or_else(|| panic!("{lang}: Right → {patch}\n{}", nav_record(&mut d)));
+            assert!(on_patch.selected().first().is_some_and(|n| *n == widescreen));
+            // Kept: the next start reads Patch from the game's or the console's file.
+            d.send("b");
+            d.wait(|d| {
+                let dir = d.card.tmp.join("data/game-settings");
+                [dir.join("dreamcast.json"), dir.join("dreamcast/Sonic Adventure (USA).json")].iter().any(|f| std::fs::read_to_string(f).is_ok_and(|t| t.contains("\"dc_widescreen\": \"patch\"") || t.contains("\"dc_widescreen\":\"patch\"")))
+            });
+        }
+    }
+
     /// Walks the pause menu page whose `@where` is `at` from its selected row down until a name comes again: each row
     /// opens a page (hint Open, its angle; A leaves for it, a list there is walked the same way, B comes back; the
     /// row's name goes to `opened`), changes in place (‹ ›, "< > Change", Left/Right) or does a thing (neither).
@@ -4901,6 +5140,42 @@ fn the_card_refused_notice_fits_640x480_whole_in_every_language() {
             assert!(shown.contains(last_word) && !shown.contains('…'), "{state} {lang}: the sentence whole: {shown}");
             assert!(std::fs::read_to_string(&boxes).unwrap_or_default().is_empty(), "{state} {lang}: overlaps");
         }
+    }
+}
+
+/// The shelf's Saturn lines on a standalone start: YabaSanshiro's saved controls for another controller set aside
+/// (`stale_controls`), and no BIOS (`swap_note`, which says what a BIOS brings). Whole on the smallest panel in every
+/// language, the closing hint below, nothing over them.
+#[test]
+fn the_saturn_standalone_notices_fit_640x480_whole_in_every_language() {
+    let card = Card::new("controls-reset-notice");
+    let (data, png) = (card.tmp.join("data"), card.tmp.join("controls.png"));
+    std::fs::create_dir_all(&data).unwrap();
+    let controls = [("en", "controller."), ("de", "zurückgesetzt."), ("es", "mando."), ("pt", "controle."), ("fr", "manette."), ("it", "controller."), ("ko", "초기화되었습니다."), ("zh", "手柄。")];
+    let bios = [("en", "menu."), ("de", "Pausenmenü."), ("es", "completo."), ("pt", "completo."), ("fr", "complet."), ("it", "completo."), ("ko", "실행됩니다."), ("zh", "暂停菜单。")];
+    for (state, lang, last_word) in controls.iter().map(|(l, w)| ("notice:controls-reset", *l, *w)).chain(bios.iter().map(|(l, w)| ("notice:saturn-bios", *l, *w))) {
+        let (words, boxes) = (card.tmp.join("controls.tsv"), card.tmp.join("controls.boxes"));
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_pocket-ui"));
+        if let Some(stub) = &card.stub {
+            cmd.env("WAYLAND_DISPLAY", &stub.path);
+        }
+        let out = cmd
+            .args(["--snapshot", state, png.to_str().unwrap()])
+            .env("POCKETUI_MOCK", "1")
+            .env("POCKETUI_LANG", lang)
+            .env("POCKETUI_SNAPSHOT_SIZE", "640x480")
+            .env("POCKETUI_VISIBLE_TEXT", &words)
+            .env("POCKETUI_TEXT_BOXES", &boxes)
+            .env("POCKETUI_DATA", &data)
+            .env("POCKETUI_ES_SYSTEMS", card.tmp.join("es_systems.cfg"))
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{state} {lang}: {}", String::from_utf8_lossy(&out.stderr));
+        let shown = std::fs::read_to_string(&words).unwrap_or_default();
+        // Korean and Chinese lines may wrap inside a word: the whole text without its breaks.
+        let joined: String = shown.chars().filter(|c| !c.is_whitespace()).collect();
+        assert!(joined.contains(last_word) && joined.contains("Saturn") && !shown.contains('…'), "{state} {lang}: the text whole: {shown}");
+        assert!(std::fs::read_to_string(&boxes).unwrap_or_default().is_empty(), "{state} {lang}: overlaps");
     }
 }
 

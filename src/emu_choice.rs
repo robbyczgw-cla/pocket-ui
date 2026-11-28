@@ -405,6 +405,68 @@ pub fn resolve(ctx: &Ctx, cfg: &Cfg, file: Option<&str>) -> Resolved {
     }
 }
 
+/// A saved choice `resolve` had to pass over: what it named, so the start can say so (`swap_note`) instead of quietly
+/// playing the game with something else (25.11.2026: Xbox went to a crashing xemu for months without a word).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Dropped {
+    /// The chosen emulator isn't here (not in es_systems.cfg's list, or pocket-core / hakuX not installed).
+    Emulator(String),
+    /// The chosen core isn't one of the chosen emulator's here: the emulator plays with its own default core.
+    Core(String),
+    /// pocket-core was chosen, but it doesn't open this kind of file (the extension, without the dot).
+    FileType(String),
+}
+
+/// Whether pocket-core plays `core` here: its own core for the system, a verified extra one (`pocket_cores`), or on the
+/// Brick one es_systems.cfg lists for it (`chosen`'s Brick arm).
+fn pocket_has(ctx: &Ctx, core: &str) -> bool {
+    let listed = cfg!(feature = "brick") && emulator(ctx.emulators, POCKET_CORE).is_some_and(|e| e.cores.iter().any(|x| x == core));
+    ctx.pocket_core == Some(core) || ctx.pocket_cores.contains(&core) || listed
+}
+
+/// The first saved choice (the game's, then the console's) that `resolve` can't honour here, or None when the choice it
+/// honours is the first one set (or nothing is set). Mirrors `chosen`; a pocket-core choice a failed start passed over
+/// (`fell_back`) is no drop: `fallback::notice` says that one.
+pub fn dropped_choice(ctx: &Ctx, cfg: &Cfg, file: Option<&str>) -> Option<Dropped> {
+    let mut levels = Vec::new();
+    if let Some(f) = file {
+        levels.push((key(ctx.system, Some(f), Level::Game, "emulator"), key(ctx.system, Some(f), Level::Game, "core"), true));
+    }
+    levels.push((key(ctx.system, None, Level::Console, "emulator"), key(ctx.system, None, Level::Console, "core"), false));
+    for (emu_key, core_key, game) in levels {
+        let (emu, core) = (cfg.get(&emu_key), cfg.get(&core_key));
+        let dropped = match (emu, core) {
+            (None, None) => continue,
+            (Some(POCKET_CORE), core) => {
+                if ctx.pocket_core.is_none() {
+                    Some(Dropped::Emulator(POCKET_CORE.into()))
+                } else if let Some(c) = core.filter(|c| !pocket_has(ctx, c)) {
+                    Some(Dropped::Core(c.into()))
+                } else if ctx.fell_back {
+                    return None;
+                } else if !ctx.file_ok {
+                    let ext = file.and_then(|f| Path::new(f).extension()).map(|e| e.to_string_lossy().to_lowercase());
+                    Some(Dropped::FileType(ext.unwrap_or_default()))
+                } else {
+                    None
+                }
+            }
+            (Some("hakux"), _) if ctx.default_override == Some(("hakux", "hakux")) => None,
+            (Some(name), core) => match emulator(ctx.emulators, name) {
+                None => Some(Dropped::Emulator(name.into())),
+                Some(e) => core.filter(|c| !e.cores.iter().any(|x| x == c)).map(|c| Dropped::Core(c.into())),
+            },
+            (None, Some(c)) => {
+                let base = if game { console_choice(ctx, cfg).filter(|r| !r.is_pocket_core()) } else { None }.unwrap_or_else(|| ctx.es_default());
+                let listed = emulator(ctx.emulators, &base.emulator).is_some_and(|e| e.cores.iter().any(|x| x == c));
+                (!listed).then(|| Dropped::Core(c.into()))
+            }
+        };
+        return dropped;
+    }
+    None
+}
+
 /// Shipped per-game runner defaults, below explicit game/console choices. ROCKNIX's PPSSPP libretro build uses
 /// system FFmpeg: Jeanne's opening movie can loop forever in av_read_frame, with the host waiting in retro_run.
 /// Its standalone build uses bundled FFmpeg and passes that scene. GPU readback and CPU/I/O options do not help.
@@ -509,6 +571,25 @@ pub fn installed(r: &Runner, system: &str, exists: impl Fn(&Path) -> bool) -> bo
             exists(&Path::new("/usr/bin").join(script))
         }
     }
+}
+
+/// The selected external player and its launcher must both exist. The paths are the ones
+/// ROCKNIX's runemu.sh and its start scripts use. Unlisted standalone emulators still need their
+/// launcher script. Ports and shell games run the game file itself.
+pub fn rocknix_external_ready(runner: &Runner, system: &str, exists: impl Fn(&Path) -> bool) -> bool {
+    if matches!(system, "ports" | "windows" | "shell" | "setup") { return true; }
+    if !installed(runner, system, &exists) { return false; }
+    let executable = match runner.emulator.as_str() {
+        "retroarch" => "/usr/bin/retroarch",
+        "armsx2" => "/usr/share/armsx2-sa/armsx2-qt",
+        "dolphin" if runner.core.contains("-qt-") => "/usr/bin/dolphin-emu",
+        "dolphin" => "/usr/bin/dolphin-emu-nogui",
+        "azahar" => "/usr/bin/azahar",
+        "ppsspp" => "/usr/bin/ppsspp",
+        "xemu" => "/usr/bin/xemu",
+        _ => return true,
+    };
+    exists(Path::new(executable))
 }
 
 // ---- names -----------------------------------------------------------------------------------------------------
@@ -1076,6 +1157,10 @@ pub fn preload() {
 }
 
 /// The emulator and core keys: the preloaded ones, or (only if a game starts before the thread is done) read now.
+/// Read once per pocket-ui run: a hand edit of system.cfg's `.emulator`/`.core` lines (Samba, SSH) counts after a restart
+/// (docs/user/options.md "Runs on"). Deliberately no mtime check here: the shelves call this for many games at once, and the
+/// other writers are covered (the Runs on page updates the cache, `apply_to_cache`; EmulationStation runs only after
+/// pocket-ui has exited, and the next start reads the file anew).
 pub fn cached() -> Arc<Cfg> {
     if let Some(c) = CHOICES.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
         return c.clone();
@@ -1327,6 +1412,49 @@ mod tests {
         assert_eq!(run(&resolve(&legacy, &cfg, Some("Alien Hominid.gba"))), ("retroarch", "mgba", From::Console));
     }
 
+    /// 25.11.2026 (Xbox to xemu for months, AUDIT-071): every saved choice the resolver passes over is named, so the start
+    /// can say so (`swap_note`); a choice it honours, or none at all, says nothing.
+    #[cfg(not(feature = "brick"))]
+    #[test]
+    fn a_saved_choice_the_resolver_passes_over_is_named() {
+        let gba = emulators("gba");
+        let game = "Alien Hominid.gba";
+        let g = |k: &str, v: &str| format!("gba[\"{game}\"].{k}={v}");
+        // An H700 without pocket-ui's gpSP: pocket-core plays mGBA only, a saved gpSP goes.
+        let no_gpsp = ctx("gba", &gba, Some("mgba"));
+        let cfg = Cfg::parse("gba.emulator=pocket-core\ngba.core=gpsp");
+        assert_eq!(resolve(&no_gpsp, &cfg, Some(game)).runner, Runner::new(POCKET_CORE, "mgba"));
+        assert_eq!(dropped_choice(&no_gpsp, &cfg, Some(game)), Some(Dropped::Core("gpsp".into())));
+        let with_gpsp = Ctx { pocket_cores: crate::h700_gba::CORES, ..ctx("gba", &gba, Some("gpsp")) };
+        assert_eq!(dropped_choice(&with_gpsp, &cfg, Some(game)), None, "honoured");
+        // An emulator es_systems.cfg doesn't list (any more): the console's default plays.
+        let cfg = Cfg::parse(&g("emulator", "gone-emu"));
+        assert_eq!(dropped_choice(&no_gpsp, &cfg, Some(game)), Some(Dropped::Emulator("gone-emu".into())));
+        // A core the chosen emulator doesn't have: its own default core.
+        let cfg = Cfg::parse("gba.emulator=retroarch\ngba.core=nonesuch");
+        assert_eq!(resolve(&no_gpsp, &cfg, Some(game)).runner, Runner::new("retroarch", "mgba"));
+        assert_eq!(dropped_choice(&no_gpsp, &cfg, Some(game)), Some(Dropped::Core("nonesuch".into())));
+        // pocket-core chosen, but not installed (no program): RetroArch plays.
+        let cfg = Cfg::parse("gba.emulator=pocket-core");
+        assert_eq!(dropped_choice(&ctx("gba", &gba, None), &cfg, Some(game)), Some(Dropped::Emulator(POCKET_CORE.into())));
+        // pocket-core chosen for a file it doesn't open.
+        let rar = Ctx { file_ok: false, ..ctx("gba", &gba, Some("mgba")) };
+        assert_eq!(resolve(&rar, &cfg, Some("Zelda.RAR")).runner, Runner::new("retroarch", "mgba"));
+        assert_eq!(dropped_choice(&rar, &cfg, Some("Zelda.RAR")), Some(Dropped::FileType("rar".into())));
+        assert_eq!(dropped_choice(&rar, &Cfg::default(), Some("Zelda.RAR")), None, "nobody chose pocket-core: its file types are the route");
+        // A failed start passed over it: `fallback::notice` says that, not this.
+        let fell = Ctx { fell_back: true, ..ctx("gba", &gba, Some("mgba")) };
+        assert_eq!(dropped_choice(&fell, &cfg, Some(game)), None);
+        // The game's choice counts first: valid there, the console's broken one doesn't matter; broken there, it is named.
+        let cfg = Cfg::parse(&format!("{}\ngba.emulator=gone-emu", g("emulator", "retroarch")));
+        assert_eq!(dropped_choice(&no_gpsp, &cfg, Some(game)), None);
+        let cfg = Cfg::parse(&format!("{}\ngba.emulator=retroarch", g("emulator", "gone-emu")));
+        assert_eq!(resolve(&no_gpsp, &cfg, Some(game)).from, From::Console);
+        assert_eq!(dropped_choice(&no_gpsp, &cfg, Some(game)), Some(Dropped::Emulator("gone-emu".into())));
+        assert_eq!(dropped_choice(&no_gpsp, &Cfg::default(), Some(game)), None, "nothing chosen");
+        assert_eq!(dropped_choice(&no_gpsp, &Cfg::parse("gba.emulator=auto"), Some(game)), None, "auto is nothing chosen");
+    }
+
     #[test]
     fn nothing_chosen_is_pocket_core_where_it_hosts_else_rocknix_default() {
         let gba = emulators("gba");
@@ -1517,6 +1645,25 @@ mod tests {
         );
         assert!(installed(&Runner::new("vicesa", "x64sc"), "c64", fs));
         assert!(installed(&Runner::new("pocket-core", "mgba"), "gba", fs));
+    }
+
+    #[test]
+    fn missing_standalone_program_does_not_count_as_installed_when_its_script_remains() {
+        for (system, emulator, core, script, binary) in [
+            ("ps2", "armsx2", "armsx2-sa", "start_armsx2.sh", "/usr/share/armsx2-sa/armsx2-qt"),
+            ("gamecube", "dolphin", "dolphin-qt-gc", "start_dolphin_gc.sh", "/usr/bin/dolphin-emu"),
+            ("wii", "dolphin", "dolphin-sa-wii", "start_dolphin_wii.sh", "/usr/bin/dolphin-emu-nogui"),
+            ("3ds", "azahar", "azahar-sa", "start_azahar.sh", "/usr/bin/azahar"),
+            ("psp", "ppsspp", "ppsspp-sa", "start_ppsspp.sh", "/usr/bin/ppsspp"),
+            ("xbox", "xemu", "xemu-sa", "start_xemu.sh", "/usr/bin/xemu"),
+        ] {
+            let runner = Runner::new(emulator, core);
+            let script = Path::new("/usr/bin").join(script);
+            let binary = Path::new(binary);
+            assert!(rocknix_external_ready(&runner, system, |p| p == script || p == binary), "{system}");
+            assert!(!rocknix_external_ready(&runner, system, |p| p == script), "{system}: missing program");
+            assert!(!rocknix_external_ready(&runner, system, |p| p == binary), "{system}: missing launcher");
+        }
     }
 
     #[test]

@@ -596,12 +596,12 @@ pub(super) struct Rig {
     pub(super) root: crate::testutil::TestDir,
     pub(super) shared: Arc<Shared>,
     pub(super) addr: SocketAddr,
-    edits: Arc<Mutex<Vec<Edit>>>,
+    pub(super) edits: Arc<Mutex<Vec<Edit>>>,
     /// tailscaled's answers, changeable while the server runs.
     peers: Arc<Mutex<HashMap<IpAddr, Whois>>>,
     /// How often the screen was captured.
     shots: Arc<std::sync::atomic::AtomicUsize>,
-    server: Option<super::server::Server>,
+    pub(super) server: Option<super::server::Server>,
 }
 
 /// A server on 127.0.0.1 with one GBA game, a port waiting for files, and an App that answers every edit with Ok.
@@ -615,7 +615,7 @@ fn rig_with(name: &str, owner: bool, history: Option<super::HistorySource>) -> R
 }
 
 /// A rig whose server's `Ctx` is changed by `tune` first (deadlines, history).
-fn rig_ctx(name: &str, owner: bool, tune: impl FnOnce(&mut Ctx)) -> Rig {
+pub(super) fn rig_ctx(name: &str, owner: bool, tune: impl FnOnce(&mut Ctx)) -> Rig {
     rig_full(name, owner, false, tune)
 }
 
@@ -1015,7 +1015,7 @@ fn uploads_through_the_api() {
     assert!(leftovers.is_empty(), "no temporary files left: {leftovers:?}");
 }
 
-fn walk(dir: &Path) -> Vec<PathBuf> {
+pub(super) fn walk(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
         let p = e.path();
@@ -1115,6 +1115,43 @@ fn a_cut_off_upload_keeps_nothing() {
     assert!(out.contains("The upload was cut off. Nothing was kept."), "{out}");
     let gba: Vec<PathBuf> = walk(&r.root.join("roms/gba"));
     assert_eq!(gba, [r.root.join("roms/gba/Advance Wars (USA).gba")], "no half file, no temporary file");
+}
+
+/// 0.8 (`region_pairs`): a card with `megadrive`, `genesis` and the hacks folder listed, only `genesis` there. The Upload
+/// tab offers one Mega Drive (into `genesis`, the folder that is there), an `.md` means it without a question, and the
+/// library shows one Mega Drive with the game of `genesis`.
+#[test]
+fn a_console_with_several_folders_is_one_system_on_the_page_and_its_uploads_go_into_the_folder_there() {
+    let _n = crate::region_pairs::for_this_thread(&[], false);
+    let r = rig("api-region", false);
+    let roms = r.root.join("roms");
+    std::fs::create_dir_all(roms.join("genesis")).unwrap();
+    std::fs::write(roms.join("genesis/Comix Zone (USA).md"), b"rom").unwrap();
+    let entry = |id: &str, name: &str| format!("<system><name>{id}</name><fullname>{name}</fullname><path>{}</path><extension>.md .bin .zip</extension></system>", roms.join(id).display());
+    let cfg = format!(
+        "<systemList><system><name>gba</name><fullname>Game Boy Advance</fullname><path>{}</path><extension>.gba .zip</extension></system>{}{}{}</systemList>",
+        roms.join("gba").display(), entry("megadrive", "Mega Drive"), entry("genesis", "Genesis"), entry("megadriveh", "Mega Drive (Hacks)")
+    );
+    std::fs::write(&r.shared.es_systems, cfg).unwrap();
+    let (cookie, csrf) = r.pair();
+    let auth = [("Cookie", cookie.as_str()), ("X-CSRF-Token", csrf.as_str())];
+    let u = r.req("GET", "/api/uploads", &[("Cookie", &cookie)], b"").json();
+    let offered: Vec<(&str, &str)> = u["systems"].as_array().unwrap().iter().map(|s| (s["id"].as_str().unwrap(), s["name"].as_str().unwrap())).collect();
+    assert!(offered.contains(&("genesis", "Mega Drive")) && !offered.iter().any(|(id, _)| *id == "megadrive"), "one Mega Drive, into genesis: {offered:?}");
+    assert_eq!(u["prefer"]["md"], "genesis", "an .md means it, not the hacks folder");
+    let a = r.req("POST", "/api/upload?kind=rom&system=genesis&name=Sonic.md", &auth, b"data");
+    assert_eq!(a.status, 200, "{}", String::from_utf8_lossy(&a.body));
+    assert!(roms.join("genesis/Sonic.md").is_file() && !roms.join("megadrive").exists(), "nothing made beside the folder that is there");
+    // With `megadrive` there too, uploads go there and the library is still one Mega Drive with both games.
+    std::fs::create_dir_all(roms.join("megadrive")).unwrap();
+    std::fs::write(roms.join("megadrive/Gunstar Heroes (Europe).md"), b"rom").unwrap();
+    r.shared.library_epoch.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let u = r.req("GET", "/api/uploads", &[("Cookie", &cookie)], b"").json();
+    assert_eq!(u["prefer"]["md"], "megadrive");
+    let lib = r.req("GET", "/api/library", &[("Cookie", &cookie)], b"").json();
+    let md: Vec<&serde_json::Value> = lib["systems"].as_array().unwrap().iter().filter(|s| s["name"] == "Mega Drive").collect();
+    assert_eq!(md.len(), 1, "{}", lib["systems"]);
+    assert_eq!((md[0]["id"].as_str(), md[0]["games"].as_u64()), (Some("megadrive"), Some(3)));
 }
 
 #[test]
@@ -1574,6 +1611,7 @@ fn the_history_shows_the_games_list_names() {
         core: None,
         emulators: Vec::new(),
         games: vec![crate::library::Game { name: "Tobu Tobu Girl (Europe)".into(), path: "/storage/roms/gb/Tobu Tobu Girl (Europe).gb".into() }],
+        parts: Vec::new(),
     };
     let lib = api::LibCache::build(vec![sys], Vec::new());
     let mut v = serde_json::json!({ "games": [

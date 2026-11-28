@@ -48,6 +48,8 @@ impl App {
     pub(crate) fn open_details(&mut self) {
         match self.items.get(self.sel).copied() {
             Some(Item::System(s)) => self.open_console(s),
+            // By series: the series card in place of the console page (`app_series`).
+            Some(Item::Series(i)) => self.open_series_card(i),
             _ => self.open_card(),
         }
     }
@@ -96,7 +98,7 @@ impl App {
                 let link = self.link_to_system(other)?;
                 let names: Vec<&str> = chips.iter().map(|&i| credits.chips[i].name.as_str()).collect();
                 Some(LinkRow {
-                    name: consoles::for_system(other).map_or(other, |c| c.name.as_str()).to_string(),
+                    name: consoles::for_system(other).map_or(other, consoles::shown_name).to_string(),
                     note: names.join(" · "),
                     stripe: stripe(other),
                     link,
@@ -128,7 +130,7 @@ impl App {
         );
         Some(CreditsData {
             credits,
-            console_name: console.name.clone(),
+            console_name: consoles::shown_name(console).to_string(),
             stripe: stripe(&name),
             same_chip,
             family_links,
@@ -262,9 +264,14 @@ impl App {
     }
 
     /// What plays the system here, as `launch` would start one of its games.
-    fn system_runs_on(&self, s: usize) -> Option<String> {
+    pub(crate) fn system_runs_on(&self, s: usize) -> Option<String> {
         let sys = self.systems.get(s)?;
         let (emulator, core) = self.route(sys, None, pocket_core_installed());
+        // The default remains selected while the bundle is missing. This line describes
+        // what is available on this device. Runs on and the launch notice explain the choice.
+        if emulator == "hakux" && !(pocket_ui::hakux::supported(pocket_ui::device::current()) && pocket_ui::hakux::installed()) {
+            return None;
+        }
         consoles::runner_text(&emulator, &core)
     }
 
@@ -357,7 +364,7 @@ impl App {
     pub(crate) fn console_snapshot(&mut self, rest: &str) {
         ASSUME_POCKET_CORE.store(true, Ordering::Relaxed);
         let id = rest.split(':').next().unwrap_or_default();
-        let Some(s) = self.systems.iter().position(|sys| sys.name == id) else {
+        let Some(s) = self.systems.iter().position(|sys| pocket_ui::region_pairs::same_shelf(&sys.name, &id)) else {
             eprintln!("console:{id}: no such system in the library");
             return;
         };
@@ -412,7 +419,7 @@ impl App {
             self.sel = rest.split(':').nth(3).and_then(|r| r.parse().ok()).unwrap_or(0).min(self.items.len().saturating_sub(1));
             self.prev_sel = self.sel;
         }
-        if let Some(s) = self.systems.iter().position(|sys| sys.name == id) {
+        if let Some(s) = self.systems.iter().position(|sys| pocket_ui::region_pairs::same_shelf(&sys.name, &id)) {
             if let Some(i) = self.items.iter().position(|it| *it == Item::System(s)) {
                 self.sel = i;
                 self.prev_sel = i;
@@ -452,7 +459,7 @@ impl App {
             self.theme = Theme::Big;
             self.rebuild();
         }
-        if let Some(s) = system.filter(|_| look != "big").and_then(|id| self.systems.iter().position(|s| s.name == id)) {
+        if let Some(s) = system.filter(|_| look != "big").and_then(|id| self.systems.iter().position(|s| pocket_ui::region_pairs::same_shelf(&s.name, &id))) {
             self.screen = Screen::Games(s);
             self.rebuild();
         }

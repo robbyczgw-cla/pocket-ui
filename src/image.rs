@@ -236,6 +236,17 @@ impl Image {
         ((self.w as f32 * scale) as i32, (self.h as f32 * scale) as i32)
     }
 
+    /// The picture at `aspect` (width / height), as the game is shown: a core's pixels needn't be square (Nestopia's NES
+    /// picture is far wider than it is shown, night QA 27.11.2026). The height stays. None when there is nothing to do
+    /// (no aspect, or the same shape within a pixel).
+    pub fn shaped(&self, aspect: f32) -> Option<Image> {
+        if !(aspect > 0.0) || !aspect.is_finite() || self.w == 0 || self.h == 0 {
+            return None;
+        }
+        let w = (self.h as f32 * aspect).round().clamp(1.0, 8192.0) as u32;
+        (w.abs_diff(self.w) > 1).then(|| self.resized(w as i32, self.h as i32))
+    }
+
     /// Box-filtered downscale (each target pixel averages its source area); used for photos and box art,
     /// where nearest-neighbour would shimmer.
     pub fn resized(&self, w: i32, h: i32) -> Image {
@@ -321,6 +332,19 @@ mod tests {
     }
 
     /// A PNG whose header claims `w` x `h` RGB pixels, with one row of data (a few hundred bytes).
+    #[test]
+    fn a_picture_takes_the_shape_the_game_is_shown_at() {
+        // Nestopia's frame: far wider than the 4:3 it is shown at; SNES's 256x224 narrower.
+        let wide = Image { w: 602, h: 240, px: vec![0x123456; 602 * 240] };
+        let s = wide.shaped(4.0 / 3.0).unwrap();
+        assert_eq!((s.w, s.h), (320, 240));
+        assert_eq!(s.px[0], 0x123456, "the colours stay");
+        let snes = Image { w: 256, h: 224, px: vec![0; 256 * 224] };
+        assert_eq!(snes.shaped(4.0 / 3.0).map(|s| (s.w, s.h)), Some((299, 224)));
+        assert!(snes.shaped(256.0 / 224.0).is_none(), "already in shape");
+        assert!(snes.shaped(0.0).is_none() && snes.shaped(f32::NAN).is_none(), "no aspect: as it is");
+    }
+
     fn png_claiming(w: u32, h: u32) -> Vec<u8> {
         let chunk = |out: &mut Vec<u8>, kind: &[u8], data: &[u8]| {
             out.extend_from_slice(&(data.len() as u32).to_be_bytes());

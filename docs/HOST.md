@@ -1414,6 +1414,14 @@ console's 8:7 pixels (Original 1.31:1, a hair narrower than Snes9x's 4:3) and it
 at 1x, shown 1.80:1); with correction off it would be 72 columns, wider than 16:9. pocket-core shows the reported aspect.
 Its states are version 114.2, not bsnes 115's or Snes9x's: a Continue moment of the other core is put aside (`frozen`).
 
+pocket-ui's own bsnes-hd (0.8, `scripts/build-bsnes-hd.sh`, `scripts/bsnes-hd-files.sh`): the same commit as ROCKNIX's
+(fc26b25), built with zig 0.17.0 for glibc 2.33 through `scripts/brick-build-cores.sh`, 2.6 MB, the same bytes from a fresh
+work folder. zig has no libgomp, so it is built with `openmp=false`: HD draws its lines on one thread (the table's
+"Threads 1" rows). It lies in `cores/` beside the programs in every ROCKNIX package and app update, and `store::core_path`
+takes it only where the image has no `/usr/lib/libretro/bsnes_hd_beta_libretro.so` (the Mini V2's image has one, measured
+below). Not yet measured on a handheld. A saved HD choice without any bsnes-hd plays Original on Snes9x and says so
+(`mode7_hd::chosen_without_core`, `swap_note`).
+
 Frame time on a desktop PC (Ryzen 5 4650G, headless libretro, attract-mode races, aspect correction off, ms per frame mean / p99):
 
 | Game | Threads | Original | HD 2x | HD 3x | HD 4x | Wide 2x | Wide 4x |
@@ -1460,6 +1468,21 @@ keeps 2x (`mode7_hd::offer`). The SM8550's 3x is still an estimate. Original's p
 heavier HD runs have none, looks like the CPU clocking down under the light load (a finding for the player's pacing, not for
 Mode 7). The card (Linux, bsnes-hd with its threads) is still to be measured. Retro Game Corps' widescreen guide (2023): 2x
 slowed down on the AYN Odin (SD845) and the Retroid Pocket 3+ under Android RetroArch.
+
+## Dreamcast widescreen (2026-11-26, `src/dc_widescreen.rs`)
+
+Options → Picture → Widescreen (Off, Patch, Hack) for the Dreamcast, Linux and Android's player alike. Both values are
+Flycast's own options (`shell/libretro/libretro_core_options.h` at flyinghead/flycast c3763d8, the core the Android app
+ships; ROCKNIX's `flycast_libretro.so` declares the same names): Patch = `flycast_widescreen_cheats` (bound to
+`config::WidescreenGameHacks`, `core/cheats.cpp`'s per-game list; a hit stretches the picture with `ScreenStretching`
+134), Hack = `flycast_widescreen_hack` (`config::Widescreen`: `getOutputFramebufferAspectRatio` returns 16:9). The start
+sets both under the `flycast_` and the Android build's `reicast_` names, and never both on: the two multiply (16:9 × 1.34).
+The core announces the shape through `retro_resize_renderer` → SET_GEOMETRY; pocket-core and the player draw the core's
+aspect, so nothing in the players changes. Flycast drops the hack for vertical games and the patches under
+RetroAchievements hardcore. The Emulator page hides the four keys (`OptionSet::row_decides`) only for a start the row
+placed its options in (`dc_widescreen::take_row_set`, a mark on the starting thread): NAOMI and Atomiswave games keep the
+two switches there.
+A settings reload (Restore defaults) puts the row's values over RetroArch's again. Not yet seen on a handheld.
 
 ## Touch screen (2026-10-22)
 The Mini V2's panel is `generic ft5x06 (8d)`, `/dev/input/event4`: multitouch protocol B (5 slots), direct input,

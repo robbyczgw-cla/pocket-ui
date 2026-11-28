@@ -139,6 +139,11 @@ Player 2, and so on. Connecting or dropping a controller mid-game pops up a quic
 RetroArch assigns players in discovery order (change under RetroArch's menu, Settings, then Input); standalone emulators (PS2,
 GameCube, Wii, 3DS, …) keep ROCKNIX's controller settings.
 
+When the saved controls of YabaSanshiro (Saturn) or Azahar (3DS) belong to another controller than the one the game gets,
+for example after a card moved from another handheld, pocket-ui moves them into a `pocket-ui-controls-<time>` folder beside
+them before the game starts, ROCKNIX writes fresh ones for the controller in your hands, and the shelf says "Controls for
+Saturn were reset to match this controller." Changes you made for the controller you play with stay as they are.
+
 ## In a game
 
 **Menu Button layout never alters gameplay.** Game buttons, HOME shortcuts and Options → Controls always follow the

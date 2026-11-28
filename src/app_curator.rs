@@ -298,7 +298,7 @@ impl App {
             };
             if pocket_ui::background_io::cancelled() { return None; }
             // Connections' index with a new catalog or new gamelists: the same games, their developers, publishers, series, genres.
-            let connections = make_connections.then(|| Arc::new(pocket_ui::connections::Index::build(super::app_connections::entries(&catalog, &gamelist))));
+            let connections = make_connections.then(|| Arc::new(pocket_ui::connections::Index::build(super::app_connections::entries(&catalog, &gamelist, &data_dir))));
             let catalog_ms = t.elapsed().as_millis();
             if pocket_ui::background_io::cancelled() { return None; }
             let t = Instant::now();
@@ -356,6 +356,8 @@ impl App {
                 if let Some(c) = connections {
                     self.curator.connections.index = c;
                     self.refresh_card_connections();
+                    // The shelves by series from the new index, the open one and its card kept by name (`app_series`).
+                    self.series_make();
                 }
                 self.curator.connections.rediscover = rediscover;
                 self.curator.today = today;
@@ -404,6 +406,18 @@ impl App {
         let top = |lens: &Lens, order: Order| ix.sorted(&ix.matches(lens), merge, order).into_iter().take(pocket_ui::home_panel::MAX_COVERS).collect::<Vec<_>>();
         self.curator.shelf_tops = self.curator.prefs.shelves.iter().enumerate().map(|(i, s)| (i, top(&s.lens, s.order))).collect();
         self.curator.sticker_tops = self.library.stickers().iter().map(|st| (st.id, top(&sticker_lens(st.id), Order::Name))).collect();
+    }
+
+    /// The shelves by series were made again: Curator's ways back to a series follow it (`app_series::series_make`).
+    pub(crate) fn curator_series_moved(&mut self, map: &dyn Fn(usize) -> Option<usize>) {
+        for (screen, picked) in &mut self.curator.back {
+            if let Screen::Series(i) = *screen {
+                *screen = map(i).map_or(Screen::Home, Screen::Series);
+            }
+            if let Picked::Other(Item::Series(i)) = *picked {
+                *picked = map(i).map_or(Picked::Other(Item::Search), |n| Picked::Other(Item::Series(n)));
+            }
+        }
     }
 
     pub(crate) fn curator_follow_library(&mut self, fresh: &[pocket_ui::library::System]) {
@@ -1175,7 +1189,7 @@ impl App {
             at(g).is_some_and(|(f, _)| {
                 let file_ok = pocket_ui::library_cache::missing_game(&f.name, &f.path).is_none() && pocket_ui::library_cache::empty_game(&f.name, &f.path).is_none();
                 file_ok
-                    && self.systems.iter().find(|s| s.name == f.system).is_some_and(|sys| {
+                    && self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &f.system)).is_some_and(|sys| {
                         if sys.emulators.is_empty() {
                             return true;
                         }
@@ -1349,6 +1363,8 @@ impl App {
             RowKind::ResetCover => self.card_reset_cover(),
             // The game's screenshots (`app_gallery`).
             RowKind::Screenshots => self.open_gallery_for_card(),
+            // The game's real manual (`app_manual`).
+            RowKind::Manual => self.game_open_manual_for_card(),
         }
     }
 
@@ -1469,7 +1485,7 @@ impl App {
 
     /// "Snes9x on pocket-core · performance Auto": how a file starts, as `launch` would start it.
     fn runs_on(&self, system: &str, path: &Path) -> String {
-        let Some(sys) = self.systems.iter().find(|s| s.name == system) else { return String::new() };
+        let Some(sys) = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system)) else { return String::new() };
         let host = Path::new(super::host_bin()).exists() || std::env::var_os("POCKETUI_SNAPSHOT_POCKET_CORE").is_some();
         let (emulator, core) = self.route(sys, Some(path), host);
         let mut runs = pocket_ui::consoles::runner_text(&emulator, &core).unwrap_or_default();
@@ -2011,7 +2027,7 @@ impl App {
         let what = parts.first().copied().unwrap_or("home");
         let game = |app: &App| -> Option<(usize, usize)> {
             let (sys, name) = (parts.get(1)?, parts.get(2)?);
-            let s = app.systems.iter().position(|x| x.name == *sys)?;
+            let s = app.systems.iter().position(|x| pocket_ui::region_pairs::same_shelf(&x.name, sys))?;
             let g = app.systems[s].games.iter().position(|g| g.name.to_lowercase().contains(&name.to_lowercase()))?;
             Some((s, g))
         };
@@ -2301,6 +2317,7 @@ fn name_page(title: &str, name: &str, purpose: Purpose, back: Option<Page>) -> P
 
 /// Save states of a file: pocket-core's slots and auto state, RetroArch's state.
 fn save_states(system: &str, path: &Path) -> usize {
+    let system = pocket_ui::region_pairs::own_system(system, path);
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
     let base = pocket_ui::slots::base(system, stem);
     let bases = if system == "nds" { vec![base.clone(), pocket_ui::ds::state_base(&base, "dsperate")] } else { vec![base] };

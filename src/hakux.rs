@@ -509,6 +509,19 @@ mod tests {
             crate::signed_data::sha256_hex(core), CORE_FILE, crate::signed_data::sha256_hex(info), INFO_FILE)).unwrap();
         fs::write(root.join("update-pending"), b"next").unwrap();
 
+        // A damaged source may be left by an incomplete copy. Nothing is installed until
+        // both the .info and the exact core bytes are available.
+        for (file, good) in [(INFO_FILE, info.as_slice()), (CORE_FILE, core.as_slice())] {
+            for (label, payload) in crate::file_faults::faults(good) {
+                fs::remove_file(source.join(file)).ok();
+                if let Some(bytes) = payload { fs::write(source.join(file), bytes).unwrap(); }
+                if fs::read(source.join(file)).is_ok_and(|b| b == good) { continue; }
+                assert!(seed_bundle(&source, &root).is_err(), "{file}: {label}");
+                assert!(!root.join("hakux").exists(), "{file}: {label}");
+            }
+            fs::write(source.join(file), good).unwrap();
+        }
+
         let target = root.join("hakux");
         seed_bundle(&source, &root).unwrap();
         assert_eq!(fs::read(target.join(CORE_FILE)).unwrap(), core);

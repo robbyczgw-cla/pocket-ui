@@ -155,6 +155,11 @@ pub(crate) enum Kind {
     Color(Medium),
     /// The cover cut for a front of that medium this many pixels high.
     Cover(Medium, i32),
+    /// ScreenScraper's photo of the real spine (`boxsides/`), stood up and kept small (`media::upright_spine`).
+    Spine,
+    /// ScreenScraper's logo of a game (`wheels/`) for its series' spine, cut, stood up and kept small
+    /// (`series_look::upright_logo`).
+    Logo,
 }
 
 /// What the reader thread brings back.
@@ -162,6 +167,8 @@ enum Got {
     /// The cover's main colour and its accent (`media::cover_colors`).
     Color(Option<(u32, u32)>),
     Cover(Option<Image>),
+    Spine(Option<Image>),
+    Logo(Option<Pic>),
 }
 
 #[derive(Clone)]
@@ -237,7 +244,7 @@ impl Reader {
         q.soon.retain(|(p, k)| !(*p == path && *k == kind));
         match kind {
             Kind::Cover(..) => q.now.push_front((path, kind)),
-            Kind::Color(_) => q.now.push_back((path, kind)),
+            Kind::Color(_) | Kind::Spine | Kind::Logo => q.now.push_back((path, kind)),
         }
         cv.notify_one();
     }
@@ -256,6 +263,11 @@ impl Reader {
 
 /// Reads one cover: its spine colour, or the picture cut for a case's front.
 fn read(path: &Path, kind: Kind, loaded: Option<&Image>) -> Got {
+    if kind == Kind::Logo {
+        // With its alpha: a logo is see-through round its letters (`image` would put them on black).
+        let logo = pocket_ui::real_label::load_rgba(path).and_then(|r| pocket_ui::series_look::upright_logo(r.w, r.h, &r.px, pocket_ui::series_look::LOGO_EDGE));
+        return Got::Logo(logo);
+    }
     let owned;
     let img = match loaded {
         Some(img) => Some(img),
@@ -268,10 +280,17 @@ fn read(path: &Path, kind: Kind, loaded: Option<&Image>) -> Got {
         Kind::Color(m) => Got::Color(img.and_then(|i| media::cover_colors(&media::trim_system_band(i, m.game()).px))),
         Kind::Cover(m, h) => Got::Cover(img.map(|i| {
             let (_, _, lw, lh) = media::label_rect(m, h as f32 / m.size().h as f32);
-            art::cover_fit(i, lw, lh)
+            art::cover_fit_case(i, lw, lh, m)
         })),
+        Kind::Spine => Got::Spine(img.and_then(media::upright_spine)),
+        Kind::Logo => unreachable!("a logo is read with its alpha"),
     }
 }
+
+/// A series' cover and its spine's logo (`series_look`).
+#[path = "app_series_look.rs"]
+mod series_look;
+use series_look::SeriesFront;
 
 /// A case's pictures, made once: by game, case and colours.
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -285,6 +304,8 @@ struct CaseKey {
     ajar: bool,
     /// A game never played, in the shop's film (`app_shrink_wrap`): tearing it off makes its pictures again.
     sealed: bool,
+    /// Its real spine's photo is read (`App::spine_photo`): the spine is made again with it once it is there.
+    photo: bool,
 }
 
 /// A case's big spine and front, whether the front has its cover yet, and its last-use stamp.
@@ -404,6 +425,8 @@ struct LaunchGameKey {
     h: i32,
     has_cover: bool,
     look: Look,
+    /// The game's own label printed on it (`App::real_label`): it is made again once the label is there.
+    label: bool,
 }
 
 impl Inserting {
@@ -557,6 +580,28 @@ pub(crate) struct CabinetUi {
     shown: HashMap<CaseKey, (Rc<Pic>, Rc<Pic>, bool, u64)>,
     /// Per ROM: its box art file, if it has one.
     cover_files: HashMap<PathBuf, Option<PathBuf>>,
+    /// Per ROM: ScreenScraper's photo of its real spine, if there is one (`screenscraper::existing`, `boxsides/`).
+    side_files: HashMap<PathBuf, Option<PathBuf>>,
+    /// The spine photos read, stood up (`media::upright_spine`), per file.
+    photos: HashMap<PathBuf, Slot<Rc<Image>>>,
+    /// Per series (by name): the logo file its spine shows, if one is on the card (`App::series_logo`).
+    logo_files: HashMap<String, Option<PathBuf>>,
+    /// Whether the card has a folder of logos at all (None: not looked yet): without one no series looks further.
+    logo_dir: Option<bool>,
+    /// The logos read, stood up (`series_look::upright_logo`), per file.
+    logos: HashMap<PathBuf, Slot<Rc<Pic>>>,
+    /// Per series (by name) and front size: its cover of its games' cases (`series_look::collage`), made once; None: no
+    /// game of it has box art (its plain front).
+    series_fronts: HashMap<(String, i32), Option<Rc<Pic>>>,
+    /// Series covers being stacked on a thread of their own (`App::series_front`), and the ones it finished.
+    series_composing: std::collections::HashSet<(String, i32)>,
+    /// Counts the changes that make series' spines and fronts again (`series_changed`): part of their cases' keys.
+    pub(crate) series_gen: u64,
+    /// The cover cuts of a series' cases while the rest are read: held here, so trimming `labels` never drops one
+    /// before the stack is made (`App::series_front`).
+    series_labels: HashMap<(PathBuf, Medium, i32), Rc<Image>>,
+    /// (series and size, `series_gen` when asked, the stack; None: it could not be made).
+    series_composed: Arc<Mutex<Vec<((String, i32), u64, Option<Pic>)>>>,
     /// The home-made front of a game without box art for Split's preview, per ROM and room (`homemade_front`).
     homemade: Option<((PathBuf, i32, i32), Rc<Pic>)>,
     colors: HashMap<PathBuf, Slot<(u32, u32)>>,
@@ -603,6 +648,9 @@ pub(crate) struct CabinetUi {
     pub(crate) pending: usize,
     /// Read covers right away instead of on the thread (snapshots, the look step's previews).
     pub(crate) inline: bool,
+    /// Cover and spine files read on the spot (`inline`) since the cabinet was made: the Layout page's previews by
+    /// series read none (`app_look`).
+    pub(crate) read_inline: usize,
     /// The cover file of the game being started: its colours and cuts are read right away by the first frame that wants
     /// them (once, `App::warm_launch_cover`), so the insert scene never opens on a plain stand-in front.
     warm: Option<PathBuf>,
@@ -616,8 +664,11 @@ pub(crate) struct CabinetUi {
     /// When the way back ended: an open case's game slides out of it from then (`paint_ajar_game`), on its own clock,
     /// so that the shelf's move (the case turning in, the rock) does not start again over the case just put back.
     pub(crate) ajar_at: Option<Instant>,
-    /// The game box's cartridge or card, made for the case front it came out of (`box_game`).
-    box_game: Option<(Rc<Pic>, Rc<Pic>)>,
+    /// The game box's cartridge or card, made for the case front it came out of (`box_game`), and whether it carries the
+    /// game's own label (it is made again when the label arrives).
+    box_game: Option<(Rc<Pic>, bool, Rc<Pic>)>,
+    /// The games' own labels from ScreenScraper, made on their thread (`real_label`, `App::real_label`).
+    real_labels: Option<pocket_ui::real_label::Labels>,
     /// The focused or launching game's cartridge/disc (`launch_game_pic`), pre-warmed while resting on a case.
     launch_game: Option<(LaunchGameKey, Rc<Pic>)>,
     /// Scratch buffer for keeping the hint bar pixels across `paint_insert` without allocating every frame.
@@ -674,6 +725,16 @@ impl Default for CabinetUi {
             spines: HashMap::new(),
             shown: HashMap::new(),
             cover_files: HashMap::new(),
+            side_files: HashMap::new(),
+            photos: HashMap::new(),
+            logo_files: HashMap::new(),
+            logo_dir: None,
+            logos: HashMap::new(),
+            series_fronts: HashMap::new(),
+            series_composing: Default::default(),
+            series_gen: 0,
+            series_labels: HashMap::new(),
+            series_composed: Default::default(),
             homemade: None,
             colors: HashMap::new(),
             labels: HashMap::new(),
@@ -700,12 +761,14 @@ impl Default for CabinetUi {
             reader: None,
             pending: 0,
             inline: false,
+            read_inline: 0,
             warm: None,
             drawn: Vec::new(),
             insert: None,
             eject: None,
             ajar_at: None,
             box_game: None,
+            real_labels: None,
             launch_game: None,
             hint_scratch: Vec::new(),
             launch_px: Vec::new(),
@@ -798,13 +861,44 @@ impl CabinetUi {
 
     /// New box art arrived: look again for games that had none.
     pub(crate) fn covers_changed(&mut self) {
-        self.colors_gen += 1;
         self.launch_game = None;
         self.insert_warm = None;
         self.cover_files.retain(|_, f| f.is_some());
+        // A series' cover is made again from its games' new box art.
+        self.series_changed();
+        self.spines_changed();
         pocket_ui::dir_index::changed();
         self.colors.retain(|_, c| !matches!(c, Slot::Missing));
         self.labels.retain(|_, c| !matches!(c, Slot::Missing));
+        // The games' own labels too: a run may have brought a label scan where only the cartridge's photo was.
+        if let Some(labels) = self.real_labels.as_mut() {
+            labels.forget();
+        }
+        self.box_game = None;
+    }
+
+    /// New spine photos may be on disk. Keep the ones already loaded and retry cached misses.
+    pub(crate) fn spines_changed(&mut self) {
+        // Repaint cached shelf tiles so visible cases ask the reader for their photos again.
+        self.colors_gen += 1;
+        self.side_files.retain(|_, f| f.is_some());
+        self.photos.retain(|_, c| !matches!(c, Slot::Missing));
+        // New logos may be there too (the run's logo pass).
+        self.logo_dir = None;
+        self.logo_files.clear();
+        self.logos.retain(|_, c| !matches!(c, Slot::Missing));
+        self.series_gen += 1;
+    }
+
+    /// The series, their games, covers or logos changed: their covers are stacked again, their logos looked up again,
+    /// and their spines and fronts made again (their keys carry `series_gen`).
+    pub(crate) fn series_changed(&mut self) {
+        self.series_fronts.clear();
+        self.series_labels.clear();
+        self.logo_files.clear();
+        self.series_gen += 1;
+        // The shelf's painted tiles hold the old spines: painted again (Sol's recheck).
+        self.colors_gen += 1;
     }
 
     /// A player's cover changed. Existing case art and colors of this game have to be read again.
@@ -813,6 +907,7 @@ impl CabinetUi {
         pocket_ui::dir_index::changed();
         self.colors.remove(rom);
         self.labels.retain(|(path, _, _), _| path != rom);
+        self.series_changed();
         self.language_changed();
     }
 
@@ -941,10 +1036,11 @@ pub(crate) struct Info {
 
 /// `system`'s disc (or UMD) `h` high, printed with the cover's art and the title (`media::disc_pic`); with Cozy extras
 /// → Printed discs off a plain one, its print in the system's colour without art or title.
-fn printed_disc(text: &mut pocket_ui::text::Text, system: &str, h: i32, look: Look, title: &str, cover: Option<&Image>) -> Pic {
+/// A real face (`label`, `App::real_label`) is printed in place of the cover's art.
+fn printed_disc(text: &mut pocket_ui::text::Text, system: &str, h: i32, look: Look, title: &str, cover: Option<&Image>, label: Option<&Image>) -> Pic {
     let kind = media::DiscKind::of(system);
     if pocket_ui::cozy_extras::on(pocket_ui::cozy_extras::Extra::PrintedDiscs) {
-        media::disc_pic(text, kind, h, look, title, cover)
+        media::disc_pic_labelled(text, kind, h, look, title, cover, label)
     } else {
         media::disc_pic(text, kind, h, Look { color: stripe(system), ..look }, "", None)
     }
@@ -982,6 +1078,12 @@ impl App {
             Item::System(s) => Info {
                 title: self.systems[s].fullname.clone(),
                 system: self.systems[s].name.clone(),
+                rom: PathBuf::new(),
+            },
+            // A series is a shelf in the cabinet, never a case (`app_series`); here for completeness.
+            Item::Series(i) => Info {
+                title: self.series_describe(i).0,
+                system: "series".into(),
                 rom: PathBuf::new(),
             },
             Item::Favorites => Info {
@@ -1032,6 +1134,8 @@ impl App {
             Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::History | Item::Review(_) | Item::Rediscover | Item::JustPlay => "curator",
             Item::Crate => "crate",
             Item::Search => "search",
+            // A series in the colours of its first game's console (`app_series::series_stripe_id`).
+            Item::Series(i) => self.series_first_system(i).unwrap_or("curator"),
         }
     }
 
@@ -1107,16 +1211,21 @@ impl App {
             .map(|i| case(self, i))
             .collect();
         let favorites: Vec<Case> = self.favorite_items().into_iter().map(|i| case(self, i)).collect();
-        let systems = pocket_ui::shelf::visible_systems(self.systems.iter().map(|s| s.name.as_str()), &self.hidden)
-            .into_iter()
-            .map(|s| {
-                let (ff, medium) = (FormFactor::of(&self.systems[s].name), Medium::of(&self.systems[s].name));
-                (s, (0..self.systems[s].games.len()).map(|g| Case { item: Item::Game(s, g), ff, medium }).collect())
-            })
-            .collect();
+        let systems: Vec<(ShelfKey, Vec<Case>)> = if self.series_on() {
+            // By series (`app_series`): a shelf per series, each game in its own console's case.
+            (0..self.series.shelves.len()).map(|i| (ShelfKey::Series(i), self.series_items(i).into_iter().map(|it| case(self, it)).collect())).collect()
+        } else {
+            pocket_ui::shelf::visible_systems(self.systems.iter().map(|s| s.name.as_str()), &self.hidden)
+                .into_iter()
+                .map(|s| {
+                    let (ff, medium) = (FormFactor::of(&self.systems[s].name), Medium::of(&self.systems[s].name));
+                    (ShelfKey::System(s), (0..self.systems[s].games.len()).map(|g| Case { item: Item::Game(s, g), ff, medium }).collect())
+                })
+                .collect()
+        };
         let curator_shelves = curator.iter().map(|&k| (k, self.cabinet_curator_items(k).into_iter().map(|i| case(self, i)).collect())).collect();
         self.cabinet.curator_keys = curator;
-        self.cabinet.cab = Cabinet::build(recent, favorites, curator_shelves, systems);
+        self.cabinet.cab = Cabinet::build_keyed(recent, favorites, curator_shelves, systems);
     }
 
     /// Which case the app's selection is: a shelf per screen, the selected row on it.
@@ -1137,16 +1246,18 @@ impl App {
                 (_, Item::Sticker(id)) => ShelfKey::Sticker(id),
                 (_, Item::Recent(_) | Item::Streaming | Item::Search | Item::JustPlay | Item::Lens | Item::Crate) => ShelfKey::Continue,
                 (Screen::Favorites, _) | (_, Item::Favorites) => ShelfKey::Favorites,
+                (Screen::Series(i), _) | (_, Item::Series(i)) => ShelfKey::Series(i),
                 (_, Item::Game(s, _) | Item::System(s)) => ShelfKey::System(s),
             };
             match item {
-                Item::System(_) | Item::Favorites | Item::Curator => shelf(key).map(|s| (s, 0)),
+                Item::System(_) | Item::Series(_) | Item::Favorites | Item::Curator => shelf(key).map(|s| (s, 0)),
                 Item::SmartShelf(_) | Item::Sticker(_) if curator.is_none() => shelf(key).map(|s| (s, 0)),
                 _ => cab.find(key, item),
             }
         });
         found.or_else(|| match self.screen {
             Screen::Games(s) => shelf(ShelfKey::System(s)).map(|i| (i, 0)),
+            Screen::Series(i) => shelf(ShelfKey::Series(i)).map(|x| (x, 0)),
             Screen::Favorites => shelf(ShelfKey::Favorites).map(|i| (i, 0)),
             _ => curator.and_then(shelf).map(|i| (i, 0)).or(Some((0, 0))),
         })
@@ -1174,6 +1285,7 @@ impl App {
             ShelfKey::Continue => Screen::Home,
             ShelfKey::Favorites => Screen::Favorites,
             ShelfKey::System(x) => Screen::Games(x),
+            ShelfKey::Series(x) => Screen::Series(x),
             key => super::app_curator::shelf_screen(key).unwrap_or(Screen::Home),
         };
         let moved = self.screen != screen || self.items.get(self.sel) != Some(&item);
@@ -1438,8 +1550,9 @@ impl App {
         let m = self.medium(item);
         let info = self.case_info(item);
         let game = media::Game::of(&info.system, &info.rom.to_string_lossy());
-        if let Some((f, pic)) = &self.cabinet.box_game {
-            if Rc::ptr_eq(f, front) {
+        let label = self.real_label(&info.system, &info.rom);
+        if let Some((f, labelled, pic)) = &self.cabinet.box_game {
+            if Rc::ptr_eq(f, front) && *labelled == label.is_some() {
                 return Some(pic.clone());
             }
         }
@@ -1453,13 +1566,13 @@ impl App {
         // Without box art the front shows a title card: the label gets the title written to fit it instead.
         let has_cover = self.cover_file(&info.system, &info.rom).is_some();
         let pic = Rc::new(if game.is_round() {
-            // A disc or a UMD, printed with the cover's art and the title (`media::disc_pic`).
-            printed_disc(&mut self.text, &info.system, h, look, &info.title, has_cover.then_some(&cover))
+            // A disc or a UMD, printed with the cover's art and the title (`media::disc_pic`), or its own face.
+            printed_disc(&mut self.text, &info.system, h, look, &info.title, has_cover.then_some(&cover), label.as_deref())
         } else {
-            media::game_pic(&mut self.text, game, h, look, &info.title, has_cover.then_some(&cover), console.as_deref())?
+            media::game_pic_labelled(&mut self.text, game, h, look, &info.title, has_cover.then_some(&cover), console.as_deref(), label.as_deref())?
         });
         self.cabinet.made("box game", t0);
-        self.cabinet.box_game = Some((front.clone(), pic.clone()));
+        self.cabinet.box_game = Some((front.clone(), label.is_some(), pic.clone()));
         Some(pic)
     }
 
@@ -1516,7 +1629,7 @@ impl App {
         let look = self.case_look(&info, medium);
         let (front, from) = if self.theme == super::Theme::Cabinet {
             let Some(from) = self.cabinet.last_out.filter(|(i, _)| *i == item).map(|(_, r)| r) else { return false };
-            let key = CaseKey { rom: info.rom.clone(), medium, look, case: self.case_stickers_of(&info.rom), ajar: self.is_frozen_item(item), sealed: self.sealed(&info.rom) };
+            let key = CaseKey { rom: info.rom.clone(), medium, look, case: self.case_stickers_of(&info.rom), ajar: self.is_frozen_item(item), sealed: self.sealed(&info.rom), photo: self.spine_photo(&info.system, &info.rom).is_some() };
             let Some((_, front, _, _)) = self.cabinet.shown.get(&key).cloned() else { return false };
             (front, from)
         } else {
@@ -1569,6 +1682,41 @@ impl App {
         self.cabinet.reader.get_or_insert_with(Reader::start).clone()
     }
 
+    /// The game's own label from ScreenScraper for its cartridge or disc (`real_label`), when it is made; asked of the
+    /// labels' thread the first time, so a frame never reads or decodes it. None for a game without one, a system whose
+    /// medium takes none, and a game whose label is still being made (the cover's art stands in).
+    pub(crate) fn real_label(&mut self, system: &str, rom: &Path) -> Option<std::sync::Arc<Image>> {
+        // Real labels Off: the cover's art on the label, exactly as without ScreenScraper.
+        if rom.as_os_str().is_empty() || system == "curator" || system == "sticker" || !self.screenscraper_shows(pocket_ui::screenscraper::Face::SupportTexture) {
+            return None;
+        }
+        let target = pocket_ui::real_label::Target::of(system, &rom.to_string_lossy())?;
+        let sync = self.pictures.sync;
+        let proxy = self.proxy.clone();
+        let labels = self.cabinet.real_labels.get_or_insert_with(|| {
+            // A label made on its thread asks for a frame: a cartridge at rest on the screen shows it at once.
+            let wake: pocket_ui::real_label::Wake = std::sync::Arc::new(move || {
+                let _ = proxy.send_event(super::UserEvent::RealLabel);
+            });
+            pocket_ui::real_label::Labels::new(&self.data_dir, Some(wake))
+        });
+        labels.sync = sync;
+        labels.get(system, rom, target)
+    }
+
+    /// The box's real back from ScreenScraper (`Face::BoxBack`) fitted into `w` x `h`, from the picture thread (None
+    /// until it is read, and for a game without one: its back stays as pocket-ui lays it out). Nothing is looked up in the
+    /// frame (review 26.11., P2: a slow card made the box's front wait): the picture thread finds the file or not, and a
+    /// ScreenScraper run that brings one clears the picture cache (`app_screenscraper`).
+    pub(crate) fn real_back(&mut self, system: &str, rom: &Path, w: i32, h: i32) -> Option<Rc<Image>> {
+        // Real box backs Off (the usual): pocket-ui's own back, with the player's progress.
+        if rom.as_os_str().is_empty() || system == "curator" || system == "sticker" || !self.screenscraper_shows(pocket_ui::screenscraper::Face::BoxBack) {
+            return None;
+        }
+        let file = pocket_ui::screenscraper::path(&self.data_dir, pocket_ui::screenscraper::Face::BoxBack, system, rom);
+        self.picture(&file, w, h)
+    }
+
     /// The box art file of a ROM, looked for once.
     pub(crate) fn cover_file(&mut self, system: &str, rom: &Path) -> Option<PathBuf> {
         if rom.as_os_str().is_empty() || system == "curator" || system == "sticker" {
@@ -1596,10 +1744,43 @@ impl App {
         found
     }
 
+    /// ScreenScraper's photo of the game's real spine, stood up (docs/SCREENSCRAPER.md): asked for the first time a
+    /// spine of the game is made (read on the thread), None until it is there and for a game without one.
+    fn spine_photo(&mut self, system: &str, rom: &Path) -> Option<Rc<Image>> {
+        // Real spines Off: the painted spine, exactly as without ScreenScraper.
+        if rom.as_os_str().is_empty() || system == "curator" || system == "sticker" || !self.screenscraper_shows(pocket_ui::screenscraper::Face::BoxSide) {
+            return None;
+        }
+        let file = match self.cabinet.side_files.get(rom) {
+            Some(f) => f.clone(),
+            None => {
+                let f = pocket_ui::screenscraper::existing(&self.data_dir, pocket_ui::screenscraper::Face::BoxSide, system, rom);
+                self.cabinet.side_files.insert(rom.to_path_buf(), f.clone());
+                f
+            }
+        }?;
+        if !self.cabinet.photos.contains_key(&file) {
+            self.want(&file, Kind::Spine);
+        }
+        match self.cabinet.photos.get(&file) {
+            Some(Slot::Ready(img)) => Some(img.clone()),
+            _ => None,
+        }
+    }
+
+    /// A spine with the game's real spine photo when there is one (`media::photo_spine`: the photo alone, whole), else
+    /// the painted one with its title (`media::spine_with`).
+    fn spine_or_photo(&mut self, photo: Option<&Image>, m: Medium, k: f32, look: Look, title: &str, want: f32) -> Pic {
+        photo
+            .and_then(|ph| media::photo_spine(m, k, look, ph))
+            .unwrap_or_else(|| media::spine_with(&mut self.text, m, k, look, title, want))
+    }
+
     /// Reads now or asks the thread, for a cover file.
     fn want(&mut self, file: &Path, kind: Kind) {
         let sample = self.sample_cover.as_ref().filter(|(p, _)| p == file).map(|(_, img)| img.clone());
         if self.cabinet.inline || sample.is_some() || self.cabinet.warm.as_deref() == Some(file) {
+            self.cabinet.read_inline += usize::from(sample.is_none());
             let got = read(file, kind, sample.as_deref());
             self.cabinet_got(file.to_path_buf(), kind, got);
             return;
@@ -1610,6 +1791,12 @@ impl App {
             }
             Kind::Cover(m, h) => {
                 self.cabinet.labels.insert((file.to_path_buf(), m, h), Slot::Pending);
+            }
+            Kind::Spine => {
+                self.cabinet.photos.insert(file.to_path_buf(), Slot::Pending);
+            }
+            Kind::Logo => {
+                self.cabinet.logos.insert(file.to_path_buf(), Slot::Pending);
             }
         }
         self.cabinet.pending += 1;
@@ -1624,6 +1811,18 @@ impl App {
             }
             (Kind::Cover(m, h), Got::Cover(img)) => {
                 self.cabinet.labels.insert((file, m, h), img.map_or(Slot::Missing, |i| Slot::Ready(Rc::new(i))));
+            }
+            (Kind::Spine, Got::Spine(img)) => {
+                if img.is_some() {
+                    self.cabinet.colors_gen += 1;
+                }
+                self.cabinet.photos.insert(file, img.map_or(Slot::Missing, |i| Slot::Ready(Rc::new(i))));
+            }
+            (Kind::Logo, Got::Logo(logo)) => {
+                if logo.is_some() {
+                    self.cabinet.colors_gen += 1;
+                }
+                self.cabinet.logos.insert(file, logo.map_or(Slot::Missing, |l| Slot::Ready(Rc::new(l))));
             }
             _ => {}
         }
@@ -1641,6 +1840,7 @@ impl App {
     }
 
     pub(crate) fn cabinet_poll(&mut self) {
+        self.series_fronts_poll();
         // Over with the start: the game runs (or the start was dropped). Not when the first cut is in: the scene reads
         // its own sizes, and the shelf's small cut may be there from before.
         if self.cabinet.warm.is_some() && (self.running.is_some() || self.launch_at.is_none()) {
@@ -1688,6 +1888,7 @@ impl App {
     fn spine_pic(&mut self, item: Item, m: Medium) -> Rc<Pic> {
         let info = self.case_info(item);
         let look = self.case_look(&info, m);
+        let photo = self.spine_photo(&info.system, &info.rom);
         let key = CaseKey {
             case: self.case_stickers_of(&info.rom),
             rom: info.rom.clone(),
@@ -1695,6 +1896,7 @@ impl App {
             look,
             ajar: self.is_frozen_item(item),
             sealed: self.sealed(&info.rom),
+            photo: photo.is_some(),
         };
         let frame = self.cabinet.frame;
         if let Some((pic, used)) = self.cabinet.spines.get_mut(&key) {
@@ -1704,7 +1906,7 @@ impl App {
         let t0 = Instant::now();
         // As large as the label takes (37 px at most): readable at arm's length on the Mini V2 (Alex's photo,
         // 2026-10-28: "Legend of…" at 21 px was not).
-        let pic = media::spine_with(&mut self.text, m, 1.0, look, &media::printed_title(&info.title, item.title_is_name()), 37.0);
+        let pic = self.spine_or_photo(photo.as_deref(), m, 1.0, look, &media::printed_title(&info.title, item.title_is_name()), 37.0);
         let pic = self.stuck_spine(pic, m, 1.0, &info.rom, key.case);
         let pic = self.sealed_spine(pic, 1.0, &info.rom, key.sealed);
         let pic = Rc::new(if key.ajar { ajar_spine(&mut self.text, pic, &info.system, &info.rom, media::shelf_scale(), look) } else { pic });
@@ -1817,6 +2019,7 @@ impl App {
         let lh = (m.size().h as f32 * k).round() as i32;
         self.note_label_h(item, m, lh);
         let label = file.and_then(|f| self.cover_label(&f, m, lh));
+        let photo = self.spine_photo(&info.system, &info.rom);
         let key = CaseKey {
             case: self.case_stickers_of(&info.rom),
             rom: info.rom.clone(),
@@ -1824,6 +2027,7 @@ impl App {
             look,
             ajar: self.is_frozen_item(item),
             sealed: self.sealed(&info.rom),
+            photo: photo.is_some(),
         };
         let frame = self.cabinet.frame;
         let fh = media::front_size(m, k).1;
@@ -1836,7 +2040,7 @@ impl App {
         }
         let sprite = pocket_ui::system_art::get(&info.system).or_else(|| emblem(item));
         let t0 = Instant::now();
-        let spine = media::spine(&mut self.text, m, k, look, &media::printed_title(&info.title, item.title_is_name()));
+        let spine = self.spine_or_photo(photo.as_deref(), m, k, look, &media::printed_title(&info.title, item.title_is_name()), media::spine_size(m, k));
         let spine = self.stuck_spine(spine, m, k, &info.rom, key.case);
         let spine = Rc::new(self.sealed_spine(spine, k, &info.rom, key.sealed));
         self.cabinet.made("big spine", t0);
@@ -2399,6 +2603,7 @@ impl App {
     fn prop_seed(&self, key: ShelfKey) -> u32 {
         match key {
             ShelfKey::System(i) => self.systems.get(i).map_or(7, |sys| sys.name.bytes().fold(5381u32, |h, b| h.wrapping_mul(33) ^ b as u32)),
+            ShelfKey::Series(i) => self.series.shelves.get(i).map_or(11, |sh| sh.name.bytes().fold(5381u32, |h, b| h.wrapping_mul(33) ^ b as u32)),
             ShelfKey::Continue => 1,
             ShelfKey::Favorites => 2,
             ShelfKey::Curator => 3,
@@ -2597,6 +2802,7 @@ impl App {
             ShelfKey::Continue => ("Continue".to_string(), false),
             ShelfKey::Favorites => ("Favourites".to_string(), false),
             ShelfKey::System(i) => (self.systems[i].fullname.clone(), false),
+            ShelfKey::Series(i) => (self.series.shelves.get(i).map_or_else(String::new, |sh| sh.name.clone()), false),
             key => self.cabinet_curator_plate(key).unwrap_or_default(),
         }
     }
@@ -2858,6 +3064,7 @@ impl App {
         screen_h: i32,
         stage_k: f32,
         seated: i32,
+        (own_system, rom): (&str, &Path),
     ) -> Option<Rc<Pic>> {
         let target_h = if game.is_round() {
             let sw = Self::scene_sprite_width(system, screen_h);
@@ -2865,6 +3072,8 @@ impl App {
         } else {
             game.size_beside(medium, from_h).1
         };
+        // The label is the game's own (its system's folder, not the console the scene shows).
+        let label = self.real_label(own_system, rom);
         if let Some((cached, pic)) = &self.cabinet.launch_game {
             if Rc::ptr_eq(&cached.front, front)
                 && cached.system == system
@@ -2872,6 +3081,7 @@ impl App {
                 && cached.h == target_h
                 && cached.has_cover == has_cover
                 && cached.look == look
+                && cached.label == label.is_some()
             {
                 return Some(pic.clone());
             }
@@ -2882,14 +3092,14 @@ impl App {
         let t0 = Instant::now();
         let cover = has_cover.then_some(&cover);
         let pic = if game.is_round() {
-            Some(printed_disc(&mut self.text, system, target_h, look, title, cover))
+            Some(printed_disc(&mut self.text, system, target_h, look, title, cover, label.as_deref()))
         } else {
-            media::game_pic(&mut self.text, game, target_h, look, title, cover, None)
+            media::game_pic_labelled(&mut self.text, game, target_h, look, title, cover, None, label.as_deref())
         };
         self.cabinet.made("game", t0);
         let pic = pic.map(Rc::new)?;
         self.cabinet.launch_game = Some((
-            LaunchGameKey { front: front.clone(), system: system.to_string(), game, h: target_h, has_cover, look },
+            LaunchGameKey { front: front.clone(), system: system.to_string(), game, h: target_h, has_cover, look, label: label.is_some() },
             pic.clone(),
         ));
         Some(pic)
@@ -2931,7 +3141,7 @@ impl App {
             let _ = self.scene_sprite(&shown, h).or_else(|| self.scene_sprite(pocket_ui::insert_scene::STAND_IN, h));
         }
         let front = if self.theme == super::Theme::Cabinet {
-            let key = CaseKey { rom: info.rom.clone(), medium, look, case: self.case_stickers_of(&info.rom), ajar: self.is_frozen_item(item), sealed: self.sealed(&info.rom) };
+            let key = CaseKey { rom: info.rom.clone(), medium, look, case: self.case_stickers_of(&info.rom), ajar: self.is_frozen_item(item), sealed: self.sealed(&info.rom), photo: self.spine_photo(&info.system, &info.rom).is_some() };
             self.cabinet.shown.get(&key).map(|(_, f, _, _)| f.clone())
         } else {
             self.cabinet.shelf_lit.as_ref().map(|(f, _, _)| f.clone())
@@ -2939,7 +3149,7 @@ impl App {
         let Some(front) = front else { return rig.is_some() };
         let has_cover = self.cover_file(&info.system, &info.rom).is_some();
         let seated = rig.as_ref().map_or(0, |r| r.rig.seated_h(r.scale));
-        let _ = self.launch_game_pic(&shown, medium, game, &front, front.h, look, &info.title, has_cover, h, stage_k, seated);
+        let _ = self.launch_game_pic(&shown, medium, game, &front, front.h, look, &info.title, has_cover, h, stage_k, seated, (&info.system, &info.rom));
         true
     }
 
@@ -3011,8 +3221,9 @@ impl App {
         // animation.
         if ins.scene.game.is_none() {
             let seated = ins.scene.rig.as_ref().map_or(0, |r| r.rig.seated_h(r.scale));
-            let (look, title, has_cover) = (ins.scene.look, ins.scene.title.clone(), ins.scene.has_cover);
-            let pic = self.launch_game_pic(&system, medium, game, &front, from.3, look, &title, has_cover, c.h, stage_k, seated);
+            let (look, title, has_cover, item) = (ins.scene.look, ins.scene.title.clone(), ins.scene.has_cover, ins.item);
+            let info = self.case_info(item);
+            let pic = self.launch_game_pic(&system, medium, game, &front, from.3, look, &title, has_cover, c.h, stage_k, seated, (&info.system, &info.rom));
             if let Some(ins) = self.cabinet.insert.as_mut() {
                 ins.scene.game = pic;
             }
@@ -4057,7 +4268,7 @@ fn emblem(item: Item) -> Option<&'static pocket_ui::system_art::Sprite> {
         Item::SmartShelf(_) => Art::Sticker(Sticker::TenGames),
         Item::History | Item::Review(_) | Item::Rediscover => Art::History,
         Item::Crate => return Some(super::app_crate::crate_art()),
-        Item::Recent(_) | Item::Game(..) | Item::System(_) => return None,
+        Item::Recent(_) | Item::Game(..) | Item::System(_) | Item::Series(_) => return None,
     })
 }
 
@@ -4283,7 +4494,7 @@ fn shelf_group(item: Item) -> u8 {
     match item {
         Item::Curator | Item::Search => 0,
         Item::Recent(_) => 1,
-        Item::System(_) => 3,
+        Item::System(_) | Item::Series(_) => 3,
         Item::Game(..) => 4,
         _ => 2,
     }
@@ -4397,9 +4608,18 @@ impl App {
         let look = self.case_look(&info, m);
         // Only a game can be sealed: asked before an entry without a ROM gets its stand-in key.
         let sealed = self.sealed(&info.rom);
-        if info.rom.as_os_str().is_empty() {
+        if let Item::Series(_) = item {
+            // A series by its name and the cabinet's series generation (`CabinetUi::series_changed`): a new list of series,
+            // new covers or logos make its spine and front again, and a series that took another's place never shows its.
+            info.rom = PathBuf::from(format!("shelf/series/{}/{}", info.title, self.cabinet.series_gen));
+        } else if info.rom.as_os_str().is_empty() {
             info.rom = PathBuf::from(format!("shelf/{item:?}"));
         }
+        // A series' spine: its logo is its photo (`series_logo`).
+        let photo = match item {
+            Item::Series(i) => self.series_logo(i).is_some(),
+            _ => self.spine_photo(&info.system, &info.rom).is_some(),
+        };
         let key = CaseKey {
             case: self.case_stickers_of(&info.rom),
             rom: info.rom.clone(),
@@ -4407,6 +4627,7 @@ impl App {
             look,
             ajar: self.is_frozen_item(item),
             sealed,
+            photo,
         };
         (info, key)
     }
@@ -4453,7 +4674,13 @@ impl App {
             _ => info.title.clone(),
         };
         let t0 = Instant::now();
-        let pic = media::spine_with(&mut self.text, m, f / media::shelf_scale(), key.0.look, &media::printed_title(&title, item.title_is_name()), want);
+        let photo = if key.0.photo { self.spine_photo(&info.system, &info.rom) } else { None };
+        let logo = if key.0.photo { self.series_logo_of(item) } else { None };
+        let pic = match logo {
+            // A series with its logo: the logo is its name (`series_look::logo_spine`).
+            Some(logo) => pocket_ui::series_look::logo_spine(&mut self.text, m, f / media::shelf_scale(), key.0.look, &logo, want),
+            None => self.spine_or_photo(photo.as_deref(), m, f / media::shelf_scale(), key.0.look, &media::printed_title(&title, item.title_is_name()), want),
+        };
         let pic = self.stuck_spine(pic, m, f / media::shelf_scale(), &info.rom, key.0.case);
         let pic = self.sealed_spine(pic, f / media::shelf_scale(), &info.rom, key.0.sealed);
         let pic = Rc::new(if key.0.ajar { ajar_spine(&mut self.text, pic, &info.system, &info.rom, f, key.0.look) } else { pic });
@@ -4480,10 +4707,17 @@ impl App {
         let fh = (m.size().h as f32 * k).round() as i32;
         self.note_label_h(item, m, fh);
         let label = file.as_ref().and_then(|f| self.cover_label(f, m, fh));
-        let reading = label.is_none()
-            && file
-                .as_ref()
-                .is_some_and(|f| matches!(self.cabinet.labels.get(&(f.clone(), m, fh)), Some(Slot::Pending)));
+        // A series: its games' cases stacked (`series_front`), while their covers are read its plain front.
+        // Not on the first frame of a turn (`later`): only the spine shows then.
+        let series = match item {
+            Item::Series(i) if !later => Some(self.series_front(i, m, k)),
+            _ => None,
+        };
+        let reading = matches!(series, Some(SeriesFront::Reading))
+            || label.is_none()
+                && file
+                    .as_ref()
+                    .is_some_and(|f| matches!(self.cabinet.labels.get(&(f.clone(), m, fh)), Some(Slot::Pending)));
         let key = (key, (k * 1000.0) as i32);
         if let Some((spine, front)) = self.cabinet.cached_front(&key, reading) {
             return (spine, Some(front));
@@ -4501,9 +4735,18 @@ impl App {
         let sprite = pocket_ui::system_art::get(&info.system).or_else(|| emblem(item));
         let title = media::printed_title(if reading { "" } else { info.title.as_str() }, item.title_is_name());
         let t0 = Instant::now();
-        let spine = media::spine(&mut self.text, m, k, key.0.look, "");
+        let photo = if key.0.photo { self.spine_photo(&info.system, &info.rom) } else { None };
+        let spine = match if key.0.photo { self.series_logo_of(item) } else { None } {
+            Some(logo) => pocket_ui::series_look::logo_spine(&mut self.text, m, k, key.0.look, &logo, media::spine_size(m, k)),
+            None => self.spine_or_photo(photo.as_deref(), m, k, key.0.look, "", media::spine_size(m, k)),
+        };
         let spine = self.stuck_spine(spine, m, k, &info.rom, key.0.case);
         let spine = Rc::new(self.sealed_spine(spine, k, &info.rom, key.0.sealed));
+        if let Some(SeriesFront::Cases(front)) = series {
+            self.cabinet.made("shown front", t0);
+            self.cabinet.cache_front(key, spine.clone(), front.clone(), true);
+            return (spine, Some(front));
+        }
         let front = media::front(
             &mut self.text,
             m,
@@ -5235,8 +5478,9 @@ impl App {
         // page under a launch is kept.
         if let Some(ins) = self.cabinet.insert.as_mut().filter(|i| i.item == item) {
             ins.shadow = (shadows && front.is_some()).then_some((fx + 10, fy + 12, fw, fh, lay.floor, turned));
-        } else if shadows && front.is_some() && item != Item::Crate {
-            // (Not the crate's: its box stands at the bottom of the front's place, a case's shadow round it was a dark frame.)
+        } else if shadows && front.is_some() && item != Item::Crate && !self.series_stacked(item, fh) {
+            // (Not the crate's: its box stands at the bottom of the front's place, a case's shadow round it was a dark frame.
+            // Nor a series' stack of cases: each has its own shadow, `series_look::collage`.)
             art::soft_shadow(c, fx + 10, fy + 12, fw, fh, 24, 0.45 * turned, (0, lay.floor));
         }
         match front {
@@ -5768,6 +6012,23 @@ mod shelf_tests {
         }
     }
 
+    #[test]
+    fn downloaded_spines_wake_a_shelf_with_cached_placeholders() {
+        let mut cabinet = CabinetUi::default();
+        let pending = PathBuf::from("new-rom.gba");
+        let ready = PathBuf::from("old-rom.gba");
+        let existing_photo = PathBuf::from("old-rom.png");
+        cabinet.side_files.insert(pending.clone(), None);
+        cabinet.side_files.insert(ready.clone(), Some(existing_photo.clone()));
+        let painted = cabinet.colors_gen;
+
+        cabinet.spines_changed();
+
+        assert_ne!(cabinet.colors_gen, painted, "already painted shelf tiles must ask for the new photo");
+        assert!(!cabinet.side_files.contains_key(&pending), "a previously missing spine is looked up again");
+        assert_eq!(cabinet.side_files.get(&ready), Some(&Some(existing_photo)), "ready spines stay cached");
+    }
+
     /// On every supported size the showcase has its room without the selected shelf sinking behind the top board (its
     /// spines cut at the top lose the start of their titles), for the tallest shelf of every kind of case, and the room is
     /// at least what the TV and the case need (`SHOW_MIN_SHARE`).
@@ -5796,6 +6057,7 @@ mod shelf_tests {
             case: CaseStickers { completed: true, ..Default::default() },
             ajar: false,
             sealed: false,
+            photo: false,
         }, 3000);
         let mut probes = Vec::new();
         for i in 0..100 {
@@ -5807,7 +6069,7 @@ mod shelf_tests {
             let bare = cabinet.bare_fronts.bare(&front);
             probes.push((Rc::downgrade(&spine), Rc::downgrade(&front), Rc::downgrade(&bare)));
             if i == 0 {
-                cabinet.box_game = Some((front.clone(), Rc::new(Pic::new(80, 90, 0xff00_ff00))));
+                cabinet.box_game = Some((front.clone(), false, Rc::new(Pic::new(80, 90, 0xff00_ff00))));
             } else if i == 1 {
                 cabinet.insert = Some(Inserting {
                     at: Instant::now(), item: Item::Game(0, 1),

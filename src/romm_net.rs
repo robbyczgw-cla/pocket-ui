@@ -178,7 +178,8 @@ impl Net for Curl {
         cmd.arg("-o").arg(part).args(["-K", "-"]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
         let Ok(mut child) = cmd.spawn() else { return Fetched::Unreachable };
         if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(curl_config("GET", url, Some(token), None).as_bytes());
+            // No token (ScreenScraper's pictures, `screenscraper`): no Authorization header at all.
+            let _ = stdin.write_all(curl_config("GET", url, Some(token).filter(|t| !t.is_empty()), None).as_bytes());
         }
         let mut stdout = child.stdout.take();
         loop {
@@ -298,7 +299,7 @@ impl Plain {
         let host_header = if host.contains(':') { format!("[{host}]") } else { host.clone() };
         let host_header = if port == 80 { host_header } else { format!("{host_header}:{port}") };
         let mut req = format!("{method} {path} HTTP/1.1\r\nHost: {host_header}\r\nUser-Agent: {}\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nConnection: close\r\n", self.user_agent);
-        if let Some(t) = token.filter(|t| t.chars().all(|c| c.is_ascii_graphic())) {
+        if let Some(t) = token.filter(|t| !t.is_empty() && t.chars().all(|c| c.is_ascii_graphic())) {
             req.push_str(&format!("Authorization: Bearer {t}\r\n"));
         }
         if from > 0 {
@@ -506,6 +507,26 @@ pub fn parse_bridge(reply: &str) -> Answer {
     }
 }
 
+/// The screen kept on while a RomM game downloads (`PocketBase.awakeHold`): on when made, off when dropped.
+#[cfg(target_os = "android")]
+struct AwakeHold(bool);
+
+#[cfg(target_os = "android")]
+impl AwakeHold {
+    fn new() -> Self {
+        AwakeHold(crate::platform::android::strings("awakeHold", &["on"]).is_ok())
+    }
+}
+
+#[cfg(target_os = "android")]
+impl Drop for AwakeHold {
+    fn drop(&mut self) {
+        if self.0 {
+            let _ = crate::platform::android::strings("awakeHold", &["off"]);
+        }
+    }
+}
+
 /// Android: `https://` through the Activity (`RommHttp.java`), plain `http://` through [`Plain`].
 #[cfg(target_os = "android")]
 pub struct AndroidNet {
@@ -525,6 +546,8 @@ impl Net for AndroidNet {
     }
 
     fn fetch(&self, url: &str, token: &str, part: &Path, size: u64, stop: &AtomicBool, progress: &(dyn Fn(u64) + Sync)) -> Fetched {
+        // The screen stays on for the whole download, https or a LAN server's plain http (`Awake.java`), off again however it ends.
+        let _awake = AwakeHold::new();
         if url.starts_with("http://") {
             return self.plain.fetch(url, token, part, size, stop, progress);
         }

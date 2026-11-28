@@ -99,6 +99,8 @@ test -s "$OUT/apk/assets/licences/HANDHELD-RUST-LICENSES.txt" && test -s "$OUT/a
 
 # Build paths out of the native libraries (the home folder of whoever builds): scripts/release-rustflags.sh, checked below.
 REMAP_ROOT=$(pwd -P) . scripts/release-rustflags.sh
+# ScreenScraper's developer id from this machine's file, if it has one (build.rs; never in the repository).
+. scripts/screenscraper-env.sh
 # 16 KB memory pages (Android 15+ devices): align our own libraries' segments like the cores' (build-cores.py). Checked by release-check.sh.
 export RUSTFLAGS="$RUSTFLAGS -C link-arg=-Wl,-z,max-page-size=16384"
 cargo ndk -t arm64-v8a --platform 26 -o "$OUT/apk/lib" build --locked --release --manifest-path android/Cargo.toml
@@ -108,8 +110,9 @@ cargo ndk -t arm64-v8a --platform 26 build --locked --release --manifest-path an
 cp "${CARGO_TARGET_DIR:-$PWD/android/handheld/target}/aarch64-linux-android/release/examples/libpocket_handheld.so" "$OUT/apk/lib/arm64-v8a/"
 # Every packaged native library: our own and the cores.
 sh scripts/check-binary-paths.sh "$OUT"/apk/lib/arm64-v8a/*.so || { echo 'build-apk: the native libraries carry build paths' >&2; exit 1; }
-javac --release 8 -classpath "$JAR" -d "$OUT/classes" android/java/xyz/pocketui/app/*.java
-"$BT/d8" --min-api 26 --lib "$JAR" --output "$OUT/dex" "$OUT/classes/xyz/pocketui/app/"*.class
+# With Shizuku's binder interfaces and parcel (android/java/moe, MIT; Android extras, docs/ANDROID-EXTRAS.md).
+javac --release 8 -classpath "$JAR" -d "$OUT/classes" android/java/xyz/pocketui/app/*.java android/java/moe/shizuku/server/*.java android/java/moe/shizuku/api/*.java
+"$BT/d8" --min-api 26 --lib "$JAR" --output "$OUT/dex" "$OUT/classes/xyz/pocketui/app/"*.class "$OUT/classes/moe/shizuku/server/"*.class "$OUT/classes/moe/shizuku/api/"*.class
 "$BT/aapt" package -f -M android/AndroidManifest.xml -S android/res -I "$JAR" -F "$OUT/unsigned.apk"
 cp "$OUT/dex/classes.dex" "$OUT/apk/"
 (cd "$OUT/apk" && zip -qr "$OUT/unsigned.apk" .)

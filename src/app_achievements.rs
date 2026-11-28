@@ -454,7 +454,9 @@ impl App {
         let panel_h = 30 + 48 + (shown - 1) * pocket_ui::type_scale::line(44, 8) + 24 + pocket_ui::type_scale::grow(44);
         pocket_ui::kit::panel(c, pad, panel_top, c.w - 2 * pad, panel_h);
         self.text.draw(c, Face::Body, 24, left, y, pal().dust, "Status");
-        y += 48;
+        // Hangul, hanzi and Vietnamese stacked marks stand taller than capitals: down by the difference, clear of the
+        // label (`Text::cjk_rise`; 0 for every other line).
+        y += 48 + lines.first().map_or(0, |l| self.text.cjk_rise(Face::Title, 44, l));
         for line in lines.iter().take(2) {
             self.text.draw(c, Face::Title, 44, left, y, color, line);
             y += pocket_ui::type_scale::line(44, 8);

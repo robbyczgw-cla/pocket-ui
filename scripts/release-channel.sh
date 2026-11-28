@@ -9,6 +9,7 @@
 #     --ds-core     pinned portable DSperate build folder (binary, licences, full source and recipe)
 #     --hakux       pinned hakuX build folder (Xbox core, licences and source information)
 #     --gba-core    pinned ARM64 gpSP build folder (licence and corresponding source included)
+#     --bsnes-hd    pinned ARM64 bsnes-hd build folder (scripts/build-bsnes-hd.sh; licences and corresponding source included)
 #     --in          the artefacts (default release-out/): bin/pocket-ui and bin/pocket-core (or a ready
 #                   pocket-ui-<v>-aarch64.tar.gz), optional pocket-ui-<v>-rocknix-install.zip,
 #                   pocket-ui-<v>-rp-mini-v2.img.xz, NOTES.txt and store/ (a signed catalog folder)
@@ -44,6 +45,7 @@ KEY=${POCKETUI_SIGNING_KEY:-$HOME/.config/pocket-ui/store-signing.key}
 NOTES=
 DS_CORE_DIR=
 GBA_CORE_DIR=
+BSNES_HD_DIR=
 HAKUX_DIR=
 NOTES_FILE=
 PREVIOUS=
@@ -65,6 +67,7 @@ while [ $# -gt 0 ]; do
     --ds-core) DS_CORE_DIR=$2; shift ;;
     --hakux) HAKUX_DIR=$2; shift ;;
     --gba-core) GBA_CORE_DIR=$2; shift ;;
+    --bsnes-hd) BSNES_HD_DIR=$2; shift ;;
     --in) IN=$2; shift ;;
     --out) OUT=$2; shift ;;
     --channel) CHANNEL=$2; shift ;;
@@ -223,6 +226,10 @@ else
     python3 -I "$ROOT/scripts/dsperate-files.py" "$DS_CORE_DIR" "$S/cores"
     case " $FILES " in *" cores "*) ;; *) FILES="$FILES cores";; esac
   fi
+  if [ -n "$BSNES_HD_DIR" ]; then
+    sh "$ROOT/scripts/bsnes-hd-files.sh" "$BSNES_HD_DIR" "$S/cores"
+    case " $FILES " in *" cores "*) ;; *) FILES="$FILES cores";; esac
+  fi
   if [ -n "$HAKUX_DIR" ]; then
     sh "$ROOT/scripts/hakux-files.sh" "$HAKUX_DIR" "$S/hakux"
     FILES="$FILES hakux"
@@ -255,6 +262,12 @@ if [ -n "$DS_CORE_DIR" ]; then
     cmp -s "$X/.expected-ds/$f" "$X/cores/$f" || die "the app archive lacks the verified DSperate, licence or source: $f"
   done
 fi
+if [ -n "$BSNES_HD_DIR" ]; then
+  sh "$ROOT/scripts/bsnes-hd-files.sh" "$BSNES_HD_DIR" "$X/.expected-bsnes"
+  (cd "$X/.expected-bsnes" && find . -type f) | while IFS= read -r f; do
+    cmp -s "$X/.expected-bsnes/$f" "$X/cores/$f" || die "the app archive lacks the verified bsnes-hd, licence or source: $f"
+  done
+fi
 if [ -n "$HAKUX_DIR" ]; then
   sh "$ROOT/scripts/hakux-files.sh" "$HAKUX_DIR" "$X/.expected-hakux"
   diff -qr "$X/.expected-hakux" "$X/hakux" || die "the app archive lacks the verified hakuX bundle"
@@ -263,6 +276,10 @@ fi
 # route must carry its verified core, even when a ready archive was supplied.
 if grep -aq dsperate "$X/pocket-ui"; then
   python3 -I "$ROOT/scripts/dsperate-files.py" --check "$X/cores" || die "DSperate bundle missing or stale; build scripts/build-dsperate.sh and pass --ds-core"
+fi
+# The same for Mode 7 HD's bsnes-hd (src/mode7_hd.rs BUNDLED): the app update brings it to cards whose image has none.
+if LC_ALL=C grep -a -q 'cores/bsnes_hd_beta_libretro.so' "$X/pocket-ui"; then
+  sh "$ROOT/scripts/bsnes-hd-files.sh" --check "$X/cores" || die "bsnes-hd bundle missing or stale; build scripts/build-bsnes-hd.sh and pass --bsnes-hd"
 fi
 rm -rf "$X"
 asset "$GH/$APP"

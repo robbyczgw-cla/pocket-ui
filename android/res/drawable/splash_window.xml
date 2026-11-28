@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Before Android 12 the start shows the window's background: the boot screen's picture (splash_mark, made by
+     pocket-splash from src/splash.rs, docs/BOOT-SPLASH.md "On Android") in the middle of black, as pocket-splash shows it. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@android:color/black" />
+    <item><bitmap android:src="@drawable/splash_mark" android:gravity="center" android:filter="false" /></item>
+</layer-list>

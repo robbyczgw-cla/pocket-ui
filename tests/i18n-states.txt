@@ -43,6 +43,9 @@ setup:first-games:dd
 setup:first-look
 setup:first-look:d
 setup:first-look:dddr
+setup:first-handheld
+setup:first-handheld:d
+setup:first-done
 setup:look
 setup:look:L
 setup:play
@@ -192,6 +195,9 @@ battery:0
 battery:3
 battery:3:samples
 battery:3:sleep
+battery:reset
+battery:reset-ask
+battery:reset-failed
 updates:note
 updates:refused
 updates:unreachable
@@ -408,6 +414,8 @@ tour:settings
 tour:easy_to_read
 tour-new:lens,echoes
 tour-new:retro_look
+tour-new:screenscraper,shelf_by_series
+tour-new:shelf_by_series
 
 # Settings → System → Sleep & power
 sleep
@@ -570,6 +578,7 @@ picture-snes:3
 picture-psx
 # An N64 game on the Mini V2: Resolution (render_scale), the last row, selected.
 picture-n64:4:device=miniv2
+picture-dc:5:device=miniv2
 picture-custom:3
 shortcuts
 shortcuts:6

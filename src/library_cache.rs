@@ -29,7 +29,8 @@ pub const FILE: &str = "library-cache.json";
 /// system carry what tells them apart, versions are taken off names ("Pipes.v1.02"), and a disc whose track file is
 /// missing is left out: a list of format 1 would show the old names until the rescan swapped them.
 /// 3 (2026-10-27): a file name with no capital letter is cased for the shelf ("Libbet and the Magic Floor").
-pub const VERSION: u32 = 3;
+/// 4 (2026-11-26): a console sold under regional names is one shelf with its other folders as parts (`region_pairs`).
+pub const VERSION: u32 = 4;
 /// `0` switches the cache off.
 pub const ENV: &str = "POCKETUI_LIBRARY_CACHE";
 
@@ -85,8 +86,10 @@ fn read_if(data_dir: &Path, key: &Key, fits: impl Fn(&Key) -> bool) -> Result<(V
     if !fits(&found) {
         return Err(stale_reason(&found, key));
     }
-    let systems: Vec<System> = serde_json::from_reader(r).map_err(|e| format!("damaged ({e})"))?;
+    let mut systems: Vec<System> = serde_json::from_reader(r).map_err(|e| format!("damaged ({e})"))?;
     library::learn_names(&systems);
+    // The names chosen since the list was written (Settings → Look → Cozy extras).
+    library::name_region_pairs(&mut systems);
     Ok((systems, found))
 }
 
@@ -508,7 +511,7 @@ mod tests {
     fn the_newest_list_handed_in_stays() {
         let f = Fixture::new("order");
         let key = Key::now(&f.es()).unwrap();
-        let one = vec![System { name: "gba".into(), fullname: "GBA".into(), emulator: None, core: None, emulators: vec![], games: vec![Game { name: "One".into(), path: "/r/one.gba".into() }] }];
+        let one = vec![System { name: "gba".into(), fullname: "GBA".into(), emulator: None, core: None, emulators: vec![], games: vec![Game { name: "One".into(), path: "/r/one.gba".into() }], parts: Vec::new() }];
         let mut two = one.clone();
         two[0].games[0].name = "Two".into();
         // Numbered 2 written first, then 1 (handed in earlier, slower thread): 2 stays.

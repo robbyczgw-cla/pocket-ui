@@ -81,9 +81,21 @@ fn a_gles_core_reaches_the_screen_upright_through_the_read_back() {
     }
 }
 
+/// The direct way's prototype asked for where there is no screen surface (a computer): it says so and reads back as always.
+#[test]
+fn the_direct_way_without_a_screen_falls_back_to_the_read_back() {
+    if let Some(err) = run_with(true) {
+        assert!(err.contains("direct: no screen surface"), "{err}");
+    }
+}
+
 /// Runs the stub core; the core's log, None when the host has no GLES. The log has the order read and the read-back's time split into
 /// the read and the turn into the picture.
 fn run() -> Option<String> {
+    run_with(false)
+}
+
+fn run_with(direct: bool) -> Option<String> {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
     std::fs::write(d.join("core.c"), CORE).unwrap();
@@ -113,6 +125,7 @@ fn run() -> Option<String> {
         .env("XDG_RUNTIME_DIR", d)
         .env("POCKETUI_DATA", d.join("data"))
         .env("ALSA_CONFIG_PATH", d.join("asound.conf"))
+        .env(if direct { "POCKET_CORE_BRICK_DIRECT" } else { "POCKET_CORE_NOT_DIRECT" }, "1")
         .stdout(std::fs::File::create(&log).unwrap())
         .stderr(std::fs::File::create(d.join("core.err")).unwrap())
         .spawn()

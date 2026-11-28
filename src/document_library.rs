@@ -126,7 +126,8 @@ pub fn ps1_bios(documents: &[Document]) -> Vec<Part> {
 }
 
 /// A BIOS accepted by our bundled players: system, private relative name and exact length. No ROMs are bundled.
-/// Names are matched without case; Dreamcast's files go in Flycast's `dc/` system subfolder.
+/// Names are matched without case; Dreamcast's files go in Flycast's `dc/` system subfolder. The Mega-CD's are known (never
+/// a game) but no player of ours takes them: its games go to an emulator app.
 pub fn bios_file(name: &str) -> Option<(&'static str, String, i64)> {
     let name = name.to_ascii_lowercase();
     let leaf = name.strip_prefix("dc/").unwrap_or(&name);
@@ -139,7 +140,10 @@ pub fn bios_file(name: &str) -> Option<(&'static str, String, i64)> {
         "gbc_bios.bin" => ("gbc", leaf.to_string(), 2304),
         "gba_bios.bin" => ("gba", leaf.to_string(), 16384),
         "bios_cd_e.bin" | "bios_cd_u.bin" | "bios_cd_j.bin" => ("segacd", format!("bios_CD_{}.bin", leaf[8..9].to_ascii_uppercase()), 128 << 10),
-        "syscard3.pce" => ("pcenginecd", leaf.to_string(), 256 << 10),
+        // PC Engine CD's System Cards: Android's player plays the CD games from the PC Engine's folder (Beetle PCE Fast,
+        // `android/cores.lock.json`), so they belong to `pcengine`. `BiosFiles.java` takes the same names and sizes.
+        "syscard3.pce" | "syscard2.pce" | "syscard1.pce" => ("pcengine", leaf.to_string(), 256 << 10),
+        "gexpress.pce" => ("pcengine", leaf.to_string(), 32 << 10),
         _ if is_ps1_bios_name(&name) => ("psx", name, PS1_BIOS_BYTES),
         _ => return None,
     };
@@ -476,6 +480,36 @@ mod tests {
         let bios = player_bios(&docs);
         assert_eq!(bios.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["gb_bios.bin", "gbc_bios.bin", "gba_bios.bin", "bios_CD_E.bin", "syscard3.pce"]);
         assert!(scan(docs).is_empty(), "BIOS files never become games, also in a system's folder");
+    }
+
+    /// PC Engine CD games didn't start on Android (26.11.2026): `syscard3.pce` was copied under a name `BiosFiles.java` refused,
+    /// and it belonged to `pcenginecd`, a system no player of ours plays, so neither view handed it to the PC Engine's games.
+    /// The boot screen's Game Boy files were refused the same way. The test above checked our names, never the Java side's.
+    /// Every BIOS we know: a system our own player plays (`android/cores.lock.json`) and a name and size the player keeps,
+    /// or a system that goes to an emulator app.
+    #[test]
+    fn every_bios_we_know_is_one_the_player_keeps_for_a_system_it_plays() {
+        let java = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/android/java/xyz/pocketui/app/BiosFiles.java")).unwrap();
+        let to_an_app = ["segacd"];
+        for name in ["saturn_bios.bin", "sega_101.bin", "mpr-17933.bin", "dc_boot.bin", "dc_bios.bin", "dc_flash.bin", "gb_bios.bin", "gbc_bios.bin",
+            "gba_bios.bin", "bios_CD_E.bin", "bios_cd_u.bin", "bios_CD_J.bin", "SYSCARD3.PCE", "syscard2.pce", "syscard1.pce", "gexpress.pce", "scph5501.bin", "SCPH1001.BIN"] {
+            let (system, kept, size) = bios_file(name).unwrap_or_else(|| panic!("{name} is a BIOS"));
+            if to_an_app.contains(&system) {
+                assert!(crate::play_route::bundled_core(system).is_none(), "{system} plays in our player now: hand {name} over");
+                continue;
+            }
+            assert!(crate::play_route::bundled_core(system).is_some(), "{name} is for {system}, a system no player of ours plays");
+            let case = java.lines().find(|l| l.contains(&format!("\"{kept}\"")));
+            if is_ps1_bios_name(&kept) {
+                assert!(java.contains("scph[0-9]{3,5}[a-z]?") && kept == kept.to_ascii_lowercase(), "{kept}");
+                continue;
+            }
+            let case = case.unwrap_or_else(|| panic!("BiosFiles.java refuses {kept}"));
+            let java_size = case.split("return ").nth(1).map(|r| r.trim_end_matches(';').trim()).unwrap_or_default();
+            let bytes = match java_size.split_once("<<") { Some((a, b)) => a.parse::<i64>().unwrap() << b.parse::<i64>().unwrap(), None => java_size.parse().unwrap() };
+            assert_eq!(bytes, size, "{kept}: the same size on both sides");
+        }
+        assert_eq!(bios_file("SYSCARD3.PCE").map(|b| b.0), Some("pcengine"), "the PC Engine's CD games play from its folder");
     }
 
     #[test]

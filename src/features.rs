@@ -21,7 +21,7 @@ use crate::on_start::OnStart;
 use crate::pad::Button;
 use crate::palette::*;
 use crate::font_style::FontStyle;
-use crate::settings::{Frames, Motion, TextSize};
+use crate::settings::{Frames, Motion, ShelfOrder, TextSize};
 use crate::text::{Face, Text};
 use crate::touch::Area;
 use crate::ui_sound;
@@ -46,6 +46,14 @@ pub struct Switches {
     pub sound: ui_sound::Config,
     pub haptics: bool,
     pub leds: leds::Config,
+    /// Settings › Games › Box art & downloads › ScreenScraper (settings.json's `screenscraper`): Off until the player
+    /// switches it on; no profile ever does.
+    pub screenscraper: bool,
+    /// The four rows under it (Real spines, labels, box backs, manuals): what ScreenScraper fetches and shows. The Real box
+    /// pictures card sets them with its START (`Cards::press_picker`).
+    pub screenscraper_show: crate::screenscraper::Show,
+    /// Settings › Look › Layout › Order (settings.json's `shelf_order`).
+    pub shelf_order: ShelfOrder,
 }
 
 impl Default for Switches {
@@ -63,6 +71,9 @@ impl Default for Switches {
             sound: ui_sound::Config::default(),
             haptics: false,
             leds: leds::Config::default(),
+            screenscraper: false,
+            screenscraper_show: crate::screenscraper::Show::default(),
+            shelf_order: ShelfOrder::Console,
         }
     }
 }
@@ -551,6 +562,44 @@ pub static FEATURES: &[Feature] = &[
         try_it: None,
     },
     Feature {
+        // 0.8.0: Off on every device until the player switches it on (a card's A or Settings), never by a profile. The
+        // first start asks on its Box art step, so it is not one of "Choose for yourself" (`FIRST_START_ASKS`); after an
+        // update it is a card once, with what it sends (`NOTES`). Only in builds that have it (`in_this_build`).
+        id: "screenscraper",
+        title: "Real box pictures",
+        plain: "real box spines, labels and backs",
+        line: "Real spines, labels, box backs and manuals.",
+        place: "Settings › Games › Box art & downloads › ScreenScraper",
+        guide: "extras.md#screenscraper",
+        since: "0.8.0",
+        switch: Some(Switch { get: |s| s.screenscraper, set: |s, on| s.screenscraper = on }),
+        simple: Pick::Keep,
+        enthusiast: Pick::Keep,
+        preview: pv::screenscraper,
+        todo: None,
+        try_it: Some("Turn on"),
+    },
+    Feature {
+        // 0.8.0: Order on the first start's look step, so also not one of "Choose for yourself" (`FIRST_START_ASKS`).
+        id: "shelf_by_series",
+        title: "Shelves by series",
+        plain: "your games grouped by series",
+        line: "Home groups your games by series, from every console, in release order.",
+        place: "Settings › Look › Layout › Order",
+        guide: "playing.md#shelves-by-series",
+        since: "0.8.0",
+        switch: Some(Switch {
+            get: |s| s.shelf_order == ShelfOrder::Series,
+            set: |s, on| s.shelf_order = if on { ShelfOrder::Series } else { ShelfOrder::Console },
+        }),
+        // A taste, not part of a profile.
+        simple: Pick::Keep,
+        enthusiast: Pick::Keep,
+        preview: pv::shelf_by_series,
+        todo: None,
+        try_it: Some("Turn on"),
+    },
+    Feature {
         id: "search",
         title: "Search and the letter jump",
         plain: "Search and the letter jump",
@@ -893,9 +942,32 @@ pub fn profile_summary(p: Profile) -> (Vec<&'static str>, Vec<&'static str>) {
     (titles(Pick::On), titles(Pick::Off))
 }
 
-/// The cards of the first start's "Choose for yourself": every feature with a switch.
+/// The switch cards the first start asks on a step of its own (Box art: ScreenScraper; the look: Order), so "Choose for
+/// yourself" leaves them out and nothing is asked twice.
+pub const FIRST_START_ASKS: &[&str] = &["screenscraper", "shelf_by_series"];
+
+/// The cards of the first start's "Choose for yourself": every feature with a switch that the first start doesn't ask
+/// elsewhere (`FIRST_START_ASKS`).
 pub fn choose_list() -> Vec<usize> {
-    available().filter(|(_, f)| f.switch.is_some()).map(|(i, _)| i).collect()
+    available().filter(|(_, f)| f.switch.is_some() && !FIRST_START_ASKS.contains(&f.id)).map(|(i, _)| i).collect()
+}
+
+/// Whether this build has the card's feature: ScreenScraper only with pocket-ui's developer id, as its Settings row
+/// (`screenscraper::shown`). "New in this version" asks this; Settings › Tour shows no such card.
+pub fn in_this_build(f: &Feature) -> bool {
+    f.id != "screenscraper" || crate::screenscraper::shown()
+}
+
+/// A card's note under its line, across the page (the preview below gets smaller for it): what it sends where
+/// (ScreenScraper's), by id.
+pub const NOTES: &[(&str, &str)] = &[(
+    "screenscraper",
+    "Only while it is on, it sends each game's checksum, size and file name to screenscraper.fr, as a guest unless you sign in.",
+)];
+
+/// The card's note, if it has one (`NOTES`).
+pub fn note(f: &Feature) -> Option<&'static str> {
+    NOTES.iter().find(|(id, _)| *id == f.id).map(|(_, n)| *n)
 }
 
 /// "New in this version": the features newer than the version last seen (`BASELINE` when none was noted) and not
@@ -907,7 +979,7 @@ pub fn due(seen: Option<&str>, current: &str) -> Vec<usize> {
         return Vec::new();
     }
     let mut list: Vec<usize> = available()
-        .filter(|(_, f)| newer(f.since, seen) && !newer(f.since, current))
+        .filter(|(_, f)| newer(f.since, seen) && !newer(f.since, current) && in_this_build(f))
         .map(|(i, _)| i)
         .collect();
     // Newest first; the registry's order among the same version.
@@ -941,6 +1013,9 @@ pub enum Mode {
     Tour,
     /// After an update: B puts them all away.
     New { version: String },
+    /// The first start's Real box pictures page (Your games › Real box pictures, `setup`): the same choice as the card
+    /// after an update (`Cards::picker`); START or B goes back to Your games.
+    Pictures,
 }
 
 /// The three choices of a switch card.
@@ -974,6 +1049,30 @@ pub struct Cards {
     changed: bool,
     /// The previews painted so far: (feature, light).
     previews: HashMap<(usize, bool), Image>,
+    /// The Real box pictures card (`picker`): the kinds ticked so far, taken only with its START.
+    picks: crate::screenscraper::Show,
+    /// Its real examples, decoded and scaled once: (kind, width, height).
+    samples: HashMap<(usize, i32, i32), Image>,
+}
+
+/// The real examples on the Real box pictures card, one per kind (`screenscraper::PICTURE_NAMES`): shipped with the app,
+/// as the card comes before anything may be fetched. Sources and licence: assets/ss-samples/SOURCES.md.
+const SAMPLES: [&[u8]; 4] = [
+    include_bytes!("../assets/ss-samples/spine.jpg"),
+    include_bytes!("../assets/ss-samples/label.jpg"),
+    include_bytes!("../assets/ss-samples/back.jpg"),
+    include_bytes!("../assets/ss-samples/manual.jpg"),
+];
+/// The game the examples are of (a free game with a real release, `SAMPLES`); painted as it is.
+pub const SAMPLE_GAME: &str = "Tobu Tobu Girl";
+/// The Real box pictures page's promise under its rows: ticking sends nothing.
+pub const NOTHING_BEFORE_START: &str = "Nothing is sent before START.";
+/// Who holds the examples' art and its licence (CC BY 4.0 asks for both where they are shown); painted as it is.
+pub const SAMPLE_CREDIT: &str = "Tangram Games 2017\u{a0}· CC\u{a0}BY\u{a0}4.0";
+
+/// Example `i` (`SAMPLES`) as shipped.
+pub fn sample(i: usize) -> Option<Image> {
+    crate::image::read_jpeg(*SAMPLES.get(i)?)
 }
 
 impl Cards {
@@ -987,6 +1086,8 @@ impl Cards {
             later,
             changed: false,
             previews: HashMap::new(),
+            picks: crate::screenscraper::Show::default(),
+            samples: HashMap::new(),
         };
         c.show(0);
         c
@@ -995,11 +1096,85 @@ impl Cards {
     /// Opens at card `i` of the list.
     pub fn show(&mut self, i: usize) {
         self.at = i.min(self.list.len().saturating_sub(1));
+        if self.picker() {
+            // The kinds as they are now (the first time: spines, labels and manuals, no box backs), the first row chosen.
+            (self.picks, self.choice) = (self.switches.screenscraper_show, 0);
+            return;
+        }
         let offers = self.offer().is_some();
         self.choice = match self.feature().and_then(|f| f.is_on(&self.switches)) {
             Some(false) if !offers => 1,
             _ => 0,
         };
+    }
+
+    /// The Real box pictures card after an update (owner 27.11.2026): instead of On, Off and Later, the four kinds of
+    /// picture one by one (Real spines, labels, box backs, manuals), each with a real example beside the list. A switches
+    /// the chosen kind, START turns ScreenScraper on with the kinds ticked, B ("Not now") leaves it off; nothing is sent
+    /// before START.
+    pub fn picker(&self) -> bool {
+        matches!(self.mode, Mode::New { .. } | Mode::Pictures) && self.feature().is_some_and(|f| f.id == "screenscraper")
+    }
+
+    /// The kinds ticked on the Real box pictures card (`picker`).
+    pub fn picks(&self) -> crate::screenscraper::Show {
+        self.picks
+    }
+
+    /// What START does on the Real box pictures card: "Turn on" while it is off and a kind is ticked; with none ticked it
+    /// stays off and START only goes on.
+    fn picker_start(&self) -> &'static str {
+        match (self.switches.screenscraper, self.picks.any(), self.at + 1 >= self.list.len()) {
+            (false, true, _) => "Turn on",
+            (_, _, true) => "Done",
+            _ => "Next",
+        }
+    }
+
+    /// A press on the Real box pictures card (`picker`).
+    fn press_picker(&mut self, b: Button) -> Out {
+        let n = crate::screenscraper::PICTURE_NAMES.len();
+        match b {
+            Button::Up => self.choice = (self.choice + n - 1) % n,
+            Button::Down => self.choice = (self.choice + 1) % n,
+            Button::East => self.picks.flip(self.choice),
+            Button::R1 | Button::Right => {
+                if self.at + 1 < self.list.len() {
+                    self.show(self.at + 1);
+                }
+            }
+            // Back a card; on the first one nothing happens (the ticks stay).
+            Button::L1 | Button::Left => {
+                if self.at > 0 {
+                    self.show(self.at - 1);
+                }
+            }
+            // On with the kinds ticked; with none ticked nothing would be shown, so it stays as it is.
+            Button::Start => {
+                let id = self.feature().map(|f| f.id).unwrap_or_default();
+                let on = self.switches.screenscraper || self.picks.any();
+                let changed = on && (self.switches.screenscraper_show != self.picks || !self.switches.screenscraper);
+                if changed {
+                    self.switches.screenscraper_show = self.picks;
+                    self.switches.screenscraper = true;
+                    self.changed = true;
+                    self.later.retain(|l| l != id);
+                }
+                let out = self.next();
+                return if changed && out == Out::Stay { Out::Changed } else { out };
+            }
+            // Not now: off as it was, put off as Later does (after an update), and on to the next card.
+            Button::South => {
+                if let Some(f) = self.feature().filter(|_| matches!(self.mode, Mode::New { .. })) {
+                    if !self.switches.screenscraper && !self.later.iter().any(|l| l == f.id) {
+                        self.later.push(f.id.to_string());
+                    }
+                }
+                return self.next();
+            }
+            _ => {}
+        }
+        Out::Stay
     }
 
     /// After an update, a new feature that is off and has a `try_it`: what A says while On is chosen.
@@ -1044,6 +1219,12 @@ impl Cards {
         self.choice
     }
 
+    /// Row `i` chosen (a finger on a row, `setup`'s Real box pictures page), within the rows there are.
+    pub fn select(&mut self, i: usize) {
+        let rows = if self.picker() { crate::screenscraper::PICTURE_NAMES.len() } else { CHOICES.len() };
+        self.choice = i.min(rows - 1);
+    }
+
     /// The switches after a change, once.
     pub fn take_switches(&mut self) -> Option<Switches> {
         std::mem::take(&mut self.changed).then(|| self.switches.clone())
@@ -1051,7 +1232,9 @@ impl Cards {
 
     /// What the screen shows, for the App's redraw check.
     pub fn mark(&self) -> (usize, usize, usize) {
-        (self.at, self.choice, self.later.len())
+        // The Real box pictures card's ticks change the page too (`picker`): one bit per kind above the choice.
+        let ticks = (0..crate::screenscraper::PICTURE_NAMES.len()).filter(|i| self.picks.get(*i)).fold(0, |m, i| m | 1 << (i + 8));
+        (self.at, self.choice | if self.picker() { ticks } else { 0 }, self.later.len())
     }
 
     fn next(&mut self) -> Out {
@@ -1083,6 +1266,9 @@ impl Cards {
     }
 
     pub fn press(&mut self, b: Button) -> Out {
+        if self.picker() {
+            return self.press_picker(b);
+        }
         let switch = self.feature().is_some_and(|f| f.switch.is_some());
         match b {
             Button::Up if switch => self.choice = (self.choice + CHOICES.len() - 1) % CHOICES.len(),
@@ -1146,6 +1332,123 @@ impl Cards {
         hits
     }
 
+    /// The Real box pictures card below its title, line and what it sends (`picker`): the four kinds as rows with On or Off
+    /// on the left, the chosen kind's real example on the right, the way to the setting under the rows. Rows and type get
+    /// smaller before anything is cut; on a short screen with Large text the way goes first.
+    fn paint_picker(&mut self, c: &mut Canvas, text: &mut Text, top: i32, mut hits: Hits) -> Hits {
+        let names = crate::screenscraper::PICTURE_NAMES;
+        let n = names.len() as i32;
+        let f = self.feature().expect("the picker is a card");
+        let limit = crate::kit::hint_bar_top(c.h) - 8;
+        // The list takes what its longest name needs (German, Large text), from 46 up to 60 % of the width.
+        let room = c.w - 2 * MARGIN - 44;
+        // Each row ends in a tick box (ticked: fetched and shown), the same width in every language, so a long word for
+        // Off (Desactivado) never squeezes the name (Sol 27.11.2026).
+        let box_w = |px: u32| (px as i32 * 3 / 4).max(16);
+        // A narrow screen (640x480 is painted at its own size) gets tighter paddings and up to two thirds for the list.
+        let narrow = c.w < 800;
+        let (pad_l, pad_r, gap) = if narrow { (14, 12, 10) } else { (28, 24, 20) };
+        let name_w = |text: &mut Text, px: u32| names.iter().map(|nm| text.width(Face::Title, px, nm)).max().unwrap_or(0);
+        let need = |text: &mut Text, px: u32| name_w(text, px) + pad_l + pad_r + box_w(px) + gap;
+        let lw = need(text, 37).clamp(room * 46 / 100, room * if narrow { 66 } else { 60 } / 100);
+        let x = MARGIN;
+        let lead = "Changed any time in";
+        // Under the rows, always (Neon 28.11.2026): the ticks send nothing, START does.
+        let promise = text.wrap_prose(Face::Body, 24, NOTHING_BEFORE_START, lw);
+        let promise_h = promise.len() as i32 * crate::type_scale::line(24, 10) + 10;
+        let step = |px: u32| crate::type_scale::line(px, 12);
+        // Rows of 88 or 72 with the way under them; when that is too tall the way goes first (the rows are the setting's
+        // own), and only then do the rows get lower.
+        let tiers = [(88, 14, 37, 24), (72, 10, 37, 24), (72, 10, 37, 21), (60, 8, 32, 21), (52, 6, 28, 21)];
+        let high = |row: i32, gap: i32, way_lines: usize, way_px: u32| n * (row + gap) + 14 + promise_h + way_lines as i32 * step(way_px);
+        let with_way = tiers[..3].iter().find_map(|&(row, gap, label_px, way_px)| {
+            let way: Vec<String> = [text.wrap_prose(Face::Body, way_px, lead, lw), text.wrap_prose(Face::Body, way_px, f.place_here(), lw)].concat();
+            (top + high(row, gap, way.len(), way_px) <= limit).then_some((row, gap, label_px, way_px, way))
+        });
+        let (row, gap, label_px, way_px, way) = with_way.unwrap_or_else(|| {
+            match tiers.iter().find(|&&(row, gap, _, way_px)| top + high(row, gap, 0, way_px) <= limit) {
+                Some(&(row, gap, label_px, way_px)) => (row, gap, label_px, way_px, Vec::new()),
+                // Still too tall (Large text on 768 lines under a long note): the rows share what is left above the
+                // promise, so it stays whole above the hint bar.
+                None => {
+                    let row = ((limit - top - 14 - promise_h) / n - 4).max(30);
+                    (row, 4, (row as u32 * 9 / 20).clamp(16, 28), 21, Vec::new())
+                }
+            }
+        });
+        // Every name whole: its type gets smaller before a name is cut.
+        // Tall rows (88) take a size bigger where the names fit (Neon 28.11.2026: thin at 640x480 in Retro).
+        let top_px = if row >= 88 { 44 } else { label_px };
+        let label_px = [top_px, label_px, 32, 28, 24, 21, 18].into_iter().filter(|px| *px <= top_px).find(|px| need(text, *px) <= lw).unwrap_or(18);
+        let mut y = top;
+        for (k, name) in names.iter().enumerate() {
+            let selected = k == self.choice;
+            c.rect(x, y, lw, row, if selected { pal().label } else { pal().spine });
+            if selected {
+                crate::game_card::lift_shadow(c, x, y + row, lw, pal().t);
+            }
+            let (fg, dim) = if selected { (pal().ink, pal().label_dust) } else { (pal().chalk, pal().dust) };
+            let bw = box_w(label_px);
+            let label = text.fit(Face::Title, label_px, name, lw - pad_l - pad_r - bw - gap);
+            text.draw(c, Face::Title, label_px, x + pad_l, y + row / 2 + crate::type_scale::base(13, label_px), fg, &label);
+            tick_box(c, x + lw - pad_r - bw, y + (row - bw) / 2, bw, self.picks.get(k), if self.picks.get(k) { fg } else { dim });
+            hits.choices.push((Area::new(x, y, lw, row), k));
+            y += row + gap;
+        }
+        y += 14 + 24;
+        for line in &promise {
+            text.draw(c, Face::Body, 24, x, y, pal().chalk, line);
+            y += crate::type_scale::line(24, 10);
+        }
+        y += 10 - 24 + way_px as i32;
+        for line in &way {
+            text.draw(c, Face::Body, way_px, x, y, pal().dust, line);
+            y += step(way_px);
+        }
+
+        // The chosen kind's real example, whole, on the keycap paper; its game, the art's holder and licence under it.
+        // Both whole, wrapped if the column is narrow (Large text): the credit is what the art's licence asks for.
+        let caption = format!("Example: {SAMPLE_GAME}");
+        let px = x + lw + 44;
+        let bw = c.w - MARGIN - px;
+        let cap_lines = text.wrap_prose(Face::Body, 21, &caption, bw);
+        let credit_lines = text.literal(|t| t.wrap_prose(Face::Body, 21, SAMPLE_CREDIT, bw));
+        let cap_step = crate::type_scale::line(21, 8);
+        let cap_h = (cap_lines.len() + credit_lines.len()) as i32 * cap_step;
+        let bh = (limit - top - cap_h - 8 - 12).max(64);
+        crate::retro::pill(c, px, top, bw, bh, 16, pal().keycap);
+        let (iw, ih) = (bw - 32, bh - 32);
+        let key = (self.choice, iw, ih);
+        if !self.samples.contains_key(&key) {
+            if let Some(img) = sample(self.choice) {
+                // Whole and in proportion: the long side fills the box.
+                let (w, h) = (img.w as i32, img.h as i32);
+                let (sw, sh) = if w * ih > h * iw { (iw, (h * iw / w.max(1)).max(1)) } else { ((w * ih / h.max(1)).max(1), ih) };
+                self.samples.insert(key, img.resized(sw, sh));
+            }
+        }
+        if let Some(img) = self.samples.get(&key) {
+            let (w, h) = (img.w as i32, img.h as i32);
+            c.blit_scaled(img, px + (bw - w) / 2, top + (bh - h) / 2, w, h);
+        }
+        let mut base = top + bh + 8 + 21;
+        for line in &cap_lines {
+            text.draw(c, Face::Body, 21, px, base, pal().dust, line);
+            base += cap_step;
+        }
+        text.literal(|t| {
+            for line in &credit_lines {
+                t.draw(c, Face::Body, 21, px, base, pal().dust, line);
+                base += cap_step;
+            }
+        });
+
+        let h: Vec<(&str, &str)> = vec![("Up/Down", "Choose"), ("A", "Switch"), ("START", self.picker_start()), ("B", "Not now")];
+        hits.buttons = crate::setup::hints(c, text, &h);
+        hits.sel = self.choice;
+        hits
+    }
+
     /// The card page. Returns the choice rows and the hint pills for touch.
     pub fn paint(&mut self, c: &mut Canvas, text: &mut Text) -> Hits {
         c.clear(pal().void);
@@ -1156,6 +1459,7 @@ impl Cards {
         let Some(f) = self.feature() else { return hits };
         let heading = match &self.mode {
             Mode::First => "Choose for yourself".to_string(),
+            Mode::Pictures => "Your games".to_string(),
             Mode::Tour => TOUR_TITLE.to_string(),
             Mode::New { version } => format!("New in pocket-ui {version}"),
         };
@@ -1173,15 +1477,34 @@ impl Cards {
         }
         let title = text.fit(Face::Title, 67, f.title, c.w - 2 * MARGIN);
         text.draw(c, Face::Title, 67, MARGIN, 160, pal().chalk, &title);
-        for (k, line) in text.wrap_prose(Face::Body, 28, line_in(f, crate::device::android_profile()), c.w - 2 * MARGIN).iter().take(2).enumerate() {
-            text.draw(c, Face::Body, 28, MARGIN, 208 + k as i32 * 38, pal().dust, line);
+        let lines: Vec<String> = text.wrap_prose(Face::Body, 28, line_in(f, crate::device::android_profile()), c.w - 2 * MARGIN).into_iter().take(2).collect();
+        // The Real box pictures page: a line with stacked marks (Vietnamese ẫ) goes down by their extra height, clear of
+        // the title (`Text::tall_extra`, 0 for Latin letters).
+        let rise = if self.picker() { text.tall_extra(Face::Body, 28, &lines) } else { 0 };
+        for (k, line) in lines.iter().enumerate() {
+            text.draw(c, Face::Body, 28, MARGIN, 208 + rise + k as i32 * 38, pal().dust, line);
         }
+        // What the feature sends where (`NOTES`), whole, under its line across the page; the preview gives up the height
+        // it takes beyond the line's two lines.
+        let note_step = crate::type_scale::line(24, 10);
+        let notes: Vec<String> = note(f).map(|n| text.wrap_prose(Face::Body, 24, n, c.w - 2 * MARGIN)).unwrap_or_default();
+        let mut ny = 208 + rise + lines.len() as i32 * 38 + 4;
+        for line in &notes {
+            text.draw(c, Face::Body, 24, MARGIN, ny, pal().chalk, line);
+            ny += note_step;
+        }
+        let taken = if notes.is_empty() { rise } else { (ny - note_step + 4 - (208 + 38)).max(0) };
 
         // On a short screen (768 lines) the preview is smaller and the choices lower-key, so that the card ends above the
         // hint bar; the column beside the preview gets the width the preview gave up.
         let short = crate::kit::short_screen(c.h);
-        let (pw, ph) = if short { (360 * PREVIEW.0 / PREVIEW.1, 360) } else { PREVIEW };
-        let (px, py) = (MARGIN + 8, if short { 280 } else { 300 });
+        if self.picker() {
+            let top = if short { 280 } else { 300 } + taken - 8;
+            return self.paint_picker(c, text, top, hits);
+        }
+        let ph = if short { 360 } else { PREVIEW.1 } - taken;
+        let (pw, ph) = (ph * PREVIEW.0 / PREVIEW.1, ph);
+        let (px, py) = (MARGIN + 8, if short { 280 } else { 300 } + taken);
         crate::retro::pill(c, px - 8, py - 8, pw + 16, ph + 16, 16, pal().keycap);
         if let Some(img) = self.preview(text) {
             c.blit_scaled(img, px, py, pw, ph);
@@ -1198,19 +1521,25 @@ impl Cards {
         };
         // The way to the setting can be long (German, two settings, Large text) and must stay readable whole, above the hint
         // bar: when it doesn't fit, its type goes 28, 24, 21 px, and last the rows are lower, before anything is cut.
-        let (lead_lines, rows) = (text.wrap_prose(Face::Body, 24, lead, w), if f.switch.is_some() { CHOICES.len() as i32 } else { 0 });
+        let (mut lead_lines, rows) = (text.wrap_prose(Face::Body, 24, lead, w), if f.switch.is_some() { CHOICES.len() as i32 } else { 0 });
         let tiers = if short { [(72, 10, 20, 28), (72, 10, 20, 24), (72, 10, 20, 21), (60, 8, 22, 21)] } else { [(88, 14, 30, 28), (88, 14, 30, 24), (88, 14, 30, 21), (60, 8, 22, 21)] };
         let top = py - 8;
         let limit = crate::kit::hint_bar_top(c.h) - 8;
         let mut chosen = None;
+        let mut fits = false;
         for (row, gap, extra, font) in tiers {
             let lines = text.wrap_prose(Face::Body, font, f.place_here(), w);
             let high = rows * (row + gap) + if rows > 0 { extra } else { 30 } + lead_lines.len() as i32 * crate::type_scale::line(24, 10) + 16
                 + lines.len() as i32 * crate::type_scale::line(font, 12);
             chosen = Some((row, gap, extra, font, lines));
-            if top + high <= limit {
+            fits = top + high <= limit;
+            if fits {
                 break;
             }
+        }
+        // Still too long (a note above took height, Large text on 768 lines): the way itself stays whole, its lead goes.
+        if !fits {
+            lead_lines.clear();
         }
         let (row, gap, extra, font, place_lines) = chosen.expect("tiers is not empty");
         let mut y = top;
@@ -1269,6 +1598,29 @@ impl Cards {
         hits.buttons = crate::setup::hints(c, text, &h);
         hits.sel = self.choice;
         hits
+    }
+}
+
+/// A tick box of `s` pixels at (x, y): its frame, and a tick in it when `on` (the Real box pictures rows).
+fn tick_box(c: &mut Canvas, x: i32, y: i32, s: i32, on: bool, color: u32) {
+    let t = (s / 9).max(2);
+    c.rect(x, y, s, t, color);
+    c.rect(x, y + s - t, s, t, color);
+    c.rect(x, y, t, s, color);
+    c.rect(x + s - t, y, t, s, color);
+    if on {
+        // The tick: a short stroke down to the right, then a long one up to the right, in squares of the frame's width.
+        let (x0, y0) = (x + s * 2 / 9, y + s / 2);
+        let (xm, ym) = (x + s * 4 / 9, y + s * 7 / 10);
+        let (x1, y1) = (x + s * 7 / 9, y + s * 3 / 10);
+        let stroke = |c: &mut Canvas, (ax, ay): (i32, i32), (bx, by): (i32, i32)| {
+            let n = (bx - ax).abs().max((by - ay).abs()).max(1);
+            for i in 0..=n {
+                c.rect(ax + (bx - ax) * i / n - t / 2, ay + (by - ay) * i / n - t / 2, t + 1, t + 1, color);
+            }
+        };
+        stroke(c, (x0, y0), (xm, ym));
+        stroke(c, (xm, ym), (x1, y1));
     }
 }
 
@@ -1382,7 +1734,10 @@ pub fn paint_profiles(c: &mut Canvas, text: &mut Text, sel: usize, profiles: &[P
         let blurb = text.fit(Face::Body, 24, p.blurb(), width - 56);
         // Lower by what Large text adds to it: on a short screen's rows (92 px) the grown line touched the name above
         // (Retro, Spanish, 1024x768, 2026-11-07).
-        text.draw(c, Face::Body, 24, MARGIN + 28, y + row_h * 90 / 112 + crate::type_scale::grow(24), dim, &blurb);
+        // Stacked Vietnamese marks (and hangul, hanzi) stand taller: down by the difference, clear of the name; the row
+        // has the room below (`Text::cjk_rise`, 0 for Latin text).
+        let rise = text.cjk_rise(Face::Body, 24, &blurb);
+        text.draw(c, Face::Body, 24, MARGIN + 28, y + row_h * 90 / 112 + crate::type_scale::grow(24) + rise, dim, &blurb);
         hits.choices.push((Area::new(MARGIN, y, width, row_h), i));
     }
     let mut y = first + profiles.len() as i32 * pitch + if short { 22 } else { 30 };
@@ -1644,6 +1999,126 @@ mod tests {
         // "Choose for yourself" shows what is set, as every card there.
         let c = cards(Mode::First, &["retro_look"]);
         assert_eq!((c.choice(), c.offer()), (1, None));
+    }
+
+    /// 0.8.0: whoever updates from 0.7.x gets ScreenScraper's card once (with what it sends) and Shelves by series; A turns
+    /// the shown card on, B leaves both off; a new device asks on its own steps, so neither card comes twice.
+    #[test]
+    fn after_the_update_to_0_8_screenscraper_is_offered_once_and_stays_off_until_start() {
+        let _shown = crate::screenscraper::shown_for_this_thread(true);
+        let (ss, series) = (by_id("screenscraper").unwrap(), by_id("shelf_by_series").unwrap());
+        for seen in [Some("0.7.2"), Some("0.7.0"), Some("0.6.1")] {
+            assert_eq!(due(seen, "0.8.0"), vec![ss, series], "from {seen:?}");
+        }
+        assert!(due(Some("0.8.0"), "0.8.0").is_empty() && due(Some("0.8.0"), "0.8.1").is_empty(), "seen once, never again");
+        // The first start notes its own version (`App::finish_setup`): nothing after it, and its "Choose for yourself" has
+        // neither card (Box art and the look step ask).
+        assert!(due(Some("0.8.0"), "0.8.0").is_empty());
+        assert!(!choose_list().contains(&ss) && !choose_list().contains(&series));
+        assert!(FIRST_START_ASKS.iter().all(|id| by_id(id).is_some()), "{FIRST_START_ASKS:?}");
+        // A build without pocket-ui's developer id has no ScreenScraper: no card for it.
+        {
+            let _without = crate::screenscraper::shown_for_this_thread(false);
+            assert_eq!(due(Some("0.7.2"), "0.8.0"), vec![series]);
+        }
+
+        // Off on a new device and after every profile.
+        let start = Switches::default();
+        assert!(!start.screenscraper && start.shelf_order == ShelfOrder::Console);
+        for p in Profile::ALL {
+            let mut s = start.clone();
+            apply(p, &mut s);
+            assert!(!s.screenscraper && s.shelf_order == ShelfOrder::Console, "{p:?} switches neither on");
+        }
+
+        let new = || Mode::New { version: "0.8.0".into() };
+        // The card is the four kinds with a real example each (owner 27.11.2026): A switches the chosen kind and sends
+        // nothing, START turns ScreenScraper on with the kinds ticked, B ("Not now") leaves it off.
+        use crate::screenscraper::Show;
+        let mut c = cards(new(), &["screenscraper", "shelf_by_series"]);
+        assert!(c.picker());
+        assert_eq!((c.choice(), c.picks(), c.picker_start()), (0, Show::default(), "Turn on"), "today's kinds ticked, the first row chosen");
+        assert_eq!(c.press(Button::Down), Out::Stay);
+        assert_eq!(c.press(Button::Down), Out::Stay);
+        assert_eq!(c.press(Button::East), Out::Stay, "A switches Real box backs and stays on the card");
+        assert!(c.picks().backs && c.take_switches().is_none(), "A takes nothing yet");
+        assert_eq!(c.press(Button::Up), Out::Stay);
+        assert_eq!(c.press(Button::East), Out::Stay, "Real labels off");
+        assert_eq!(c.press(Button::Start), Out::Changed, "START turns it on and goes on to the next card");
+        let s = c.take_switches().unwrap();
+        assert!(s.screenscraper && s.shelf_order == ShelfOrder::Console, "START set ScreenScraper, nothing else");
+        assert_eq!(s.screenscraper_show, Show { spines: true, labels: false, backs: true, manuals: true }, "the kinds ticked");
+        assert!(!c.picker() && c.feature().map(|f| f.id) == Some("shelf_by_series"));
+        assert_eq!(c.press(Button::South), Out::Done);
+        assert!(c.take_switches().is_none(), "B leaves Order as it was");
+
+        // Not now: off, nothing taken, put off, on to the next card.
+        let mut c = cards(new(), &["screenscraper", "shelf_by_series"]);
+        assert_eq!(c.press(Button::East), Out::Stay);
+        assert_eq!(c.press(Button::South), Out::Stay);
+        assert!(c.take_switches().is_none(), "B changes nothing");
+        assert_eq!((c.at(), c.later.clone()), (1, vec!["screenscraper".to_string()]));
+        let mut c = cards(new(), &["screenscraper"]);
+        assert_eq!(c.press(Button::South), Out::Done, "the only card: Not now closes");
+        assert!(c.take_switches().is_none());
+
+        // Nothing ticked: nothing to show, so START leaves it off.
+        let mut c = cards(new(), &["screenscraper"]);
+        for _ in 0..4 {
+            if c.picks().get(c.choice()) {
+                c.press(Button::East);
+            }
+            c.press(Button::Down);
+        }
+        assert!(!c.picks().any() && c.picker_start() == "Done");
+        assert_eq!(c.press(Button::Start), Out::Done);
+        assert!(c.take_switches().is_none(), "none ticked: still off");
+
+        // Left on the first card keeps the ticks (Sol 27.11.2026).
+        let mut c = cards(new(), &["screenscraper", "shelf_by_series"]);
+        c.press(Button::East);
+        assert_eq!(c.press(Button::Left), Out::Stay);
+        assert!(!c.picks().spines, "the tick stays");
+
+        // The first start's page (Your games › Real box pictures) is the same choice: START takes the kinds and On, B
+        // nothing and puts nothing off; both end the page.
+        let mut c = cards(Mode::Pictures, &["screenscraper"]);
+        assert!(c.picker() && c.picks() == Show::default());
+        assert_eq!(c.press(Button::South), Out::Done);
+        assert!(c.take_switches().is_none() && c.later.is_empty(), "Not now: nothing taken, nothing put off");
+        let mut c = cards(Mode::Pictures, &["screenscraper"]);
+        assert_eq!(c.press(Button::Start), Out::Done);
+        assert_eq!(c.take_switches().map(|s| (s.screenscraper, s.screenscraper_show)), Some((true, Show::default())));
+
+        // Not in "Choose for yourself" (`FIRST_START_ASKS`); the Tour doesn't list it (`in_this_build`).
+        assert!(!cards(Mode::First, &["screenscraper"]).picker());
+
+        // Shelves by series on its own: A sets Order to By series.
+        let mut c = cards(new(), &["shelf_by_series"]);
+        assert_eq!(c.press(Button::East), Out::Done);
+        assert_eq!(c.take_switches().map(|s| (s.shelf_order, s.screenscraper)), Some((ShelfOrder::Series, false)));
+
+        // The card says what it sends.
+        let note = note(&FEATURES[ss]).unwrap();
+        for word in ["checksum", "size", "file name", "while it is on", "guest"] {
+            assert!(note.contains(word), "{note}");
+        }
+        assert!(NOTES.iter().all(|(id, _)| by_id(id).is_some()), "every note belongs to a card");
+    }
+
+    /// The Real box pictures card's examples are in the app (the card comes before anything may be fetched): one real
+    /// picture per kind, whole, small enough to keep the program small.
+    #[test]
+    fn every_kind_on_the_real_box_pictures_card_has_its_real_example_in_the_app() {
+        assert_eq!(SAMPLES.len(), crate::screenscraper::PICTURE_NAMES.len());
+        for (i, bytes) in SAMPLES.iter().enumerate() {
+            let img = sample(i).unwrap_or_else(|| panic!("example {i} decodes"));
+            assert!(img.w >= 60 && img.h >= 300 && img.w.max(img.h) <= 540, "example {i}: {} x {}", img.w, img.h);
+            assert!(bytes.len() < 80_000, "example {i}: {} bytes", bytes.len());
+            // A real picture, not one flat colour.
+            let distinct: std::collections::HashSet<u32> = img.px.iter().step_by(7).copied().collect();
+            assert!(distinct.len() > 500, "example {i}: {} colours", distinct.len());
+        }
     }
 
     #[test]

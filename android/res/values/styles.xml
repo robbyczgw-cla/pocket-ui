@@ -1,6 +1,8 @@
 <resources>
+    <!-- The start (docs/BOOT-SPLASH.md "On Android"): before Android 12 the window's background is the boot screen's
+         picture on black (drawable/splash_window); from 12 the system splash shows it (values-v31). -->
     <style name="PocketTheme" parent="android:style/Theme.Material.NoActionBar.Fullscreen">
-        <item name="android:windowBackground">#000000</item>
+        <item name="android:windowBackground">@drawable/splash_window</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:colorAccent">#ECE9E1</item>
     </style>

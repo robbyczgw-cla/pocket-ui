@@ -166,7 +166,7 @@ Source code
 -----------
 
 pocket-ui's source and the scripts that build this image are next to the image on @RELEASE_URL@
-(pocket-ui-@VERSION@-source.tar.gz); the rest of the source is public at the links below. For at least three
+(pocket-ui-@VERSION@-src.tar.gz); the rest of the source is public at the links below. For at least three
 years from the release of this image, anyone can ask for the complete corresponding source code of the GNU GPL
 and LGPL software on this card, for no charge beyond the cost of providing it: open an issue at the project's
 GitHub page. See pocket-ui-info/SOURCE-OFFER.txt.

@@ -66,12 +66,14 @@ Español
 Português (Brasil)
 Français
 Italiano
+Tiếng Việt
 ‹ English ›
 ‹ Deutsch ›
 ‹ Español ›
 ‹ Português (Brasil) ›
 ‹ Français ›
 ‹ Italiano ›
+‹ Tiếng Việt ›
 ‹ Normal ›
 Ports
 Vulkan
@@ -107,6 +109,7 @@ re:^HOME \+
 ARMSX2
 hakuX
 hakuX (RetroArch)
+hakuX (standalone)
 Azahar
 Dolphin
 PPSSPP
@@ -488,9 +491,7 @@ Code 01FF57D8
 Code 01FF5AD8
 Final Quest
 Pocket CD Demo
-# Key names and a studio of the rating and Surprise me snapshots
-LEFT RIGHT
-RIGHT
+# A studio of the rating and Surprise me snapshots (the key names are words, docs/i18n-glossary.md)
 EA Jawbreaker
 BIOS Test
 Racer (Disc 2)
@@ -751,3 +752,21 @@ The Legend of Zelda: The Minish Cap
 Dome Romantik
 OpenTTD
 godot_4.3.squashfs
+# Consoles sold under regional names (`region_pairs`): their names and their rows under Cozy extras
+Super Famicom
+TurboGrafx-CD
+Mega-CD
+Mega Drive / Genesis
+SNES / Super Famicom
+NES / Famicom
+PC Engine / TurboGrafx-16
+TurboGrafx-16
+
+# Android extras (src/android_extras.rs): app names, and the ADB line typed as it is, also its wrapped pieces.
+Shizuku
+Magisk
+re:^adb shell pm grant .*
+re:^(adb|shell|pm|grant|android\.permission\.WRITE_SECURE_SETTINGS|xyz\.pocketui\.[a-z.]+)( .*)?$
+# ScreenScraper.fr, the picture source (src/screenscraper.rs)
+ScreenScraper
+re:^Tangram Games \d · CC BY 4\.0$

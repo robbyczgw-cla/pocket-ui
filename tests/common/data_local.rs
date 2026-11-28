@@ -122,7 +122,7 @@ pub fn probe(source: &str, d: &Path, file: &Path, bytes: Option<&[u8]>, valid: b
         }
         "check-zip" | "check-rom" => {
             let info=pocket_ui::library::SysInfo{id:"gb".into(),name:"Game Boy".into(),folder:"gb".into(),path:d.join("check/gb"),extensions:vec!["gb".into(),"zip".into()]};
-            let input=pocket_ui::game_check::Input{catalog:vec![info],shelf:vec![("gb".into(),vec![file.to_path_buf()])],bios_dir:d.join("check/bios"),roms:d.join("check"),h700:false};
+            let input=pocket_ui::game_check::Input{catalog:vec![info],shelf:vec![("gb".into(),vec![file.to_path_buf()])],bios_dir:d.join("check/bios"),roms:d.join("check"),h700:false,versions:Default::default()};
             let report=pocket_ui::game_check::check(&input,&std::sync::atomic::AtomicBool::new(false),&mut |_,_,_|{}).unwrap();
             if valid { assert_eq!(report.ready,1,"{report:?}"); }
             readable_report(&report);

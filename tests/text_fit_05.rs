@@ -33,6 +33,11 @@ impl Scene {
     }
 
     fn shot(&self, state: &str, device: &str, resolution: &str, lang: &str, font: &str, size: &str) -> (String, String, String) {
+        self.shot_env(state, device, resolution, lang, font, size, &[])
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn shot_env(&self, state: &str, device: &str, resolution: &str, lang: &str, font: &str, size: &str, env: &[(&str, &str)]) -> (String, String, String) {
         let root = self.dir.path();
         let settings: serde_json::Value = serde_json::from_slice(&fs::read(root.join("data/settings.json")).unwrap()).unwrap();
         let look = settings["theme"].as_str().unwrap();
@@ -51,6 +56,7 @@ impl Scene {
             .env("POCKETUI_LANG", lang).env("POCKETUI_FONT", font).env("POCKETUI_TEXT_SIZE", size)
             .env("POCKETUI_RETRO", if font == "retro" { "cocoa" } else { "off" })
             .env("POCKETUI_VISIBLE_TEXT", &seen).env("POCKETUI_TEXT_BOXES", &boxes).env("POCKETUI_NAV_PROBE", &nav)
+            .envs(env.iter().copied())
             .output().unwrap();
         assert!(out.status.success(), "{name}: {}", String::from_utf8_lossy(&out.stderr));
         if let Some(proof) = std::env::var_os("POCKETUI_TEXT_FIT_PROOF") {
@@ -128,6 +134,79 @@ fn pmini_home_keeps_details_beside_quick_settings_settings_and_resume() {
                 let label = i18n::tr_in(Lang::from_locale(lang), label);
                 if !nav.contains(&format!("{}{}\t", pocket_ui::nav_probe::HINT, key)) || !shown.lines().any(|s| s == label) { bad.push(format!("{look}: missing {key} {label}: {shown}")); }
             }
+        }
+        bad
+    });
+}
+
+/// Every UI language (the release check needs them all), both letters, both text sizes.
+fn every_language(mut check: impl FnMut(&Scene, &str, &str, &str) -> Vec<String>) {
+    let scene = Scene::new();
+    let mut bad = Vec::new();
+    for lang in ["en", "de", "es", "pt", "fr", "it", "ko", "zh", "vi", "ja"] {
+        for font in ["barlow", "retro"] {
+            for size in ["normal", "large"] {
+                bad.extend(check(&scene, lang, font, size).into_iter().map(|s| format!("{lang}/{font}/{size}: {s}")));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
+
+fn squeeze(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// 0.8 check video on the Brick (27.11.2026): Load's value at its last stop read "From the…" in the pause menu. The
+/// value is whole on 1024x768, selected (with its arrows) and at rest, in every language, letters and size.
+#[test]
+fn pause_load_from_the_start_is_whole_at_1024x768() {
+    every_language(|scene, lang, font, size| {
+        let mut bad = Vec::new();
+        for state in ["slot-restart:snes", "slot-restart"] {
+            let (shown, boxes, _) = scene.shot(state, "brick", "1024x768", lang, font, size);
+            bad.extend(faults(&boxes).into_iter().map(|f| format!("{state}: {f}")));
+            // The window says it too: the row's value is the line after Load's name, and it is never cut short ("…").
+            let (want, load) = (i18n::tr_in(Lang::from_locale(lang), "From the start"), i18n::tr_in(Lang::from_locale(lang), "Load"));
+            let lines: Vec<&str> = shown.lines().map(str::trim).collect();
+            // Its arrows, where they fit, are drawn as marks of their own around it.
+            let value = lines.iter().position(|l| *l == load).and_then(|i| lines[i + 1..].iter().find(|l| **l != "‹")).copied().unwrap_or("");
+            // Whole on Load's row (the video's case: English at the usual size, both letters); where a long translation
+            // or Large text leaves the row no room beside the preview, a size smaller first, and the window says it
+            // whole (as for every long value, `pause_page`).
+            let whole = squeeze(value) == squeeze(&want);
+            if lang == "en" && size == "normal" && !whole { bad.push(format!("{state}: Load's value {value:?}, not {want:?}")); }
+            if !lines.iter().any(|l| squeeze(l) == squeeze(&want)) { bad.push(format!("{state}: {want:?} whole nowhere: {shown}")); }
+        }
+        bad
+    });
+}
+
+/// 0.8 check video on the Brick: on the ScreenScraper row its long text pushed Real box backs and Real manuals off the
+/// page, and the credit broke as "(CC" / "BY-NC-SA 4.0)" beside the hint bar. On 1024x768, every language, letters and
+/// size, guest, running, signed in and at the day's limit: the four rows under ScreenScraper are on the page (at Large as
+/// many as fit, the rest a scroll away) and the licence stays one piece.
+#[test]
+fn screenscraper_row_keeps_its_rows_and_licence_whole_at_1024x768() {
+    every_language(|scene, lang, font, size| {
+        let l = Lang::from_locale(lang);
+        let mut bad = Vec::new();
+        for demo in ["on", "running", "signed", "quota"] {
+            let state = format!("setup:extras-screenscraper={demo}");
+            let (shown, boxes, _) = scene.shot_env(&state, "brick", "1024x768", lang, font, size, &[("POCKETUI_SCREENSCRAPER_ROW", "1")]);
+            bad.extend(faults(&boxes).into_iter().map(|f| format!("{demo}: {f}")));
+            // At the usual size all five rows; at Large the list scrolls (`extras_page`): ScreenScraper and the rows
+            // right under it as far as they fit, never fewer than two.
+            let rows: &[&str] = if size == "normal" { &["ScreenScraper", "Real spines", "Real labels", "Real box backs", "Real manuals"] } else { &["ScreenScraper", "Real spines", "Real labels"] };
+            for row in rows {
+                let row = i18n::tr_in(l, row);
+                if !shown.lines().any(|s| s.trim() == row) { bad.push(format!("{demo}: row {row:?} not on the page: {shown}")); }
+            }
+            // The credit in the interface's language, its licence's name never split over two lines.
+            let credit = squeeze(&i18n::tr_in(l, "Data and media: ScreenScraper.fr (CC BY-NC-SA 4.0)"));
+            let all = squeeze(&shown.replace('\n', " ")).replace("（ ", "（").replace(" ）", "）");
+            if !all.contains(&credit) && !all.replace(" ", "").contains(&credit.replace(" ", "")) { bad.push(format!("{demo}: the credit {credit:?} missing: {shown}")); }
+            if !shown.lines().any(|s| squeeze(s).contains("CC BY-NC-SA 4.0")) { bad.push(format!("{demo}: \"CC BY-NC-SA 4.0\" broken apart: {shown}")); }
         }
         bad
     });

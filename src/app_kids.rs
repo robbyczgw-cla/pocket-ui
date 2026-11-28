@@ -1222,7 +1222,8 @@ impl App {
         let wrapped: Vec<String> = lines.iter().flat_map(|line| self.text.wrap_prose_at_most(Face::Body, spx, line, width, 2)).collect();
         // Above the hint bar whatever the text's size and language (Spanish, Large text, 1024x768: the second line of
         // "Forgot it?" touched it): the block stands higher where it needs to.
-        let step = (spx as f32 * 1.3) as i32;
+        // Lines of stacked Vietnamese marks stand taller (`Text::tall_extra`, 0 for Latin text).
+        let step = (spx as f32 * 1.3) as i32 + self.text.tall_extra(Face::Body, spx, &wrapped);
         let mut y = ((810.0 * u) as i32).min(pocket_ui::kit::hint_bar_top(c.h) - 16 - (wrapped.len() as i32 - 1).max(0) * step);
         for l in wrapped {
             let w = self.text.width(Face::Body, spx, &l);
@@ -1526,7 +1527,7 @@ impl App {
     }
 
     fn kids_library_item(&self, pick: &Pick) -> Option<Item> {
-        let s = self.systems.iter().position(|sys| sys.name == pick.system)?;
+        let s = self.systems.iter().position(|sys| pocket_ui::region_pairs::same_shelf(&sys.name, &pick.system))?;
         let g = self.systems[s].games.iter().position(|g| g.path == pick.path)?;
         Some(Item::Game(s, g))
     }

@@ -271,6 +271,33 @@ fn old_short_psp_moment_gets_a_clear_explanation_and_remains_loadable() {
     assert!(play_cards::recovery_note("ppsspp", Resume::Resumed).is_none());
 }
 #[test]
+fn the_short_note_over_the_game_keeps_its_sentences_apart() {
+    // Night QA 27.11.2026: "… neu gestartet Der Moment … letzten Platz Dieser PSP-Moment …" in the pill over the game.
+    // The recovery page drew every line on its own, only the pill joined them with a bare space.
+    use pocket_ui::i18n::{for_this_thread, tr, Lang};
+    let lines = ["Couldn't go back to that moment: started fresh", "Its moment is kept under Load, after the last slot",
+        play_cards::recovery_note("ppsspp", pocket_ui::libretro::Resume::Failed).unwrap()];
+    for lang in [Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::Vi] {
+        let _l = for_this_thread(lang);
+        let translated: Vec<String> = lines.iter().map(|l| tr(l)).collect();
+        let msg = play_cards::note_sentences(&translated);
+        for pair in translated.windows(2) {
+            let joint = &msg[msg.find(pair[0].as_str()).unwrap() + pair[0].len()..];
+            assert!(joint.starts_with(". ") || (pair[0].ends_with('.') && joint.starts_with(' ')), "{lang:?}: {msg}");
+        }
+        assert!(!msg.contains(".."), "{lang:?}: no doubled stop in {msg}");
+    }
+    for lang in [Lang::Zh, Lang::Ja] {
+        let _l = for_this_thread(lang);
+        let translated: Vec<String> = lines.iter().map(|l| tr(l)).collect();
+        let msg = play_cards::note_sentences(&translated);
+        assert_eq!(msg.matches(['。', '.', '！', '？']).count() >= 2, true, "{lang:?}: {msg}");
+        assert!(!msg.contains("。。"), "{lang:?}: {msg}");
+    }
+    let one = vec!["Slot 1 saved".to_string()];
+    assert_eq!(play_cards::note_sentences(&one), "Slot 1 saved", "a single line stays as it was");
+}
+#[test]
 fn a_return_after_a_long_break_is_quiet_and_optional() {
     use pocket_ui::where_was_i::{card, Facts, AWAY};
     let f = Facts {

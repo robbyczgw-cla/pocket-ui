@@ -11,15 +11,25 @@
         <package android:name="org.ppsspp.ppsspp"/><package android:name="org.ppsspp.ppssppgold"/>
         <package android:name="com.github.stenzek.duckstation"/><package android:name="io.github.lime3ds.android"/>
         <package android:name="org.azahar_emu.azahar"/>
-        <package android:name="com.armsx2"/><package android:name="com.rfandango.haku_x"/>
+        <package android:name="com.armsx2"/><package android:name="come.nanodata.armsx2"/><package android:name="com.rfandango.haku_x"/>
+        <!-- Android extras (docs/ANDROID-EXTRAS.md): Shizuku, and DraStic's name for the pause menu over it. -->
+        <package android:name="moe.shizuku.privileged.api"/><package android:name="com.dsemu.drastic"/>
         <!-- The drawer under the shelf: every app with a start icon, as a home screen shows them. No QUERY_ALL_PACKAGES. -->
         <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
     </queries>
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Settings → System → Run in background: Android's own question to leave pocket-ui off battery optimisation (a normal
+         permission, the player answers; HandheldActivity.askBatteryExempt). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Only the handheld view asks for these, explained at its start: it reads the games where they are (ROMs/<system>).
          The Mobile view keeps the folder picker. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <!-- Android extras (Settings → System → Android extras, docs/ANDROID-EXTRAS.md), off unless the player sets them up:
+         Android grants WRITE_SECURE_SETTINGS only by adb, Shizuku or root, never by a dialog; Shizuku's API permission lets
+         Shizuku ask the player whether pocket-ui may use it. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <application android:label="pocket-ui" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:theme="@style/PocketTheme" android:debuggable="false" android:extractNativeLibs="true" android:allowNativeHeapPointerTagging="false" android:allowBackup="false" android:hasFragileUserData="true" android:usesCleartextTraffic="false">
         <!-- The two NativeActivity views follow every configuration themselves (a pad paired, the language): Android can't take
              them down and make them again in their process (their native loop never ends; review of 12.11.2026, #2). -->
@@ -39,5 +49,13 @@
         <provider android:name=".RomProvider" android:authorities="xyz.pocketui.app.roms" android:exported="false" android:grantUriPermissions="true" />
         <service android:name=".PlayerWarm" android:process=":player" android:exported="false" />
         <receiver android:name=".UpdateInstaller$ResultReceiver" android:exported="false" />
+        <!-- Android extras (docs/ANDROID-EXTRAS.md), in a process of their own: Shizuku's server hands its binder to this provider
+             (it must be <package>.shizuku, exported, one process; the permission is the shell's, so other apps can't call it),
+             and the pause menu over other emulator apps is this accessibility service, which the player turns on. -->
+        <provider android:name=".ExtrasProvider" android:process=":extras" android:authorities="xyz.pocketui.app.shizuku" android:exported="true" android:multiprocess="false" android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+        <service android:name=".PadWatch" android:process=":extras" android:label="pocket-ui pause menu" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/pad_watch" />
+        </service>
     </application>
 </manifest>

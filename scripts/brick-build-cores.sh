@@ -51,6 +51,7 @@ tic80|https://github.com/nesbox/TIC-80|7020500a6e88f6ee91301933bb77f082a10e10f5|
 melondsds|https://github.com/JesseTG/melonds-ds|bc4e4b67d2d470d7c682810a1e892cafd6f9082b|.|cmake-melon|melondsds_libretro.so
 dsperate|https://github.com/thwonp/dsperate-lr|27b9d76fb4c900d29f9629806f316527b5da90c2|.|cmake-dsperate|dsperate_libretro.so
 scummvm|https://github.com/libretro/scummvm|292e409938384ac0b3819a336c61fbb71dcbb9c3|backends/platform/libretro|Makefile|scummvm_libretro.so
+bsnes_hd_beta|https://github.com/DerKoun/bsnes-hd|fc26b25ea236f0f877f0265d2a2c37dfd93dfde9|bsnes|GNUmakefile|bsnes_hd_beta_libretro.so
 '
 ONLY=${BRICK_CORES:-}
 mkdir -p "$OUT/cores" "$OUT/licences" "$OUT/sources" "$WORK"
@@ -172,6 +173,15 @@ echo "$CORES" | while IFS='|' read -r id repo commit dir mk so; do
   [ "$id" = pcsx_rearmed ] && XARGS=("EXTRA_LDFLAGS=-Wl,-z,noexecstack -Wl,-z,nodelete -s" HAVE_PHYSICAL_CDROM=0)
   [ "$id" = dosbox_pure ] && XARGS+=(ISMAC= ISWIN= "MAKE_CPUFLAGS=-fPIC")
   [ "$id" = yabause ] && XARGS+=(HAVE_SSE=0 DYNAREC=0)
+  # bsnes-hd (Options > Picture > Mode 7 HD on ROCKNIX, scripts/build-bsnes-hd.sh): the commit ROCKNIX 20261001 builds. Its own make
+  # variables (nall), not the libretro ones; no OpenMP (zig has no libgomp: the libretro link line names -lgomp, an empty stub
+  # answers it), so HD Mode 7 draws its lines on one thread. The Makefile's own -g goes again with -Wl,-s at the link.
+  if [ "$id" = bsnes_hd_beta ]; then
+    mkdir -p "$WORK/gomp-stub"; : | "$BIN/cc" -x c -c - -o "$WORK/gomp-stub/stub.o"; rm -f "$WORK/gomp-stub/libgomp.a"; "$BIN/ar" rcs "$WORK/gomp-stub/libgomp.a" "$WORK/gomp-stub/stub.o"
+    XARGS=(target=libretro binary=library local=false platform=linux openmp=false build=performance "compiler=$BIN/c++")
+    # nall specialises is_signed/is_unsigned for its 128-bit types, which clang 20 refuses by default (libc++ answers them itself).
+    BRICK_CC_EXTRA="-w -Wno-invalid-specialization -L$WORK/gomp-stub -Wl,-s -Wl,-z,noexecstack -Wl,-z,nodelete"; export BRICK_CC_EXTRA
+  fi
   [ "$id" = scummvm ] && XARGS+=(core BUILD_64BIT=1 FORCE_OPENGLNONE=1 USE_LIBCO=0 "AR=$BIN/ar cru" "LDFLAGS=-shared -fPIC -Wl,-z,noexecstack -Wl,-z,nodelete -s -pthread -lm -ldl -Wl,--no-undefined")
   if [[ "$mk" = cmake-* ]]; then
     CARGS=(); CXX_EXTRA=

@@ -124,7 +124,7 @@ impl App {
         if system == pocket_ui::android_games::SYSTEM_ID {
             return false;
         }
-        let Some(sys) = self.systems.iter().find(|s| s.name == system) else { return false };
+        let Some(sys) = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system)) else { return false };
         let Some((way, _)) = self.phone_way(sys, Some(path)) else { return false };
         match way {
             Way::NeedsCore { .. } => {
@@ -167,7 +167,7 @@ impl App {
 
     /// The game card's "Setting up Dolphin" row: a game that plays in the Dolphin app here.
     pub(crate) fn card_dolphin_row(&self, system: &str, path: &Path) -> Option<pocket_ui::game_card_model::CuratorRow> {
-        let sys = self.systems.iter().find(|s| s.name == system)?;
+        let sys = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system))?;
         let (way, _) = self.phone_way(sys, Some(path))?;
         matches!(way, Way::App(app) if pocket_ui::rescue::is_dolphin(&app.package)).then(|| pocket_ui::game_card_model::CuratorRow {
             kind: pocket_ui::game_card_model::RowKind::Dolphin,
@@ -180,7 +180,7 @@ impl App {
     pub(crate) fn phone_save(&mut self, edits: &[(String, Option<String>)]) {
         let Some((page, _)) = self.emu.page.as_ref() else { return };
         let system = page.subject.system.clone();
-        let refs: Vec<GameRef> = self.systems.iter().find(|s| s.name == system).into_iter().flat_map(|s| s.games.iter().filter_map(|g| game_ref(&s.name, &g.path))).collect();
+        let refs: Vec<GameRef> = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system)).into_iter().flat_map(|s| s.games.iter().filter_map(|g| game_ref(&s.name, &g.path))).collect();
         let mut prefs = (*play_route::prefs()).clone();
         play_route_cfg::apply_edits(&mut prefs, edits, &refs);
         play_route::set_prefs(prefs.clone());

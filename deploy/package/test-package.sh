@@ -4,7 +4,8 @@
 # The root is a folder with ROCKNIX's os-release, a device-tree model, essway.service, start_es.sh and /storage;
 # systemctl is a fake that logs its calls and "loads" the drop-in when the file is there; pocket-ui and pocket-core are
 # shell stand-ins that print their version and a compatibility report chosen by the test. Each case runs under every
-# shell found of dash, bash (ROCKNIX's sh) and busybox sh. POCKETUI_PACKAGE=<dir> tests the scripts in another folder.
+# shell found of dash, bash (ROCKNIX's sh) and busybox sh. POCKETUI_PACKAGE=<dir> tests the scripts in another folder (an
+# unpacked install zip), and that it carries hakuX, gpSP, DSperate and bsnes-hd (scripts/package-complete.py rocknix).
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 PKG_SRC=${POCKETUI_PACKAGE:-$HERE}
@@ -734,6 +735,12 @@ if [ -z "${POCKETUI_PACKAGE:-}" ] && command -v cargo >/dev/null; then
   fi
 else
   echo "skip licence-files.sh (needs cargo; or POCKETUI_PACKAGE is set)"
+fi
+
+# The real package (POCKETUI_PACKAGE: the unpacked make-install-zip.sh folder) carries pocket-ui's own emulators: red when one
+# is missing (25.11.2026: hakuX was in no package from 0.2.1 to 0.7.2; the stand-in payload above always had it).
+if [ -n "${POCKETUI_PACKAGE:-}" ]; then
+  check "the package carries hakuX, gpSP, DSperate and bsnes-hd" 'python3 -I "$REPO/scripts/package-complete.py" rocknix "$POCKETUI_PACKAGE"'
 fi
 
 python3 "$HERE/test-power-cut.py" || fails=$((fails + 1))

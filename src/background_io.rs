@@ -20,6 +20,8 @@ static STATE: AtomicU64 = AtomicU64::new(0);
 static UPDATES: Mutex<usize> = Mutex::new(0);
 thread_local! {
     static JOB: Cell<Option<u64>> = const { Cell::new(None) };
+    /// Update pauses taken on this thread ([`pauses_taken_here`]).
+    static TAKEN: Cell<u64> = const { Cell::new(0) };
 }
 
 fn set_pause(reason: u64, on: bool) {
@@ -44,6 +46,7 @@ pub fn paused() -> bool {
 pub struct UpdatePause { _private: () }
 
 pub fn pause_for_update() -> UpdatePause {
+    TAKEN.set(TAKEN.get() + 1);
     let mut count = UPDATES.lock().unwrap();
     *count += 1;
     if *count == 1 { set_pause(UPDATE, true); }
@@ -55,6 +58,29 @@ impl Drop for UpdatePause {
         let mut count = UPDATES.lock().unwrap();
         *count -= 1;
         if *count == 0 { set_pause(UPDATE, false); }
+    }
+}
+
+/// How many update pauses this thread has taken: a test can tell that a step took none (the shelf's update look
+/// only reads the signed list over HTTPS and leaves the card to the shelf's jobs, `app_update_hint`), without the
+/// other tests' pauses that run beside it.
+pub fn pauses_taken_here() -> u64 {
+    TAKEN.get()
+}
+
+/// Why a shelf job lost the card, for its log line: what holds the card now, or that a game or an update had it
+/// meanwhile and has let go already.
+pub fn why_stopped() -> &'static str {
+    why(STATE.load(Ordering::Acquire))
+}
+
+fn why(state: u64) -> &'static str {
+    if state & GAME != 0 {
+        "a game started"
+    } else if state & UPDATE != 0 {
+        "an update needs the card"
+    } else {
+        "a game or an update had the card meanwhile"
     }
 }
 
@@ -211,6 +237,24 @@ pub(crate) fn after_launch_request<T>(read: impl FnOnce() -> T) -> T {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stopped_job_names_what_took_the_card() {
+        assert_eq!(why(GAME), "a game started");
+        assert_eq!(why(GAME | UPDATE), "a game started");
+        assert_eq!(why(UPDATE + 3 * GENERATION), "an update needs the card");
+        assert_eq!(why(2 * GENERATION), "a game or an update had the card meanwhile");
+    }
+
+    #[test]
+    fn pauses_are_counted_on_the_thread_that_takes_them() {
+        // The pause moves the generation: the other readers' tests hold this lock for that.
+        let _lock = crate::covers::READER_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let before = pauses_taken_here();
+        drop(pause_for_update());
+        assert_eq!(pauses_taken_here(), before + 1);
+        assert_eq!(std::thread::spawn(pauses_taken_here).join().unwrap(), 0, "another thread took none");
+    }
 
     #[test]
     fn file_source_rule_background_reads_have_the_same_bytes_and_errors() {

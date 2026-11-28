@@ -188,6 +188,8 @@ EmulationStation?" (Cancel, Back to EmulationStation).
     sh deploy/darkos/make-port.sh OUT <folder with the three programs> <version>
 
 `OUT/ports/` goes into `/roms/ports/` (then EmulationStation: Start → Game settings → Update gamelists, or a restart).
+make-port.sh puts the Chinese and Japanese font files into `app/fonts` (`scripts/shipped-fonts.sh`, as the Brick's card);
+`sh deploy/darkos/test-make-port.sh` (in the gate) builds a port from stand-in programs and checks them, byte for byte.
 Remove pocket-ui by deleting `/roms/ports/pocket-ui.sh` and `/roms/ports/pocket-ui/`.
 
 ## When it cannot start

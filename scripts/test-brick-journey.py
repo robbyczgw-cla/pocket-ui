@@ -875,5 +875,24 @@ class Safety(unittest.TestCase):
             self.assertFalse(owner_watch.pressed(owner_watch.EVENT.pack(0, 0, kind, code, value)))
 
 
+class RouteStarts(unittest.TestCase):
+    """--phase routes compares what the launch line names with scripts/release-routes.json (docs/DEVICE-TESTS.md)."""
+    def test_the_brick_table_has_its_bundled_cores(self):
+        routes=journey.route_table(Path(__file__).resolve().parent/'release-routes.json','TrimUI Brick')
+        self.assertEqual(routes['gba'],('pocket-core','gpsp','payload'))
+        self.assertEqual(routes['nds'],('pocket-core','dsperate','payload'))
+
+    def test_the_launch_line_of_the_system_is_read(self):
+        log=('launch gba /tmp/w/.pocket-ui-test/gba/pocketcheck.gba (emulator pocket-core, core mgba)\n'
+             'launch nds /tmp/w/.pocket-ui-test/nds/pocketcheck.nds (emulator pocket-core, core dsperate)\n'
+             'launch gba /tmp/w/.pocket-ui-test/gba/pocketcheck.gba (emulator pocket-core, core gpsp)\n')
+        self.assertEqual(journey.launch_route(log,'gba'),('pocket-core','gpsp'))
+        self.assertIsNone(journey.launch_route(log,'psx'))
+
+    def test_the_phase_is_offered(self):
+        self.assertTrue(callable(getattr(journey.Journey,'routes')))
+        self.assertTrue(callable(getattr(journey.Journey,'route_games')))
+
+
 if __name__=='__main__':
     unittest.main()

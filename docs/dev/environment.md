@@ -37,6 +37,7 @@ These are meant for development and tests; normal use needs none of them. On a d
 | `POCKETUI_SNAPSHOT_ART_ROM=<rom>` | `--snapshot` with `POCKETUI_SNAPSHOT_PROGRESS=pokemon…` or `zelda…`: the made-up team and badges, or pendants and crystals, pictured from that ROM on the computer (the developer's own copy of a GBA Pokémon game, never in the repository; `app_case_knows::snapshot_art`) |
 | `POCKETUI_SNAPSHOT_DS_PALETTES=<file>` | `--snapshot` with `POCKETUI_SNAPSHOT_ART_ROM=<a DS Pokémon ROM>` whose code doesn't hold the games' icon palette numbers (a hack): the developer's own 496 numbers, one byte each (never in the repository; `case_knows_art::snapshot_nds_places`); never used when reading a player's game |
 | `POCKETUI_SNAPSHOT_FLIP_MS=<ms>` | `--snapshot box:…`: the box's last turn that long after it began, instead of done (`game_box::BoxView::snapshot_settle`) |
+| `POCKETUI_SNAPSHOT_BACK_ZOOM=<x>,<y>` | `--snapshot box:…:r`: a real box back (ScreenScraper's) zoomed with its point (x, y), parts of its width and height, in the middle of the view (`game_box::BoxView::set_zoom`) |
 | `POCKETUI_SNAPSHOT_OPEN_MS=<ms>` | `--snapshot box:…`: the game that long into sliding out of its case, instead of out (`game_box::BoxView::snapshot_settle`) |
 | `POCKETUI_SNAPSHOT_STICKER_MS=<ms>` | `--snapshot info:shelf:stickers:<system>:<game>:<keys>` (the box with the card's Stickers sheet, keys `a` toggles, `d` down, `b` closes it) or `info:shelf:walk:<system>:<game>:<keys>` (the box as it opens, then the keys where the pad sends them, `S` SELECT, a frame after each; prints `walk box=… page=…`, `App::walk_key`): the clock held that long (animation time) into the press the closing started (`app_case_stickers.rs`, `sticker_snapshot_clock`); `tests/sticker_press.rs` |
 | `POCKETUI_SNAPSHOT_FROZEN=<n>` | `--snapshot`: the first n recent games of `POCKETUI_DATA` stand open, whatever is on the card (`App::frozen_snapshot`) |
@@ -75,6 +76,9 @@ These are meant for development and tests; normal use needs none of them. On a d
 | `POCKETUI_STATES` | Save-state directory instead of `/storage/roms/savestates` |
 | `POCKETUI_STATUS=<file>` | Where the UI writes its one-line status instead of `/tmp/pocket-ui.status` (`<dir>/ui.status` under `--test-driver`): set it for every second instance (a device journey, a decoder fixture, a navigation probe) so that it never overwrites the owner's status; `scripts/ui-status.sh` honors it too ([DEVICE-TESTS.md](../DEVICE-TESTS.md), `src/ui_status.rs`) |
 | `POCKETUI_GBA_CORE` | Development path to the bundled ARM64 gpSP library; enables H700 GBA core selection on a stand-in device too, retaining existing Continue ownership and saved choices ([HOST.md](../HOST.md#h700-gba)) |
+| `POCKETUI_BSNES_HD_CORE` | Development path to pocket-ui's own bsnes-hd (`mode7_hd::bundled_path`, normally `cores/bsnes_hd_beta_libretro.so` beside the programs), used for Mode 7 HD where the system has no bsnes-hd ([HOST.md](../HOST.md)) |
+| `POCKETUI_START_NOTE` | Set by pocket-ui for pocket-core: the line pocket-core shows over the game's first seconds when another emulator plays than chosen or usual (`swap_note`) |
+| `POCKETUI_TEST_PICO8_LAUNCHER` | Tests: act as if ROCKNIX's `start_pico8.sh` were there, so a FAKE-08 start says the official PICO-8 is missing (`swap_note`) |
 | `POCKETUI_TEST_PM_LIFETIME_HELPER=<program>` | Tests only (`ports::tests::killing_the_ui_process_stops_its_portmaster_helper_with_a_checkpoint`): passes a fake PortMaster helper to its child UI process so killing that UI verifies helper shutdown and a resumable checkpoint. Not for use by hand |
 | `POCKETUI_TEST_PREPARE_MS=<ms>` | With `POCKETUI_MOCK` only: delay the launch worker, capped at 2 s |
 | `POCKETUI_J2ME_ROOT=<dir>` | With `POCKETUI_MOCK` only: stands in for the handheld's `/storage` (`<dir>/storage`) and ROCKNIX's `freej2me.sh` (`<dir>/freej2me.sh`) for a phone game's Java load (`src/j2me_java.rs`, tests/j2me_java.rs); without it no start loads Java under the mock |
@@ -194,6 +198,10 @@ These are meant for development and tests; normal use needs none of them. On a d
 | `POCKET_HAPTIC_TICK=<ms>,<strength>` | The menu haptics' tick ([HOST.md](../HOST.md)) |
 | `POCKETUI_VERSION=<version>` | At build time: the version `pocket-ui --version` and the Updates page report (see [Building](building.md#building)) |
 | `POCKETUI_COMMIT=<sha>` | At build time: the commit the report's `system.txt` names (the release scripts set it; a build of your own says "not recorded") |
+| `POCKETUI_SCREENSCRAPER_DEVID=<id>`, `POCKETUI_SCREENSCRAPER_DEVPASSWORD=<password>`, `POCKETUI_SCREENSCRAPER_SOFTNAME=<name>` | At build time: pocket-ui's ScreenScraper developer id (`scripts/screenscraper-env.sh` reads it from `~/.config/screenscraper-dev`; never in the repository). Without the first two the build has no ScreenScraper ([SCREENSCRAPER.md](../SCREENSCRAPER.md#the-developer-id)) |
+| `POCKETUI_SCREENSCRAPER_ROW=1` | With `POCKETUI_MOCK`: Box art & downloads shows the ScreenScraper row in a build without the id (snapshots and tests; nothing is sent, `screenscraper::shown`) |
+| `POCKETUI_SCREENSCRAPER_NOTE=spines:<done>:<total>\|tomorrow` | With `POCKETUI_MOCK`: the shelf's ScreenScraper line as a run shows it ("Getting spines 34 of 120", "Spines: more tomorrow"; only with ScreenScraper On in settings.json), for snapshots and `tests/screenscraper_shelf.rs` |
+| `SCREENSCRAPER_DEV_FILE=<file>` | For `scripts/screenscraper-env.sh`: the id's file instead of `~/.config/screenscraper-dev` |
 | `POCKETUI_FAN_ROOT=<dir>` | Smooth fan and the Performance & fan readout read and write the fan and thermal files below `<dir>/sys` instead of `/sys`: mock files for the virtual device ([FAN-CURVE.md](../FAN-CURVE.md#the-virtual-device)); the launcher's hand-back honours it too |
 | `POCKETUI_FAN_MIN_PWM=<0-255>` | Smooth fan's lowest running PWM for this fan, once measured on the device (40 by default; [FAN-CURVE.md](../FAN-CURVE.md#on-the-device)) |
 
@@ -209,6 +217,7 @@ These are meant for development and tests; normal use needs none of them. On a d
 | `POCKET_CORE_NO_OVER_GAME=1` | Set by pocket-ui for a Easy game: no FPS, CPU or Pixel Path line over the game and no HOME + Y, whatever Over the game says; the setting itself is untouched ([BIG-SHELF.md](../BIG-SHELF.md)) |
 | `POCKET_CORE_TRACE=1` | Print every libretro environment call a core makes that pocket-core does not answer; a core's log has no 2 MB limit then |
 | `POCKET_CORE_TEST=1` | The command FIFO also takes test input (`press A 150`, `axis lx 0.8`), `peek <offset>` and `achievement-demo` ([HOST.md](../HOST.md)) |
+| `POCKET_CORE_TEST_LATE_WATCH_MS=<ms>` | With `POCKET_CORE_TEST`: the R36S N64 start watch begins this late, as on an overloaded handheld (`tests/r36s_n64_start.rs`) |
 | `POCKET_CORE_AUDIO=alsa\|pulse` | The sound output (ALSA through PipeWire's plugin first, PulseAudio's simple API as the fallback) |
 | `POCKET_CORE_AUDIO_MS=<ms>`, `POCKET_CORE_ALSA_US=<µs>`, `POCKET_CORE_ALSA_DEVICE=<name>` | The sound queue's target, the ALSA buffer, the ALSA device (`pipewire`) |
 | `POCKET_CORE_AUDIO_PW=1` | Sample PipeWire's per-node errors from the stream's open for `audio session`/`audio sample` (benches; otherwise the first `audio stats` starts it) |

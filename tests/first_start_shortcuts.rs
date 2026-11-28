@@ -174,7 +174,7 @@ fn the_starter_page_in_kids_mode_says_where_b_goes() {
     }
 }
 
-/// The first start's last stage names HOME in a plain line beside Finish (a first game in RetroArch or another emulator
+/// The first start's last page names HOME in a plain line (a first game in RetroArch or another emulator
 /// has no line over it), fits 640x480 in all three languages, and stays away in Kids Mode and in Settings' Add games.
 #[test]
 fn the_last_page_of_the_first_start_says_what_home_does() {
@@ -184,8 +184,11 @@ fn the_last_page_of_the_first_start_says_what_home_does() {
         ("de", "Im Spiel öffnet HOME das Menü: Speichern, Laden, Beenden."),
         ("es", "En un juego, HOME abre el menú: guardar, cargar, salir."),
     ] {
+        // Said once, on "You're all set" (26.11.: the look step said it too).
+        let done = card.screen("setup:first-done:device=rg28xx", lang, "640x480");
+        assert!(sees(&done, line), "{lang}: {done}");
         let page = card.screen("setup:first-look:device=rg28xx", lang, "640x480");
-        assert!(sees(&page, line), "{lang}: {page}");
+        assert!(!sees(&page, line), "{lang}: once is enough: {page}");
         let extras = match lang {
             "de" => "Jederzeit mehr laden: Einstellungen › Spiele › Cover & Downloads.",
             "es" => "Consigue más cuando quieras: Ajustes › Juegos › Carátulas y descargas.",
@@ -198,6 +201,6 @@ fn the_last_page_of_the_first_start_says_what_home_does() {
     let kids = Card::new();
     std::fs::create_dir_all(kids.dir.path().join("data")).unwrap();
     std::fs::write(kids.dir.path().join("data/kids.json"), br#"{"on":true}"#).unwrap();
-    let page = kids.screen("setup:first-look:device=rg28xx", "en", "640x480");
+    let page = kids.screen("setup:first-done:device=rg28xx", "en", "640x480");
     assert!(!sees(&page, "HOME"), "Kids Mode: {page}");
 }

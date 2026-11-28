@@ -22,7 +22,7 @@ impl App {
     /// What plays the game at `path` now, as the page's subject: the console, the resolved emulator, whether pocket-core
     /// could host the system.
     fn this_game_subject(&self, system: &str, name: &str, path: &Path) -> Option<Subject> {
-        let sys = self.systems.iter().find(|s| s.name == system)?;
+        let sys = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system))?;
         let hosted = self.emu_hostable(sys, path);
         let runner = self.resolve_runner(sys, Some(path), std::path::Path::new(super::host_bin()).exists()).runner;
         Some(Subject {
@@ -233,7 +233,7 @@ impl App {
             }
         }
         let system = system.unwrap_or_else(|| "gba".into());
-        let Some(sys) = self.systems.iter().find(|s| s.name == system) else {
+        let Some(sys) = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system)) else {
             eprintln!("this-game:{system}: no such system in the library");
             return false;
         };

@@ -180,6 +180,9 @@ impl WebUi {
         let Some(shared) = self.shared.clone().filter(|_| self.server.is_some()) else { return };
         if game.map(|g| g.path) != self.seen_game.as_deref() {
             shared.game_running.store(game.is_some(), Ordering::Relaxed);
+            if game.is_some() {
+                shared.games_started.fetch_add(1, Ordering::Relaxed);
+            }
             *shared.now_playing.lock().unwrap() = game.as_ref().map(|r| NowPlaying {
                 system: r.system.to_string(),
                 name: r.name.to_string(),

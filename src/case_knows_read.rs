@@ -38,6 +38,7 @@ fn art_path(data_dir: &Path) -> PathBuf {
 
 /// Where the save of `rom` may be, in the order they are looked at.
 pub fn save_places(system: &str, rom: &Path) -> Vec<PathBuf> {
+    let system = crate::region_pairs::own_system(system, rom);
     let Some(stem) = rom.file_stem().and_then(|s| s.to_str()) else { return Vec::new() };
     let mut out = Vec::new();
     #[cfg(feature = "brick")]

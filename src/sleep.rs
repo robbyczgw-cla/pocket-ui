@@ -979,6 +979,16 @@ impl Timers {
     }
 }
 
+/// Whether the shelf runs its own low-battery guard on a build without the Brick's card rules: not in Android's Handheld
+/// view (26.11.2026). An app can't switch the handheld off (the guard's 2 % would try), its words say "the Pocket switches
+/// off", and Android 15 denies apps `/sys/class/power_supply/battery` anyway (emulator, read as the app: Permission
+/// denied), while a vendor's build may allow it. Android's own warning covers the shelf; a game in the player has the
+/// player's guard (`android/src/player_battery.rs`: 5 % warns, 2 % saves and closes).
+#[cfg_attr(feature = "brick", allow(dead_code))]
+fn shelf_battery_guard_runs(android_handheld: bool) -> bool {
+    !android_handheld
+}
+
 /// Whether pocket-ui runs its own low-battery guard (`spawn_battery_guard`): everywhere but on the Brick under NextUI,
 /// whose card owns the battery (`brick`: any Brick, `crate::device::brick`; `standalone`: the Brick's own card). The own card is
 /// pocket-ui's alone: without the guard a Brick left on ran past 2 % and 0 % until the cell gave out, the game unsaved
@@ -1440,7 +1450,9 @@ impl Sleep {
         }
         #[cfg(target_os = "linux")]
         sleep.spawn_watcher();
-        sleep.spawn_battery_guard();
+        if shelf_battery_guard_runs(cfg!(all(target_os = "android", feature = "handheld"))) {
+            sleep.spawn_battery_guard();
+        }
         sleep.spawn_rtc_check();
         sleep
     }
@@ -4681,6 +4693,18 @@ mod tests {
     fn powered_off_now(dir: &Path) -> bool {
         std::thread::sleep(Duration::from_millis(200));
         dir.join("powered-off").exists()
+    }
+
+    /// Android's Handheld view never runs the shelf's low-battery guard (26.11.2026): it would say "the Pocket switches
+    /// off" and try a power-off an app can't do. Every Linux build keeps it.
+    #[test]
+    fn the_shelf_s_battery_guard_is_off_in_android_s_handheld_view_only() {
+        assert!(!shelf_battery_guard_runs(true));
+        assert!(shelf_battery_guard_runs(false));
+        let src = include_str!("sleep.rs");
+        let new = &src[src.find("    pub fn new(data_dir: PathBuf, notify: Arc<dyn Fn() + Send + Sync>) -> Sleep {").unwrap()..];
+        let new = &new[..new.find("\n    }\n").unwrap()];
+        assert!(new.contains("if shelf_battery_guard_runs(cfg!(all(target_os = \"android\", feature = \"handheld\")))"), "{new}");
     }
 
     #[cfg(not(feature = "brick"))]

@@ -13,7 +13,7 @@ The spike that preceded this (the port of hakuX PR #9 booted Jade Empire in Retr
   `dbc8b167782a84d20c41be7feb9d0f19e5f9a4a8`, unpatched and only renamed to `hakux_libretro.so` (our audio relaunch fix for Jade
   Empire is upstream there). `scripts/hakux-files.sh` takes the unpacked archive. Needs glibc 2.38 at most, Vulkan 1.2 (Turnip on
   the Mini V2). It writes its own dashboard into the console disk (`hdd/Partition2`) and may rewrite `hdd/eeprom.bin`.
-  `scripts/build-hakux-core.sh` still builds the former 1.3.0 core from the hakuX-Linux fork.
+  `scripts/build-hakux-core.sh` fetches that asset, checks it by sha256 and renames the core.
 - **Attribution**: *Xbox: hakuX-lr 0.38.0 by portare-ch (PortareOS), based on hakuX by rfandango (GPL-3.0), release
   linux-v0.38.0 at dbc8b16.* In `NOTICE.md` (on the device in `/storage/pocket-ui/licences`, Settings → Help & tools → About), `docs/LICENCES.md`
   section 5.2, and the manual. The core is GPL-3.0-or-later and loaded by RetroArch, a separate GPL-3.0-or-later program;
@@ -112,10 +112,11 @@ measured: the Odin 2 Mini and the pause menu's Continue with this core.
 
 ## Shipping the core
 
-`scripts/build-hakux-core.sh` builds the package from the fork's commit (`HAKUX_REPO` can point at a local clone) plus any patches in `deploy/hakux/patches/` (none today; applied
-with `git am`, committer and date fixed, so a patched commit has the same id everywhere) inside the fork's own Debian image on an
-aarch64 Docker host (`HAKUX_BUILD_HOST`, an Apple-silicon Mac), with the fork's pinned dependencies cached in `~/hakux-core-deps`
-there. The package builders use `scripts/hakux-files.sh DIR DEST` to copy the same bundle:
+`scripts/build-hakux-core.sh [out-dir] [archive]` downloads the release asset named in `deploy/hakux/SOURCE.txt` (or takes
+one already downloaded), checks the archive and the core against the two sha256 sums there, renames `hakux-lr_libretro.so` to
+`hakux_libretro.so` and leaves `lib/libretro/`, `share/licenses/hakux/` and `BUILD-INFO` in out-dir; nothing is compiled. A new
+hakuX-lr release: change the Release, Commit and both sha256 lines of `SOURCE.txt`, then run it.
+The package builders use `scripts/hakux-files.sh DIR DEST` to copy the same bundle:
 `hakux_libretro.so`, the `.info` of `deploy/hakux/` (the one a test pins to "no save states"), `SOURCE.txt`, `BUILD-INFO`, our `patches/` and
 the core's `licenses/`, with its own `SHA256SUMS`. `scripts/make-install-zip.sh --hakux DIR` puts that into the package as
 `hakux/` for the SSH and ports install. The installer checks the sums and copies the bundle into the new release folder.

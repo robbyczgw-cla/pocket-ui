@@ -190,7 +190,7 @@ impl App {
         if self.running.is_some() || pocket_ui::covers::game_on() {
             return Err(NotChanged::Running);
         }
-        if !self.systems.iter().any(|s| s.name == system && s.games.iter().any(|g| g.path == rom)) || !rom.exists() {
+        if !self.systems.iter().any(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system) && s.games.iter().any(|g| g.path == rom)) || !rom.exists() {
             return Err(NotChanged::Gone);
         }
         custom::apply(&self.data_dir, system, rom, png).map_err(|e| {

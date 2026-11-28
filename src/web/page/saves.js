@@ -1,5 +1,5 @@
 // pocket-ui web companion: saves and Pocket Sync (src/web/saves.rs, src/web/pockets.rs). Loaded before app.js and uses
-// its helpers (h, t, api, view, toast, size, fileRow, uploadXhr, dropZone) when it runs, never while it loads.
+// its helpers (h, t, api, view, toast, size, fileRow, uploadPieces, dropZone) when it runs, never while it loads.
 "use strict";
 
 // "3 min ago", in the Pocket's language. `now` is the Pocket's clock, so a phone set wrong doesn't matter.
@@ -96,7 +96,8 @@ async function putBack(id, file, r) {
     replace = 1;
   }
   r.state.textContent = t("Uploading…");
-  const res = await uploadXhr("/api/saves/upload?" + new URLSearchParams(Object.assign({ replace }, q)), file, r);
+  // In pieces as game files go: Chrome on Android breaks off a large state sent in one request.
+  const res = await uploadPieces(Object.assign({ replace }, q), file, r, "/api/saves/upload/start");
   if (!res.ok) return fail(res.body.error || t("Not put back ({n}).", { n: res.status }));
   r.state.className = "ok small";
   r.state.textContent = res.body.replaced ? t("Put back as {s}. The old one is in the backup.", { s: res.body.name }) : t("Put back as {s}.", { s: res.body.name });

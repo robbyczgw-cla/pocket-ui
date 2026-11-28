@@ -423,6 +423,12 @@ native_case() { # card, system, folder, file: dArkOS's own command, as ark, outs
 
 # A signed synthetic next app validates, installs, fails before its first frame, and the real boot takes the installed build back.
 # The fixture is prepared on the build host with the project signing key; that key never enters the container/card.
+# A real RG353 has wlan0; the container only eth0. Since 0.7.0 a port without a Wi-Fi interface opens Updates on the
+# card page (device::no_wifi_chip, darkos::wifi_here): the update layouts then never reach "confirming" (0.7.1 release,
+# 25.11.2026). A dummy wlan0 stands in for the player's handheld, only for these two layouts.
+wifi_up() { ip link show wlan0 >/dev/null 2>&1 || { ip link add wlan0 type dummy && ip link set wlan0 up; }; }
+wifi_down() { ip link del wlan0 2>/dev/null || true; }
+
 run_updates() {
   C=$1; P=$C/ports/pocket-ui; echo "=== signed update from Settings and automatic rollback"
   install_port "$C"
@@ -435,7 +441,7 @@ run_updates() {
   printf 'file:///tmp/darkos-test5-update-fixture/update.json\n' >"$P/update-url"
   mkdir -p "$P/storage/.config/pocket-ui"
   printf 'keep-save\n' >"$P/storage/keep-save"
-  es_start "$C"; to_shelf "$C (updater)"
+  wifi_up; es_start "$C"; to_shelf "$C (updater)"
   # System's rows on dArkOS: Back to EmulationStation, then Updates.
   open_category System; key down 0.4; key a 1
   check "Updates is visible on dArkOS" test "$(status place)" = settings:Updates
@@ -452,7 +458,7 @@ run_updates() {
   check "persistent saves survive the update and rollback" grep -qx keep-save "$P/storage/keep-save"
   check "no pending update remains" test ! -e "$P/storage/pocket-ui/update-pending"
   cp "$P/logs/boot.log" /out/update-rollback-boot.log
-  stop_port "$C"
+  stop_port "$C"; wifi_down
 }
 
 # The tester's real path: test-5 installed by hand, games and saves on the card, then Settings > Updates to the next build
@@ -472,7 +478,7 @@ run_update56() {
   new=$(python3 -I -c 'import json;print(json.load(open("/tmp/darkos-test6-update/update.json"))["app"]["version"])')
   printf 'file:///tmp/darkos-test6-update/update.json\n' >"$P/update-url"
   PADENV="${GLENV:-}"
-  es_start "$C"; to_shelf "$C ($old)"
+  wifi_up; es_start "$C"; to_shelf "$C ($old)"
   waitfor place shelf 15 || bad "$old: no shelf after the welcome screen ($(status place))"; sleep 3
   # A real save before the update: GBA Save & quit leaves its Continue state in storage/. Keys only while the game runs:
   # on the shelf the same keys would choose Back to EmulationStation.
@@ -525,7 +531,7 @@ run_update56() {
   else
     bad "$new: PSP did not start (place=$(status place))"
   fi
-  stop_port "$C"
+  stop_port "$C"; wifi_down
   check "no port processes left after the update" test -z "$(pgrep -f "$P/(app/bin/pocket|app/start.sh|start.sh)")"
   check "no view mounts left after the update" test "$(grep -c pocket-view /proc/mounts)" = 0
 }

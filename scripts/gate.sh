@@ -67,6 +67,17 @@ if [ -f scripts/check-leaks.sh ] && [ -z "${GATE_LEAKS_DONE:-}" ]; then
     [ -z "$leaks" ] || echo "$leaks"
     echo "gate: leak scan ok ($(( $(date +%s) - leaks_start )) s)"
 fi
+# What did the branch change? Against the merge base with main (committed, uncommitted and new files). A remote gate has no .git:
+# tools/remote-gate.sh writes the list to .gate-changed there. Nothing known or an empty list: run everything.
+changed=
+if [ -f .gate-changed ]; then changed=$(cat .gate-changed)
+elif base=$(git merge-base "${GATE_BASE:-main}" HEAD 2>/dev/null); then
+    changed=$( { git diff --name-only "$base"; git ls-files -o --exclude-standard; } | sort -u )
+fi
+# A tool's own self-test runs when the change touches the tool (25.11.2026, gate false reds): test-check-changelog.py went red
+# beside check-changelog.py for the same CHANGELOG line, and the gate's own fixtures ran in every train. GATE_FULL=1 (nightly,
+# release check) and an unknown change list run them all.  tool_changed ERE: the change list has a path matching ERE.
+tool_changed() { [ -n "${GATE_FULL:-}" ] || [ -z "$changed" ] || printf '%s\n' "$changed" | grep -Eq "$1"; }
 # Fast checks (19.11.2026, fail-fast): the script checks that turned the most trains red, before any build - seconds, not the
 # 20 minutes until the suites reach the same verdict. The translation audit (a painted string without a German line) and the
 # reader inventory (tests/data_sources.rs runs the same script later). Each only when the tree has it; all at once.
@@ -74,9 +85,17 @@ fi
 # back under the published [0.5.1] with a green gate. Here it checks the train's tree after that merge; --no-vetoed keeps
 # its verdict the same on every gate host (the vetoed list is the maintainer's, the queue client checks it before queueing).
 fast_started=$(date +%s) fast_pids= fast_names=
-for fast_check in i18n-extract.py reader-inventory.py check-changelog.py test-check-changelog.py; do
+for fast_check in i18n-extract.py reader-inventory.py check-changelog.py test-check-changelog.py test-reader-inventory.py \
+    test-i18n-extract.py kern-walk.py; do
     [ -f "scripts/$fast_check" ] || continue
-    case $fast_check in i18n-extract.py) fast_args=--check ;; check-changelog.py) fast_args=--no-vetoed ;; *) fast_args= ;; esac
+    case $fast_check in
+    # The Kern walker's own numbers on made-up pictures (no shell suite reads it; gate-parts.py NOT_SHELL).
+    kern-walk.py) tool_changed '^scripts/kern-walk\.py$' && python3 -c 'import numpy' 2>/dev/null || continue ;;
+    test-check-changelog.py) tool_changed '^scripts/(test-)?check-changelog\.py$|^scripts/changelog-published\.txt$' || continue ;;
+    test-reader-inventory.py) tool_changed '^scripts/(test-)?reader-inventory\.py$' || continue ;;
+    test-i18n-extract.py) tool_changed '^scripts/(test-)?i18n-extract\.py$' || continue ;;
+    esac
+    case $fast_check in i18n-extract.py) fast_args=--check ;; check-changelog.py) fast_args=--no-vetoed ;; kern-walk.py) fast_args=--self-test ;; *) fast_args= ;; esac
     # shellcheck disable=SC2086
     python3 -I "scripts/$fast_check" $fast_args >"/tmp/gate-fast-$name.$fast_check.log" 2>&1 &
     fast_pids="$fast_pids $!" fast_names="$fast_names $fast_check"
@@ -134,13 +153,6 @@ fi
 
 start=$(date +%s)
 
-# What did the branch change? Against the merge base with main (committed, uncommitted and new files). A remote gate has no .git:
-# tools/remote-gate.sh writes the list to .gate-changed there. Nothing known or an empty list: run everything.
-changed=
-if [ -f .gate-changed ]; then changed=$(cat .gate-changed)
-elif base=$(git merge-base "${GATE_BASE:-main}" HEAD 2>/dev/null); then
-    changed=$( { git diff --name-only "$base"; git ls-files -o --exclude-standard; } | sort -u )
-fi
 # The short path is a strict allowlist. Embedded manual/translation inputs and
 # every unknown, source, script, image or Cargo change retain the complete gate.
 docs_only=0 shell_tests=1 why_shell=full
@@ -235,34 +247,44 @@ if [ "$docs_only" -eq 0 ] && [ -f scripts/preflight.sh ]; then
     echo "gate: cheap checks ok ($(( $(date +%s) - cheap_started )) s)"
 fi
 
+# The gate's own fixtures (seconds each, ~40 s together) run when the gate machinery changed (tool_changed above).
+GATE_TOOLS='^scripts/(gate[^/]*|test-gate[^/]*|preflight\.sh|test-preflight\.sh|run-tmp\.sh|test-run-tmp\.sh|check-compile\.sh|check-platforms\.sh|check-leaks\.sh|quick-tests\.py|test-timing\.sh)$|^\.config/'
+gate_selftests=0
+if tool_changed "$GATE_TOOLS"; then gate_selftests=1; else echo "gate: the gate's own self-tests skipped (no gate script changed; GATE_FULL=1 runs them)"; fi
 # Run selection regressions even when this branch would skip the shell suites. Fixture trees omit this script,
 # preventing recursion; its cargo and shell commands are stand-ins and never build or access a device.
-if [ -f scripts/test-gate-paths.sh ]; then
+if [ "$gate_selftests" -eq 1 ] && [ -f scripts/test-gate-paths.sh ]; then
     paths_log=/tmp/gate-paths-$name.log
     sh scripts/test-gate-paths.sh >"$paths_log" 2>&1 || {
         echo "GATE: path-selection tests FAILED ($paths_log)"; tail -10 "$paths_log"; exit 1;
     }
 fi
-if [ -f scripts/test-preflight.sh ]; then
+if [ "$gate_selftests" -eq 1 ] && [ -f scripts/test-preflight.sh ]; then
     preflight_log=/tmp/gate-preflight-$name.log
     sh scripts/test-preflight.sh >"$preflight_log" 2>&1 || {
         echo "GATE: preflight script tests FAILED ($preflight_log)"; tail -10 "$preflight_log"; exit 1;
     }
 fi
-if [ -f scripts/test-run-tmp.sh ]; then
+if [ "$gate_selftests" -eq 1 ] && [ -f scripts/test-run-tmp.sh ]; then
     runtmp_log=/tmp/gate-run-tmp-$name.log
     sh scripts/test-run-tmp.sh >"$runtmp_log" 2>&1 || {
         echo "GATE: run-folder script tests FAILED ($runtmp_log)"; tail -10 "$runtmp_log"; exit 1;
     }
 fi
-if [ -f scripts/test-gate-schedule.py ]; then
+if [ "$gate_selftests" -eq 1 ] && [ -f scripts/test-gate-schedule.py ]; then
     schedule_log=/tmp/gate-schedule-$name.log
     python3 scripts/test-gate-schedule.py >"$schedule_log" 2>&1 || {
         echo "GATE: scheduling fixtures FAILED ($schedule_log)"; tail -20 "$schedule_log"; exit 1;
     }
     tail -1 "$schedule_log"
 fi
-if [ -f scripts/test-gate-comments.py ]; then
+if [ -f scripts/test-host-budgets.sh ] && tool_changed '^scripts/(test-)?host-budgets\.(sh|txt)$|^scripts/bookkeeping\.sh$'; then
+    budgets_log=/tmp/gate-host-budgets-$name.log
+    sh scripts/test-host-budgets.sh >"$budgets_log" 2>&1 || {
+        echo "GATE: host-budget script tests FAILED ($budgets_log)"; tail -10 "$budgets_log"; exit 1;
+    }
+fi
+if [ "$gate_selftests" -eq 1 ] && [ -f scripts/test-gate-comments.py ]; then
     comments_log=/tmp/gate-comments-$name.log
     python3 -I scripts/test-gate-comments.py >"$comments_log" 2>&1 || {
         echo "GATE: comment-only proof tests FAILED ($comments_log)"; tail -20 "$comments_log"; exit 1;
@@ -371,6 +393,25 @@ flaky_skip=
 [ -z "$flaky_skip" ] || echo "gate: left to the nightly run (flaky): $flaky_skip"
 # Single tests scripts/gate-parts.py leaves to the nightly run (NIGHTLY_TESTS), skipped the same way.
 [ -n "${GATE_FULL:-}" ] || flaky_skip="$flaky_skip${nightly_tests:+ $nightly_tests}"
+# Host timing budgets (scripts/host-budgets.txt, 25.11.2026): a time measured on a shared build host is a warning
+# (scripts/host-budgets.sh, nightly), never a red gate or release check, in every tier.
+budget_tests= budget_suites=
+if [ -f scripts/host-budgets.txt ]; then
+    budget_tests=$(sed -n 's/^test [^ ]* \([^ ]*\)$/\1/p' scripts/host-budgets.txt | tr '\n' ' ')
+    budget_suites=$(sed -n 's/^suite \([^ ]*\)$/\1/p' scripts/host-budgets.txt | tr '\n' ' ')
+    [ -z "$budget_tests$budget_suites" ] || echo "gate: host timing budgets are warnings (scripts/host-budgets.sh, nightly): $(echo $budget_tests $budget_suites | wc -w) tests and suites left out"
+    flaky_skip="$flaky_skip $budget_tests"
+    # The budget suites leave the named programs; GATE_FULL=1 runs every program: name them, without the budget suites.
+    for suite in $budget_suites; do rust_targets=$(printf '%s\n' " $rust_targets " | sed "s/ --test $suite / /; s/^ *//; s/ *\$//"); done
+    if [ -z "$rust_targets" ] && [ -n "$budget_suites" ] && [ "$docs_only" -eq 0 ]; then
+        rust_targets="--lib --bins"
+        for suite in tests/*.rs; do
+            [ -f "$suite" ] || continue
+            suite=$(basename "$suite" .rs)
+            case " $budget_suites " in *" $suite "*) ;; *) rust_targets="$rust_targets --test $suite" ;; esac
+        done
+    fi
+fi
 cargo_flaky=
 for skipped in $flaky_skip; do cargo_flaky="$cargo_flaky --skip $skipped"; done
 # shellcheck disable=SC2086  # pflag is one or two words

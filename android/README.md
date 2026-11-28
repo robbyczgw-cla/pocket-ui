@@ -65,7 +65,8 @@ The player keeps the initial timing/geometry run's picture. A newer picture afte
 The player initially hides touch controls when Android reports a gamepad. Gamepad key/stick input keeps them hidden and uses the full safe viewport; a touch reveals them again. Pause/back remains available in either input mode.
 
 The APK keeps every core of the lock, PSP, DS, N64 and Dreamcast too (bundled is cleaner than a download), under a 90 MB budget of our own; 0.5.0-android.5 with four of them as downloads was 33.2 MB. GLES cores get an
-isolated EGL context and framebuffer; a native-size readback feeds the existing screenshots/pause path.
+isolated EGL context and framebuffer. The compositor samples the shared colour texture with GLES fences. An
+on-demand native-size capture feeds the screenshots and pause path.
 PSP has four face buttons and shoulders. N64 adds Z/C controls and maps touch arrows to its analog stick;
 DS playfield touches reach the core pointer interface. Pause/resume restores the Activity EGL context.
 Only quick starts are required for this development milestone:

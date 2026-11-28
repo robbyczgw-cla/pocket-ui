@@ -75,7 +75,8 @@ PC Engine CD always use your real BIOS once present (Mega-CD and PC Engine CD re
 built-in HLE shortcut from skipping the logo. Nintendo DS isn't included because DS emulators either boot direct or stop
 at the DS touchscreen menu.
 
-On Android's Handheld view, this switch works identically using the BIOS folders you set up (Game check copies them in).
+On Android's Handheld view, this switch works the same with the files in `ROMs/bios` (Dreamcast's may be in `ROMs/bios/dc`);
+Mega-CD and PC Engine CD games don't play in the app's own player there yet.
 
 Boot screens only play on a **fresh start**, never when resuming a saved state. Want to boot straight into your last
 game through its classic startup logo every time? Turn **Continue where I quit** **Off** and set [On start](#on-start)

@@ -1,8 +1,12 @@
 <resources>
+    <!-- The start (docs/BOOT-SPLASH.md "On Android"): Android's splash shows the boot screen's picture on true black,
+         as pocket-splash does (drawable-nodpi/splash_mark, made from src/splash.rs; no app icon, no brown), then the
+         shelf fades in from black (`boot_fade`). The window itself stays black: a surface made again later (back from
+         a game) never flashes the picture. -->
     <style name="PocketTheme" parent="android:style/Theme.Material.NoActionBar.Fullscreen">
         <item name="android:windowBackground">#000000</item>
-        <item name="android:windowSplashScreenBackground">#3A2A1F</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:windowSplashScreenBackground">#000000</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>
         <item name="android:colorAccent">#ECE9E1</item>
     </style>
     <!-- The player comes up on the black the launcher's start ended on; no splash colour or icon in between. -->

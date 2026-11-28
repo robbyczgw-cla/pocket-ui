@@ -106,8 +106,9 @@ fn the_dpad_reaches_the_gba_choice_and_every_console_view_uses_the_saved_sp() {
     // Compare the pictures that contain hardware, below the live status corner.
     let pixels = |v: (i32, i32, Vec<u8>)| v.2[(v.0 * 110 * 3) as usize..].to_vec();
     let before: Vec<_> = views.iter().map(|s| pixels(shot_in(tmp.path(), &lib, &data, &stub, s, "en", "shelf"))).collect();
-    // Up wraps from the first extra to the model choice; A selects SP, immediately saved.
-    shot_in(tmp.path(), &lib, &data, &stub, "cozy:0::ua", "en", "shelf");
+    // Up wraps from the first extra to the last row; up past the four console names (`region_pairs`) to the model
+    // choice; A selects SP, immediately saved.
+    shot_in(tmp.path(), &lib, &data, &stub, "cozy:0::uuuuua", "en", "shelf");
     let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(data.join("settings.json")).unwrap()).unwrap();
     assert_eq!(saved["gba_model"], "sp", "reachable with the D-pad, under Cozy extras");
     let mut sp_views = Vec::new();
@@ -142,7 +143,7 @@ fn the_dpad_reaches_the_gba_choice_and_every_console_view_uses_the_saved_sp() {
     for look in ["shelf", "cabinet", "split"] {
         // Paint classic first, then choose SP through the actual handler and paint again in
         // the same process. A stale cached case front must not survive that choice.
-        let warm = pixels(shot_in(tmp.path(), &lib, &data, &stub, &format!("cozy:0::ua:{look}"), "en", "shelf"));
+        let warm = pixels(shot_in(tmp.path(), &lib, &data, &stub, &format!("cozy:0::uuuuua:{look}"), "en", "shelf"));
         let cold = pixels(shot_in(tmp.path(), &lib, &data, &stub, &format!("shelf:gba:{look}"), "en", "shelf"));
         assert!(warm == cold, "{look}: choosing SP immediately replaces already-painted hardware, without a restart");
         shot_in(tmp.path(), &lib, &data, &stub, "cozy:16::r", "en", "shelf");

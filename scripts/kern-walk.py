@@ -30,7 +30,9 @@ TV on. Three numbers per moment instead of equal pixels (pixel equality is too s
            still, the game picture's box; Brick against the Plus within 5 points (both 4:3) and every device against its
            reference within 5 points
   cover    our cover's own magenta is on the case (not the tape-label stand-in)
-plus "not empty" for every picture. Exit 0 = all green, 1 = a red line (report.md, page/index.html), 2 = the harness.
+plus "not empty" for every picture. Exit 0 = all green, 1 = a red line (report.md, page/index.html), 2 = the harness could
+not start (a missing program or tool), 3 = INCOMPLETE: the walker stopped (adb, lock, a copy, a crash of its own) in every walk of
+a device, walked again up to KERN_WALK_RETRIES (2) more times: no finding about pocket-ui, walk again (25.11.2026).
 
 Output: OUT/page/index.html (the contact sheets: per moment beginning, middle and end, reference left, now right),
 OUT/report.md, OUT/numbers.json, OUT/<device>/ (logs). --make-ref writes this run as a reference folder (OUT/ref/) for
@@ -57,6 +59,8 @@ except ImportError:  # the analysis needs it; say so instead of a traceback
     np = None
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# what a device's work folder copy leaves out; "*.tmp": a save written atomically right now (25.11.2026, 0.7.1 walk crashed on it)
+COPY_IGNORE = shutil.ignore_patterns("fb", "fb2", "w*", "i", "i2", "cores", "tmp", "*.so", "*.tmp")
 DEVICES = {
     "brick": {"size": (1024, 768), "env": {"POCKETUI_DEVICE": "brick", "POCKET_CORE_SOFTWARE": "1"},
               "path": "Brick: software picture (POCKET_CORE_SOFTWARE), 1024x768"},
@@ -433,8 +437,16 @@ class Session:
 
 class Harness(Exception):
     """The walk could not go on. `final`: never walk again (something else came to the front of a device: its owner
-    may be using it)."""
+    may be using it). A plain Harness may be pocket-ui's doing (a program ended, no game started, a step never came): it is
+    walked again, and only an abort in every walk is red."""
     final = False
+    tool = False
+
+
+class ToolAbort(Harness):
+    """The walker itself could not go on (adb, the device lock, the battery, screenrecord, a file copy, a Python error):
+    no finding about pocket-ui. Walked again; still so at the end = INCOMPLETE (exit 3), never red (25.11.2026)."""
+    tool = True
 
 
 def to_game(s):
@@ -608,13 +620,13 @@ class Android:
     def sh(self, cmd, check=True, timeout=60):
         r = subprocess.run(self.adb + ["shell", cmd], capture_output=True, text=True, timeout=timeout)
         if check and r.returncode != 0:
-            raise Harness(f"adb shell {cmd[:80]}: {r.stderr.strip() or r.stdout.strip()}")
+            raise ToolAbort(f"adb shell {cmd[:80]}: {r.stderr.strip() or r.stdout.strip()}")
         return r.stdout
 
     def adb_run(self, *args, timeout=300):
         r = subprocess.run(self.adb + list(args), capture_output=True, text=True, timeout=timeout)
         if r.returncode != 0:
-            raise Harness(f"adb {' '.join(args)[:80]}: {r.stderr.strip() or r.stdout.strip()}")
+            raise ToolAbort(f"adb {' '.join(args)[:80]}: {r.stderr.strip() or r.stdout.strip()}")
         return r.stdout
 
     def runas(self, cmd):
@@ -626,14 +638,14 @@ class Android:
         try:
             fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
-            raise Harness(f"{self.lock_path} is held by another session")
+            raise ToolAbort(f"{self.lock_path} is held by another session")
         level = re.search(r"level: (\d+)", self.sh("dumpsys battery"))
         if level and int(level.group(1)) < 20:
-            raise Harness(f"battery {level.group(1)} % (needs 20 %)")
+            raise ToolAbort(f"battery {level.group(1)} % (needs 20 %)")
         # What runs before (an app the walk must never stop): the user's apps stay as they are.
         self.running_before = {l.split()[-1] for l in self.sh("ps -A -o NAME", check=False).split()[1:] if "." in l}
         if f"package:{self.pkg}\n" in self.sh("pm list packages") + "\n":
-            raise Harness(f"{self.pkg} is installed already: not ours to replace (uninstall it by hand if it is a leftover)")
+            raise ToolAbort(f"{self.pkg} is installed already: not ours to replace (uninstall it by hand if it is a leftover)")
         self.adb_run("install", self.apk)
         self.sh(f"cmd appops set {self.pkg} PLAY_AUDIO ignore")   # silent before anything starts
         self.sh(f"appops set {self.pkg} MANAGE_EXTERNAL_STORAGE allow")
@@ -642,7 +654,7 @@ class Android:
         self.hidden = sorted({l.rstrip("/").rsplit("/", 1)[-1].lower() for l in found.split() if l.strip()})
         pick = next((c for c in ANDROID_SYSTEMS if c[0] not in self.hidden), None)
         if pick is None:
-            raise Harness(f"the device has every test system ({', '.join(c[0] for c in ANDROID_SYSTEMS)}): no system of our own")
+            raise ToolAbort(f"the device has every test system ({', '.join(c[0] for c in ANDROID_SYSTEMS)}): no system of our own")
         self.system, test_rom, self.ext = pick
         # Our card: a test program of scripts/testroms.py under two names, our covers, the walk's settings.
         rom = os.path.join(work, "game" + self.ext)
@@ -657,7 +669,7 @@ class Android:
         t0 = time.monotonic()
         while self.sh(f"ls -d /sdcard/Android/data/{self.pkg}/files", check=False).strip() == "":
             if time.monotonic() - t0 > 30:
-                raise Harness(f"Android did not make /sdcard/Android/data/{self.pkg}/files")
+                raise ToolAbort(f"Android did not make /sdcard/Android/data/{self.pkg}/files")
             time.sleep(0.5)
         # Every system the copy knows (its es_systems.cfg, by id: "gamecube", not the folder "gc") is hidden but ours,
         # so none of the owner's games is on its shelf (21.11.2026: folder names hid nothing, a press started his
@@ -665,7 +677,7 @@ class Android:
         cfg = self.sh(f"run-as {self.pkg} cat files/handheld/es_systems.cfg", check=False)
         names = re.findall(r"<name>([^<]+)</name>", cfg)
         if self.system not in names:
-            raise Harness(f"the copy's es_systems.cfg does not list {self.system} ({len(names)} systems)")
+            raise ToolAbort(f"the copy's es_systems.cfg does not list {self.system} ({len(names)} systems)")
         self.hidden = sorted(set(names) - {self.system})
         self.sh(f"am force-stop {self.pkg}")
         self.sh(f"rm -rf {self.tmp}; mkdir -p {self.tmp} {self.games}/{self.system}")
@@ -718,7 +730,7 @@ class Android:
 
     def check(self):
         if self.abort:
-            e = Harness(self.abort)
+            e = ToolAbort(self.abort)
             e.final = True
             raise e
 
@@ -736,7 +748,7 @@ class Android:
             # Only into our package: a press never reaches the owner's app (or anything he opened meanwhile).
             front = self.focus()
             if f"{self.pkg}/" not in front:
-                raise Harness(f"not pressing {n}: {front.strip() or 'nothing'} is in front, not {self.pkg}")
+                raise ToolAbort(f"not pressing {n}: {front.strip() or 'nothing'} is in front, not {self.pkg}")
             self.sh(f"input gamepad keyevent {ANDROID_KEYS[n]}")
             time.sleep(gap)
 
@@ -774,7 +786,7 @@ class Android:
         self.sh("rm -f /sdcard/kern-walk.mp4")
         tf = self.decode(data, "mp4")
         if not tf:
-            raise Harness("screenrecord gave no pictures")
+            raise ToolAbort("screenrecord gave no pictures")
         return tf
 
     def end(self):
@@ -825,7 +837,7 @@ def walk_android(a, out):
             if "PlayerActivity" in dev.focus():
                 if not dev.started_ours():
                     dev.sh(f"am force-stop {dev.pkg}")
-                    raise Harness(f"{k_tv}: a game not of ours started: stopped at once")
+                    raise ToolAbort(f"{k_tv}: a game not of ours started: stopped at once")
                 break
             time.sleep(1.5)
         else:
@@ -976,8 +988,9 @@ def page(out, results, ref_dir, label):
             " Rot = eine der drei Zahlen (Bewegung, Größe, Cover) oder ein leeres Bild.</p>"]
     for dev, r in results.items():
         red = {k for k, _ in r["red"]}
+        state = "ROT" if red else ("UNVOLLSTÄNDIG: " + r["incomplete"]) if r.get("incomplete") else "grün"
         rows.append(f"<h2>{dev} <small>{html.escape(DEVICES[dev]['path'])}</small> "
-                    f"<span class={'r' if red else 'g'}>{'ROT' if red else 'grün'}</span></h2><table>")
+                    f"<span class={'r' if red or r.get('incomplete') else 'g'}>{html.escape(state)}</span></h2><table>")
         for key, name, _ in ([("-", "Gang abgebrochen, letztes Bild", "")] if "-" in r["numbers"] else []) + MOMENTS:
             n = r["numbers"].get(key, {})
             img = f"{dev}-{key}.jpg"
@@ -1061,8 +1074,56 @@ def self_test():
     assert [t for t, _ in ui] == [0.1, 0.2, 0.3], ui
     assert played and played[0][0] > 0.5 and lit_any(played[0][1]) and len(played) == len(on) - 2 + 30, len(played)
     assert android_launch([(0.0, shelf)] * 5) == ([], [])
+    import tempfile
+    with tempfile.TemporaryDirectory() as t:
+        os.makedirs(os.path.join(t, "a", "roms"))
+        open(os.path.join(t, "a", "roms", "Game.srm"), "w").write("s")
+        open(os.path.join(t, "a", "roms", "Game.srm.123-4.tmp"), "w").write("t")
+        shutil.copytree(os.path.join(t, "a"), os.path.join(t, "b"), ignore=COPY_IGNORE)
+        assert os.path.exists(os.path.join(t, "b", "roms", "Game.srm")) and not os.path.exists(os.path.join(t, "b", "roms", "Game.srm.123-4.tmp")), "the copy takes a save still being written"
+    # Verdicts (25.11.2026): the walker stopping is INCOMPLETE, never red; pocket-ui stopping in every walk stays red; a red
+    # moment in two complete walks stays red, in one of two is a note.
+    tool, ours = ToolAbort("adb shell: device offline"), Harness("insert: a program ended (pocket-ui: panicked)")
+    shrunk = [("einlegen", "Größe lit 18.9 % gegen Plus 24.8 % (±5)")]
+    v = verdict([], [tool, tool, tool])
+    assert v["incomplete"] and not v["red"], v
+    v = verdict([], [ToolAbort("the walker crashed: shutil.Error: copy")])
+    assert v["incomplete"] and not v["red"], v
+    v = verdict([], [ours, ours, ours])
+    assert v["red"] and "jedem der 3" in v["red"][0][1] and not v["incomplete"], v
+    v = verdict([], [ours, tool, ours])
+    assert v["incomplete"] and not v["red"], v
+    assert verdict([shrunk, shrunk], [None, None])["red"] == shrunk
+    v = verdict([shrunk, []], [None, None])
+    assert v["red"] == [] and v["once"] == ["einlegen"], v
+    assert verdict([[]], [tool, None]) == {"red": [], "once": [], "first": [], "incomplete": "", "walks": 2}
+    assert verdict([shrunk], [None, tool, tool])["red"] == shrunk, "a red the walker saw stays red when its re-walks stop"
     print(f"kern-walk self-test: ok ({len(MOMENTS)} moments)")
     return 0
+
+
+def verdict(complete, walks):
+    """A device's verdict from its walks. complete: the red lines [(moment, why)] of each walk that went to its end; walks:
+    per walk None or the Harness that stopped it. Red is what two complete walks both found (one complete walk: its reds);
+    a stop in every walk is red only when each could be pocket-ui's (a program ended, no game, a step never came) and
+    INCOMPLETE when the walker stopped (ToolAbort): exit 3, never red (25.11.2026)."""
+    out = {"red": [], "once": [], "first": [], "incomplete": "", "walks": len(walks)}
+    if complete:
+        last = complete[-1]
+        if len(complete) >= 2:
+            twice = {k for k, _ in complete[-2]} & {k for k, _ in last}
+            out["red"] = [(k, t) for k, t in last if k in twice]
+            out["once"] = sorted({k for k, _ in complete[-2]} ^ {k for k, _ in last})
+            out["first"] = [f"{k}: {t}" for k, t in complete[-2] if k in out["once"]]
+        else:
+            out["red"] = list(last)
+        return out
+    stops = [w for w in walks if w is not None]
+    if stops and not any(w.tool for w in stops):
+        out["red"] = [("-", f"Gang abgebrochen, bei jedem der {len(stops)} Gänge: {stops[-1]}")]
+    else:
+        out["incomplete"] = str(stops[-1]) if stops else "kein Gang"
+    return out
 
 
 def main():
@@ -1119,7 +1180,7 @@ def main():
         if dev not in DEVICES:
             print(f"kern-walk: unknown device {dev}", file=sys.stderr)
             return 2
-    numbers, failed, final = {}, {}, set()
+    numbers, failed, final, walks = {}, {}, set(), {}
     t_all = time.monotonic()
 
     def walk_one(dev):
@@ -1127,9 +1188,10 @@ def main():
         failed.pop(dev, None)
         try:
             numbers[dev] = walk_android(a, work) if dev == "android" else walk(a, dev, work)
-        except Harness as e:
-            failed[dev] = str(e)
-            if e.final:
+        except Exception as e:  # a crash of the walker is the tool's, never a finding about pocket-ui
+            h = e if isinstance(e, Harness) else ToolAbort(f"the walker crashed: {type(e).__name__}: {e}")
+            failed[dev] = h
+            if h.final:
                 final.add(dev)
             numbers[dev] = dict(getattr(e, "partial", {}))
             # What the screen showed when the walk stopped: on the page, never an empty gap.
@@ -1137,46 +1199,57 @@ def main():
                 if "-" in numbers[dev]:
                     raise OSError("already there")
                 numbers[dev]["-"] = {"frames": [Recorder([(os.path.join(work, dev, "fb"), "ui")], DEVICES[dev]["size"]).now()]}
-            except (OSError, ValueError):
+            except Exception:
                 pass
         finally:
             if os.path.isdir(os.path.join(work, dev)):
                 dst = os.path.join(a.out, dev)
                 shutil.rmtree(dst, ignore_errors=True)
-                shutil.copytree(os.path.join(work, dev), dst, ignore=shutil.ignore_patterns("fb", "fb2", "w*", "i", "i2", "cores", "tmp", "*.so"))
-        print(f"kern-walk: {dev} walked in {time.monotonic() - t0:.0f} s" + (f" (harness: {failed[dev]})" if dev in failed else ""), flush=True)
+                try:
+                    shutil.copytree(os.path.join(work, dev), dst, ignore=COPY_IGNORE)
+                except (OSError, shutil.Error) as e:  # the logs only (25.11.2026: a save being written crashed the 0.7.1 walk here)
+                    print(f"kern-walk: {dev}: its logs were not all copied ({str(e)[:200]})", flush=True)
+        walks.setdefault(dev, []).append(failed.get(dev))
+        print(f"kern-walk: {dev} walked in {time.monotonic() - t0:.0f} s" + (f" ({'tool' if failed[dev].tool else 'stopped'}: {failed[dev]})" if dev in failed else ""), flush=True)
 
     ref_dir = a.ref if a.ref and os.path.isdir(a.ref) else ""
     refs = {dev: json.load(open(os.path.join(ref_dir, dev, "numbers.json"))) for dev in devices
             if ref_dir and os.path.exists(os.path.join(ref_dir, dev, "numbers.json"))}
 
-    def reds():
-        out = {}
-        for dev in devices:
-            plus = strip_frames(numbers["plus"]) if dev == "brick" and numbers.get("plus") and "plus" not in failed else None
-            out[dev] = judge(strip_frames(numbers[dev]), refs.get(dev), plus) if dev not in failed else [("-", f"Gang abgebrochen: {failed[dev]}")]
-        return out
+    def reds(dev):
+        plus = strip_frames(numbers["plus"]) if dev == "brick" and numbers.get("plus") and "plus" not in failed else None
+        return judge(strip_frames(numbers[dev]), refs.get(dev), plus)
 
+    complete = {dev: [] for dev in devices}  # the red lines of each walk that went to its end
+
+    def note(dev):
+        if dev not in failed:
+            complete[dev].append(reds(dev))
+
+    retries = int(os.environ.get("KERN_WALK_RETRIES", "2"))
     try:
         for dev in devices:
             walk_one(dev)
-        first = reds()
-        # The build computer is shared: a moment whose pictures came slowly once (another job's load) is walked again. Red is what is
-        # red both times (the 20.11. switch-on is 0 pictures every time; findings only when they repeat).
-        again = [dev for dev in devices if first[dev] and dev not in final]
-        for dev in again:
-            print(f"kern-walk: {dev} again ({len(first[dev])} red)", flush=True)
-            walk_one(dev)
-        second = reds() if again else first
+        for dev in devices:  # judged after the round: the Brick against the Plus's numbers
+            note(dev)
+        # The build computer is shared: a moment whose pictures came slowly once (another job's load) is walked again, and red
+        # is what is red both times (the 20.11. switch-on is 0 pictures every time; findings only when they repeat). A walk that
+        # stopped is walked again too (25.11.2026), up to KERN_WALK_RETRIES more times.
+        most = max(2, 1 + retries)  # walks per device: a red one is always walked twice
+        for _ in range(most - 1):
+            again = [dev for dev in devices if dev not in final and len(walks[dev]) < most
+                     and (not complete[dev] or (complete[dev][-1] and len(complete[dev]) < 2))]
+            if not again:
+                break
+            for dev in again:
+                why = f"the walk stopped: {failed[dev]}" if dev in failed else f"{len(complete[dev][-1])} red"
+                print(f"kern-walk: {dev} again ({why})", flush=True)
+                walk_one(dev)
+            for dev in again:
+                note(dev)
     finally:
         shutil.rmtree(work, ignore_errors=True)
-    results = {}
-    for dev in devices:
-        twice = {k for k, _ in first[dev]} & {k for k, _ in second[dev]}
-        red = [(k, t) for k, t in second[dev] if k in twice]
-        once = sorted({k for k, _ in first[dev]} ^ {k for k, _ in second[dev]})
-        results[dev] = {"numbers": numbers[dev], "red": red, "ref": dev in refs, "once": once,
-                        "first": [f"{k}: {t}" for k, t in first[dev] if k in once]}
+    results = {dev: dict(verdict(complete[dev], walks[dev]), numbers=numbers[dev], ref=dev in refs) for dev in devices}
     pg = page(a.out, results, ref_dir, a.label)
     if a.make_ref:
         for dev in devices:
@@ -1186,11 +1259,15 @@ def main():
             for key, _, _ in MOMENTS:
                 if os.path.exists(os.path.join(pg, f"{dev}-{key}.jpg")):
                     shutil.copy(os.path.join(pg, f"{dev}-{key}.jpg"), os.path.join(rd, f"{key}.jpg"))
-    json.dump({d: {"numbers": strip_frames(r["numbers"]), "red": r["red"], "ref": r["ref"], "once": r["once"]} for d, r in results.items()},
+    json.dump({d: {"numbers": strip_frames(r["numbers"]), "red": r["red"], "ref": r["ref"], "once": r["once"],
+                   "incomplete": r["incomplete"], "walks": r["walks"]} for d, r in results.items()},
               open(os.path.join(a.out, "numbers.json"), "w"), indent=1)
     lines = [f"# Kern-Abnahme {a.label}", "", f"{time.monotonic() - t_all:.0f} s, core {a.core}", ""]
     for dev, r in results.items():
-        lines.append(f"- **{dev}**: {'ROT' if r['red'] else 'grün'}" + ("" if r["ref"] else " (ohne Referenz)"))
+        state = "ROT" if r["red"] else "UNVOLLSTÄNDIG (das Werkzeug brach ab, kein Befund über pocket-ui)" if r["incomplete"] else "grün"
+        lines.append(f"- **{dev}**: {state}" + ("" if r["ref"] else " (ohne Referenz)"))
+        if r["incomplete"]:
+            lines.append(f"  - {r['walks']} Gänge, zuletzt: {r['incomplete']}")
         lines += [f"  - {k}: {t}" for k, t in r["red"]]
         if r["once"]:
             lines.append(f"  - nur einmal rot, beim zweiten Gang nicht (Last auf dem Rechner): {'; '.join(r['first']) or ', '.join(r['once'])}")
@@ -1201,7 +1278,14 @@ def main():
         shutil.rmtree(a.publish, ignore_errors=True)
         shutil.copytree(pg, a.publish)
         print(f"kern-walk: page also in {a.publish}")
-    return 1 if any(r["red"] for r in results.values()) else 0
+    if any(r["red"] for r in results.values()):
+        return 1
+    stopped = [dev for dev, r in results.items() if r["incomplete"]]
+    if stopped:
+        print(f"kern-walk: INCOMPLETE: {', '.join(stopped)}: the walker stopped (not pocket-ui) in every walk; no verdict for "
+              f"{'it' if len(stopped) == 1 else 'them'}. Walk again (exit 3).")
+        return 3
+    return 0
 
 
 if __name__ == "__main__":

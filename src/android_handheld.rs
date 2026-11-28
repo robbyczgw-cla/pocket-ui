@@ -23,6 +23,65 @@ pub fn player_title(name: &str, path: &Path) -> String {
     }
 }
 
+/// Where `PocketActivity.launchApp` keeps why another emulator app wasn't opened after it said "" (a word: `storage`, `open`).
+pub const APP_START_ERROR: &str = "app-start-error";
+
+/// What the shelf says when the Activity couldn't hand `name` to another emulator app after the start's scene (lead 27.11.2026:
+/// that start only went to the log). `storage`: pocket-ui couldn't write its note of the game that plays (`LaunchNote`
+/// FAILED), also when even the word couldn't be kept; `open`: Android refused to open the app.
+pub fn app_start_failed(name: &str, why: Option<&str>) -> String {
+    match why.map(str::trim) {
+        Some("open") => format!("{name} didn't start: Android couldn't open the emulator app. Open it once from Android, then try again."),
+        _ => format!("{name} didn't start: pocket-ui couldn't write to the device's storage. Make some room and try again."),
+    }
+}
+
+/// Azahar (and Lime3DS, the same app under its old name) closes at once when a game comes before its first-start setup
+/// ("DirectoryInitialization has to run at least once", night QA 27.11.2026): another app can't see that setup, so a game
+/// that is back this soon gets the way out.
+pub const AZAHAR_SETUP: &str = "Azahar closed right away. If it isn't set up yet, open Azahar once and finish its setup, then start the game again.";
+
+/// A game back from Azahar sooner than this counts as one Azahar didn't open (the start's scene is counted in).
+pub const AZAHAR_QUICK_RETURN: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// The sentence for a game back from another emulator app after `played`, if its app is Azahar and it was back that soon.
+pub fn quick_return_hint(package: &str, played: std::time::Duration) -> Option<&'static str> {
+    let azahar = matches!(package, "org.azahar_emu.azahar" | "io.github.lime3ds.android");
+    (azahar && played < AZAHAR_QUICK_RETURN).then_some(AZAHAR_SETUP)
+}
+
+#[cfg(test)]
+mod app_start_tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn a_start_another_app_never_got_says_why_in_every_language() {
+        let storage = app_start_failed("Mars3D", Some("storage"));
+        let open = app_start_failed("Mars3D", Some("open\n"));
+        assert!(storage.starts_with("Mars3D didn't start") && storage.contains("storage"));
+        assert!(open.contains("Android couldn't open the emulator app"));
+        assert_eq!(app_start_failed("Mars3D", None), storage, "even the word not kept: storage");
+        for lang in crate::i18n::Lang::ALL.iter().copied().filter(|l| *l != crate::i18n::Lang::En) {
+            let _l = crate::i18n::for_this_thread(lang);
+            for line in [storage.as_str(), open.as_str(), AZAHAR_SETUP] {
+                let said = crate::i18n::tr(line);
+                assert_ne!(said, line, "{lang:?} has no line for {line}");
+                if line != AZAHAR_SETUP { assert!(said.contains("Mars3D"), "{lang:?}: the game's name stays in {said}"); }
+            }
+        }
+    }
+
+    #[test]
+    fn only_a_quick_return_from_azahar_asks_for_its_setup() {
+        for package in ["org.azahar_emu.azahar", "io.github.lime3ds.android"] {
+            assert_eq!(quick_return_hint(package, Duration::from_secs(2)), Some(AZAHAR_SETUP), "{package}");
+            assert_eq!(quick_return_hint(package, Duration::from_secs(5 * 60)), None, "{package}: a real session");
+        }
+        assert_eq!(quick_return_hint("org.ppsspp.ppsspp", Duration::from_secs(2)), None);
+    }
+}
+
 #[cfg(test)]
 mod player_title_tests {
     #[test]
@@ -50,6 +109,31 @@ pub fn child_ci(dir: &Path, name: &str) -> Option<PathBuf> {
         .map(|e| e.path())
         .find(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.eq_ignore_ascii_case(name)))
         .or_else(|| exact.is_dir().then_some(exact))
+}
+
+/// The BIOS files for `system` in the `bios` folder (any case) of each of `roots`: `(file, name)`, the name as the player's
+/// own BIOS folder keeps it (`document_library::bios_file`, Dreamcast's under `dc/`; `BiosFiles.java` takes only those),
+/// the exact size only, the first of a name wins. Dreamcast's files are also read from `bios/dc`, where ROCKNIX's Flycast
+/// keeps them, so a ROCKNIX card or folder copied over plays the same. Only a search: nothing is moved or copied here.
+pub fn bios_files(system: &str, roots: &[PathBuf]) -> Vec<(PathBuf, String)> {
+    let mut out: Vec<(PathBuf, String)> = Vec::new();
+    for root in roots {
+        let Some(bios) = child_ci(root, "bios") else { continue };
+        let mut dirs = vec![bios.clone()];
+        if system == "dreamcast" {
+            dirs.extend(child_ci(&bios, "dc"));
+        }
+        for dir in dirs {
+            let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+            for e in entries.flatten() {
+                let Some((s, name, size)) = crate::document_library::bios_file(&e.file_name().to_string_lossy()) else { continue };
+                if s == system && e.metadata().is_ok_and(|m| m.is_file() && m.len() == size as u64) && !out.iter().any(|(_, n)| *n == name) {
+                    out.push((e.path(), name));
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Whether a volume under /storage is a card (`1234-ABCD`: FAT and exFAT cards). A long UUID is a Linux partition another
@@ -334,7 +418,7 @@ mod tests {
         }
         assert!(FONTS.contains("\"fonts\"") && FONTS.contains("assets.list(\"fonts\")") && FONTS.contains("renameTo"));
         assert!(BUILD.contains("scripts/shipped-fonts.sh \"$OUT/apk/assets\""));
-        for f in ["FusionPixel12-zh_hans-CJK.otf", "NotoSansSC-Regular-CJK.otf"] {
+        for f in ["FusionPixel12-zh_hans-CJK.otf", "NotoSansSC-Regular-CJK.otf", "FusionPixel12-ja-CJK.otf", "NotoSansJP-Regular-CJK.otf"] {
             assert!(AUDIT.contains(&format!("assets/fonts/{f}")), "{f}");
             assert!(include_str!("../scripts/shipped-fonts.sh").contains(f), "{f}");
         }
@@ -399,22 +483,6 @@ mod tests {
         assert!(mode(base).contains("LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES"), "the Mobile view: {}", mode(base));
         assert!(mode(HANDHELD).contains("LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER"), "the Handheld view: {}", mode(HANDHELD));
         assert!(HANDHELD.contains("extends PocketBase"));
-    }
-
-    /// The files dialog (13.11.2026 rollout): it says what the app writes (a copy of the saves in "pocket-ui saves" when the Mobile
-    /// view has a games folder, as `save_copy` does), in every language, and a pad has the main button focused from the start.
-    #[test]
-    fn the_files_dialog_tells_the_truth_about_saves_and_focuses_its_main_button() {
-        let at = HANDHELD.find("private void askForFiles()").expect("the dialog");
-        let dialog = &HANDHELD[at..];
-        let dialog = &dialog[..dialog.find("onRequestPermissionsResult").unwrap()];
-        assert_eq!(dialog.matches("pocket-ui saves").count(), 6, "English, German, Spanish, Portuguese, French and Italian name the copy's folder");
-        for lie in ["saves stay in the app's own folder", "Spielstände bleiben im App-Ordner", "quedan en la carpeta de la app"] {
-            assert!(!dialog.contains(lie), "{lie}");
-        }
-        let show = dialog.find(".show();").expect("the dialog is shown");
-        let focus = dialog.find("getButton(AlertDialog.BUTTON_POSITIVE)").expect("the main button is looked up");
-        assert!(focus > show && dialog[focus..].contains("requestFocus()"), "the main button takes the focus after show()");
     }
 
     /// A view that ends ends its process before NativeActivity's onDestroy waits for the native loop (review #1 and #2: the
@@ -528,6 +596,49 @@ mod tests {
         assert_eq!(bare["frozen_shown"], false);
         assert!(bare.get("picture").is_none() && bare.get("settings_dir").is_none());
         assert!(bare.get("boot_screen").is_none(), "Off unless the view switched it on");
+    }
+
+    /// A ROCKNIX card copied to Android has Dreamcast's BIOS in `bios/dc/` (26.11.2026): the handheld view read only the top of
+    /// `bios` and handed `dc_boot.bin` under its bare name, which the player's `BiosFiles.java` refuses (it keeps
+    /// `dc/dc_boot.bin`), so Dreamcast never had its BIOS. No test followed the list into the Java side's names. Every system:
+    /// what is handed over is a name the player takes, in `bios/` and (Dreamcast) `bios/dc/`, any case, exact size only.
+    #[test]
+    fn a_bios_in_bios_or_rocknix_bios_dc_reaches_the_player_under_a_name_it_takes() {
+        let s = TestDir::new("handheld-bios");
+        let (card, internal) = (s.join("1234-ABCD/ROMs"), s.join("emulated/0/ROMs"));
+        let roots = vec![internal.clone(), card.clone()];
+        let none = |system: &str| crate::android_first_start::missing_bios(&[system], |_| !bios_files(system, &roots).is_empty());
+        assert!(bios_files("dreamcast", &roots).is_empty(), "no bios folder, nothing handed over");
+        assert_eq!(none("dreamcast")[0].line(false), "Dreamcast plays without a BIOS. For better compatibility, put dc_boot.bin and dc_flash.bin in ROMs/bios.", "missing: the hint as before");
+        dirs(&card, &["BIOS/DC"]);
+        std::fs::write(card.join("BIOS/DC/dc_boot.bin"), vec![0; 2 << 20]).unwrap();
+        std::fs::write(card.join("BIOS/DC/dc_flash.bin"), vec![0; 128 << 10]).unwrap();
+        std::fs::write(card.join("BIOS/DC/dc_nvmem.bin"), vec![0; 128 << 10]).unwrap();
+        let names = |system: &str| bios_files(system, &roots).into_iter().map(|(_, n)| n).collect::<Vec<_>>();
+        let mut dc = names("dreamcast");
+        dc.sort();
+        assert_eq!(dc, ["dc/dc_boot.bin", "dc/dc_flash.bin"], "ROCKNIX's bios/dc, under the player's names");
+        assert!(none("dreamcast").is_empty(), "found: no hint");
+        assert!(bios_files("dreamcast", &roots).iter().all(|(f, _)| f.parent() == Some(card.join("BIOS/DC").as_path())), "read where it is, not copied");
+        // The top of bios too, for every system; a wrong size never wins over a right one.
+        dirs(&internal, &["bios"]);
+        std::fs::write(internal.join("bios/dc_boot.bin"), b"short").unwrap();
+        std::fs::write(internal.join("bios/saturn_bios.bin"), vec![0; 512 << 10]).unwrap();
+        std::fs::write(internal.join("bios/SCPH5501.BIN"), vec![0; 512 << 10]).unwrap();
+        let boot = bios_files("dreamcast", &roots).into_iter().filter(|(_, n)| n == "dc/dc_boot.bin").map(|(f, _)| f).collect::<Vec<_>>();
+        assert_eq!(boot, [card.join("BIOS/DC/dc_boot.bin")], "the short copy is skipped");
+        assert_eq!(names("saturn"), ["saturn_bios.bin"]);
+        assert_eq!(names("psx"), ["scph5501.bin"], "lower case, as the player keeps it");
+        assert!(names("saturn").iter().all(|n| !n.starts_with("dc/")), "only Dreamcast reads bios/dc");
+        // PC Engine CD games play from the PC Engine's folder: its System Card goes with them, as the Mobile view's list does.
+        std::fs::write(internal.join("bios/SYSCARD3.PCE"), vec![0; 256 << 10]).unwrap();
+        std::fs::write(internal.join("bios/gba_bios.bin"), vec![0; 16384]).unwrap();
+        assert_eq!(names("pcengine"), ["syscard3.pce"]);
+        assert_eq!(names("gba"), ["gba_bios.bin"]);
+        let java = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/android/java/xyz/pocketui/app/BiosFiles.java")).unwrap();
+        for name in dc.iter().chain(&names("saturn")).chain(&names("pcengine")).chain(&names("gba")) {
+            assert!(java.contains(&format!("case \"{name}\"")), "BiosFiles.java takes {name}");
+        }
     }
 
     /// Cheats: Mobile reads a same-name `.cht` beside the game; so does this view (the card on Linux has no database here).

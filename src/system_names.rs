@@ -6,6 +6,10 @@
 
 /// The short name of the system with id `id` (a folder name of ES-DE and ROCKNIX), if the table has one.
 pub fn short(id: &str) -> Option<&'static str> {
+    // A console sold under regional names: the name chosen under Look (`region_pairs`, "Mega Drive" or "Genesis").
+    if let Some(n) = crate::region_pairs::current(id) {
+        return Some(n.short);
+    }
     Some(match id {
         "nes" | "famicom" => "NES",
         "fds" => "FDS",

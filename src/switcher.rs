@@ -154,7 +154,7 @@ impl Entry {
 
     #[allow(clippy::too_many_arguments)]
     pub fn new(system: &str, name: &str, path: &Path, label: String, meta: String, color: u32, favorite: bool, cover: Option<PathBuf>) -> Self {
-        let (auto, slots) = previews(&slots::base(system, path.file_stem().and_then(|s| s.to_str()).unwrap_or_default()));
+        let (auto, slots) = previews(&slots::base(crate::region_pairs::own_system(system, path), path.file_stem().and_then(|s| s.to_str()).unwrap_or_default()));
         Entry {
             system: system.to_string(),
             name: name.to_string(),
@@ -505,6 +505,7 @@ impl Drop for Loader {
 
 /// Save-state pictures of a game, best first: the auto-resume ones, then slot previews, newest first.
 pub fn screenshots(system: &str, rom: &Path) -> Vec<PathBuf> {
+    let system = crate::region_pairs::own_system(system, rom);
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
     let base = slots::base(system, stem);
     let mut pictures = screenshots_at(&base);

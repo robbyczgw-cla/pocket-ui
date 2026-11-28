@@ -75,9 +75,27 @@ impl App {
         self.ignore_log.accepted();
         let (w, h) = self.screen_size();
         let (x, y) = touch::to_px((ev.x, ev.y), w, h);
-        let gesture = self.touch_rec.feed(ev.phase, x, y, std::time::Instant::now(), self.hits.pitch());
         // The page in front takes the finger (`app_where`, the page `paint` painted): never one under it.
         let place = self.where_now().place;
+        // The game's manual swipes sideways by pages (`ManualView::touch`), every other page by its rows.
+        let pitch = if place == Place::GameManual { pocket_ui::manual_view::ManualView::swipe_pitch(w) } else { self.hits.pitch() };
+        let gesture = self.touch_rec.feed(ev.phase, x, y, std::time::Instant::now(), pitch);
+        // The game's manual: its hints are buttons; a swipe or a tap on a half of the page turns the page.
+        if place == Place::GameManual {
+            if ev.phase == touch::Phase::Down {
+                self.game_manual_finger_down();
+            }
+            match gesture {
+                Some(Gesture::Tap { x, y }) => match self.hits.tap(x, y) {
+                    TapAction::Press(b) => self.tap_button(el, b),
+                    _ if (y as i32) < pocket_ui::kit::hint_bar_top(h as i32) => self.game_manual_touch(Gesture::Tap { x, y }, w as i32),
+                    _ => {}
+                },
+                Some(g) => self.game_manual_touch(g, w as i32),
+                None => {}
+            }
+            return;
+        }
         // Add games: a tap on a way selects it, a tap on the selected one does it; its hints are buttons. (The manual opened
         // over it with SELECT is a page of its own: its links and its swipe, not the ways behind it.)
         if matches!(place, Place::Setup { .. }) {

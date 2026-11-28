@@ -21,9 +21,12 @@ Path(sys.argv[1]).write_text('\n'.join(sources) + '\n')
 PYTHON
 javac --release 8 -d "$reader_test_dir/classes" "@$reader_test_dir/java-sources" \
   android/java/xyz/pocketui/app/{GameCopy,GameDirect,SaveBackup,SaveCopy,UpdateInstaller,Views,NetworkRule}.java \
-  scripts/android/test/{GameDirectTest,JavaReaderRule,ViewsTest}.java
+  android/java/xyz/pocketui/app/{PadChord,PadMenu,EmulatorKeys,PressGate,TargetKey,LaunchNote,PressSlot}.java \
+  scripts/android/test/{GameDirectTest,JavaReaderRule,ViewsTest,ExtrasKeysTest}.java
 java -Xmx128m -cp "$reader_test_dir/classes" xyz.pocketui.app.JavaReaderRule --seeds "$reader_test_dir/seeds"
 "$reader_test_dir/corpus" "$reader_test_dir/faults" "$reader_test_dir/seeds"
 java -Xmx128m -cp "$reader_test_dir/classes" xyz.pocketui.app.GameDirectTest
 java -Xmx128m -cp "$reader_test_dir/classes" xyz.pocketui.app.ViewsTest
+# Android extras: the pad chord, the pause menu over other emulator apps and their keys (docs/ANDROID-EXTRAS.md).
+java -Xmx128m -cp "$reader_test_dir/classes" xyz.pocketui.app.ExtrasKeysTest
 python3 -I scripts/android/test/run-java-reader-rule.py "$reader_test_dir/classes" "$reader_test_dir/faults"

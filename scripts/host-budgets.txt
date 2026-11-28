@@ -1,0 +1,18 @@
+# Host timing budgets (25.11.2026, gate false reds): tests whose verdict is a time measured on the build host (CPU or wall clock),
+# nothing a player sees. A loaded host turned them red in trains and in the 0.7.2 release suite (cabinet_art 3.03x against
+# 3.0x at load 21-26, 2.62x alone). scripts/gate.sh skips them in every tier, the merge gate and GATE_FULL=1 (nightly, release
+# check) alike; scripts/host-budgets.sh runs them alone and prints warnings, the nightly run counts them in NIGHTLY.md.
+# A real slowdown shows there every night, by name and number. Behaviour tests that also time something stay in the gate.
+#   test <target> <name>   target: lib (cargo test --lib) or the integration suite's name; the name as nextest prints it
+#   suite <name>           a whole integration suite of budgets
+test lib tv_glow::tests::the_glow_costs_well_under_the_wood_behind_it
+test lib cabinet_art::tests::a_shape_shadow_costs_about_its_picture
+test lib ui_art::tests::painting_a_vignette_is_cheap
+test lib emu_choice::tests::resolving_costs_microseconds
+test lib connections::tests::speed_of_the_index_for_5000_games
+test lib curator::tests::speed_index_build_lens_keypress_and_echoes_for_5000_games
+test lib curator::tests::speed_catalog_from_gamedb_for_a_real_library
+test lib search::tests::five_thousand_games_index_and_search_in_time
+test settings_open settings_first_frame_is_not_much_slower_than_the_next
+suite launch_frames
+suite shelf_moves

@@ -16,8 +16,12 @@ final class EmulatorIntents {
     private static String[][] apps(String profile) {
         if (profile.startsWith("retroarch:")) return new String[][]{{"com.retroarch.aarch64", RA_ACTIVITY, MAIN, "ROM"}, {"com.retroarch", RA_ACTIVITY, MAIN, "ROM"}, {"com.retroarch.ra32", RA_ACTIVITY, MAIN, "ROM"}};
         switch (profile) {
-            // ARMSX2 2.9.3: Main reads the intent's data (handleExternalLaunchIntent) and goes back to us on Close.
+            // ARMSX2 2.9.3: Main reads the intent's data (handleExternalLaunchIntent) and goes back to us on Close. The Play Store
+            // build is the same app under come.nanodata.armsx2 (2.9.7, same com.armsx2.Main, VIEW with content and file data;
+            // RG556 26.11.2026): before this line PS2 fell through to NetherSX2, which said "no disc" for the game.
+            // NetherSX2 (xyz.aethersx2.android) stays last: our content URI as bootPath gave "no disc" there (RG556 26.11.).
             case "ps2": return new String[][]{{"com.armsx2", "com.armsx2.Main", VIEW, null},
+                {"come.nanodata.armsx2", "com.armsx2.Main", VIEW, null},
                 {"xyz.aethersx2.android", "xyz.aethersx2.android.EmulationActivity", MAIN, "bootPath"}};
             // Dolphin 2603a: StartupHandler boots the ClipData's or the data's URI before AutoStartFile.
             case "dolphin": return new String[][]{{"org.dolphinemu.dolphinemu", "org.dolphinemu.dolphinemu.ui.main.MainActivity", MAIN, "AutoStartFile"}};

@@ -10,6 +10,13 @@ final class BiosFiles {
             case "dc/dc_boot.bin": return 2<<20;
             case "dc/dc_flash.bin": return 128<<10;
             case "saturn_bios.bin": case "sega_101.bin": case "mpr-17933.bin": return 512<<10;
+            // PC Engine CD's System Cards (Beetle PCE Fast, its "CD BIOS" option; System Card 3 by default).
+            case "syscard3.pce": case "syscard2.pce": case "syscard1.pce": return 256<<10;
+            case "gexpress.pce": return 32<<10;
+            // Console boot screen's files (`boot_screen`): the Game Boys' logos.
+            case "gb_bios.bin": return 256;
+            case "gbc_bios.bin": return 2304;
+            case "gba_bios.bin": return 16384;
             default:
                 if(name.matches("scph[0-9]{3,5}[a-z]?\\.bin")||name.equals("psxonpsp660.bin"))return 512<<10;
                 return 0;

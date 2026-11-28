@@ -44,7 +44,10 @@ opening the page from the camera): a page of another site that learned the code 
 | `GET /<code>/` | The page (`index.html`), with the code in its two asset paths and the systems that take uploads in a `<script type="application/json">` block (id, name, folder, the file types this page takes for it and its size limit) |
 | `GET /<code>/app.js`, `/<code>/app.css` | The page's script and style (the security headers allow no inline script or style) |
 | `POST /<code>/check?name=&size=&system=&dir=` | Where the file would go, whether it fits, whether a file of that name is there: `{ok, path, system, exists}` or `{ok:false, error}` with the status of the reason. Makes nothing on the card |
-| `POST /<code>/upload?name=&system=&dir=` | The file as the raw body with `Content-Length` (no multipart, no chunked encoding) |
+| `POST /<code>/upload?name=&system=&dir=` | The file as the raw body with `Content-Length` (no multipart, no chunked encoding). The page sends in pieces (below); this stays for `curl` |
+| `POST /<code>/start?name=&size=&system=&dir=` | A file in pieces: every check of `upload` for `size` bytes, the room reserved, the folders and the temporary file made, its row on the Pocket's page. `{ok, id, piece, path}` |
+| `POST /<code>/part?id=&offset=` | One piece (`Content-Length`), exactly at the bytes the Pocket has (else `416 {received, code: "offset"}`, nothing read); a piece cut off is taken back (`400 {received}`). The last one puts the file in place (a disc sheet is read and checked first) and answers `{ok, path}`. An unknown id: `404 {code: "gone"}` |
+| `POST /<code>/cancel?id=` | The phone gave up: the temporary file and the folders it made go, its row says so |
 
 No listing, no download, nothing read from the card; `check` answers only about the one name it is given.
 
@@ -96,6 +99,13 @@ the page); more get `503`.
   only from there (security review L3): a file of the same pattern in a game folder is never touched.
 - **Memory**: one 256 KB buffer and a 64 KB reader per request, at most eight requests: a 4 GB image costs no more RAM
   than a 4 MB one (the RG35XX family has 1 GB and no swap).
+- **Pieces** (25.11.2026): Chrome on Android sends a large file from the file picker straight from Android's file
+  provider and broke off a 1.62 GB PS2 disc at once ("The connection dropped"), while a 16 MB game went. The page now
+  reads every file in 8 MB pieces (`FileReader.readAsArrayBuffer(file.slice())`) and sends each as its own `part`
+  request; the Pocket's side is `files::Partial`, the same writing as above. A piece without an answer goes again (up
+  to eight times, waiting longer each time; the Pocket answers with where it stands if it got it after all). Only when
+  the page's own style sheet no longer answers does the phone say the Pocket closed the page or went to sleep; a file the
+  phone can't read says so. A file left half sent goes when the page closes or after its idle time.
 
 After the page closes the grid counts the folders again; leaving Settings reads the library, so the games are on the
 shelf.
@@ -132,6 +142,9 @@ is why the page is short-lived, closes when the Pocket goes dark, and says so.
 curl -s -o /dev/null -w '%{http_code}\n' http://<addr>:<port>/                          # 403
 curl -s -X POST "http://<addr>:<port>/<code>/check?name=Game.gba&size=1000"              # {"ok":true,...}
 curl -s -X POST -T Game.gba "http://<addr>:<port>/<code>/upload?name=Game.gba"
+# in pieces, as the page sends: start, then each piece at its offset
+curl -s -X POST "http://<addr>:<port>/<code>/start?name=Game.gba&size=$(stat -c%s Game.gba)"   # {"ok":true,"id":"…",…}
+curl -s -X POST --data-binary @Game.gba "http://<addr>:<port>/<code>/part?id=<id>&offset=0"
 ```
 
 Then B on the Pocket and `ss -ltn` on the Pocket: the port is gone.

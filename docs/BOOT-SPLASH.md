@@ -219,6 +219,20 @@ the boot reads as one: the mark, dip to black, shelf. Only at the first start si
 show the first frame as it is, and waking from sleep starts nothing. The fade starts at the first frame painted, not
 at the program's start, and adds nothing to the time to the first frame. Motion Off: no fade (the mark is still left).
 
+## On Android
+
+The Android app has no boot of its own, but its start shows the same picture (26.11.2026): Android's splash is true
+black with the boot screen's picture in the middle (the cartridge, the "pocket-ui" wordmark and the bar in its first
+colour, NES red), never the app icon on brown. `splash::android_icon` cuts it from the picture as the Mini V2's
+1240x1080 shows it, to a square half again the picture's diagonal, because Android draws the icon in a 240 dp square and
+shows only the middle circle two thirds as wide; at the Mini V2's density 2.0 the 240 dp are about the square's own size.
+`pocket-splash --android-icon android/res/drawable-nodpi/splash_mark.png` writes it; `splash::tests` fails when the
+file in the APK no longer matches the code. From Android 12 the theme's `windowSplashScreenAnimatedIcon` shows it and the
+window stays black (a surface made again later, back from a game, never flashes the picture); before 12 the window's
+background is the picture on black (`drawable/splash_window`). Then the Handheld view's first frame fades in from black
+over 300 ms, as the shelf does after pocket-splash: on Android every start of its process is such a start
+(`boot_fade::ANDROID_START`). The player keeps its plain black splash.
+
 ## Tests
 
 - `cargo test` (gate): `splash::tests` (fades, holds, the late and first-start lines, Motion Off and Reduced, frame
@@ -227,7 +241,8 @@ at the program's start, and adds nothing to the time to the first frame. Motion 
   screen is taken and when a write fails, sway seen in a fake `/proc`, and `sway-touch.sh` and its kin *not* seen as
   sway, the wait for the frame buffer against a fake one that appears late and one that never appears, the wait ending
   for sway and for a stop, the unit's keys parsed, the Motion setting read leniently, the CPU
-  budget), `boot_fade::tests`, and in the program the size and offsets of the kernel's two structs.
+  budget, Android's start picture inside the splash circle and the same as the APK's file), `boot_fade::tests`, and in the
+  program the size and offsets of the kernel's two structs.
 - `deploy/test-grub-quiet.sh` (gate), `deploy/package/test-package.sh` (gate: the unit and its link installed,
   never started, kept on a second run, removed by uninstall and `--keep-programs`, a foreign unit left alone).
 - `scripts/image/check.sh`: the image's kernel line, no `echo`, no `fbcon=`; the unit and link in `.pocket-seed`, the

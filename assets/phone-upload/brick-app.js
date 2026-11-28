@@ -26,6 +26,7 @@
     exists: "Ist schon auf dem Brick und bleibt, wie sie ist. Zum Ersetzen erst dort löschen:",
     none: "Kein System nimmt diese Art Datei.",
     save: "Spielstände werden so nicht übertragen.",
+    unreadable: "Dieses Handy konnte die Datei nicht lesen. Von dieser Datei wurde nichts behalten.",
     lost: "Die Verbindung zum Brick ist abgebrochen. Von dieser Datei wurde nichts behalten.",
     summary: function (n, of, skipped) {
       return "Hinzugefügt: " + n + (n === 1 ? " Spiel" : " Spiele") + " von " + of + (skipped ? " (" + skipped + " andere Dateien übersprungen)" : "");
@@ -48,6 +49,7 @@
     exists: "Ya está en el Brick y se queda como está. Para reemplazarlo, bórralo allí primero:",
     none: "Ningún sistema acepta este tipo de archivo.",
     save: "Las partidas no se pasan así.",
+    unreadable: "Este teléfono no pudo leer el archivo. De este archivo no se guardó nada.",
     lost: "Se perdió la conexión con el Brick. De este archivo no se guardó nada.",
     summary: function (n, of, skipped) {
       return "Añadido: " + n + (n === 1 ? " juego" : " juegos") + " de " + of + (skipped ? " (" + skipped + (skipped === 1 ? " otro archivo omitido)" : " otros archivos omitidos)") : "");
@@ -70,6 +72,7 @@
     exists: "Already on the Brick and kept as it is. To replace it, delete it there first:",
     none: "No system takes this kind of file.",
     save: "Saves can't be sent this way.",
+    unreadable: "This phone could not read the file. Nothing of this file was kept.",
     lost: "The connection to the Brick broke off. Nothing of this file was kept.",
     summary: function (n, of, skipped) {
       return "Added: " + n + (n === 1 ? " game" : " games") + " of " + of + (skipped ? " (" + skipped + " other files skipped)" : "");
@@ -309,7 +312,8 @@
     exists: "Ist schon auf dem Brick und bleibt, wie sie ist.",
     no_room: "Nicht genug Platz auf der SD-Karte.",
     too_big: "Die Datei ist zu groß für dieses System.",
-    cut_off: "Der Upload wurde abgebrochen. Nichts wurde behalten."
+    cut_off: "Der Upload wurde abgebrochen. Nichts wurde behalten.",
+    gone: "Diese Datei kam nicht ganz an. Nichts wurde behalten. Sende sie noch einmal."
   } : es ? {
     bad_name: "Ese nombre de archivo no se puede usar.",
     saves: "Las partidas no se pasan así.",
@@ -329,7 +333,8 @@
     exists: "Ya está en el Brick y se queda como está.",
     no_room: "No hay espacio en la tarjeta SD.",
     too_big: "El archivo es demasiado grande para este sistema.",
-    cut_off: "Se cortó la subida. No se guardó nada."
+    cut_off: "Se cortó la subida. No se guardó nada.",
+    gone: "Este archivo no llegó entero. No se guardó nada. Envíalo otra vez."
   } : null;
 
   function reason(x, r) {
@@ -372,8 +377,74 @@
       running--;
       send(row);
     };
-    x.onerror = function () { lost(); finish(row, "failed", T.lost, "alert"); };
+    x.onerror = function () { noAnswer(row, null); };
     x.send();
+  }
+
+  // Files go in pieces, each read into memory first and sent as its own request: Chrome on Android can't send a large
+  // file from the phone's file picker in one go (it breaks off at once; 25.11.2026, a 1.62 GB PS2 disc). A piece that
+  // gets no answer goes again; the Pocket says where it stands.
+  var PIECE = 8388608;
+  var TRIES = 8;
+
+  function post(url, data, progress, done) {
+    var x = new XMLHttpRequest();
+    x.open("POST", url);
+    if (progress) x.upload.onprogress = function (e) { progress(e.loaded); };
+    x.onload = function () {
+      var r = {};
+      try { r = JSON.parse(x.responseText) || {}; } catch (e) { r = { error: x.responseText }; }
+      done(x, r);
+    };
+    x.onerror = function () { done(null, {}); };
+    x.onabort = x.onerror;
+    x.send(data === undefined ? null : data);
+  }
+
+  // The bytes from `from` to `to` of `file`, read into memory: done(null, bytes) or done(error).
+  function readPiece(file, from, to, done) {
+    var called = false;
+    function once(err, data) {
+      if (called) return;
+      called = true;
+      done(err, data);
+    }
+    try {
+      var reader = new FileReader();
+      reader.onload = function () { once(null, reader.result); };
+      reader.onerror = function () { once(reader.error || "error"); };
+      reader.readAsArrayBuffer(file.slice(from, to));
+    } catch (e) {
+      once(e);
+    }
+  }
+
+  // Whether the Pocket still has this page open: only then is it the connection that broke off, not the page.
+  function stillOpen(done) {
+    var x = new XMLHttpRequest();
+    x.open("GET", base + "app.css");
+    x.onload = function () { done(!(x.status === 503 && x.responseText === "Closed")); };
+    x.onerror = function () { done(false); };
+    x.send();
+  }
+
+  // A request got no answer, also after the tries: the page closed on the Pocket, or only the connection broke off.
+  function noAnswer(row, id) {
+    stillOpen(function (open) {
+      if (open && id) cancel(id);
+      if (!open) lost();
+      finish(row, "failed", T.lost, "alert");
+    });
+  }
+
+  function cancel(id) {
+    post(base + "cancel?id=" + encodeURIComponent(id), undefined, null, function () {});
+  }
+
+  function progress(row, n) {
+    if (!row.bar) return;
+    row.bar.value = n;
+    setLine(row, T.sending + Math.floor((n * 100) / (row.file.size || 1)) + " % · " + size(n) + " / " + size(row.file.size));
   }
 
   function send(row) {
@@ -385,22 +456,55 @@
     row.bar.value = 0;
     row.li.appendChild(row.bar);
     setLine(row, T.sending + "0 %");
-    var x = new XMLHttpRequest();
-    x.open("POST", base + "upload?" + query(row));
-    x.upload.onprogress = function (e) {
-      if (!e.lengthComputable) return;
-      row.bar.value = e.loaded;
-      setLine(row, T.sending + Math.floor((e.loaded * 100) / (e.total || 1)) + " % · " + size(e.loaded) + " / " + size(e.total));
-    };
-    x.onload = function () {
-      var r = {};
-      try { r = JSON.parse(x.responseText); } catch (e) { r = { error: x.responseText }; }
-      if (r.ok) finish(row, "added", T.added + r.path, "ok");
-      else finish(row, "failed", reason(x, r), "alert");
-    };
-    x.onerror = function () { lost(); finish(row, "failed", T.lost, "alert"); };
-    x.onabort = x.onerror;
-    x.send(row.file);
+    post(base + "start?" + query(row), undefined, null, function (x, r) {
+      if (!x) return noAnswer(row, null);
+      if (x.status === 503 && r.error === "Closed") {
+        lost();
+        return finish(row, "failed", T.lost, "alert");
+      }
+      if (!r.ok) return finish(row, "failed", reason(x, r), "alert");
+      row.id = r.id;
+      row.piece = r.piece || PIECE;
+      row.at = 0;
+      row.tries = 0;
+      piece(row);
+    });
+  }
+
+  function piece(row) {
+    var from = row.at;
+    readPiece(row.file, from, Math.min(row.file.size, from + row.piece), function (err, data) {
+      if (err) {
+        cancel(row.id);
+        return finish(row, "failed", T.unreadable, "alert");
+      }
+      post(base + "part?id=" + encodeURIComponent(row.id) + "&offset=" + from, data, function (n) { progress(row, from + n); }, function (x, r) {
+        // The last piece: the file is in place.
+        if (x && r.ok && r.path !== undefined) return finish(row, "added", T.added + r.path, "ok");
+        if (x && r.ok) {
+          row.at = r.received;
+          row.tries = 0;
+          progress(row, row.at);
+          return piece(row);
+        }
+        if (x && x.status === 503 && r.error === "Closed") {
+          lost();
+          return finish(row, "failed", T.lost, "alert");
+        }
+        // Cut off or at the wrong place: on from what the Pocket has.
+        if (x && typeof r.received === "number" && ++row.tries <= TRIES) {
+          row.at = r.received;
+          return piece(row);
+        }
+        // No answer, or the Pocket was busy: the same piece again after a moment.
+        if (!x || x.status === 503) {
+          if (++row.tries <= TRIES) return setTimeout(function () { piece(row); }, Math.min(15000, 1000 * Math.pow(2, row.tries - 1)));
+          return noAnswer(row, row.id);
+        }
+        if (typeof r.received === "number") cancel(row.id);
+        finish(row, "failed", reason(x, r), "alert");
+      });
+    });
   }
 
   function pump() {

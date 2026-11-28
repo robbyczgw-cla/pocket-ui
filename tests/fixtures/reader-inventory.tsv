@@ -1,4 +1,10 @@
-android/handheld/app_android.rs	1	let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+android/handheld/app_android.rs	1	let why = std::fs::read_to_string(&file).ok();
+android/java/moe/shizuku/server/IRemoteProcess.java	1	_arg1 = data.readString();
+android/java/moe/shizuku/server/IShizukuApplication.java	1	_arg2 = data.readString();
+android/java/moe/shizuku/server/IShizukuService.java	3	_arg0 = data.readString();
+android/java/moe/shizuku/server/IShizukuService.java	2	_arg1 = data.readString();
+android/java/moe/shizuku/server/IShizukuService.java	1	_arg2 = data.readString();
+android/java/moe/shizuku/server/IShizukuService.java	2	_result = _reply.readString();
 android/java/xyz/pocketui/app/AppDrawer.java	1	File[] old = dir == null ? null : dir.listFiles();
 android/java/xyz/pocketui/app/BiosFiles.java	1	while((n=in.read(bytes))!=-1){total+=n;if(total>expected)throw new IOException("BIOS is too large");out.write(bytes,0,n);}
 android/java/xyz/pocketui/app/CoreDownloads.java	1	String read(String address) throws Exception {
@@ -6,6 +12,14 @@ android/java/xyz/pocketui/app/CoreDownloads.java	1	if(address.startsWith("file:"
 android/java/xyz/pocketui/app/CoreDownloads.java	1	try(RandomAccessFile in=new RandomAccessFile(source,"r");FileOutputStream out=new FileOutputStream(dest,true)){
 android/java/xyz/pocketui/app/CoreDownloads.java	1	while((count=in.read(b))!=-1){hooks.check();out.write(b,0,count);bytes+=count;}out.getFD().sync();
 android/java/xyz/pocketui/app/CoreDownloads.java	1	while((count=in.read(b))!=-1){if(cancelled)throw new IOException("Download cancelled. Choose it again to continue.");if(System.nanoTime()>deadline)throw new IOException("The download took too long. Check Wi-Fi and try again.");if((total+=count)>1024*1024)throw new IOException("Catalog too large");out.write(b,0,count);}
+android/java/xyz/pocketui/app/Extras.java	1	File[] all = dir == null ? null : dir.listFiles();
+android/java/xyz/pocketui/app/Extras.java	1	String note = stamp == 0 ? "" : read(f).trim();
+android/java/xyz/pocketui/app/Extras.java	1	for (String line : read(file(c, "texts.tsv")).split("\n")) {
+android/java/xyz/pocketui/app/Extras.java	1	for (int n; (n = in.read(b)) > 0; ) {
+android/java/xyz/pocketui/app/Extras.java	1	return read(file(c, "root")).trim();
+android/java/xyz/pocketui/app/Extras.java	1	static String read(File f) {
+android/java/xyz/pocketui/app/Extras.java	1	try (InputStream in = new java.io.FileInputStream(f)) {
+android/java/xyz/pocketui/app/Extras.java	1	try (InputStream in = new java.io.FileInputStream(keep)) { before.load(in); } catch (java.io.IOException ignored) { }
 android/java/xyz/pocketui/app/GameCopy.java	3	File[] files=folder.listFiles();
 android/java/xyz/pocketui/app/GameCopy.java	1	File[] folders=content.listFiles();
 android/java/xyz/pocketui/app/GameCopy.java	2	copy.readFully(b,0,n);
@@ -25,6 +39,12 @@ android/java/xyz/pocketui/app/GameDirect.java	1	try(ParcelFileDescriptor fd=cont
 android/java/xyz/pocketui/app/GameDirect.java	1	while(length<header.length&&(n=in.read(header,length,header.length-length))>0)length+=n;
 android/java/xyz/pocketui/app/HandheldActivity.java	1	for (int n; (n = in.read(buf)) > 0; ) {
 android/java/xyz/pocketui/app/HandheldActivity.java	1	try (java.io.InputStream in = getContentResolver().openInputStream(uri); java.io.OutputStream os = new java.io.FileOutputStream(out)) {
+android/java/xyz/pocketui/app/LaunchNote.java	1	String[] lines = read(new File(dir, NOTE)).trim().split("\n");
+android/java/xyz/pocketui/app/LaunchNote.java	1	private static String read(File f) {
+android/java/xyz/pocketui/app/LaunchNote.java	1	return new String(java.nio.file.Files.readAllBytes(f.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+android/java/xyz/pocketui/app/PadWatch.java	1	if (r == PadChord.OPEN) open();
+android/java/xyz/pocketui/app/PadWatch.java	1	keys = EmulatorKeys.of(front, Extras.read(Extras.file(this, "keys.txt")));
+android/java/xyz/pocketui/app/PadWatch.java	1	private void open() {
 android/java/xyz/pocketui/app/PlayerActivity.java	1	gameDocument=getContentResolver().openFileDescriptor(android.net.Uri.parse(getIntent().getStringExtra("document")),"r");
 android/java/xyz/pocketui/app/PlayerActivity.java	1	int[] safe=SafeInsets.read(this,insets);safeLeft=safe[0];safeTop=safe[1];safeRight=safe[2];safeBottom=safe[3];
 android/java/xyz/pocketui/app/PlayerActivity.java	1	public java.io.InputStream open(String path)throws java.io.IOException{return assets.open(path);}
@@ -78,6 +98,8 @@ android/java/xyz/pocketui/app/ShippedFonts.java	1	while ((n = in.read(buffer)) !
 android/java/xyz/pocketui/app/SystemAssets.java	1	InputStream open(String path) throws IOException;
 android/java/xyz/pocketui/app/SystemAssets.java	1	try(InputStream input=source.open(path); FileOutputStream output=new FileOutputStream(part)){
 android/java/xyz/pocketui/app/SystemAssets.java	1	while((n=input.read(buffer))!=-1)output.write(buffer,0,n);
+android/java/xyz/pocketui/app/TargetKey.java	1	for (int n; (n = in.read(buf)) >= 0; ) {
+android/java/xyz/pocketui/app/TargetKey.java	1	try (java.io.FileInputStream in = new java.io.FileInputStream(pipe[0])) {
 android/java/xyz/pocketui/app/UpdateInstaller.java	1	HttpURLConnection c = open(n, url, size, true);
 android/java/xyz/pocketui/app/UpdateInstaller.java	1	Network n = wifi(); c = open(n, url, limit, false);
 android/java/xyz/pocketui/app/UpdateInstaller.java	1	String read(String url, String maximum) {
@@ -96,7 +118,7 @@ android/src/lib.rs	1	let stamp = noted.iter().filter_map(|k| std::fs::metadata(d
 android/src/lib.rs	1	let stamp = pocket_ui::save_copy::pending(&data).iter().filter_map(|k| std::fs::metadata(data.join(pocket_ui::save_copy::PENDING).join(k)).and_then(|m| m.modified()).ok()).max();
 android/src/lib.rs	1	pocket_ui::image::load_png(&dest)
 android/src/play_cards.rs	1	pocket_ui::fsutil::read_json_or_backup(&data.join("android-buttons").join(format!("{key}.json"))).unwrap_or_default()
-android/src/player.rs	1	(Some(s), Some(p)) if p + Duration::from_secs(2) >= s => pocket_ui::image::load_png(&png).map(std::sync::Arc::new),
+android/src/player.rs	1	(Some(s), Some(p)) if p + Duration::from_secs(2) >= s => pocket_ui::image::load_png(&png).map(|i| std::sync::Arc::new(if live == Some((i.w, i.h)) { i.shaped(aspect).unwrap_or(i) } else { i })),
 android/src/player.rs	1	let bytes = pocket_ui::state_file::read(path).map_err(|e| e.to_string())?;
 android/src/player.rs	1	let file = |name: &str| std::fs::read_to_string(format!("/sys/class/power_supply/battery/{name}")).ok();
 android/src/player.rs	1	let loaded_picture = pocket_ui::image::load_png(&pocket_ui::slots::preview_path(path));
@@ -153,6 +175,8 @@ src/android_handheld/files.rs	1	std::fs::read_to_string(path).unwrap_or_default(
 src/android_handheld.rs	1	.and_then(|p| std::fs::read_to_string(p).ok())
 src/android_handheld.rs	1	.filter(|p| std::fs::metadata(p).is_ok_and(|m| m.len() <= 262_144))
 src/android_handheld.rs	1	for e in std::fs::read_dir(&own)?.filter_map(|e| e.ok()) {
+src/android_handheld.rs	1	if s == system && e.metadata().is_ok_and(|m| m.is_file() && m.len() == size as u64) && !out.iter().any(|(_, n)| *n == name) {
+src/android_handheld.rs	1	let Ok(entries) = std::fs::read_dir(&dir) else { continue };
 src/android_handheld.rs	1	let mut cards: Vec<PathBuf> = std::fs::read_dir(storage)
 src/android_handheld.rs	1	let mut taken: std::collections::BTreeMap<String, (u64, u64)> = crate::fsutil::read_json_or_backup(&note).unwrap_or_default();
 src/android_handheld.rs	1	let taken: std::collections::BTreeMap<String, (u64, u64)> = crate::fsutil::read_json_or_backup(&view_data.join("mobile-history.json")).unwrap_or_default();
@@ -187,6 +211,8 @@ src/app_cover_pick.rs	1	let read = std::fs::File::open(file).and_then(|f| f.take
 src/app_disc.rs	1	Discs::read(&run.path).and_then(DiscRow::new)
 src/app_earlier.rs	1	row.selected().map(|e| (image::load_png(&slots::preview_path(&e.path)), e.at))
 src/app_emu_choice.rs	1	_ => (Cfg::read(Path::new(emu_choice::SYSTEM_CFG)), Cfg::read(Path::new(emu_choice::SHIPPED_CFG)), false),
+src/app_emu_choice.rs	1	std::io::stdin().read_to_string(&mut text).map_err(|e| e.to_string())?;
+src/app_emu_choice.rs	1	text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
 src/app_frame_dump.rs	1	let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("frame-dump: script {}: {e}", p.to_string_lossy()));
 src/app_frozen.rs	1	let written = frozen::resume_files(&game).iter().any(|f| std::fs::metadata(f).and_then(|m| m.modified()).is_ok_and(|t| t >= started));
 src/app_history.rs	1	play_log::open();
@@ -196,6 +222,8 @@ src/app_library_sync.rs	1	.and_then(|k| pocket_ui::library_cache::read(data_dir,
 src/app_library_sync.rs	1	let mut dirs: Vec<PathBuf> = std::fs::read_dir(root)
 src/app_library_sync.rs	1	sync::Config::read().ok().and_then(|c| ls::device_folder(&c.device_id))
 src/app_look.rs	1	Cover::File(path) => image::load_image(path).unwrap_or_else(|| self.sample_box(&sample)),
+src/app_manual.rs	1	let opened = manual::open(net.as_ref(), &self.data_dir, &system, &rom, &lang(), false, &|| false, &|_| {});
+src/app_manual.rs	1	let result = manual::open(net.as_ref(), &data_dir, &system, &rom, &lang, online, &stop, &progress);
 src/app_nav_probe.rs	1	let mut out = std::fs::read_to_string(&path).unwrap_or_default();
 src/app_perf_fan.rs	1	let mut r = Readout::read(&root, &battery);
 src/app_pixel_path.rs	1	if let Some(r) = Report::read(file, &rom, seq) {
@@ -214,7 +242,7 @@ src/app_screenshot.rs	1	let shot = if run.emulator == "retroarch" { run.options.
 src/app_search.rs	1	let img = image::load_image(path)?;
 src/app_shortcut_list.rs	1	let cfg = emu_choice::Cfg::read(std::path::Path::new(pocket_ui::system_cfg::PATH));
 src/app_shortcut_list.rs	1	let values = run.options.open(&self.data_dir, &run.system, &run.path).effective();
-src/app_storage.rs	1	if !self.systems.iter().any(|s| s.name == system && s.games.iter().any(|g| g.path == path)) || std::fs::symlink_metadata(&path).is_err() {
+src/app_storage.rs	1	if !self.systems.iter().any(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system) && s.games.iter().any(|g| g.path == path)) || std::fs::symlink_metadata(&path).is_err() {
 src/app_storage.rs	1	let health = card_health::read(&roms);
 src/app_sync.rs	1	let cfg = Config::read().ok();
 src/app_sync.rs	1	match Config::read() {
@@ -382,7 +410,8 @@ src/boot_screen.rs	1	f.read_exact(&mut b).ok()?;
 src/boot_screen.rs	1	let flag = std::fs::File::open(rom).ok().and_then(|mut f| {
 src/boot_screen.rs	1	std::fs::metadata(dir.join(file)).is_ok_and(|m| m.is_file() && m.len() == bytes)
 src/brick_gl.rs	1	let egl = Egl::open(window, screen, say)?;
-src/brick_gles.rs	1	let egl = Egl::open("pbuffer", (16, 16), &mut |line| eprintln!("[hw] {line}")).map_err(|f| format!("[hw] GL context: {f}"))?;
+src/brick_gles.rs	1	None => Egl::open("pbuffer", (16, 16), &mut *say).map_err(|f| format!("[hw] GL context: {f}"))?,
+src/brick_gles.rs	1	let mut egl = match Egl::open("null", (16, 16), &mut *say) {
 src/brick_hw.rs	1	Self::open(&system_root(), motor_voltage_range())
 src/brick_hw.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(FKEYS_FILE)).unwrap_or_default()
 src/brick_hw.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(LIGHTS_FILE)).unwrap_or_default()
@@ -669,6 +698,15 @@ src/fsutil.rs	1	let bytes = fs::read(path).map_err(|e| e.to_string())?;
 src/fsutil.rs	1	let m = fs::metadata(path).ok()?;
 src/fsutil.rs	1	match fs::symlink_metadata(path) {
 src/fsutil.rs	1	std::fs::copy(from, to)?;
+src/fuel_gauge.rs	1	Some("show") | None => read(&mut bus).map(|s| println!("rk817 i2c-{}: {s}", g.bus)),
+src/fuel_gauge.rs	1	let after = read(r)?;
+src/fuel_gauge.rs	1	let before = read(r)?;
+src/fuel_gauge.rs	1	let chip = std::fs::read_to_string(e.path().join("name")).ok()?;
+src/fuel_gauge.rs	1	let file = std::fs::OpenOptions::new().read(true).write(true).open(&g.dev)?;
+src/fuel_gauge.rs	1	let mut bus = Bus::open(g)?;
+src/fuel_gauge.rs	1	let mut bus = match Bus::open(g) {
+src/fuel_gauge.rs	1	let mut found: Vec<Gauge> = std::fs::read_dir(sys.join("bus/i2c/devices"))
+src/fuel_gauge.rs	1	let now = read(r)?;
 src/gallery.rs	1	let Ok(files) = crate::background_io::read_dir(sys.path()) else { continue };
 src/gallery.rs	1	let Ok(systems) = crate::background_io::read_dir(dir) else { return found };
 src/gallery.rs	1	let read = std::fs::File::open(shot).and_then(|f| f.take(SHELF_MAX_BYTES + 1).read_to_end(&mut bytes));
@@ -734,6 +772,7 @@ src/hostsys.rs	1	let Ok(source) = std::fs::metadata(e.path()) else { continue };
 src/hostsys.rs	1	let mut dirs: Vec<std::path::PathBuf> = crate::background_io::read_dir(&root)
 src/hostsys.rs	1	let mut seeded: std::collections::BTreeMap<String, SeededAsset> = std::fs::read(&record).ok()
 src/hostsys.rs	1	let text = std::fs::read_to_string(&ini)
+src/hostsys.rs	1	std::fs::read_dir(dir).is_ok_and(|mut d| d.next().is_none())
 src/hw_render.rs	1	let Some(name) = std::fs::read_to_string(&info).ok().and_then(|s| {
 src/hw_render.rs	1	let text = std::fs::read_to_string(&per_core).or_else(|_| std::fs::read_to_string(root.join("retroarch-core-options.cfg"))).unwrap_or_default();
 src/i18n.rs	1	if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&rec.path) {
@@ -781,17 +820,18 @@ src/leds.rs	1	let sample = crate::battery::read(&dir, 0);
 src/library.rs	1	.or_else(|| fs::read_to_string(GAMES_CARD_MARKER).ok().and_then(|t| t.lines().next().map(str::to_string)))?;
 src/library.rs	1	for e in fs::read_dir(dir).into_iter().flatten().flatten() {
 src/library.rs	1	fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
-src/library.rs	1	if !matches!(kind.as_str(), "cue" | "m3u" | "gdi") || fs::metadata(&g.path).map_or(true, |m| m.len() > SHEET_MAX_BYTES) {
+src/library.rs	1	fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).find(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.eq_ignore_ascii_case(name)))
+src/library.rs	2	if !matches!(kind.as_str(), "cue" | "m3u" | "gdi") || fs::metadata(&g.path).map_or(true, |m| m.len() > SHEET_MAX_BYTES) {
 src/library.rs	1	if let Ok(entries) = fs::read_dir(dir) {
 src/library.rs	2	let (xml, _) = system_list::read(es_systems);
-src/library.rs	1	let Ok(bytes) = fs::read(&g.path) else { continue };
+src/library.rs	2	let Ok(bytes) = fs::read(&g.path) else { continue };
 src/library.rs	1	let Ok(entries) = fs::read_dir(dir) else { return false };
 src/library.rs	2	let Ok(entries) = fs::read_dir(roms) else { return Vec::new() };
 src/library.rs	1	let Ok(metadata) = fs::metadata(entry.path()) else { continue };
 src/library.rs	1	subs.iter().any(|s| fs::read_dir(s).is_ok_and(|e| e.flatten().any(|e| fs::is_file(e.path()) && takes(&e.path()))))
 src/library_cache.rs	1	let file = crate::background_io::open(path(data_dir)).map_err(|e| if e.kind() == io::ErrorKind::NotFound { "none yet".to_string() } else { e.to_string() })?;
 src/library_cache.rs	1	let m = crate::background_io::metadata(es_systems).ok()?;
-src/library_cache.rs	1	let systems: Vec<System> = serde_json::from_reader(r).map_err(|e| format!("damaged ({e})"))?;
+src/library_cache.rs	1	let mut systems: Vec<System> = serde_json::from_reader(r).map_err(|e| format!("damaged ({e})"))?;
 src/library_cache.rs	1	r.read_line(&mut first).map_err(|e| e.to_string())?;
 src/library_sync.rs	1	.map(|_| crate::fsutil::read_json_or_backup(&own_dir.join(HISTORY_FILE)).unwrap_or_default());
 src/library_sync.rs	1	let meta = match std::fs::metadata(path) {
@@ -826,12 +866,13 @@ src/logs.rs	1	match f.read(&mut buf) {
 src/logs.rs	1	self.file = OpenOptions::new().create(true).append(true).open(&self.path).ok();
 src/low_battery.rs	1	let capacity = std::fs::read_to_string(dir.join("capacity")).ok()?;
 src/low_battery.rs	1	let level = read(dir)?;
-src/low_battery.rs	1	std::fs::read_to_string(dir.join(name)).ok()
+src/low_battery.rs	1	let value = std::fs::read_to_string(dir.join(name)).ok()?.trim().parse::<u32>().ok()?;
 src/main.rs	1	(image::load_png(std::path::Path::new(&preview)), t)
 src/main.rs	1	app.earlier_snapshot(state, args.get(2).and_then(|p| image::load_image(std::path::Path::new(p))));
 src/main.rs	1	if let (Some(pic), Some(layout)) = (args.get(3).and_then(|p| image::load_image(std::path::Path::new(p))), app.preview_layout(w as i32, h as i32)) {
 src/main.rs	1	if let Some(cheats) = &mut menu.cheats { cheats.open(); }
 src/main.rs	1	if let Some(img) = std::env::var("POCKETUI_SNAPSHOT_LAUNCH_PICTURE").ok().and_then(|p| image::load_png(std::path::Path::new(&p))) {
+src/main.rs	1	if let Some(z) = std::fs::read_link("/etc/localtime").ok().and_then(|l| l.to_str().and_then(|t| t.split_once("zoneinfo/").map(|(_, z)| z.to_string()))) {
 src/main.rs	1	let Ok(file) = std::fs::OpenOptions::new().read(true).write(true).open(&fifo) else { return };
 src/main.rs	3	let background = args.get(2).and_then(|p| image::load_image(std::path::Path::new(p)));
 src/main.rs	1	let current = battery::read(&battery::dir(), now);
@@ -843,7 +884,9 @@ src/main.rs	1	let saved = ra_state.as_ref().and_then(|state| std::fs::metadata(s
 src/main.rs	1	pocket_ui::play_log::open();
 src/main.rs	1	pocket_ui::settings_values::set(pocket_ui::settings_values::read(&*app.sys.shared_hw(), &app.sys.net(), &app.data_dir, connected));
 src/mako_osd.rs	1	let text = match std::fs::read_to_string(config) {
+src/manual_pdf.rs	1	let doc = Doc::open(bytes)?;
 src/manual_time.rs	1	let file = std::fs::OpenOptions::new().read(true).open(dev).map_err(|e| format!("{}: {e}", dev.display()))?;
+src/manual_view.rs	1	let bytes = crate::background_io::read(path).ok()?;
 src/media.rs	1	if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
 src/moonlight.rs	1	for e in std::fs::read_dir(dir)?.flatten() {
 src/moonlight.rs	1	host_setting(&std::fs::read_to_string(SYSTEM_CFG).unwrap_or_default())
@@ -884,9 +927,10 @@ src/perf_fan.rs	1	crate::fsutil::read_json_or_backup(&data_dir.join(FILE)).unwra
 src/perf_fan.rs	1	let battery = crate::battery::read(battery_dir, 0);
 src/phone_upload.rs	1	Ok(p) => Response::json(200, &json!({ "ok": true, "path": shown(&inner.cfg.roots, &p.path()), "system": p.system(), "exists": std::fs::symlink_metadata(p.path()).is_ok() })),
 src/phone_upload.rs	1	if (&mut *body).take(len).read_to_end(&mut data).is_err() || data.len() as u64 != len {
-src/phone_upload.rs	1	if std::fs::symlink_metadata(p.path()).is_ok() {
+src/phone_upload.rs	2	if std::fs::symlink_metadata(p.path()).is_ok() {
 src/phone_upload.rs	1	if std::fs::symlink_metadata(sys.path.join(&seg)).is_ok_and(|m| m.file_type().is_symlink() || !m.is_dir()) {
 src/phone_upload.rs	1	let bad = refs.iter().find(|r| !plain_name(r) || (if ext == "m3u" { ["m3u", "exe"].iter().any(|m| r.to_lowercase().contains(&format!(".{m}"))) } else { marker_in(r).is_some() }) || std::fs::symlink_metadata(dir.join(r)).is_ok_and(|m| m.file_type().is_symlink()));
+src/phone_upload.rs	1	let data = std::fs::read(tmp).map_err(|e| Refused::Io(format!("Can't read the disc sheet: {e}")))?;
 src/phone_upload.rs	1	let n = self.r.read(buf)?;
 src/phone_upload.rs	1	match std::fs::symlink_metadata(&parent) {
 src/phone_upload.rs	1	read(libc::CLOCK_BOOTTIME).saturating_sub(read(libc::CLOCK_MONOTONIC))
@@ -1034,6 +1078,7 @@ src/ra_hotkeys.rs	1	let devices = std::fs::read_to_string(&paths.input_devices).
 src/ra_hotkeys.rs	1	let devices = std::fs::read_to_string(paths.input_devices).unwrap_or_default();
 src/ra_state.rs	1	for entry in std::fs::read_dir(dir)? {
 src/ra_state.rs	1	if !entry.metadata().is_ok_and(|m| m.is_file() && m.len() > 0) {
+src/real_label.rs	1	let file = std::io::BufReader::new(crate::background_io::open(path).ok()?);
 src/recents.rs	1	let mut list: Vec<Recent> = crate::fsutil::read_json_or_backup(&file).unwrap_or_default();
 src/report.rs	1	card_dir: games_card_reports(&std::fs::read_to_string("/proc/mounts").unwrap_or_default(), Path::new(GAMES_CARD), &out_dir),
 src/report.rs	1	f.take(cap).read_to_end(&mut buf).ok()?;
@@ -1121,8 +1166,19 @@ src/save_transfer.rs	1	let Ok(read) = std::fs::read_dir(dir) else { return };
 src/save_transfer.rs	1	plan.bytes += std::fs::metadata(&path).map_or(0, |m| m.len());
 src/save_transfer.rs	1	std::fs::metadata(path).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as u64)
 src/save_trouble.rs	1	Trouble::from_word(&std::fs::read_to_string(file).ok()?)
-src/save_trouble.rs	1	let line = std::fs::read_to_string(file).ok()?;
+src/save_trouble.rs	2	let line = std::fs::read_to_string(file).ok()?;
 src/save_trouble.rs	1	} else if std::fs::read_to_string(file).is_ok_and(|s| is_moment_notice(&s)) {
+src/screenscraper.rs	1	if crate::image::png_size(&part).is_some() && crate::image::load_png(&part).is_some() {
+src/screenscraper.rs	1	let bytes = std::fs::metadata(&part).map_or(0, |m| m.len());
+src/screenscraper.rs	1	let days = match std::fs::read_to_string(day_file(data_dir)) {
+src/screenscraper.rs	1	let m = crate::background_io::metadata(rom).ok()?;
+src/screenscraper.rs	1	let text = crate::background_io::read_to_string(index_file(data_dir, system)).unwrap_or_default();
+src/screenscraper.rs	1	} else if std::fs::read(&part).is_ok_and(|b| b.trim_ascii().starts_with(b"NOMEDIA")) {
+src/screenscraper_facts.rs	1	let text = crate::background_io::read_to_string(file(data_dir, system, rom)).ok()?;
+src/screenscraper_manual.rs	1	F::Done => match std::fs::read(&pdf) {
+src/screenscraper_manual.rs	1	for e in std::fs::read_dir(game).into_iter().flatten().flatten() {
+src/screenscraper_manual.rs	1	if crate::background_io::metadata(&list).ok()?.len() > MAX_PAGES_FILE {
+src/screenscraper_manual.rs	1	let text = crate::background_io::read_to_string(&list).ok()?;
 src/screenshot.rs	1	let Ok(entries) = std::fs::read_dir(dir.join(clean(system))) else { return Vec::new() };
 src/screenshot.rs	1	path.symlink_metadata().is_ok_and(|m| m.is_file()).then_some(path)
 src/screenshot.rs	1	while path.symlink_metadata().is_ok() && n < 999 {
@@ -1197,6 +1253,16 @@ src/softpatch.rs	1	let size = std::fs::metadata(rom).map_err(|e| format!("{}: {e
 src/splash.rs	1	&& std::fs::read_to_string(e.path().join("comm")).is_ok_and(|c| is_sway_comm(&c))
 src/splash.rs	1	let Ok(entries) = std::fs::read_dir(proc) else { return false };
 src/splash.rs	1	std::fs::read(data_dir.join("settings.json")).ok().and_then(|b| serde_json::from_slice::<Only>(&b).ok()).unwrap_or_default().motion
+src/stale_controls.rs	1	if present.iter().all(|f| std::fs::read(dir.join(f)).ok() == std::fs::read(newest.join(f)).ok()) {
+src/stale_controls.rs	1	let es = read(here.path(ES_INPUT)).unwrap_or_default();
+src/stale_controls.rs	1	let ini = read(dir.join("qt-config.ini"));
+src/stale_controls.rs	1	let input = read(dir.join("input.cfg"));
+src/stale_controls.rs	1	let newest = std::fs::read_dir(dir)?.flatten()
+src/stale_controls.rs	1	let read = |p: PathBuf| std::fs::read_to_string(p).ok();
+src/stale_controls.rs	1	let verdict = azahar(ini.as_deref(), &read(here.path(AZAHAR_STOCK)).unwrap_or_default(), &here.pads());
+src/stale_controls.rs	1	let verdict = yabasanshiro(input.as_deref(), read(dir.join("keymapv2.json")).as_deref(), &es, &pad);
+src/stale_controls.rs	1	parse_devices(&std::fs::read_to_string(self.path("proc/bus/input/devices")).unwrap_or_default())
+src/stale_controls.rs	1	|| std::fs::read_to_string(self.path("etc/os-release")).is_ok_and(|s| {
 src/standalone.rs	2	.filter(|f| std::fs::read_to_string(f).is_ok_and(|g| g.trim() == "performance"))
 src/standalone.rs	1	b"NCSD" => read_at(u32::from_le_bytes(head[0x120..0x124].try_into().ok()?) as u64 * 0x200)?,
 src/standalone.rs	1	f.read_exact(&mut head).ok()?;
@@ -1327,6 +1393,7 @@ src/tailscale.rs	1	while matches!(reader.read_until(b'\n', &mut buf), Ok(n) if n
 src/text.rs	1	let bytes = std::fs::read(fonts_dir().join(name)).ok()?;
 src/text_fallback.rs	1	let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
 src/text_fallback.rs	1	let map = unsafe { memmap2::Mmap::map(&file) }.map_err(|e| e.to_string())?;
+src/text_fallback.rs	1	open(&dir.join(if pixel { CJK_JA_PIXEL_FILE } else { CJK_JA_SANS_FILE }))
 src/text_fallback.rs	1	open(&dir.join(if pixel { CJK_PIXEL_FILE } else { CJK_SANS_FILE }))
 src/timeline.rs	1	Picture::File(p) => std::fs::read(crate::state_file::resolve(p)).ok(),
 src/timeline.rs	1	copied = crate::state_file::read(from).map_err(|e| Skip::Skipped(format!("{}: {e}", from.display())))?;
@@ -1496,13 +1563,15 @@ src/web/api.rs	1	self.stream.read(buf)
 src/web/auth.rs	1	let f: File = crate::fsutil::read_json_or_backup(&file).unwrap_or_default();
 src/web/cover_edit.rs	1	let revision = std::fs::metadata(path).ok()
 src/web/diagnostics.rs	1	if !std::fs::metadata(path).is_ok_and(|m| m.is_file()) {
-src/web/files.rs	1	.open(&tmp)
+src/web/files.rs	2	.open(&tmp)
 src/web/files.rs	1	for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
 src/web/files.rs	1	if !std::fs::symlink_metadata(dir).is_ok_and(|m| m.is_dir()) {
 src/web/files.rs	1	if let Ok(d) = std::fs::File::open(dir) {
+src/web/files.rs	1	if std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut b)).is_err() {
 src/web/files.rs	1	if std::fs::symlink_metadata(&dir).is_ok_and(|m| m.file_type().is_symlink()) {
-src/web/files.rs	1	if std::fs::symlink_metadata(target).is_ok_and(|m| !m.is_file()) {
-src/web/files.rs	1	let exists = std::fs::symlink_metadata(target).is_ok();
+src/web/files.rs	2	if std::fs::symlink_metadata(target).is_ok_and(|m| !m.is_file()) {
+src/web/files.rs	1	let exists = std::fs::symlink_metadata(&self.target).is_ok();
+src/web/files.rs	2	let exists = std::fs::symlink_metadata(target).is_ok();
 src/web/files.rs	1	let n = match r.read(&mut buf[..want]) {
 src/web/files.rs	1	match std::fs::symlink_metadata(&at) {
 src/web/files.rs	1	match std::fs::symlink_metadata(tmp_dir) {
@@ -1533,9 +1602,9 @@ src/web/saves.rs	1	let backup = match std::fs::symlink_metadata(target) {
 src/web/saves.rs	1	let m = std::fs::symlink_metadata(&path).ok().filter(|m| m.is_file())?;
 src/web/saves.rs	1	let m = std::fs::symlink_metadata(target).ok()?;
 src/web/saves.rs	1	let mut f = std::fs::File::open(&file.path).map_err(|_| Response::error(404, "That save is not on the Pocket any more."))?;
-src/web/saves.rs	1	let tmp_dir = match std::fs::symlink_metadata(&tmp_dir).ok().filter(|m| m.is_dir()).and_then(|_| tmp_dir.canonicalize().ok()) {
+src/web/saves.rs	1	let tmp_dir = std::fs::symlink_metadata(&tmp_dir).ok().filter(|m| m.is_dir()).and_then(|_| tmp_dir.canonicalize().ok()).ok_or_else(|| refused(Refused::Io("Can't make the uploads folder.".into())))?;
 src/web/saves.rs	1	match f.read(&mut buf) {
-src/web/saves.rs	1	match std::fs::symlink_metadata(&t) {
+src/web/saves.rs	2	match std::fs::symlink_metadata(&t) {
 src/web/zip.rs	1	if !f.metadata().is_ok_and(|m| m.is_file()) {
 src/web/zip.rs	1	let Ok(mut f) = std::fs::File::open(&e.path) else { continue };
 src/web/zip.rs	1	let n = match f.read(&mut buf) {

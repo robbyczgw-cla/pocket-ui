@@ -52,7 +52,8 @@ pub fn tools_dir(data_dir: &Path) -> PathBuf {
 }
 
 /// The core file pocket-core should load: one installed into `/storage/cores` wins over the
-/// image's, the same order the `/tmp/cores` overlay gives RetroArch.
+/// image's, the same order the `/tmp/cores` overlay gives RetroArch. pocket-ui's own gpSP and DSperate come before the
+/// image's, its own bsnes-hd after it (only where the image has none).
 pub fn core_path(core: &str) -> PathBuf {
     #[cfg(not(all(target_os = "android", not(feature = "handheld"))))]
     if core == "gpsp" {
@@ -69,7 +70,12 @@ pub fn core_path(core: &str) -> PathBuf {
     } else if core == "dsperate" && crate::ds::bundled_path().is_file() {
         crate::ds::bundled_path()
     } else {
-        Path::new("/usr/lib/libretro").join(file)
+        let image = Path::new("/usr/lib/libretro").join(file);
+        // bsnes-hd: the image's where it has one (measured there, docs/HOST.md "Mode 7 HD"), else pocket-ui's own.
+        if core == crate::mode7_hd::LINUX_CORE && !image.is_file() && crate::mode7_hd::bundled_path().is_file() {
+            return crate::mode7_hd::bundled_path();
+        }
+        image
     }
 }
 

@@ -242,6 +242,10 @@ pub const BRICK_PPSSPP: &[(&str, &str)] = &[
     ("ppsspp_fast_memory", "enabled"),
 ];
 
+/// N64 defaults on the Brick card (`curation`).
+pub const BRICK_MUPEN64: &[(&str, &str)] =
+    &[("mupen64plus-EnableCopyColorToRDRAM", "Off"), ("mupen64plus-ThreadedRenderer", "True"), ("mupen64plus-EnableNativeResFactor", "1")];
+
 /// Our curation of one core: values that suit a handheld better than the core's own defaults, and
 /// options that only confuse there (they keep their default and stay out of the menu). Keys a core
 /// doesn't have, and values it doesn't offer, are ignored, so entries for newer or older versions
@@ -503,6 +507,16 @@ pub fn curation(core: &str) -> Curation {
         // memory. Defaults only: a value chosen in Options › Emulator wins. Auto frameskip stays off: it skips by the wall
         // clock, and the player paces the core itself.
         "ppsspp" if cfg!(feature = "brick") => Curation { defaults: BRICK_PPSSPP, ..Curation::default() },
+        // N64 on the TrimUI Brick and Smart Pro (A133P, PowerVR GE8300). GLideN64 copies every picture back into the N64's memory
+        // by default ("Async"): on this GPU that cost about 2.7 ms a frame, and with the picture on the screen directly
+        // (`brick_gles`, the direct way) what it copied back showed as old pictures and noise in the black frame around the
+        // N64's picture; the read-back had a strip of it on the left. Off: Super Mario 64 44.7 -> 51.8 fps in a 30 s run, the
+        // frame clean (Brick, 2026-11-26). The threaded renderer (ROCKNIX's default on every handheld, and ours on Android) emulates
+        // and draws on two cores: the worst frames 20 instead of 36 ms. The N64's own resolution (factor 1, ROCKNIX's H700 and
+        // RK3326 default) instead of 640x480: busy scenes waited for the GPU, Banjo-Kazooie's intro 37 -> 53 fps, Zelda's title
+        // flight 41 -> 46 fps. The card has no Resolution row (`render_scale`). Defaults only: Options › Emulator wins, e.g. for
+        // a game whose effect needs the copy.
+        "mupen64plus_next" if cfg!(feature = "brick") => Curation { defaults: BRICK_MUPEN64, ..Curation::default() },
         "dsperate" => Curation {
             defaults:&[("dsperate_frameskip","auto"),("dsperate_slot2","empty"),("dsperate_analog","off")],
             hidden:&["dsperate_jit","dsperate_frameskip"],
@@ -682,7 +696,7 @@ pub struct OptionSet {
     dirty: bool,
     /// Options a pocket-ui row decides instead (`render_scale::CORE_KEYS` where Options → Picture → Resolution is there):
     /// left out of the Emulator page like `curation`'s hidden ones, so there is one place for them.
-    pub row_decides: &'static [&'static str],
+    pub row_decides: Vec<&'static str>,
 }
 
 impl OptionSet {
@@ -707,7 +721,7 @@ impl OptionSet {
             if let Some(c) = self.curated.get(&def.key).filter(|c| def.has_value(c)) {
                 def.default = c.clone();
             }
-            def.hidden = !self.curation.shows(&def.key) || self.row_decides.contains(&def.key.as_str());
+            def.hidden = !self.curation.shows(&def.key) || self.row_decides.iter().any(|k| *k == def.key);
             def.visible = old_visible.get(&def.key).copied().unwrap_or(true);
             let value = self
                 .current
@@ -1174,6 +1188,45 @@ mod tests {
         o.declare(vec![], ppsspp_defs());
         assert_eq!((o.get("ppsspp_frameskip"), o.get("ppsspp_cpu_core")), (Some("disabled"), Some("IR JIT")));
         assert_eq!(o.get("ppsspp_internal_resolution"), Some("480x272"));
+    }
+
+    /// Mupen64Plus-Next's own lists for the two curated keys (libretro/libretro_core_options.h, GLES 3 build).
+    fn mupen64_defs() -> Vec<OptionDef> {
+        let with = |key: &str, values: &[&str], default: &str| {
+            finish(key.into(), Some(key.into()), None, None, values.iter().map(|v| (v.to_string(), v.to_string())).collect(), Some(default.into()))
+        };
+        vec![
+            with("mupen64plus-EnableCopyColorToRDRAM", &["Off", "Sync", "Async", "TripleBuffer"], "Async"),
+            with("mupen64plus-ThreadedRenderer", &["True", "False"], "False"),
+            with("mupen64plus-EnableNativeResFactor", &["0", "1", "2", "3", "4", "5", "6", "7", "8"], "0"),
+        ]
+    }
+
+    #[cfg(feature = "brick")]
+    #[test]
+    fn brick_n64_starts_without_the_copy_to_rdram_on_two_threads_at_its_own_resolution_and_the_players_choice_wins() {
+        let mut o = OptionSet::new(curation("mupen64plus_next"), &[]);
+        o.declare(vec![], mupen64_defs());
+        for (key, value) in [("mupen64plus-EnableCopyColorToRDRAM", "Off"), ("mupen64plus-ThreadedRenderer", "True"), ("mupen64plus-EnableNativeResFactor", "1")] {
+            assert_eq!(o.get(key), Some(value), "{key}");
+            assert_eq!(o.def(key).unwrap().default, value, "{key}: Restore defaults comes back here");
+            assert!(o.snapshot().1.iter().any(|s| s.key == key), "{key} stays in Options › Emulator");
+        }
+        // A game whose effect needs the copy: chosen in Options › Emulator, that value.
+        let saved = [("mupen64plus-EnableCopyColorToRDRAM".to_string(), "Async".to_string())];
+        let mut o = OptionSet::new(curation("mupen64plus_next"), &saved);
+        o.declare(vec![], mupen64_defs());
+        assert_eq!(o.get("mupen64plus-EnableCopyColorToRDRAM"), Some("Async"));
+        assert_eq!(o.get("mupen64plus-ThreadedRenderer"), Some("True"));
+    }
+
+    #[cfg(not(feature = "brick"))]
+    #[test]
+    fn n64_elsewhere_keeps_the_cores_own_copy_to_rdram() {
+        let mut o = OptionSet::new(curation("mupen64plus_next"), &[]);
+        o.declare(vec![], mupen64_defs());
+        assert_eq!(o.get("mupen64plus-EnableCopyColorToRDRAM"), Some("Async"));
+        assert!(curation("mupen64plus_next").defaults.is_empty());
     }
 
     #[cfg(not(feature = "brick"))]

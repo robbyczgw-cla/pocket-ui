@@ -1942,6 +1942,8 @@ impl Ui {
                 game: inside.as_ref(),
                 cover,
                 console,
+                back: None,
+                back_zoom: None,
                 moving: &[],
             },
         );
@@ -2065,6 +2067,7 @@ pub fn library(games: Vec<Game>) -> Library {
                 .as_ref()
                 .map(|d| [d.developers.clone(), d.publishers.clone(), d.series.clone(), d.genres.clone()])
                 .unwrap_or_default(),
+            number: None,
         });
         features.push(features_for(
             GameRef {

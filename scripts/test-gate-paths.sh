@@ -45,7 +45,7 @@ printf '#!/bin/sh\necho 1\n' >"$T/bin/nproc"
 chmod +x "$T/bin/nproc"
 for suite in deploy/test-run-pocket-ui.sh scripts/test-verify-device.sh scripts/test-check-core-licences.sh \
     deploy/package/test-package.sh deploy/test-grub-quiet.sh scripts/image/test-grub-checks.sh scripts/image/test-bios-checks.sh scripts/test-check-release-tree.sh scripts/image/test-rocknix-source.sh scripts/image/test-h700-pins.sh scripts/image/test-storage-budget.sh deploy/fat/test-hook.sh \
-    deploy/image/test-mount-storage.sh; do
+    deploy/image/test-mount-storage.sh deploy/darkos/test-make-port.sh; do
     mkdir -p "$T/tree/$(dirname "$suite")"
     cat >"$T/tree/$suite" <<'SUITE'
 #!/bin/sh
@@ -144,6 +144,43 @@ grep -q 'gate: fast checks ok: i18n-extract.py reader-inventory.py' "$T/out" || 
 rm -f "$T/tree/scripts/reader-inventory.py"
 pass=$((pass + 1))
 echo 'ok a red fast check (reader inventory, translation audit) stops the gate before any build'
+# A tool's self-test runs only when the change touches the tool (25.11.2026, gate false reds): a red test-check-changelog.py
+# is skipped for a source change and stops the gate for a change to the guard; the gate's own fixtures follow the same rule.
+printf 'import sys\nprint("selftest red")\nsys.exit(1)\n' >"$T/tree/scripts/test-check-changelog.py"
+printf 'printf "%%s\\n" "$0" >>"$GATE_FIXTURE_CALLS.self"\n' >"$T/tree/scripts/test-run-tmp.sh"
+: >"$T/cargo"; : >"$T/calls"; : >"$T/calls.self"
+printf '%s\n' src/main.rs >"$T/tree/.gate-changed"
+GATE_PARALLEL=0 GATE_RUNNER=cargo GATE_PROFILE=gate sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 || { echo 'FAIL a self-test of an unchanged tool stopped the gate'; cat "$T/out"; exit 1; }
+! grep -q 'fast checks ok:.*test-check-changelog' "$T/out" && [ ! -s "$T/calls.self" ] && grep -q "gate's own self-tests skipped" "$T/out" \
+    || { echo 'FAIL self-tests ran for a change that does not touch their tool'; cat "$T/out"; exit 1; }
+printf '%s\n' scripts/check-changelog.py >"$T/tree/.gate-changed"
+: >"$T/cargo"; : >"$T/calls"
+GATE_PARALLEL=0 GATE_RUNNER=cargo GATE_PROFILE=gate sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 && { echo 'FAIL a red self-test of a changed guard passed'; exit 1; }
+grep -q 'GATE: fast checks FAILED: scripts/test-check-changelog.py' "$T/out" && grep -q 'selftest red' "$T/out" || { echo 'FAIL the changed guard did not run its self-test'; cat "$T/out"; exit 1; }
+printf 'import sys\nsys.exit(0)\n' >"$T/tree/scripts/test-check-changelog.py"
+printf '%s\n' scripts/run-tmp.sh >"$T/tree/.gate-changed"
+: >"$T/cargo"; : >"$T/calls"; : >"$T/calls.self"
+GATE_PARALLEL=0 GATE_RUNNER=cargo GATE_PROFILE=gate sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 || { echo 'FAIL gate with a changed run-tmp.sh'; cat "$T/out"; exit 1; }
+grep -q 'test-run-tmp.sh' "$T/calls.self" || { echo "FAIL a changed gate script did not run the gate's own self-tests"; cat "$T/out"; exit 1; }
+rm -f "$T/tree/scripts/test-check-changelog.py" "$T/tree/scripts/test-run-tmp.sh" "$T/calls.self"
+pass=$((pass + 1))
+echo 'ok self-tests run only when their tool changed'
+# Host timing budgets (25.11.2026): left out of every tier, GATE_FULL=1 too, by name and by suite; other tests still run.
+printf 'test lib glow::tests::the_glow_is_cheap\nsuite budget_suite\n' >"$T/tree/scripts/host-budgets.txt"
+mkdir -p "$T/tree/tests"; : >"$T/tree/tests/budget_suite.rs"; : >"$T/tree/tests/player_suite.rs"
+printf '%s\n' src/main.rs >"$T/tree/.gate-changed"
+for full in "" 1; do
+    : >"$T/cargo"; : >"$T/calls"
+    GATE_FULL="$full" GATE_PARALLEL=0 GATE_RUNNER=cargo GATE_PROFILE=gate sh "$T/tree/scripts/gate.sh" "$T/tree" >"$T/out" 2>&1 || { echo "FAIL gate with host budgets (GATE_FULL=$full)"; cat "$T/out"; exit 1; }
+    run_line=$(grep -- ' -q -- ' "$T/cargo" | grep -v -- '--no-run' | head -1)
+    case $run_line in *"--skip glow::tests::the_glow_is_cheap"*) ;; *) echo "FAIL GATE_FULL=$full ran the budget test: $run_line"; exit 1 ;; esac
+    case $run_line in *"--test budget_suite"*) echo "FAIL GATE_FULL=$full ran the budget suite: $run_line"; exit 1 ;; esac
+    case $run_line in *"--test player_suite"*) ;; *) echo "FAIL GATE_FULL=$full lost an ordinary suite: $run_line"; exit 1 ;; esac
+    grep -q 'host timing budgets are warnings' "$T/out" || { echo 'FAIL the gate does not say it left the budgets out'; exit 1; }
+done
+rm -rf "$T/tree/scripts/host-budgets.txt" "$T/tree/tests"
+pass=$((pass + 1))
+echo 'ok host timing budgets are left out of every tier, the ordinary suites still run'
 # The CHANGELOG guard (20.11.2026): the queue's union merge put copies of [Unreleased] lines back under the published [0.5.1]
 # and the gate was green. The real scripts/check-changelog.py on a train-like tree: a published section changed = red, before
 # any build; the same tree with the section as recorded passes.
@@ -215,10 +252,10 @@ echo 'ok a local gate proves the lane against the train base'
 rm -rf "$T/tree/.git" "$T/tree/scripts/gate-comments.py" "$T/tree/scripts/some.sh" "$T/tree/scripts/other.sh"
 rm -f "$T/tree/scripts/preflight.sh" "$T/tree/scripts/i18n-extract.py"
 : >"$T/cargo"
-check 'LICENSE still runs package tests' 18 fast LICENSE
-check 'NOTICE still runs package tests' 18 fast NOTICE.md
-check 'font licence runs package tests' 18 fast assets/fonts/OFL.txt
-check 'deleted or empty licence is rejected by required package suite' 18 fast LICENSE '' 1
+check 'LICENSE still runs package tests' 19 fast LICENSE
+check 'NOTICE still runs package tests' 19 fast NOTICE.md
+check 'font licence runs package tests' 19 fast assets/fonts/OFL.txt
+check 'deleted or empty licence is rejected by required package suite' 19 fast LICENSE '' 1
 check 'ordinary docs use only doc and i18n checks' 0 docs docs/DEVELOPING.md
 check 'root Markdown skips shell and integration tests' 0 docs README.md
 check 'manual changes leave the short path' 0 fast docs/user/settings.md
@@ -231,18 +268,18 @@ check 'Brick text regression changes run the merge gate' 0 fast tests/text_size.
 check 'a Rust test a script names runs no shell tests' 0 fast tests/shell_input.rs
 check 'unknown test data runs the merge gate without shell tests' 0 fast tests/new-input.txt
 check 'Rust test path with spaces runs the merge gate without shell tests' 0 fast 'tests/new input.rs'
-check 'Rust test changes cannot cancel deploy tests' 18 fast 'tests/layout_contract.rs
+check 'Rust test changes cannot cancel deploy tests' 19 fast 'tests/layout_contract.rs
 deploy/run-pocket-ui.sh'
-check 'full override retains shell tests after Rust test changes' 18 full tests/layout_contract.rs 1
+check 'full override retains shell tests after Rust test changes' 19 full tests/layout_contract.rs 1
 check 'non-Rust source input runs the merge gate without shell tests' 0 fast src/new-input.c
 check 'assets run the merge gate without shell tests' 0 fast assets/new-input.txt
 check 'unknown root files run the merge gate without shell tests' 0 fast new-input
-check 'deploy changes run shell tests' 18 fast deploy/run-pocket-ui.sh
-check 'gate script changes run every suite but the time budgets, with the shell tests' 18 fast scripts/test-gate-paths.sh
-check 'other script changes run shell tests' 18 fast scripts/device-check.sh
+check 'deploy changes run shell tests' 19 fast deploy/run-pocket-ui.sh
+check 'gate script changes run every suite but the time budgets, with the shell tests' 19 fast scripts/test-gate-paths.sh
+check 'other script changes run shell tests' 19 fast scripts/device-check.sh
 check 'Cargo metadata changes run every suite but the time budgets' 0 fast Cargo.toml
 check 'test harness changes run every suite but the time budgets' 0 fast tests/common/mod.rs
-check 'docs cannot cancel licence tests' 18 fast 'LICENSE
+check 'docs cannot cancel licence tests' 19 fast 'LICENSE
 README.md'
 check 'docs and an asset run the merge gate without shell tests' 0 fast 'assets/new-input
 README.md'
@@ -252,8 +289,8 @@ check 'unembedded translation audit notes use short path' 0 docs assets/i18n/ski
 check 'runtime translation tables leave the short path' 0 fast assets/i18n/de.tsv
 check 'mixed docs and Rust leave the short path' 0 fast 'docs/DEVELOPING.md
 src/main.rs'
-check 'no change list runs everything' 18 full ''
-check 'full override runs everything' 18 full docs/DEVELOPING.md 1
+check 'no change list runs everything' 19 full ''
+check 'full override runs everything' 19 full docs/DEVELOPING.md 1
 # Firmware and transfer failures must fail the real shell tier.
 printf '%s\n' scripts/device-check.sh >"$T/tree/.gate-changed"
 for suite in test-device-portability.py test-device-transfer.py test-package-complete.py; do

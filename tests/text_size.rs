@@ -775,9 +775,9 @@ fn your_games_rows_stay_above_the_hint_bar_on_the_small_screens() {
     let empty = tmp.path().join("empty-systems.cfg");
     std::fs::write(&empty, "<systemList>\n</systemList>\n").unwrap();
     let rows = [
-        ("en", ["Continue", "Add more…", "Box art"]),
-        ("de", ["Fortsetzen", "Mehr hinzufügen …", "Cover"]),
-        ("es", ["Continuar", "Añadir más…", "Portada"]),
+        ("en", ["Next", "Add more…", "Box art"]),
+        ("de", ["Weiter", "Mehr hinzufügen …", "Cover"]),
+        ("es", ["Siguiente", "Añadir más…", "Portada"]),
     ];
     let empty_rows = [
         ("en", ["Add games…", "I'll add games later", "Box art"]),
@@ -1539,6 +1539,33 @@ fn chinese_in_normal_and_large_text_nothing_overlaps_or_runs_off_the_picture() {
             let table = chinese_placeholder_table(tmp.path());
             language_matrix_with("zh", "Chinese (placeholder lines)", &[("POCKETUI_I18N_TABLE", &format!("zh:{}", table.display()))]);
         }
+    }
+}
+
+/// The text-fit matrix in Vietnamese: Latin letters with stacked marks (Barlow; Retro in Departure Mono, the 76 added
+/// letters), Vietnamese runs longer than English. With `vi.tsv`'s lines once Vietnamese is complete; before, `VI_MATRIX=1`
+/// by hand, else skipped.
+#[test]
+#[ignore = "release check: the Vietnamese text-fit matrix, 640x480, 1024x768 and 720x720, Normal and Large (complete Vietnamese only)"]
+fn vietnamese_in_normal_and_large_text_nothing_overlaps_or_runs_off_the_picture() {
+    let real = std::env::var_os("VI_MATRIX").is_some_and(|v| v == "1");
+    if pocket_ui::i18n::Lang::Vi.complete() || real {
+        language_matrix("vi", "Vietnamese");
+    } else {
+        eprintln!("SKIPPED: Vietnamese is not complete yet (vi.tsv, Lang::complete); VI_MATRIX=1 runs the matrix with its lines");
+    }
+}
+
+/// The text-fit matrix in Japanese: kanji and kana in their Japanese forms (Noto Sans JP, Fusion Pixel ja), lines broken
+/// between them with kinsoku. With `ja.tsv`'s lines once Japanese is complete; before, `JA_MATRIX=1` by hand.
+#[test]
+#[ignore = "release check: the Japanese text-fit matrix, 640x480, 1024x768 and 720x720, Normal and Large (complete Japanese only)"]
+fn japanese_in_normal_and_large_text_nothing_overlaps_or_runs_off_the_picture() {
+    let real = std::env::var_os("JA_MATRIX").is_some_and(|v| v == "1");
+    if pocket_ui::i18n::Lang::Ja.complete() || real {
+        language_matrix("ja", "Japanese");
+    } else {
+        eprintln!("SKIPPED: Japanese is not complete yet (ja.tsv, Lang::complete); JA_MATRIX=1 runs the matrix with its lines");
     }
 }
 

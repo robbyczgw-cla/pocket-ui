@@ -73,6 +73,7 @@ pub fn save_dir(roots: &Roots, game: &Path) -> Option<PathBuf> {
 /// The game's saves and states, saves first, each sorted by name. With `pictures`, the states' pictures too (for a
 /// ZIP); a list shows a state and says whether it has one.
 pub fn files_of(roots: &Roots, system: &str, game: &Path, pictures: bool) -> Vec<File> {
+    let system = crate::region_pairs::own_system(system, game);
     let mut out = Vec::new();
     // A game that is a folder (DOS, ScummVM) keeps its saves in its own way.
     if !game.is_dir() {
@@ -340,6 +341,7 @@ fn base_of(roots: &Roots, kind: Kind) -> PathBuf {
 /// and the kind of file alone (see the module's notes); the folder is resolved and must be inside its base, and a
 /// state's folder is made when missing.
 pub fn target(roots: &Roots, system: &str, game: &Path, raw: &str) -> Result<(Kind, PathBuf), Refused> {
+    let system = crate::region_pairs::own_system(system, game);
     let name = files::sanitize_name(raw).ok_or_else(|| Refused::NotAllowed("That file name can't be used.".into()))?;
     let stem = game.file_stem().and_then(|s| s.to_str()).ok_or_else(|| Refused::NotAllowed("This game's name can't hold a save.".into()))?;
     let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
@@ -450,23 +452,11 @@ pub fn upload(ctx: &Ctx, req: &Request, body: &mut impl BufRead) -> Response {
     let abort = || stop();
     let gate = files::Gate { wait: &|| false, abort: &abort, no_programs: false };
     let name = t.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let game_started = || if ctx.shared.playing() { refused(Refused::Io("A game started. Nothing was changed.".into())) } else { refused(Refused::Io("The web companion was switched off. Nothing was changed.".into())) };
-    // It arrives in the uploads folder, on the same card as its place, under a name that an earlier pocket-ui's
-    // leftovers are swept by (`files::sweep_leftovers`); the Brick's own saves folder may be on another card, so it
-    // gets a hidden uploads folder of its own. Never a game's folder.
-    let tmp_dir = match (kind, &ctx.roots.saves) {
-        (Kind::Save, Some(own)) => own.join(files::UPLOADS_DIR),
-        _ => ctx.roots.uploads.clone(),
+    let game_started = || stopped_answer(ctx);
+    let (tmp_dir, staged) = match staging(ctx, kind, &name) {
+        Ok(s) => s,
+        Err(r) => return r,
     };
-    if std::fs::symlink_metadata(&tmp_dir).is_err() {
-        let _ = std::fs::create_dir(&tmp_dir);
-    }
-    // A folder, not a link to one.
-    let tmp_dir = match std::fs::symlink_metadata(&tmp_dir).ok().filter(|m| m.is_dir()).and_then(|_| tmp_dir.canonicalize().ok()) {
-        Some(d) => d,
-        None => return refused(Refused::Io("Can't make the uploads folder.".into())),
-    };
-    let staged = tmp_dir.join(format!(".{name}.{}-s{}.upload", std::process::id(), STAGED.fetch_add(1, Ordering::Relaxed)));
     if let Err(e) = files::receive(body, &staged, &tmp_dir, len, false, &gate) {
         let _ = std::fs::remove_file(&staged);
         return if stop() { game_started() } else { refused(e) };
@@ -475,13 +465,122 @@ pub fn upload(ctx: &Ctx, req: &Request, body: &mut impl BufRead) -> Response {
     if done.is_err() {
         let _ = std::fs::remove_file(&staged);
     }
+    put_back_answer(ctx, done, kind, &system, &title, &name, len)
+}
+
+/// The answer to a save or state put back, whole or in pieces.
+fn put_back_answer(ctx: &Ctx, done: Result<Option<String>, Option<Refused>>, kind: Kind, system: &str, title: &str, name: &str, len: u64) -> Response {
     match done {
         Ok(backup) => {
             println!("web: put back a {} of a {system} game ({len} bytes){}", if kind == Kind::Save { "save" } else { "state" }, if backup.is_some() { ", the old one backed up" } else { "" });
             Response::json(200, &json!({ "ok": true, "name": name, "game": title, "replaced": backup.is_some(), "backup": backup }))
         }
-        Err(None) => game_started(),
+        Err(None) => stopped_answer(ctx),
         Err(Some(e)) => refused(e),
+    }
+}
+
+/// Why a put-back stopped with nothing changed: a game started, or the companion was switched off.
+fn stopped_answer(ctx: &Ctx) -> Response {
+    if ctx.stopped.load(Ordering::Relaxed) {
+        refused(Refused::Io("The web companion was switched off. Nothing was changed.".into()))
+    } else {
+        refused(Refused::Io("A game started. Nothing was changed.".into()))
+    }
+}
+
+/// Where a file put back arrives first: the folder for it and the hidden name in it. In the uploads folder, on the
+/// same card as its place, under a name that an earlier pocket-ui's leftovers are swept by
+/// (`files::sweep_leftovers`); the Brick's own saves folder may be on another card, so it gets a hidden uploads folder
+/// of its own. Never a game's folder.
+fn staging(ctx: &Ctx, kind: Kind, name: &str) -> Result<(PathBuf, PathBuf), Response> {
+    let tmp_dir = match (kind, &ctx.roots.saves) {
+        (Kind::Save, Some(own)) => own.join(files::UPLOADS_DIR),
+        _ => ctx.roots.uploads.clone(),
+    };
+    if std::fs::symlink_metadata(&tmp_dir).is_err() {
+        let _ = std::fs::create_dir(&tmp_dir);
+    }
+    // A folder, not a link to one.
+    let tmp_dir = std::fs::symlink_metadata(&tmp_dir).ok().filter(|m| m.is_dir()).and_then(|_| tmp_dir.canonicalize().ok()).ok_or_else(|| refused(Refused::Io("Can't make the uploads folder.".into())))?;
+    let staged = tmp_dir.join(format!(".{name}.{}-s{}.upload", std::process::id(), STAGED.fetch_add(1, Ordering::Relaxed)));
+    Ok((tmp_dir, staged))
+}
+
+// --- putting back in pieces --------------------------------------------------------------------------------------
+
+/// A save or state the browser sends in pieces (`/api/saves/upload/start`, then `/api/upload/part` as for a game
+/// file): the game it was checked for and where it goes, fixed at the start. Its pieces go to a temporary file in the
+/// uploads folder (`files::Partial`, its target the hidden `staged` name); after the last one it takes its place as a
+/// whole upload does ([`put_in_place`]: the one there backed up first). Chrome on Android breaks off a large file sent
+/// in one request (25.11.2026, the game uploads); a PS2 state is tens of MB.
+pub struct PieceSave {
+    pub target: PathBuf,
+    staged: PathBuf,
+    kind: Kind,
+    replace: bool,
+    system: String,
+    title: String,
+    name: String,
+    /// `Shared::games_started` at the start: a game that started since, even one already over, ends it.
+    games: u64,
+}
+
+impl Drop for PieceSave {
+    fn drop(&mut self) {
+        // Put in place, it is gone already; otherwise nothing half stays.
+        let _ = std::fs::remove_file(&self.staged);
+    }
+}
+
+impl PieceSave {
+    /// A game started since the first piece, or the companion was switched off.
+    pub fn stopped(&self, ctx: &Ctx) -> bool {
+        ctx.shared.playing() || ctx.stopped.load(Ordering::Relaxed) || ctx.shared.games_started.load(Ordering::Relaxed) != self.games
+    }
+}
+
+/// `POST /api/saves/upload/start?id=&name=&size=[&replace=1]`: every check of [`upload`] (the game, the kind of file
+/// and its place, its size, never over a file without `replace`), the room held, the temporary file made. `stale` is
+/// called with the place before its room is reserved (the caller drops an upload for it this browser left).
+pub fn begin_pieces(ctx: &Ctx, req: &Request, stale: impl FnOnce(&Path)) -> Result<(PieceSave, files::Partial), Response> {
+    let size = req.query("size").and_then(|s| s.parse::<u64>().ok()).ok_or_else(|| Response::error(411, "The browser did not say how large the file is."))?;
+    let games = ctx.shared.games_started.load(Ordering::Relaxed);
+    let (system, game, title) = game_of(ctx, req.query("id"))?;
+    let (kind, t) = target(&ctx.roots, &system, &game, req.query("name").unwrap_or("")).map_err(refused)?;
+    let replace = req.query("replace") == Some("1");
+    match std::fs::symlink_metadata(&t) {
+        Ok(m) if !m.is_file() => return Err(refused(Refused::NotAllowed("Something that is not a file has that name.".into()))),
+        Ok(_) if !replace => return Err(refused(Refused::Exists(format!("{} is there already.", t.file_name().unwrap_or_default().to_string_lossy())))),
+        _ => {}
+    }
+    stale(&t);
+    let room = files::reserve(&t, size, max_of(kind)).map_err(refused)?;
+    let name = t.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let (tmp_dir, staged) = staging(ctx, kind, &name)?;
+    let part = files::Partial::begin(&staged, &tmp_dir, size, false, false, room).map_err(refused)?;
+    Ok((PieceSave { target: t, staged, kind, replace, system, title, name, games }, part))
+}
+
+/// The last piece arrived: the file takes its place as a whole upload's does, or nothing changes.
+pub fn end_pieces(ctx: &Ctx, part: &mut files::Partial, save: &PieceSave) -> Response {
+    if save.stopped(ctx) {
+        return stopped_answer(ctx);
+    }
+    if let Err(e) = part.finish(|_| Ok(())) {
+        return refused(e);
+    }
+    let stop = || save.stopped(ctx);
+    let done = put_in_place(ctx, &save.staged, &save.target, save.replace, &stop);
+    put_back_answer(ctx, done, save.kind, &save.system, &save.title, &save.name, part.total())
+}
+
+/// The answer to a piece that ended a put-back early: a game that started says so.
+pub fn stopped_piece(ctx: &Ctx, save: &PieceSave, e: Refused) -> Response {
+    if save.stopped(ctx) {
+        stopped_answer(ctx)
+    } else {
+        refused(e)
     }
 }
 

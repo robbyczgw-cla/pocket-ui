@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android extras: the pause menu's service as Android's accessibility page describes it (PadWatch). -->
+<resources>
+    <string name="pad_watch_description">pocket-ui がほかのエミュレーターアプリで起動したゲームの上に pocket-ui のポーズメニューを開きます：HOME または SELECT + START。前面のアプリとパッドのボタンだけを読み取り、それ以外は読みません。それらのゲーム以外では、すべてのボタンをそのまま通します。</string>
+</resources>

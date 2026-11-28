@@ -43,6 +43,12 @@ pub enum Hull {
     Card,
 }
 
+/// The fewest lines of a ScreenScraper description the back shows before "…" (beside the pictures it shows as many as
+/// they are tall); the whole text is on the page.
+const COMPACT_LINES: i32 = 6;
+/// On a narrow back (the Brick's) the description is under the pictures: three lines leave the facts in view.
+const COMPACT_LINES_NARROW: i32 = 3;
+
 /// The template pictures: the back of every kind, and the cardboard box's front.
 const BACKS: [(Hull, &[u8]); 6] = [
     (Hull::CartBox, include_bytes!("../assets/media/back/cartbox.png")),
@@ -174,6 +180,14 @@ pub struct Inputs<'a> {
     pub game: Option<&'a Pic>,
     pub cover: Option<&'a Image>,
     pub console: Option<&'a Sprite>,
+    /// The box's real back (ScreenScraper's `box-2D-back`, `screenscraper::Face::BoxBack`), fitted into
+    /// [`back_picture_room`]: shown on the back under the title, the description and facts below it; None keeps the
+    /// back as pocket-ui lays it out.
+    pub back: Option<&'a Image>,
+    /// The real back larger, for its zoom (`BoxView::zoomed`): read on the picture thread from the file itself, fitted
+    /// into twice the screen and scaled by whole source pixels (sharp), only while the zoom is on. None until it is
+    /// there: the back at rest stands in, scaled up.
+    pub back_zoom: Option<&'a Image>,
     /// Stickers landing on the case's front or lifting off it (`sticker_press`), painted over `front`, which then is the
     /// case without those that land; empty the rest of the time.
     pub moving: &'a [crate::sticker_press::Moving<'a>],
@@ -208,6 +222,8 @@ struct BackKey {
     saved_ago: Option<String>,
     /// The cover on the mini cartridge's label: a cover that arrives later repaints the back.
     cover: Option<u64>,
+    /// The real back's picture: one that arrives later repaints the back.
+    back: Option<u64>,
 }
 
 struct BackPixels {
@@ -282,6 +298,13 @@ pub struct BoxView {
     /// A sealed game (`shrink_wrap`): its seed, and the back in the same film as the front (made once per size).
     pub sealed: Option<u64>,
     film: Option<((i32, i32, u64), Pic)>,
+    /// The real back's picture at the size it is shown (its fingerprint and that size): scaled once, not per paint.
+    back_scaled: Option<((u64, i32, i32), Image)>,
+    /// The real back's zoom (R2 on it, owner 26.11.2026: on small handhelds the real back is too small to read): how far
+    /// the view has moved across and down the picture (0 to 1 of the way it can move). None: not zoomed.
+    zoom: Option<(f32, f32)>,
+    /// The back painted last showed a real back (`Inputs::back`): R2 zooms it.
+    real_back_shown: bool,
     /// The back's finished pixels: as the screen shows it at rest and as the turn paints it off screen (the same one
     /// where the screen is painted at design size, as on the Brick).
     back_pixels: Vec<BackPixels>,
@@ -594,9 +617,52 @@ impl BoxView {
         self.album.as_ref().is_some_and(|v| v.animating(now))
     }
 
+    /// A box turned to a real back, as its paint leaves it (tests of the keys without painting).
+    #[cfg(test)]
+    pub fn on_real_back() -> BoxView {
+        BoxView { back: true, real_back_shown: true, ..BoxView::default() }
+    }
+
+    /// R2 on a real back at rest: it can be zoomed.
+    pub fn zoomable(&self) -> bool {
+        self.back && self.real_back_shown && self.flip_at_rest() && self.album.is_none()
+    }
+
+    /// The real back is zoomed (R2): the D-pad moves it, B or R2 leaves the zoom.
+    pub fn zoomed(&self) -> bool {
+        self.zoom.is_some()
+    }
+
+    /// R2: the zoom on (its view on the middle of the back's top, where its title and pictures are) or off.
+    pub fn zoom_toggle(&mut self) {
+        self.zoom = if self.zoom.is_some() || !self.zoomable() { None } else { Some((0.5, 0.0)) };
+    }
+
+    /// The zoom on at `at` (how far across and down, 0 to 1) without asking: `POCKETUI_SNAPSHOT_BACK_ZOOM`.
+    pub fn set_zoom(&mut self, at: (f32, f32)) {
+        self.zoom = Some((at.0.clamp(0.0, 1.0), at.1.clamp(0.0, 1.0)));
+    }
+
+    /// The zoomed view moved by a step (`ZOOM_STEP` of the picture) left or right (`dx`), up or down (`dy`).
+    pub fn zoom_pan(&mut self, dx: i32, dy: i32) {
+        if let Some((x, y)) = self.zoom.as_mut() {
+            *x = (*x + dx as f32 * ZOOM_STEP).clamp(0.0, 1.0);
+            *y = (*y + dy as f32 * ZOOM_STEP).clamp(0.0, 1.0);
+        }
+    }
+
     /// Paints the box, front or back (or turning) under the card's top line.
     pub fn paint(&mut self, c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[CardPicture], inp: &Inputs) {
         let t0 = Instant::now();
+        // The real back zoomed: it fills the room between the top line and the hints, the box behind it.
+        if let (Some(at), Some(rest)) = (self.zoom, inp.back.filter(|_| self.back)) {
+            paint_zoom(c, inp.back_zoom.unwrap_or(rest), inp.back_zoom.is_none(), at);
+            (self.painted, self.cost) = (Some(t0), t0.elapsed());
+            return;
+        }
+        if !self.back || inp.back.is_none() {
+            self.zoom = None;
+        }
         if let (Some(view), Some(data)) = (self.album.as_ref(), d.album.as_ref()) {
             // The case lying open with its photos: the case's own inside, a DVD case in its system's plastic.
             let hull = Hull::of(inp.medium);
@@ -871,11 +937,12 @@ impl BoxView {
         BackKey {
             canvas, rect,
             scroll: self.scroll, link: self.link, bar, medium: inp.medium, look: inp.look, sealed: self.sealed,
-            palette: pal(), font: text.style(), letters: crate::font_style::retro_letters(),
+            palette: pal(), font: text.style(), letters: crate::font_style::effective_letters(),
             sizes: (type_scale::px(24), type_scale::px(28), type_scale::px(37)), lang: crate::i18n::current(),
             rating_hint: crate::game_card_model::no_rating(), translating: text.translating(),
             saved_ago: d.saves.as_ref().and_then(|s| s.newest).map(crate::recents::ago),
             cover: inp.cover.map(Image::fingerprint),
+            back: inp.back.map(Image::fingerprint),
         }
     }
 
@@ -956,10 +1023,23 @@ impl BoxView {
         self.view_h = view_h;
         self.body = (top, px, pw);
         self.link_at = vec![(-1, 0); d.links.len()];
+        // The real back across the back's width (the lead's review 26.11.2026: whole in the view it was small in a large
+        // empty back), at most `REAL_BACK_VIEWS` views tall: its top at rest, the rest one scroll down (L1/R1, R2 zooms).
+        let real = inp.back.filter(|b| b.w > 0 && b.h > 0).map(|b| {
+            let (rw, rh) = b.fit(pw - 2 * pad - 10, ((view_h - 2 * pad) as f32 * REAL_BACK_VIEWS) as i32);
+            let key = (b.fingerprint(), rw, rh);
+            if self.back_scaled.as_ref().is_none_or(|(k, _)| *k != key) {
+                let scaled = if (b.w as i32, b.h as i32) == (rw, rh) { b.clone() } else { b.resized(rw, rh) };
+                self.back_scaled = Some((key, scaled));
+            }
+            key
+        });
+        let real = real.and_then(|_| self.back_scaled.as_ref().map(|(_, img)| img));
+        self.real_back_shown = real.is_some();
         let height = {
             let mut body = c.rows(top, bot);
             let links = (self.link, &mut self.link_at);
-            paint_back_body(&mut body, text, d, pictures, inp, (px - 0, pw, pad), -self.scroll, ink, soft, paper, links)
+            paint_back_body(&mut body, text, d, pictures, inp, real, (px - 0, pw, pad), -self.scroll, ink, soft, paper, links)
         };
         let _ = full_w;
         self.max_scroll = (height - view_h).max(0);
@@ -1004,15 +1084,45 @@ impl BoxView {
     }
 }
 
+/// How tall the real back may be on the back, in views: a tall one (a Mega Drive's) scrolls a little, a wide one (a
+/// SNES's) fills the width.
+pub const REAL_BACK_VIEWS: f32 = 1.5;
+
+/// How far one press of the D-pad moves the zoomed back: an eighth of the picture.
+pub const ZOOM_STEP: f32 = 0.125;
+
+/// The real back zoomed (`BoxView::zoom_toggle`): `img` 1:1 (`up`: the back at rest standing in until the larger one is
+/// read, twice its size) in the room between the card's top line and the hints, moved `at` of the way it can move
+/// (0: its left or top edge in view, 1: its right or bottom edge); a side smaller than the room in the middle.
+fn paint_zoom(c: &mut Canvas, img: &Image, up: bool, (ax, ay): (f32, f32)) {
+    let (top, bottom, _) = room(c.w, c.h);
+    c.rect(0, top, c.w, bottom - top, pal().void);
+    let k = if up { 2 } else { 1 };
+    let (w, h) = (img.w as i32 * k, img.h as i32 * k);
+    // `at` 0: the picture's start at the room's, 1: its end at the room's end; a side smaller than the room centred.
+    let place = |len: i32, room: i32, at: f32, from: i32| {
+        if len <= room { from + (room - len) / 2 } else { from - (at * (len - room) as f32).round() as i32 }
+    };
+    let (x, y) = (place(w, c.w, ax, 0), place(h, bottom - top, ay, top));
+    let mut rows = c.rows(top, bottom);
+    rows.blit_scaled(img, x, y - top, w, h);
+}
+
 /// The scrolling part of the back, `y0` the top (negative when scrolled), inside the paper from `x` `w` wide; returns
 /// its height.
 #[allow(clippy::too_many_arguments)]
-fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[CardPicture], inp: &Inputs, (x, w, pad): (i32, i32, i32), y0: i32, ink: u32, soft: u32, paper: u32, (link, link_at): (Option<usize>, &mut Vec<(i32, i32)>)) -> i32 {
+fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[CardPicture], inp: &Inputs, real: Option<&Image>, (x, w, pad): (i32, i32, i32), y0: i32, ink: u32, soft: u32, paper: u32, (link, link_at): (Option<usize>, &mut Vec<(i32, i32)>)) -> i32 {
     let inner_x = x + pad;
     let inner_w = w - 2 * pad - 10;
     let line = type_scale::line(28, 8);
     let row = type_scale::row(44, 28);
     let mut y = y0 + pad;
+    // The box's real back first, whole in the view as the box is turned over; what pocket-ui knows of the game under it.
+    if let Some(img) = real {
+        let bx = inner_x + (inner_w - img.w as i32) / 2;
+        c.blit_scaled(img, bx, y, img.w as i32, img.h as i32);
+        y += img.h as i32 + pad;
+    }
     if let Some(why) = &d.broken {
         y = crate::game_card::paint_problem(c, text, why, (inner_x, y + type_scale::grow(28) + 22, inner_w));
     }
@@ -1049,11 +1159,25 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
     let (tx, tw, mut ty) = if wide { (inner_x + shot_w + 2 * pad, inner_w - shot_w - 2 * pad, y) } else { (inner_x, inner_w, shots_bottom + pad) };
     let (about, credit) = about(d);
     ty += type_scale::grow(28) + 22;
+    // ScreenScraper's descriptions run long (up to 4000 characters): on a wide back they stop where the pictures do (six
+    // lines at least; three under them on a narrow back), the whole text is on the page (SELECT), and the facts follow across the back, so they are in view
+    // and nothing stands empty beside them when it scrolls (Neon 26.11.2026). Other descriptions keep the back as it was.
+    let compact = matches!(d.summary, Summary::ScreenScraper(_)) && !d.plain;
     match about {
         Some(about) => {
-            for l in text.wrap(Face::Body, 28, &about, tw) {
+            let lines = text.wrap(Face::Body, 28, &about, tw);
+            let room = if wide { ((shots_bottom - ty) / line.max(1) + 1).max(COMPACT_LINES) } else { COMPACT_LINES_NARROW };
+            let cut = compact && lines.len() > room as usize;
+            let shown = if cut { room as usize } else { lines.len() };
+            for (i, l) in lines.iter().take(shown).enumerate() {
+                let l = if cut && i + 1 == shown { text.fit(Face::Body, 28, &format!("{l} …"), tw) } else { l.clone() };
                 text.draw(c, Face::Body, 28, tx, ty, ink, &l);
                 ty += line;
+            }
+            if cut {
+                let more = text.fit(Face::Body, 24, "The whole text: SELECT", tw);
+                text.draw(c, Face::Body, 24, tx, ty, soft, &more);
+                ty += type_scale::line(24, 8);
             }
         }
         None => {
@@ -1070,11 +1194,13 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
     }
     // A rule, then the facts and the player's game: on a wide back in the column of the description, under it; on a
     // narrow one under everything, in two columns when there is room, one after the other if not.
-    let (inner_x, inner_w) = if wide { (tx, tw) } else { (inner_x, inner_w) };
-    y = if wide { ty + pad } else { ty.max(shots_bottom) + pad };
+    // A short ScreenScraper description on a wide back: the facts go across it as on a narrow one (above).
+    let across = !wide || compact;
+    let (inner_x, inner_w) = if across { (inner_x, inner_w) } else { (tx, tw) };
+    y = if across { ty.max(shots_bottom) + pad } else { ty + pad };
     c.rect(inner_x, y, inner_w, 2, mix(paper, ink, 50));
     y += pad + type_scale::grow(37);
-    let two = !wide && inner_w >= type_scale::wide(760, 28);
+    let two = across && inner_w >= type_scale::wide(760, 28);
     let col_w = if two { (inner_w - pad) / 2 } else { inner_w };
     let key_w = type_scale::wide(170, 28).min(col_w / 2);
     let mut ly = y + 30;
@@ -1114,6 +1240,13 @@ fn paint_back_body(c: &mut Canvas, text: &mut Text, d: &CardData, pictures: &[Ca
             text.draw(c, Face::Body, 28, inner_x + key_w, ly + i as i32 * line, ink, &l);
         }
         ly += row + line * (lines.len().min(2) as i32 - 1);
+    }
+    // Facts from ScreenScraper name it under them, unless its description above did already (`screenscraper_facts`).
+    if d.from_screenscraper && !matches!(d.summary, Summary::ScreenScraper(_)) {
+        for l in text.wrap(Face::Body, 24, crate::game_card_model::SCREENSCRAPER_CREDIT, col_w) {
+            text.draw(c, Face::Body, 24, inner_x, ly, soft, &l);
+            ly += type_scale::line(24, 8);
+        }
     }
     let (rx, mut ry) = if two { (inner_x + col_w + pad, y + 30) } else { (inner_x, ly + pad) };
     text.draw(c, Face::Title, 37, rx, ry, soft, "Your game");
@@ -1206,12 +1339,12 @@ fn paint_progress(c: &mut Canvas, text: &mut Text, progress: &str, d: &CardData,
 /// there is no description to show.
 pub(crate) fn about(d: &CardData) -> (Option<String>, Option<String>) {
     // The short card: one sentence of the player's own description.
-    if let (true, Summary::Gamelist(t) | Summary::Romm(t)) = (d.plain, &d.summary) {
+    if let (true, Summary::Gamelist(t) | Summary::Romm(t) | Summary::ScreenScraper(t)) = (d.plain, &d.summary) {
         let first = t.split_inclusive(['.', '!', '?']).next().unwrap_or(t).trim().to_string();
         return (Some(first).filter(|f| !f.is_empty()), None);
     }
     let about = match &d.summary {
-        Summary::Wikipedia { text: t, .. } | Summary::Gamelist(t) | Summary::Romm(t) => Some(t.clone()),
+        Summary::Wikipedia { text: t, .. } | Summary::Gamelist(t) | Summary::Romm(t) | Summary::ScreenScraper(t) => Some(t.clone()),
         _ => d.sentence.clone(),
     };
     // The short card has no line for a game that simply has no article.
@@ -1268,6 +1401,41 @@ mod tests {
         assert!((turn_height(776, 1.0, 1.05) - 776.0 * 0.92).abs() < 0.01);
     }
 
+    /// Neon 26.11.2026: a long ScreenScraper description pushed the facts out of view, and on the Mini V2's wide back the
+    /// picture column stood empty beside them when scrolled. The description stops by the pictures (ending in "…"): on
+    /// the Mini V2 the facts are in view unscrolled, on the Brick (whose back shows less) after two presses of Down; a
+    /// description from elsewhere keeps the back as it was (the facts stay below its end).
+    #[test]
+    fn a_long_screenscraper_description_leaves_the_facts_in_view() {
+        let mut text = Text::builtin();
+        let inp = Inputs { medium: Medium::Gba, look: Look { color: 0x304050, band: 0x8090a0, plastic: 0x202020, tape: false },
+            front: None, game: None, cover: None, console: None, back: None, back_zoom: None, moving: &[] };
+        let long = "A long description of the game, sentence after sentence. ".repeat(60);
+        // The Mini V2 (1240x1080, a wide back) and the Brick (1024x768).
+        for (sw, sh, downs) in [(1240, 1080, 0), (1024, 768, 2)] {
+            for (summary, in_view) in [(Summary::ScreenScraper(long.clone()), true), (Summary::Gamelist(long.clone()), false)] {
+                let data = CardData {
+                    title: "Farm Days".into(),
+                    system: "Game Boy Advance".into(),
+                    summary: summary.clone(),
+                    facts: vec![("Developer", "Field Works".into())],
+                    links: vec![(0, crate::game_card::CardLink { title: "Field Works".into(), games: Vec::new() })],
+                    ..Default::default()
+                };
+                let mut view = BoxView { back: true, ..Default::default() };
+                let mut px = vec![pal().void; (sw * sh) as usize];
+                let mut c = Canvas::screen(&mut px, (sw as u32, sh as u32), 1);
+                view.paint(&mut c, &mut text, &data, &[], &inp);
+                for _ in 0..downs {
+                    view.link_step(true, 1, crate::game_card::STEP);
+                    view.paint(&mut c, &mut text, &data, &[], &inp);
+                }
+                let what = if matches!(summary, Summary::ScreenScraper(_)) { "ScreenScraper's" } else { "the gamelist's" };
+                assert_eq!(view.link_rect(0).is_some(), in_view, "{sw}x{sh}, {what} long description: the Developer fact in view after {downs} Down");
+            }
+        }
+    }
+
     #[test]
     fn a_box_back_keeps_up_with_descriptions_pictures_scrolling_and_unwrapping() {
         let mut text = Text::builtin();
@@ -1275,7 +1443,7 @@ mod tests {
             summary: Summary::Gamelist("The first description. ".repeat(80)), ..Default::default() };
         let mut pictures = Vec::new();
         let inp = Inputs { medium: Medium::Ps1, look: Look { color: 0x304050, band: 0x8090a0, plastic: 0x202020, tape: false },
-            front: None, game: None, cover: None, console: None, moving: &[] };
+            front: None, game: None, cover: None, console: None, back: None, back_zoom: None, moving: &[] };
         let render = |view: &mut BoxView, text: &mut Text, data: &CardData, pictures: &[CardPicture], n| {
             let mut px = vec![pal().void; (1280 / n * (960 / n)) as usize];
             let mut c = Canvas::screen(&mut px, ((1280 / n) as u32, (960 / n) as u32), n as u32);
@@ -1328,7 +1496,7 @@ mod tests {
         let data = CardData { title: "A game".into(), system: system.into(),
             saves: Some(crate::game_card_model::CardSaves { system: system.into(), stripe: 0x4a7a3a, filled: vec![true, false, true, false, false, true, false, false], newest: Some(1) }),
             ..Default::default() };
-        let inp = Inputs { medium, look: Look { color: 0x304050, band: 0x8090a0, plastic: 0x206040, tape: false }, front: None, game: None, cover, console: None, moving: &[] };
+        let inp = Inputs { medium, look: Look { color: 0x304050, band: 0x8090a0, plastic: 0x206040, tape: false }, front: None, game: None, cover, console: None, back: None, back_zoom: None, moving: &[] };
         let (w, h) = ((1280 / n) as u32, (960 / n) as u32);
         let mut px = vec![pal().void; (w * h) as usize];
         let mut c = Canvas::screen(&mut px, (w, h), n as u32);
@@ -1338,6 +1506,113 @@ mod tests {
             view.paint_back(&mut c, &mut text, &data, &[], &inp, (21, 31, 550, 800), true);
         }
         px
+    }
+
+    /// The back of a game with a description, `real` its real back, scrolled `scroll` down, at 1280x960: the pixels, and
+    /// how far the back scrolls.
+    fn back_of(medium: Medium, real: Option<&Image>, scroll: i32) -> (Vec<u32>, i32) {
+        let (px, max, _) = back_sized(medium, real, scroll);
+        (px, max)
+    }
+
+    /// `back_of`, and the size the real back was scaled to.
+    fn back_sized(medium: Medium, real: Option<&Image>, scroll: i32) -> (Vec<u32>, i32, Option<(i32, i32)>) {
+        let mut text = Text::builtin();
+        let data = CardData { title: "A game".into(), system: "snes".into(), summary: Summary::Gamelist("Blurb words here.".into()), ..Default::default() };
+        let inp = Inputs { medium, look: Look { color: 0x304050, band: 0x8090a0, plastic: 0x206040, tape: false }, front: None, game: None, cover: None, console: None, back: real, back_zoom: None, moving: &[] };
+        let (w, h) = (1280u32, 960u32);
+        let mut px = vec![pal().void; (w * h) as usize];
+        let mut c = Canvas::screen(&mut px, (w, h), 1);
+        let mut view = BoxView { back: true, scroll, ..Default::default() };
+        for _ in 0..2 {
+            view.paint_back(&mut c, &mut text, &data, &[], &inp, (100, 40, 900, 880), true);
+        }
+        (px, view.max_scroll, view.back_scaled.as_ref().map(|((_, w, h), _)| (*w, *h)))
+    }
+
+    #[test]
+    fn a_real_back_shows_first_when_the_box_is_turned_and_the_description_follows_it() {
+        // A box back as ScreenScraper gives it (`box-2D-back`): 3:4, magenta, a white band across its middle.
+        let real = Image { w: 300, h: 400, px: (0..400).flat_map(|y| (0..300).map(move |_| if (190..210).contains(&y) { 0xffffff } else { 0xd02080 })).collect() };
+        let w = 1280usize;
+        for medium in [Medium::Snes, Medium::Ps1, Medium::MegaDrive, Medium::Gba] {
+            let (with, scroll_with) = back_of(medium, Some(&real), 0);
+            let (without, scroll_without) = back_of(medium, None, 0);
+            let m: Vec<usize> = (0..with.len()).filter(|i| is_magenta(with[*i])).collect();
+            assert!(m.len() > 300 * 400, "{medium:?}: the real back is shown large ({} px)", m.len());
+            assert!(without.iter().all(|p| !is_magenta(*p)), "{medium:?}: no real back, none painted");
+            // Its proportions kept: the magenta area's bounding box is 3:4.
+            let (x0, x1) = (m.iter().map(|i| i % w).min().unwrap(), m.iter().map(|i| i % w).max().unwrap());
+            let (y0, y1) = (m.iter().map(|i| i / w).min().unwrap(), m.iter().map(|i| i / w).max().unwrap());
+            let (rw, rh) = back_sized(medium, Some(&real), 0).2.unwrap();
+            let ratio = rw as f32 / rh as f32;
+            assert!((ratio - 0.75).abs() < 0.02, "{medium:?}: not stretched ({ratio})");
+            assert!(((x1 - x0 + 1) as i32 - rw).abs() <= 1, "{medium:?}: shown at that size");
+            // Across the back's width (900 less its frame and paddings), its top in the view at rest.
+            assert!(x1 - x0 + 1 > 700, "{medium:?}: as wide as the back ({}px)", x1 - x0 + 1);
+            assert!(y0 > 40 && y0 < 40 + 200, "{medium:?}: its top at rest ({y0})");
+            // What pocket-ui knows of the game is still there, under it: the back scrolls now, and scrolled to its end the
+            // picture has gone up by that much and the description and facts stand where it was.
+            assert!(scroll_with > scroll_without && scroll_with > 100, "{medium:?}: the description and facts follow ({scroll_with} vs {scroll_without})");
+            let (end, _) = back_of(medium, Some(&real), i32::MAX / 2);
+            let left = end.iter().filter(|p| is_magenta(**p)).count();
+            assert!(left * 2 < m.len(), "{medium:?}: scrolled down by {scroll_with}, the picture went up with it ({left} of {} left)", m.len());
+        }
+    }
+
+    #[test]
+    fn a_real_back_zooms_sharp_and_moves_and_only_a_real_back_does() {
+        // Owner 26.11.2026: on small handhelds the real back is too small to read. 300x400 checkered in 4-pixel squares,
+        // so a sharp zoom shows whole squares (no blended greys).
+        let real = Image { w: 300, h: 400, px: (0..400u32).flat_map(|y| (0..300u32).map(move |x| if (x / 4 + y / 4) % 2 == 0 { 0xd02080 } else { 0x20d080 })).collect() };
+        let big = Image { w: 600, h: 800, px: (0..800u32).flat_map(|y| (0..600u32).map(move |x| if (x / 8 + y / 8) % 2 == 0 { 0xd02080 } else { 0x20d080 })).collect() };
+        let mut text = Text::builtin();
+        let data = CardData { title: "A game".into(), system: "snes".into(), ..Default::default() };
+        let look = Look { color: 0x304050, band: 0x8090a0, plastic: 0x206040, tape: false };
+        for (w, h) in [(640u32, 480u32), (1024, 768)] {
+            let mut paint = |view: &mut BoxView, back: Option<&Image>, zoom: Option<&Image>| {
+                let inp = Inputs { medium: Medium::Snes, look, front: None, game: None, cover: None, console: None, back, back_zoom: zoom, moving: &[] };
+                let mut px = vec![pal().void; (w * h) as usize];
+                let mut c = Canvas::screen(&mut px, (w, h), 1);
+                for _ in 0..2 {
+                    view.paint(&mut c, &mut text, &data, &[], &inp);
+                }
+                px
+            };
+            // Without a real back nothing zooms.
+            let mut plain = BoxView { back: true, ..Default::default() };
+            paint(&mut plain, None, None);
+            assert!(!plain.zoomable(), "{w}x{h}: pocket-ui's own back has nothing to zoom");
+            plain.zoom_toggle();
+            assert!(!plain.zoomed());
+            let mut view = BoxView { back: true, ..Default::default() };
+            let rest = paint(&mut view, Some(&real), None);
+            assert!(view.zoomable(), "{w}x{h}: R2 zooms the real back");
+            view.zoom_toggle();
+            assert!(view.zoomed());
+            // Until the larger picture is read, the back at rest stands in, twice its size; then the larger one, 1:1.
+            let early = paint(&mut view, Some(&real), None);
+            let zoomed = paint(&mut view, Some(&real), Some(&big));
+            let pink = |px: &[u32]| px.iter().filter(|p| **p & 0xffffff == 0xd02080).count();
+            assert!(pink(&early) > 0 && pink(&zoomed) > pink(&rest), "{w}x{h}: zoomed it fills more of the screen ({} vs {})", pink(&zoomed), pink(&rest));
+            // Sharp: only the picture's two colours and the page's, nothing blended between them.
+            let (top, bottom, _) = room(w as i32, h as i32);
+            let mixed = zoomed[(top as u32 * w) as usize..(bottom as u32 * w) as usize].iter().filter(|p| ![0xd02080, 0x20d080, pal().void & 0xffffff].contains(&(**p & 0xffffff))).count();
+            assert_eq!(mixed, 0, "{w}x{h}: scaled by whole pixels, never blurred");
+            // The D-pad moves it (the picture is larger than the screen at 2x), at its edge it stops.
+            view.zoom_pan(0, 2);
+            let moved = paint(&mut view, Some(&real), Some(&big));
+            assert_ne!(moved, zoomed, "{w}x{h}: down moves the view");
+            for _ in 0..20 {
+                view.zoom_pan(0, 1);
+            }
+            let end = paint(&mut view, Some(&real), Some(&big));
+            view.zoom_pan(0, 1);
+            assert_eq!(paint(&mut view, Some(&real), Some(&big)), end, "{w}x{h}: past its edge it stays");
+            // Off again: the back as it was.
+            view.zoom_toggle();
+            assert!(!view.zoomed());
+        }
     }
 
     #[test]
@@ -1429,7 +1704,7 @@ mod tests {
         let data = CardData { title: "Blue Stinger".into(), system: "Dreamcast".into(),
             summary: Summary::Gamelist("Blue Stinger is a survival horror game set on Dinosaur Island. ".repeat(40)), ..Default::default() };
         let inp = Inputs { medium, look: Look { color: 0x304050, band: 0x8090a0, plastic: 0x202020, tape: false },
-            front: None, game: None, cover: None, console: None, moving: &[] };
+            front: None, game: None, cover: None, console: None, back: None, back_zoom: None, moving: &[] };
         let (w, h) = (640u32, 480u32);
         let mut px = vec![pal().void; (w * h) as usize];
         let mut view = BoxView::default();
@@ -1485,7 +1760,7 @@ mod tests {
                     let data = CardData { title: "Blue Stinger".into(), system: "Dreamcast".into(),
                         summary: Summary::Gamelist("Blue Stinger is a survival horror game set on Dinosaur Island. ".repeat(40)), ..Default::default() };
                     let inp = Inputs { medium, look: Look { color: 0x304050, band: 0x8090a0, plastic: 0x202020, tape: false },
-                        front: None, game: None, cover: None, console: None, moving: &[] };
+                        front: None, game: None, cover: None, console: None, back: None, back_zoom: None, moving: &[] };
                     let mut px = vec![pal().void; 640 * 480];
                     crate::frame_clock::freeze(now - cost);
                     rest.paint(&mut Canvas::new(&mut px, 640, 480), &mut text, &data, &[], &inp);
@@ -1545,7 +1820,7 @@ mod tests {
         let mut text = Text::builtin();
         let (data, pictures, cover) = kirby();
         let inp = Inputs { medium: Medium::Snes, look: Look { color: 0x6a3a8a, band: 0xd0a0e0, plastic: 0x202020, tape: false },
-            front: None, game: None, cover: Some(&cover), console: None, moving: &[] };
+            front: None, game: None, cover: Some(&cover), console: None, back: None, back_zoom: None, moving: &[] };
         let mut px = vec![pal().void; (w * h) as usize];
         crate::frame_clock::hold();
         let mut view = BoxView::new();
@@ -1660,7 +1935,7 @@ mod tests {
         let mut text = Text::builtin();
         let (data, pictures, cover) = kirby();
         let inp = Inputs { medium: Medium::Snes, look: Look { color: 0x6a3a8a, band: 0xd0a0e0, plastic: 0x202020, tape: false },
-            front: None, game: None, cover: Some(&cover), console: None, moving: &[] };
+            front: None, game: None, cover: Some(&cover), console: None, back: None, back_zoom: None, moving: &[] };
         for (w, h, n) in [(1024u32, 768u32, 1u32), (640, 480, 2)] {
             let t0 = crate::frame_clock::hold();
             let mut view = BoxView::new();

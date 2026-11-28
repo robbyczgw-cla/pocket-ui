@@ -50,9 +50,11 @@ pub fn display_name(stem: &str) -> String {
         }
     }
     let name = out.split_whitespace().collect::<Vec<_>>().join(" ");
-    let name = split_version(&name).0.to_string();
+    let name = split_version(strip_release_number(&name)).0.to_string();
     // A disc named by its serial ("SLES_556.73.Something"): the serial in front goes, the title stays (`disc_serial`).
     let name = crate::disc_serial::clean_stem(&name);
+    // "super_mario_bros": underscores for spaces in a name that has none. A serial-only disc ("SLES_556.74") keeps them.
+    let name = if name.contains('_') && !name.contains([' ', '.']) { name.replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" ") } else { name };
     let (head, tail) = match name.split_once(" - ") {
         Some((h, t)) => (h.to_string(), format!(" - {t}")),
         None => (name.clone(), String::new()),
@@ -63,6 +65,37 @@ pub fn display_name(stem: &str) -> String {
         }
     }
     if name.is_empty() { stem.to_string() } else { name }
+}
+
+/// The release number old scene sets put in front of a name, taken off: "0902 - MegaMan & Bass", "1432 - Harvest Moon -
+/// Friends of Mineral Town" and the SNES set's "1572-Super Street Fighter 2" and "0310 NBA Jam" are the bare titles.
+/// Only exactly four digits count, and only when they can't be part of the title: the number starts with a 0, or it is
+/// no year (1900–2099), so "1943 - The Battle of Midway", "1942", "2048", "007 - GoldenEye", "1080 Snowboarding" and
+/// "100 Bullets" stay. A number before a plain space counts only with its leading 0 ("2020 Super Baseball" stays).
+fn strip_release_number(name: &str) -> &str {
+    let Some(number) = name.get(..4).filter(|n| n.bytes().all(|b| b.is_ascii_digit())) else { return name };
+    let rest = &name[4..];
+    let leading_zero = number.starts_with('0');
+    let year = (1900..=2099).contains(&number.parse::<u32>().unwrap_or(0));
+    let title = if let Some(t) = rest.strip_prefix(" - ") {
+        Some(t).filter(|_| leading_zero || !year)
+    } else if let Some(t) = rest.strip_prefix('-') {
+        // Glued ("1572-Super"): the title must start right there, not with another number or a space ("1990-1995").
+        Some(t).filter(|t| t.starts_with(char::is_alphabetic) && (leading_zero || !year))
+    } else if let Some(t) = rest.strip_prefix(' ') {
+        Some(t).filter(|t| leading_zero && t.starts_with(char::is_alphabetic))
+    } else {
+        None
+    };
+    match title.map(str::trim_start) {
+        Some(t) if t.chars().any(char::is_alphanumeric) => t,
+        _ => name,
+    }
+}
+
+/// Whether a file name starts with a release number [`display_name`] leaves out ("0239 Tiny Toon Adventures").
+pub(crate) fn has_release_number(stem: &str) -> bool {
+    strip_release_number(stem).len() != stem.len()
 }
 
 /// "Zelda,The-Oracle" → "Zelda, The - Oracle": a trailing article written without the spaces around it. Names that
@@ -143,11 +176,16 @@ fn capitalise(token: &str) -> String {
 /// ("Game V1.0") or a small v ("Game v2"); "Robo V2" (a capital V and a whole number after a space) may be the title
 /// and stays, and a name that is nothing but a version stays as it is.
 pub fn split_version(name: &str) -> (&str, Option<&str>) {
+    if let Some(bare) = bare_version(name) {
+        return bare;
+    }
     let Some(v) = name.rfind(['v', 'V']) else { return (name, None) };
     let number = &name[v + 1..];
-    let digits_and_dots = !number.is_empty()
-        && number.split('.').all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()));
     let Some(sep) = name[..v].chars().next_back() else { return (name, None) };
+    // "monomyth_v1_0": a name written with underscores writes its version with them too.
+    let parts: &[char] = if sep == '_' { &['.', '_'] } else { &['.'] };
+    let digits_and_dots = !number.is_empty()
+        && number.split(parts).all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()));
     let taken = digits_and_dots
         && match sep {
             '.' | '_' | '-' => true,
@@ -159,6 +197,16 @@ pub fn split_version(name: &str) -> (&str, Option<&str>) {
         return (name, None);
     }
     (head, Some(&name[v..]))
+}
+
+/// A version without its v at the end, after a space: "Pokemon Ash Gray 4.5.3" is ("Pokemon Ash Gray", Some("4.5.3")).
+/// Only three or more numbers with dots count; "radicalred 4.1" or "Tekken 3" may be the title and stay.
+fn bare_version(name: &str) -> Option<(&str, Option<&str>)> {
+    let (head, number) = name.rsplit_once(' ')?;
+    let parts: Vec<&str> = number.split('.').collect();
+    let version = parts.len() >= 3 && parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()));
+    let head = head.trim_end_matches([' ', '-']);
+    (version && head.chars().any(char::is_alphabetic)).then_some((head, Some(number)))
 }
 
 /// What `display_name` leaves out of a name, in the order it stands: the version ("v1.02") and the tags, each with
@@ -216,4 +264,34 @@ pub struct SysInfo {
     pub path: std::path::PathBuf,
     /// File types it takes, lowercase without the dot, in es_systems order, each once.
     pub extensions: Vec<String>,
+}
+
+/// The systems an upload may go into, one folder per console sold under regional names (`region_pairs`): its main
+/// folder (`megadrive`, `snes`, `nes`, `pcengine`) when the card has it, else the other one that is there (`genesis`
+/// alone), else the main one, made by the upload; the one shown by the name the player chose. Another system of the
+/// list stays as it is. dArkOS's second "snes" entry (`/roms/sufami`) gives way to `/roms/snes`, a folder named for the
+/// console. A page offering this list never asks "Mega Drive or Genesis?" and never shows one console twice.
+pub fn upload_folders<'a>(systems: impl IntoIterator<Item = &'a SysInfo>) -> Vec<SysInfo> {
+    let all: Vec<&SysInfo> = systems.into_iter().collect();
+    let rank = |s: &SysInfo| {
+        let pair = crate::region_pairs::pair_of(&s.id).expect("asked for pairs only");
+        let folder = s.path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        let known = crate::region_pairs::folder_system(folder).is_some_and(|f| pair.ids.contains(&f));
+        let at = pair.ids.iter().position(|id| *id == s.id).unwrap_or(usize::MAX);
+        (!known, !crate::background_io::is_dir(&s.path), at != 0, at)
+    };
+    let mut out = Vec::with_capacity(all.len());
+    for (i, s) in all.iter().enumerate() {
+        let Some(pair) = crate::region_pairs::pair_of(&s.id) else {
+            out.push((*s).clone());
+            continue;
+        };
+        let best = all.iter().enumerate().filter(|(_, o)| crate::region_pairs::pair_of(&o.id).is_some_and(|p| p.key == pair.key)).min_by_key(|(j, o)| (rank(o), *j)).map(|(j, _)| j);
+        if best == Some(i) {
+            let mut one = (*s).clone();
+            one.name = crate::region_pairs::name_of(pair).long.to_string();
+            out.push(one);
+        }
+    }
+    out
 }

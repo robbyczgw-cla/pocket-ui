@@ -162,11 +162,16 @@ fn fit(text: &mut Text, face: Face, px: u32, title: &str, width: i32, max_lines:
     loop {
         let lines = match parts {
             Some((main, sub)) if text.words_fit(face, size, main, width) && text.words_fit(face, sub_px(size), sub, width) => {
-                let mut lines: Vec<Line> = text.wrap(face, size, main, width).into_iter().map(|t| Line { text: t, px: size, sub: false, literal: name }).collect();
+                let wrapped = text.wrap(face, size, main, width);
+                let main = bind_number(text, face, size, wrapped, width);
+                let mut lines: Vec<Line> = main.into_iter().map(|t| Line { text: t, px: size, sub: false, literal: name }).collect();
                 lines.extend(text.wrap(face, sub_px(size), sub, width).into_iter().map(|t| Line { text: t, px: sub_px(size), sub: true, literal: name }));
                 Some(lines)
             }
-            None if text.words_fit(face, size, title, width) => Some(text.wrap(face, size, title, width).into_iter().map(|t| Line { text: t, px: size, sub: false, literal: name }).collect()),
+            None if text.words_fit(face, size, title, width) => Some({
+                let wrapped = text.wrap(face, size, title, width);
+                bind_number(text, face, size, wrapped, width)
+            }.into_iter().map(|t| Line { text: t, px: size, sub: false, literal: name }).collect()),
             _ => None,
         };
         if let Some(lines) = lines.filter(|l| l.len() <= max_lines) {
@@ -194,6 +199,25 @@ fn fit(text: &mut Text, face: Face, px: u32, title: &str, width: i32, max_lines:
         }
         None => text.wrap_at_most(face, size, title, width, max_lines).into_iter().map(|t| Line { text: t, px: size, sub: false, literal: name }).collect(),
     }
+}
+
+/// A short number at a title's end never stands alone on its last line ("Super Mario Bros." over a lone "3", the lead's
+/// review 26.11.2026): the word before it goes down with it ("Super Mario" over "Bros. 3"), as if a no-break space held
+/// them, where the two fit the line. A number: digits or a Roman numeral, at most four letters ("3", "64", "II", "XIII").
+pub(crate) fn bind_number(text: &mut Text, face: Face, px: u32, mut lines: Vec<String>, width: i32) -> Vec<String> {
+    let short_number = |w: &str| w.chars().count() <= 4 && (w.chars().all(|c| c.is_ascii_digit()) || w.chars().all(|c| matches!(c, 'I' | 'V' | 'X')));
+    let n = lines.len();
+    if n < 2 || !short_number(lines[n - 1].trim()) {
+        return lines;
+    }
+    let Some((rest, word)) = lines[n - 2].rsplit_once(' ') else { return lines };
+    let joined = format!("{word} {}", lines[n - 1].trim());
+    if rest.trim().is_empty() || text.width(face, px, &joined) > width {
+        return lines;
+    }
+    lines[n - 2] = rest.trim_end().to_string();
+    lines[n - 1] = joined;
+    lines
 }
 
 /// Where each of `lines` (from `layout`) goes: the left edge and baseline, the first baseline at `first`; `centre`
@@ -253,6 +277,25 @@ mod tests {
         let got = lines(&mut t, "The Legend of Zelda - Ocarina of Time", room, 3);
         assert_eq!(got.iter().map(|l| l.0.as_str()).collect::<Vec<_>>(), ["The Legend of Zelda", "Ocarina of Time"]);
         assert!(got[1].1 < got[0].1, "{got:?}");
+    }
+
+    #[test]
+    fn a_short_number_at_the_end_goes_down_with_the_word_before_it() {
+        // The lead's review 26.11.2026: "Super Mario Bros." over a lone "3".
+        let mut t = Text::builtin();
+        for (title, before) in [("Super Mario Bros. 3", "Super Mario Bros."), ("Final Fantasy VI", "Final Fantasy"), ("Mario Kart 64", "Mario Kart")] {
+            let room = t.width(Face::Title, 67, before) + 6;
+            let got = lines(&mut t, title, room, 3);
+            let texts: Vec<&str> = got.iter().map(|l| l.0.as_str()).collect();
+            assert!(texts.len() >= 2, "{title}: {texts:?}");
+            let last = texts[texts.len() - 1];
+            assert!(last.contains(' '), "{title}: its number is not alone on the last line: {texts:?}");
+            assert!(is_whole(&layout(&mut t, Face::Title, 67, title, room, 3), title), "{title}: every word still there");
+        }
+        // A longer last word is no number: wrapped as before.
+        let room = t.width(Face::Title, 67, "Banjo").max(t.width(Face::Title, 67, "Kazooie")) + 6;
+        let got = lines(&mut t, "Banjo Kazooie", room, 3);
+        assert_eq!(got.iter().map(|l| l.0.as_str()).collect::<Vec<_>>(), ["Banjo", "Kazooie"]);
     }
 
     #[test]

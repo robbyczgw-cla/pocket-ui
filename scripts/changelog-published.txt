@@ -1,7 +1,8 @@
 # CHANGELOG.md sections as the public tag has them: version, sha256 of the section's bytes (its "## [" line
 # up to the next one). Checked by scripts/check-changelog.py; written by its --record vX.Y.Z after a release.
-# from v0.7.0
-# 0.7.0 re-recorded 25.11.2026: date corrected to the release day 2026-11-24; the v0.7.0 tag still says 2026-11-26
+# from v0.7.2
+0.7.2 2c867d9e5554d60cef648b5ab1947db5f998a2f172f6f3a1bff2bcc9faa174b5
+0.7.1 9303c16e8338ea0e78ce6d110c4a02a653d6829dd1134b3c4b353ad13490f7d9
 0.7.0 75daa2d0345ffb0146f402086e174bf04c3fb4820b9b977b40f4bc4248b58e0f
 0.6.0 209b66009adda76aa618e52076599e8e7ac2cc48f2a058660720167f50003181
 0.5.1 17c3d5f765a39995b9338704f90a94e7cc1db80c7343f811678882ceb5adb57e

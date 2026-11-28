@@ -2,6 +2,8 @@
 
 Part of [Playing](playing.md#home): dedicated info pages for each console, plus **Credits & links**.
 
+With Home [by series](playing.md#shelves-by-series), X on a series opens its series card instead.
+
 Most consoles have their own hardware page. Highlight a console on Home and look for **X Details** in the hint bar, then press
 **X** to open it. *(On a game, X still opens the game's [card](library.md).)*
 

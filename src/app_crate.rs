@@ -1082,6 +1082,7 @@ mod big_card_tests {
                 core: None,
                 emulators: Vec::new(),
                 games: (0..n).map(|i| Game { name: format!("{name} {i:06}"), path: format!("/storage/roms/{name}/Game {i:06}.zip").into() }).collect(),
+                parts: Vec::new(),
             })
             .collect()
     }

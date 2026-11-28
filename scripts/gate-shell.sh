@@ -12,12 +12,12 @@ case $lane in
     sh deploy/test-run-pocket-ui.sh >"$L" 2>&1; echo $? >"$RCD/l"
     ;;
  small)
-    { sh scripts/test-verify-device.sh && python3 scripts/test-device-portability.py && python3 scripts/test-device-transfer.py && python3 -I scripts/android/test-release-check.py && python3 -I scripts/test-package-complete.py && { [ ! -f scripts/test-release-fast.sh ] || bash scripts/test-release-fast.sh; }; } >"$V" 2>&1; echo $? >"$RCD/v"
+    { sh scripts/test-verify-device.sh && python3 scripts/test-device-portability.py && python3 scripts/test-device-transfer.py && python3 -I scripts/android/test-release-check.py && python3 -I scripts/test-package-complete.py && { [ ! -f scripts/test-release-fast.sh ] || bash scripts/test-release-fast.sh; } && { [ ! -f scripts/test-release-routes.py ] || python3 -I scripts/test-release-routes.py; }; } >"$V" 2>&1; echo $? >"$RCD/v"
     bash scripts/test-check-core-licences.sh >"$C" 2>&1; echo $? >"$RCD/c"
     sh deploy/package/test-package.sh >"$P" 2>&1; echo $? >"$RCD/p"
     sh deploy/test-grub-quiet.sh >"$Q" 2>&1; echo $? >"$RCD/q"
     { sh scripts/image/test-grub-checks.sh && sh scripts/image/test-bios-checks.sh && sh scripts/test-check-release-tree.sh && sh scripts/image/test-rocknix-source.sh && sh scripts/image/test-h700-pins.sh && sh scripts/image/test-storage-budget.sh && python3 -I scripts/image/test-receipts.py; } >"$G" 2>&1; echo $? >"$RCD/g"
-    { sh deploy/fat/test-hook.sh && sh deploy/image/test-mount-storage.sh; } >"$F" 2>&1; echo $? >"$RCD/f"
+    { sh deploy/fat/test-hook.sh && sh deploy/image/test-mount-storage.sh && sh deploy/darkos/test-make-port.sh; } >"$F" 2>&1; echo $? >"$RCD/f"
     ;;
  *) echo "gate: unknown shell lane $lane" >&2; exit 2 ;;
 esac

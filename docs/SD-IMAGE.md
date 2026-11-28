@@ -530,7 +530,7 @@ The notes (`pocket-ui-info/README.txt` on the card, and `pocket-ui-<version>-rp-
 
 Chosen route (changed 2026-11-02, before 0.1.12): **no big source bundles are uploaded.** ROCKNIX, Knulli
 and pocknix publish no source archives with their releases either. Next to the image stays only
-`pocket-ui-<version>-source.tar.gz` (the `git archive` of the public release commit, which GitHub also gives for every
+`pocket-ui-<version>-src.tar.gz` (the `git archive` of the public release commit, which GitHub also gives for every
 tag: pocket-ui, pocket-core, pocket-splash and the scripts that build the image, `scripts/make-image*.sh`,
 `scripts/image/`, `deploy/`). Everything else is a pointer in `pocket-ui-info/SOURCE-OFFER.txt` and the notes: ROCKNIX's
 repository at the exact tag and commit (every package's recipe, the kernel configuration, all patches), Debian's snapshot

@@ -31,6 +31,10 @@ cp "$HERE"/hwroot/usr/bin/* "$P/port-data/hwroot/usr/bin/"
 # The screenshot stand-in asks pocket-fb for the picture (the same on the Brick's card).
 sed 's|/../../../bin/pocket-fb|/../../../../bin/pocket-fb|' "$REPO/deploy/brick/hwroot/usr/bin/grim" >"$P/port-data/hwroot/usr/bin/grim"
 cp "$REPO/LICENSE" "$P/LICENSE.txt"
+# The Chinese and Japanese font files in app/fonts, one folder above app/bin (src/text_fallback.rs `shipped_dir`), as on the
+# Brick's card (scripts/brick-make-card.sh). Without them zh and ja fell back to English on dArkOS (27.11.2026, the 0.8 kit
+# put them in after this script). Not a part (brick-update-pack.py), so the update tarball made from app/ carries them too.
+sh "$REPO/scripts/shipped-fonts.sh" "$P"
 sh "$REPO/scripts/licence-files.sh" "$P/port-data/licences/pocket-ui"
 chmod +x "$OUT/ports/pocket-ui.sh" "$D/start.sh" "$P/start.sh" "$P"/bin/pocket-* "$P"/port-data/hwroot/usr/bin/*
 echo "$VERSION" >"$P/VERSION"

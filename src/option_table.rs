@@ -243,6 +243,16 @@ pub const GROUPS: &[Group] = &[
                 default: 0,
                 shown_when: None,
             },
+            // The Dreamcast wherever pocket-ui's player plays it with Flycast (`dc_widescreen`): Flycast's widescreen
+            // patches or its widescreen hack, never both; the core reports the 16:9 shape itself.
+            Setting {
+                key: crate::dc_widescreen::KEY,
+                name: "Widescreen",
+                desc: crate::dc_widescreen::DESC,
+                choices: &[c("off", "Off"), c("patch", "Patch"), c("hack", "Hack")],
+                default: 0,
+                shown_when: None,
+            },
         ],
     },
     Group {
@@ -577,6 +587,8 @@ pub fn applies_in(key: &str, system: &str, android: bool) -> bool {
         // Super Nintendo on a handheld measured for it, with a core that has HD Mode 7 (`mode7_hd`); Android's page asks
         // `pause_options` (above).
         crate::mode7_hd::KEY => crate::mode7_hd::here_for(system).is_some(),
+        // The Dreamcast where Flycast plays it (`dc_widescreen`); Android's page asks `pause_options` (above).
+        crate::dc_widescreen::KEY => crate::dc_widescreen::applies(system),
         _ => true,
     }
 }

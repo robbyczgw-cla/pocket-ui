@@ -13,7 +13,9 @@ pub fn hints(action: Option<&str>) -> Vec<(&str, &str)> {
     hints
 }
 
-pub struct Footer<'a> { pub action: Option<&'a str>, pub alert: bool, pub remove: bool }
+/// `north`: what X does on the selected row besides `remove` ("Sign in" on ScreenScraper's). `keep_to`: the rows down to
+/// this one stay in view with the selected one where they fit (ScreenScraper and the four rows under it).
+pub struct Footer<'a> { pub action: Option<&'a str>, pub alert: bool, pub remove: bool, pub north: Option<&'a str>, pub keep_to: Option<usize> }
 
 pub fn paint(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, rows: &[Row], sel: usize, subtitle: Option<&str>, footer: Footer<'_>) {
     hits.clear();
@@ -24,6 +26,7 @@ pub fn paint(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, rows: &[Row], s
     let selected = rows.get(sel);
     let mut hints = hints(footer.action);
     if footer.remove { hints.insert(hints.len() - 1, ("X", "Remove")); }
+    if let Some(north) = footer.north { hints.insert(hints.len() - 1, ("X", north)); }
     let mut top = kit::PAD + 90;
     if let Some(subtitle) = subtitle {
         // A page-wide reason must stay whole when Pictures adds wide controls to the footer.
@@ -42,6 +45,7 @@ pub fn paint(c: &mut Canvas, text: &mut Text, hits: &mut HitMap, rows: &[Row], s
         if footer.alert { pal().alert } else { pal().text });
     let visible = ((bottom - 12 - top) / row_h).max(1) as usize;
     let first = sel.saturating_add(1).saturating_sub(visible);
+    let first = footer.keep_to.map_or(first, |to| first.max((to + 1).min(rows.len()).saturating_sub(visible)).min(sel));
     let width = c.w - 2 * kit::PAD;
     for (i, row) in rows.iter().enumerate().skip(first).take(visible) {
         let y = top + (i - first) as i32 * row_h;

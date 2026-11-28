@@ -55,6 +55,7 @@ fn painter_of(at: &str) -> &'static str {
             "port files" => "port files",
             "runs on" => "runs on",
             "this game" => "this game",
+            "game manual" => "game manual",
             "port performance" => "port perf",
             "screenshots" => "gallery",
             "save versions" => "conflicts",

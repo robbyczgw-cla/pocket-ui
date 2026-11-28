@@ -69,7 +69,11 @@ impl Server {
         let (stop2, wake_r) = (stop.clone(), fds[0]);
         let (done_tx, done) = std::sync::mpsc::channel();
         let thread = std::thread::Builder::new().name("web".into()).spawn(move || {
+            // Temporary files of uploads an earlier pocket-ui left (it ended in the middle of one) go at the start.
+            super::files::sweep_leftovers(&ctx.roots.uploads);
             supervise(&ctx, tx, &stop2, wake_r, fixed, recheck);
+            // Switched off: uploads in pieces under way keep nothing (their temporary files go).
+            ctx.pieces.clear();
             // SAFETY: the read end belongs to this thread from here on.
             unsafe { libc::close(wake_r) };
             let _ = done_tx.send(());

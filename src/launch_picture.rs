@@ -46,6 +46,7 @@ pub fn source_at(base: &Path, kept: &Path) -> Option<Source> {
 
 /// The picture for `rom` of `system`, if it has one.
 pub fn source(data_dir: &Path, system: &str, rom: &Path) -> Option<Source> {
+    let system = crate::region_pairs::own_system(system, rom);
     let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
     source_at(&crate::slots::base(system, stem), &crate::lastframe::frame_path(data_dir, system, rom))
 }

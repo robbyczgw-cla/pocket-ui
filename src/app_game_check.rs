@@ -47,7 +47,29 @@ pub(crate) struct GameCheckUi {
 /// it may answer a little later than the shelf appears.
 const QUIET_AFTER_FIRST_START: std::time::Duration = std::time::Duration::from_secs(120);
 
+/// What Game check needs to find one game in several versions (`game_check::Versions`): the names and checksums the card
+/// already has (nothing is read through, `rom_id::known`, `rom_id::cached_sums`) and the games the player has played or
+/// starred. On the check's thread.
+fn versions_of(data_dir: &std::path::Path, shelf: &[(String, Vec<PathBuf>)], played: std::collections::HashSet<PathBuf>) -> game_check::Versions {
+    let games: Vec<(String, PathBuf)> = shelf.iter().flat_map(|(id, g)| g.iter().map(move |p| (id.clone(), p.clone()))).collect();
+    let paths: Vec<PathBuf> = games.iter().map(|(_, p)| p.clone()).collect();
+    game_check::Versions { names: pocket_ui::rom_id::known(data_dir, &games), sums: pocket_ui::rom_id::cached_sums(data_dir, &paths), played, roots: Default::default() }
+}
+
 impl App {
+    /// The shelf's games the player has something of: play time or a status (`library_meta::ever_played`), a star, a
+    /// place in Recent games. Hash lookups in what the App holds, no file read.
+    fn played_games(&self, shelf: &[(String, Vec<PathBuf>)]) -> std::collections::HashSet<PathBuf> {
+        let starred: std::collections::HashSet<&std::path::Path> = self.favorites.list.iter().map(|f| f.path.as_path()).collect();
+        let recent: std::collections::HashSet<&std::path::Path> = self.recents.list.iter().map(|r| r.path.as_path()).collect();
+        shelf
+            .iter()
+            .flat_map(|(_, g)| g)
+            .filter(|p| self.library.ever_played(p) || starred.contains(p.as_path()) || recent.contains(p.as_path()))
+            .cloned()
+            .collect()
+    }
+
     pub(crate) fn open_game_check(&mut self) -> Option<SettingsPage> {
         self.game_check.page = Some(GameCheckPage::running());
         self.game_check_start();
@@ -70,6 +92,8 @@ impl App {
         let shelf: Vec<(String, Vec<PathBuf>)> = systems.iter().map(|s| (s.name.clone(), s.games.iter().map(|g| g.path.clone()).collect())).collect();
         let (proxy, es_systems) = (self.proxy.clone(), self.es_systems.clone());
         let h700 = pocket_ui::device::current().model.is_some_and(|m| m.small_chip());
+        let played = self.played_games(&shelf);
+        let data_dir = self.data_dir.clone();
         let spawned = std::thread::Builder::new().name("game-check".into()).spawn(move || {
             #[cfg(target_os = "linux")]
             // SAFETY: setpriority on this thread's own id only changes its scheduling.
@@ -84,7 +108,8 @@ impl App {
             };
             let roms = pocket_ui::library::roms_root(&catalog).unwrap_or_else(|| std::path::Path::new("/storage/roms").to_path_buf());
             let bios_dir = if pocket_ui::hostsys::bios_moved() { pocket_ui::hostsys::bios_dir() } else { roms.join("bios") };
-            let input = Input { catalog, shelf, bios_dir, roms, h700 };
+            let versions = versions_of(&data_dir, &shelf, played);
+            let input = Input { catalog, shelf, bios_dir, roms, h700, versions };
             let mut sent = Instant::now();
             let mut progress = |done: usize, total: usize, system: &str| {
                 if sent.elapsed().as_millis() >= PROGRESS_EVERY_MS {
@@ -393,7 +418,9 @@ impl App {
                 let catalog = pocket_ui::library::all_systems(&self.es_systems).unwrap_or_default();
                 let roms = pocket_ui::library::roms_root(&catalog).unwrap_or_default();
                 let shelf = self.systems.iter().map(|s| (s.name.clone(), s.games.iter().map(|g| g.path.clone()).collect())).collect();
-                let input = Input { catalog, shelf, bios_dir: roms.join("bios"), roms, h700: pocket_ui::device::current().model.is_some_and(|m| m.small_chip()) };
+                let shelf: Vec<(String, Vec<PathBuf>)> = shelf;
+                let versions = versions_of(&self.data_dir, &shelf, self.played_games(&shelf));
+                let input = Input { catalog, shelf, bios_dir: roms.join("bios"), roms, h700: pocket_ui::device::current().model.is_some_and(|m| m.small_chip()), versions };
                 let report = game_check::check(&input, &AtomicBool::new(false), &mut |_, _, _| {});
                 let mut report = report.unwrap_or_default();
                 report.note_system_list(&self.es_systems);

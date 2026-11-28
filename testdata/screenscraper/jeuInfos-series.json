@@ -1,0 +1,99 @@
+{
+ "header": {
+  "APIversion": "2.0",
+  "success": "true",
+  "error": ""
+ },
+ "response": {
+  "ssuser": {
+   "id": "",
+   "maxthreads": "1",
+   "maxdownloadspeed": "128",
+   "maxrequestspermin": "3072",
+   "maxrequestsperday": "10000",
+   "maxrequestskoperday": "1000",
+   "requeststoday": "70",
+   "requestskotoday": "0"
+  },
+  "jeu": {
+   "id": "3769",
+   "systeme": {
+    "id": "12",
+    "text": "Game Boy Advance"
+   },
+   "noms": [
+    {
+     "region": "ss",
+     "text": "Metroid - Zero Mission"
+    },
+    {
+     "region": "us",
+     "text": "Metroid : Zero Mission"
+    }
+   ],
+   "familles": [
+    {
+     "id": "3945",
+     "nomcourt": "",
+     "noms": [
+      {
+       "langue": "fr",
+       "text": "Metroid"
+      }
+     ],
+     "parentid": "0",
+     "principale": "0"
+    }
+   ],
+   "numeros": [
+    {
+     "id": "3766",
+     "nomcourt": "",
+     "noms": [
+      {
+       "langue": "fr",
+       "text": "1"
+      }
+     ],
+     "parentid": "0",
+     "principale": "0"
+    }
+   ],
+   "rom": {
+    "romregions": "us"
+   },
+   "medias": [
+    {
+     "crc": "c4ca3cf3",
+     "format": "png",
+     "md5": "e83dfe7dd95c6135d692578c88c83be2",
+     "parent": "jeu",
+     "region": "cn",
+     "sha1": "eacda8ad3020edeb17b62f6338a04f26083851cb",
+     "size": "46678",
+     "type": "box-2D-side"
+    },
+    {
+     "crc": "36cd93fb",
+     "format": "png",
+     "md5": "329ef85135c26186b9c64f52f36b74b9",
+     "parent": "jeu",
+     "region": "eu",
+     "sha1": "326933e2a6851495f952b1ae37338bcf60d337b7",
+     "size": "50070",
+     "type": "box-2D-side"
+    },
+    {
+     "crc": "025fa252",
+     "format": "png",
+     "md5": "5064f1da5dec9cd8070c35d07e585627",
+     "parent": "jeu",
+     "region": "jp",
+     "sha1": "f722ac155d9ea317993328e0df0b9087aba1d7e5",
+     "size": "112645",
+     "type": "box-2D-side"
+    }
+   ]
+  }
+ }
+}

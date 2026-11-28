@@ -29,6 +29,18 @@ pub const ANDROID_DESC: &str = "The turning, tilting floors of Super Mario Kart,
 /// The core pocket-core starts SNES games with for HD and HD widescreen on a ROCKNIX card.
 pub const LINUX_CORE: &str = "bsnes_hd_beta";
 
+/// Where pocket-ui's own bsnes-hd lies, beside the programs in the version folder as gpSP and DSperate do
+/// (`scripts/bsnes-hd-files.sh`, every ROCKNIX package and the app update): a card whose image has none still has HD.
+/// The packaging scripts look for this name in the program to require the core (`make-install-zip.sh --bsnes-hd`).
+pub const BUNDLED: &str = "cores/bsnes_hd_beta_libretro.so";
+
+/// [`BUNDLED`] beside the running program (`POCKETUI_BSNES_HD_CORE` for tests).
+pub fn bundled_path() -> std::path::PathBuf {
+    std::env::var_os("POCKETUI_BSNES_HD_CORE").map(std::path::PathBuf::from).unwrap_or_else(|| {
+        std::env::current_exe().ok().and_then(|p| p.parent().map(std::path::Path::to_path_buf)).unwrap_or_default().join(BUNDLED)
+    })
+}
+
 /// The SNES folders (ROCKNIX's `snes`, `sfc` and `snesh`).
 pub fn is_snes(system: &str) -> bool {
     matches!(system, "snes" | "sfc" | "snesh")
@@ -94,7 +106,8 @@ pub fn with_offer<T>(offer: Option<Offer>, f: impl FnOnce() -> T) -> T {
     out
 }
 
-/// Whether a core with HD Mode 7 is there: the app's bsnes on Android; on a card bsnes-hd in the image (or installed).
+/// Whether a core with HD Mode 7 is there: the app's bsnes on Android; on a card bsnes-hd in the image, installed, or
+/// pocket-ui's own beside the programs ([`bundled_path`], `store::core_path`).
 pub fn available() -> bool {
     #[cfg(target_os = "android")]
     {
@@ -152,6 +165,18 @@ pub fn start_core<'a>(data: &std::path::Path, system: &str, rom: &std::path::Pat
     }
     let settings = crate::options::GameSettings::load(data, system, rom);
     linux_core(system, usual, mode(offer, settings.values.get(KEY).map(String::as_str)), installed)
+}
+
+/// A saved HD or HD widescreen the handheld would offer, while bsnes-hd isn't there: the start plays Original on Snes9x
+/// ([`here`] hides the row then), and the start says so (`swap_note`) instead of dropping the choice quietly.
+#[cfg(all(target_os = "linux", not(target_os = "android")))]
+pub fn chosen_without_core(data: &std::path::Path, system: &str, rom: &std::path::Path) -> bool {
+    if !is_snes(system) || available() {
+        return false;
+    }
+    let Some(offer) = offer(crate::render_scale::here_class(), crate::device::current().screen()) else { return false };
+    let settings = crate::options::GameSettings::load(data, system, rom);
+    mode(Some(offer), settings.values.get(KEY).map(String::as_str)) != "original"
 }
 
 /// The core options of a start for the mode, by core (`core_options::core_id`): bsnes-hd gets scale and widescreen,

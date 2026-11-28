@@ -288,14 +288,22 @@ fn every_cozy_extra_is_described_with_its_start() {
     let rows = first_table(&section(&read("docs/user/settings.md"), "Cozy extras"));
     let doc: Vec<String> = rows.iter().map(|r| bold(&r[0])).collect();
     let mut code: Vec<&str> = pocket_ui::cozy_extras::Extra::shown().iter().map(|e| e.label()).collect();
+    let extras = code.len();
     code.push(super::app_cozy_extras::GBA_MODEL_NAME);
-    assert_eq!(doc, code, "docs/user/settings.md, \"Cozy extras\": every switch and the GBA model selector, in page order");
+    code.extend(pocket_ui::region_pairs::rows().map(|p| p.row));
+    assert_eq!(doc, code, "docs/user/settings.md, \"Cozy extras\": every switch, the GBA model selector and the console names, in page order");
+    // A console name starts as the one outside America (`region_pairs::Pair::names`' first), the American one said beside it.
+    for (r, p) in rows[extras + 1..].iter().zip(pocket_ui::region_pairs::rows()) {
+        assert!(r[2].starts_with(p.names[0].label), "Cozy extras: {}'s start is {}", p.row, p.names[0].label);
+        let american = p.names[p.american].label;
+        assert!(p.american == 0 || r[2].contains(&format!("{american} in English with an American time zone")), "Cozy extras: {}'s American start", p.row);
+    }
     for (r, e) in rows.iter().zip(pocket_ui::cozy_extras::Extra::shown()) {
         // Playful cases follows Animations until it is switched (`Extras::playful_animations`).
         let start = if e == pocket_ui::cozy_extras::Extra::Playful { "On with Cozy, Off with Quick" } else if e.default_on() { "On" } else { "Off" };
         assert_eq!(r[2], start, "docs/user/settings.md, \"Cozy extras\": {}'s start", e.label());
     }
-    assert_eq!(rows.last().unwrap()[2], pocket_ui::system_art::GbaModel::default().label(), "Cozy extras: the GBA selector starts with the classic model");
+    assert_eq!(rows[extras][2], pocket_ui::system_art::GbaModel::default().label(), "Cozy extras: the GBA selector starts with the classic model");
 }
 
 #[test]

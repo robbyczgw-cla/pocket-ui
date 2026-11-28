@@ -260,7 +260,9 @@ struct Inner {
     made: AtomicUsize,
     /// The folders uploads under way write into, and how many of them use each: a cut upload removes a folder it made
     /// only when no other upload uses it (review N1).
-    in_use: Mutex<std::collections::HashMap<PathBuf, usize>>,
+    in_use: Arc<Mutex<std::collections::HashMap<PathBuf, usize>>>,
+    /// Files arriving in pieces (`start`, `part`): a phone's browser can't send a large file in one request.
+    pieces: files::Pieces<Piece>,
     /// The last request that had the code.
     last: Mutex<Instant>,
     started: Instant,
@@ -356,6 +358,8 @@ impl Server {
     pub fn start(listener: TcpListener, cfg: Config) -> std::io::Result<Server> {
         let addr = listener.local_addr()?;
         listener.set_nonblocking(true)?;
+        // A file left half sent goes when the page would close for want of the phone.
+        let cfg_idle = cfg.idle;
         let inner = Arc::new(Inner {
             cfg,
             #[cfg(test)]
@@ -373,7 +377,8 @@ impl Server {
             active_auth: AtomicUsize::new(0),
             bad: AtomicUsize::new(0),
             made: AtomicUsize::new(0),
-            in_use: Mutex::new(std::collections::HashMap::new()),
+            in_use: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            pieces: files::Pieces::with_idle(cfg_idle),
             last: Mutex::new(Instant::now()),
             started: Instant::now(),
             last_notify: Mutex::new(Instant::now()),
@@ -519,8 +524,12 @@ fn listen(inner: &Arc<Inner>, listener: TcpListener) {
             }
         }
     }
-    // The socket closes here; whatever is still under way is cut.
+    // The socket closes here; whatever is still under way is cut, and files left half sent go.
     inner.close(None);
+    for gone in inner.pieces.sweep(|_| true) {
+        piece_gone(inner, gone);
+    }
+    inner.pieces.clear();
     {
         let mut fd = inner.listen_fd.lock().unwrap_or_else(|e| e.into_inner());
         *fd = -1;
@@ -635,6 +644,9 @@ fn respond(inner: &Inner, req: &http::Request, body: &mut BufReader<Timed>) -> R
         ("GET" | "HEAD", "app.css") => Response::new(200, "text/css; charset=utf-8", PAGE_CSS.as_bytes().to_vec()),
         ("POST", "check") => check(inner, req),
         ("POST", "upload") => upload(inner, req, body),
+        ("POST", "start") => start(inner, req),
+        ("POST", "part") => part(inner, req, body),
+        ("POST", "cancel") => cancel(inner, req),
         _ => plain(404, "Not found"),
     };
     inner.touch();
@@ -655,11 +667,9 @@ pub fn allowed(sys: &SysInfo) -> Option<(Vec<String>, u64)> {
 
 /// The page with the code in its paths and the systems in a JSON block (read by the script, never run).
 fn page(inner: &Inner) -> Response {
-    let systems: Vec<serde_json::Value> = inner
-        .cfg
-        .systems
+    // One folder per console sold under regional names (`library::upload_folders`), as `candidates` decides.
+    let systems: Vec<serde_json::Value> = crate::library::upload_folders(inner.cfg.systems.iter().filter(|s| files::system_folder_ok(&inner.cfg.roots, s) && allowed(s).is_some()))
         .iter()
-        .filter(|s| files::system_folder_ok(&inner.cfg.roots, s))
         .filter_map(|s| allowed(s).map(|(exts, max)| json!({ "id": s.id, "name": s.name, "folder": s.folder, "ext": exts, "max": max })))
         .collect();
     // `<` escaped: a system's name can't end the block.
@@ -680,12 +690,32 @@ fn bios_name(name: &str) -> bool {
 
 /// The one of `several` systems that the extension `ext` means ([`PREFER`], else the system called like it).
 fn preferred<'a>(several: &[&'a SysInfo], ext: &str) -> Option<&'a SysInfo> {
-    let want = PREFER.iter().find(|(e, _)| *e == ext).map_or(ext, |(_, id)| *id);
-    several.iter().copied().find(|s| s.id == want)
+    let want = preferred_id(ext);
+    // `genesis` stands for `megadrive` when it is the card's only folder of the console (`candidates`).
+    several.iter().copied().find(|s| s.id == want).or_else(|| several.iter().copied().find(|s| crate::region_pairs::same_shelf(&s.id, want)))
 }
 
-/// The systems that take `name` over this page by its extension.
+/// The system id a common extension means where several take it ([`PREFER`]), else the extension itself.
+pub fn preferred_id(ext: &str) -> &str {
+    PREFER.iter().find(|(e, _)| *e == ext).map_or(ext, |(_, id)| *id)
+}
+
+/// [`PREFER`] for a page's script: extension → system id.
+pub fn prefer_map() -> std::collections::BTreeMap<String, String> {
+    PREFER.iter().map(|(e, id)| (e.to_string(), id.to_string())).collect()
+}
+
+/// The systems that take `name` over this page by its extension: one folder per console sold under regional names
+/// (`library::upload_folders`: a `.md` goes into `megadrive`, or into `genesis` when only that is on the card).
 pub fn candidates<'a>(roots: &Roots, systems: &'a [SysInfo], name: &str) -> Vec<&'a SysInfo> {
+    let fits = every_fit(roots, systems, name);
+    let one = crate::library::upload_folders(fits.iter().copied());
+    fits.into_iter().filter(|s| crate::region_pairs::pair_of(&s.id).is_none() || one.iter().any(|o| o.id == s.id && o.path == s.path)).collect()
+}
+
+/// Every system that takes `name` here, both folders of a console sold under regional names among them: a system the
+/// phone names itself (`sfc` from a page of before 0.8) is still taken.
+fn every_fit<'a>(roots: &Roots, systems: &'a [SysInfo], name: &str) -> Vec<&'a SysInfo> {
     systems
         .iter()
         .filter(|s| files::system_folder_ok(roots, s) && allowed(s).is_some_and(|(exts, _)| files::matching_ext(name, &exts).is_some()))
@@ -736,13 +766,13 @@ impl Plan {
     /// claim on them; [`Claim::release`] gives them back (and removes the ones this upload made, if it failed and no
     /// other upload uses them). Made and claimed under one lock, so a folder another upload is about to use is never
     /// removed in between.
-    fn make<'a>(&self, roots: &Roots, inner: &'a Inner) -> Result<(PathBuf, Claim<'a>), Refused> {
+    fn make(&self, roots: &Roots, inner: &Inner) -> Result<(PathBuf, Claim), Refused> {
         let mut uses = inner.in_use.lock().unwrap_or_else(|e| e.into_inner());
         let folders = self.folders();
         for f in &folders {
             *uses.entry(f.clone()).or_insert(0) += 1;
         }
-        let mut claim = Claim { inner, folders, made: Vec::new() };
+        let mut claim = Claim { uses: inner.in_use.clone(), folders, made: Vec::new(), released: false };
         let result = (|| {
             let existed = self.sys.path.exists();
             let dir = files::system_folder(roots, &self.sys)?;
@@ -775,19 +805,35 @@ impl Plan {
     }
 }
 
-/// An upload's hold on the folders it writes into ([`Plan::make`]).
-struct Claim<'a> {
-    inner: &'a Inner,
+/// An upload's hold on the folders it writes into ([`Plan::make`]). Dropped without [`Claim::release`] (a file in
+/// pieces left half sent), it is released as failed.
+struct Claim {
+    uses: Arc<Mutex<std::collections::HashMap<PathBuf, usize>>>,
     folders: Vec<PathBuf>,
     /// The ones it made, oldest first.
     made: Vec<PathBuf>,
+    released: bool,
 }
 
-impl Claim<'_> {
+impl Drop for Claim {
+    fn drop(&mut self) {
+        self.give_back(true);
+    }
+}
+
+impl Claim {
     /// Gives the folders back. `failed`: the folders this upload made go too, newest first, where no other upload
     /// uses them and they are empty.
-    fn release(self, failed: bool) {
-        let mut uses = self.inner.in_use.lock().unwrap_or_else(|e| e.into_inner());
+    fn release(mut self, failed: bool) {
+        self.give_back(failed);
+    }
+
+    fn give_back(&mut self, failed: bool) {
+        if std::mem::replace(&mut self.released, true) {
+            return;
+        }
+        let uses = self.uses.clone();
+        let mut uses = uses.lock().unwrap_or_else(|e| e.into_inner());
         for f in &self.folders {
             if let Some(n) = uses.get_mut(f) {
                 *n -= 1;
@@ -829,7 +875,7 @@ pub fn plan(roots: &Roots, systems: &[SysInfo], raw: &str, system: Option<&str>,
         return cover_plan(roots, systems, name, system);
     }
     let sys = match system {
-        Some(id) => *fits.iter().find(|s| s.id == id).ok_or_else(|| Refused::NotAllowed("That system doesn't take this kind of file here.".into()))?,
+        Some(id) => *every_fit(roots, systems, &name).iter().find(|s| s.id == id).ok_or_else(|| Refused::NotAllowed("That system doesn't take this kind of file here.".into()))?,
         None => match fits.as_slice() {
             [] => return Err(Refused::NotAllowed("No system takes this kind of file here.".into())),
             [one] => *one,
@@ -1115,19 +1161,7 @@ fn upload(inner: &Inner, req: &http::Request, body: &mut BufReader<Timed>) -> Re
         Err(e) => return refused(e),
     };
     inner.made.fetch_add(1 + claim.made.len(), Ordering::SeqCst);
-    let id = inner.seq.fetch_add(1, Ordering::Relaxed) | (1 << 63);
-    {
-        let mut st = inner.status();
-        st.files.push(FileRow { id, name: p.name.clone(), done: 0, total: len, state: FileState::Receiving });
-        let over = st.files.len().saturating_sub(ROWS_KEPT);
-        // The oldest finished rows go first; one still arriving stays.
-        for _ in 0..over {
-            if let Some(i) = st.files.iter().position(|f| f.state != FileState::Receiving) {
-                st.files.remove(i);
-            }
-        }
-    }
-    inner.changed(true);
+    let id = new_row(inner, &p.name, len);
     let (never, stop) = (|| false, || inner.stop.load(Ordering::SeqCst));
     let gate = files::Gate { wait: &never, abort: &stop, no_programs: true };
     let uploads = &inner.cfg.roots.uploads;
@@ -1145,19 +1179,7 @@ fn upload(inner: &Inner, req: &http::Request, body: &mut BufReader<Timed>) -> Re
         other => other,
     };
     claim.release(result.is_err());
-    {
-        let mut st = inner.status();
-        if let Some(f) = st.files.iter_mut().find(|f| f.id == id) {
-            f.state = match &result {
-                Ok(_) => FileState::Added,
-                Err(e) => FileState::Failed(e.message()),
-            };
-        }
-        if result.is_ok() {
-            st.added += 1;
-        }
-    }
-    inner.changed(true);
+    row_ended(inner, id, result.as_ref().map(|_| ()).map_err(Refused::message));
     match result {
         Ok(w) => {
             println!("phone upload: {} ({} bytes)", shown(&inner.cfg.roots, &t), w.bytes);
@@ -1168,6 +1190,192 @@ fn upload(inner: &Inner, req: &http::Request, body: &mut BufReader<Timed>) -> Re
             refused(e)
         }
     }
+}
+
+/// A new row on the Pocket's page for a file that starts arriving.
+fn new_row(inner: &Inner, name: &str, len: u64) -> u64 {
+    let id = inner.seq.fetch_add(1, Ordering::Relaxed) | (1 << 63);
+    {
+        let mut st = inner.status();
+        st.files.push(FileRow { id, name: name.to_string(), done: 0, total: len, state: FileState::Receiving });
+        let over = st.files.len().saturating_sub(ROWS_KEPT);
+        // The oldest finished rows go first; one still arriving stays.
+        for _ in 0..over {
+            if let Some(i) = st.files.iter().position(|f| f.state != FileState::Receiving) {
+                st.files.remove(i);
+            }
+        }
+    }
+    inner.changed(true);
+    id
+}
+
+/// The row `id` says the file was added or why not.
+fn row_ended(inner: &Inner, id: u64, result: Result<(), String>) {
+    {
+        let mut st = inner.status();
+        if let Some(f) = st.files.iter_mut().find(|f| f.id == id && f.state == FileState::Receiving) {
+            f.state = match &result {
+                Ok(()) => FileState::Added,
+                Err(e) => FileState::Failed(e.clone()),
+            };
+        }
+        if result.is_ok() {
+            st.added += 1;
+        }
+    }
+    inner.changed(true);
+}
+
+/// A file arriving in pieces ([`start`], [`part`]): Chrome on Android can't send a large file from the phone's
+/// file picker in one request (25.11.2026, a 1.62 GB PS2 disc broke off at once), so the page reads it in
+/// [`files::PIECE`]s and sends each on its own. The checks, the folders and the room are those of a whole file
+/// ([`upload`]); a disc sheet is read and checked before it is put in place.
+struct Piece {
+    part: files::Partial,
+    plan: Plan,
+    /// The Pocket's row for it.
+    row: u64,
+    claim: Option<Claim>,
+}
+
+/// Dropped half sent (cancelled, left, the page closed): its row says so.
+fn piece_gone(inner: &Inner, p: Piece) {
+    row_ended(inner, p.row, Err(Refused::Short.message()));
+    drop(p);
+}
+
+/// Before a file in pieces: every check of a whole file ([`upload`]) for `size` bytes, the room held, the folders
+/// and the temporary file made. Answers the `id` the pieces name and the piece size.
+fn start(inner: &Inner, req: &http::Request) -> Response {
+    let Some(len) = req.query("size").and_then(|s| s.parse::<u64>().ok()) else {
+        return refused(Refused::Io("The phone did not say how large the file is.".into()));
+    };
+    for gone in inner.pieces.sweep(|_| false) {
+        piece_gone(inner, gone);
+    }
+    let p = match plan_of(inner, req).and_then(|p| room_for(inner, &p, len).map(|()| p)) {
+        Ok(p) => p,
+        Err(e) => return refused(e),
+    };
+    // Never over an existing file: whoever has the code could otherwise replace a game with anything.
+    if std::fs::symlink_metadata(p.path()).is_ok() {
+        return refused(Refused::Exists(format!("{} is there already.", p.name)));
+    }
+    if p.sheet() && len > MAX_SHEET {
+        return refused(Refused::TooBig("That disc sheet is too large.".into()));
+    }
+    let room = match files::reserve(&inner.cfg.roots.roms.join(".probe"), len, p.max) {
+        Ok(r) => r,
+        Err(e) => return refused(e),
+    };
+    let (t, claim) = match p.make(&inner.cfg.roots, inner) {
+        Ok(t) => t,
+        Err(e) => return refused(e),
+    };
+    // The folders are given back (and removed when made and empty) if this fails.
+    let part = match files::Partial::begin(&t, &inner.cfg.roots.uploads, len, false, true, room) {
+        Ok(part) => part,
+        Err(e) => return refused(e),
+    };
+    inner.made.fetch_add(1 + claim.made.len(), Ordering::SeqCst);
+    let row = new_row(inner, &p.name, len);
+    let shown_path = shown(&inner.cfg.roots, &t);
+    let id = inner.pieces.add(Piece { part, plan: p, row, claim: Some(claim) });
+    println!("phone upload: started in pieces ({len} bytes)");
+    Response::json(200, &json!({ "ok": true, "id": id, "piece": files::PIECE, "path": shown_path }))
+}
+
+/// One piece of a file in pieces: `id`, `offset` (exactly the bytes the Pocket has) and the bytes as the body. The
+/// last one puts the file in place. A piece at the wrong place is refused with the bytes the Pocket has (`received`).
+fn part(inner: &Inner, req: &http::Request, body: &mut BufReader<Timed>) -> Response {
+    let Some(len) = req.content_length else {
+        return refused(Refused::Io("The phone did not say how large the piece is.".into()));
+    };
+    let id = req.query("id").unwrap_or("");
+    let Some(offset) = req.query("offset").and_then(|s| s.parse::<u64>().ok()) else {
+        return refused(Refused::Io("Where does this piece go?".into()));
+    };
+    body.get_mut().until = None;
+    let Some(slot) = inner.pieces.get(id) else {
+        files::discard(body, len);
+        return Response::json(404, &json!({ "ok": false, "error": "That file did not arrive whole. Nothing was kept. Send it again.", "code": "gone" }));
+    };
+    let mut pc = slot.lock().unwrap_or_else(|e| e.into_inner());
+    let row = pc.row;
+    let (never, stop) = (|| false, || inner.stop.load(Ordering::SeqCst));
+    let gate = files::Gate { wait: &never, abort: &stop, no_programs: true };
+    let result = pc.part.append(&mut Counting { r: &mut *body, inner, id: row }, offset, len, &gate);
+    let received = pc.part.received();
+    if let Some(f) = inner.status().files.iter_mut().find(|f| f.id == row) {
+        f.done = received;
+    }
+    match result {
+        Ok(()) if !pc.part.complete() => Response::json(200, &json!({ "ok": true, "received": received })),
+        Ok(()) => {
+            inner.pieces.remove(id);
+            let (ext, sheet_dir) = (pc.plan.ext.clone(), pc.plan.path().parent().map(Path::to_path_buf).unwrap_or_else(|| inner.cfg.roots.roms.clone()));
+            let sheet = pc.plan.sheet();
+            let t = pc.part.target().to_path_buf();
+            // A disc sheet is small: read whole and checked before it is kept (security review M6).
+            let result = pc.part.finish(|tmp| {
+                if !sheet {
+                    return Ok(());
+                }
+                let data = std::fs::read(tmp).map_err(|e| Refused::Io(format!("Can't read the disc sheet: {e}")))?;
+                sheet_ok(&ext, &data, &sheet_dir)
+            });
+            // A cover that is not a picture is taken out again at once: pocket-ui would show a broken box.
+            #[cfg(feature = "brick")]
+            let result = match result {
+                Ok(_) if pc.plan.ext == "png" && pc.plan.sub.as_deref() == Some(".media") && !is_png(&t) => {
+                    let _ = std::fs::remove_file(&t);
+                    Err(Refused::NotAllowed("That cover is not a PNG picture.".into()))
+                }
+                other => other,
+            };
+            if let Some(c) = pc.claim.take() {
+                c.release(result.is_err());
+            }
+            drop(pc);
+            row_ended(inner, row, result.as_ref().map(|_| ()).map_err(Refused::message));
+            match result {
+                Ok(w) => {
+                    println!("phone upload: {} ({} bytes, in pieces)", shown(&inner.cfg.roots, &t), w.bytes);
+                    Response::json(200, &json!({ "ok": true, "path": shown(&inner.cfg.roots, &t) }))
+                }
+                Err(e) => {
+                    println!("phone upload: refused at the end ({})", e.status());
+                    refused(e)
+                }
+            }
+        }
+        Err(e) if files::Partial::goes_on(&e) => {
+            if matches!(e, Refused::Offset(_)) {
+                files::discard(&mut *body, len);
+            }
+            let code = if matches!(e, Refused::Short) { "cut_off" } else { "offset" };
+            Response::json(e.status(), &json!({ "ok": false, "error": e.message(), "code": code, "received": received }))
+        }
+        Err(e) => {
+            println!("phone upload: stopped in pieces at {received} of {} bytes ({})", pc.part.total(), e.status());
+            drop(pc);
+            inner.pieces.remove(id);
+            row_ended(inner, row, Err(e.message()));
+            refused(e)
+        }
+    }
+}
+
+/// The phone gave up on a file in pieces: its temporary file and the folders it made go, its room is free.
+fn cancel(inner: &Inner, req: &http::Request) -> Response {
+    if let Some(slot) = inner.pieces.remove(req.query("id").unwrap_or("")) {
+        let row = slot.lock().unwrap_or_else(|e| e.into_inner()).row;
+        drop(slot);
+        row_ended(inner, row, Err(Refused::Short.message()));
+        println!("phone upload: cancelled in pieces");
+    }
+    Response::json(200, &json!({ "ok": true }))
 }
 
 #[cfg(test)]
@@ -1371,6 +1579,31 @@ mod tests {
         assert!(env.leftovers().is_empty());
         let st = env.server().status();
         assert_eq!((st.added, st.files.len(), st.files[0].state.clone(), st.files[0].done), (1, 1, FileState::Added, 12));
+    }
+
+    /// 0.8 (`region_pairs`): a Mega Drive game is never asked about between `megadrive`, `genesis` and
+    /// `megadrive-japan`: it goes into `megadrive`, or into `genesis` when only that is on the card; the page lists one.
+    #[test]
+    fn a_console_with_several_folders_takes_its_games_into_one_folder_unasked() {
+        let dir = tempfile::tempdir().unwrap();
+        let roms = dir.path().join("roms");
+        std::fs::create_dir_all(roms.join("genesis")).unwrap();
+        let exts = ["md", "bin", "gen", "zip"];
+        let systems = vec![
+            sys(&roms, "megadrive", "Mega Drive", &exts),
+            sys(&roms, "genesis", "Genesis", &exts),
+            sys(&roms, "megadrive-japan", "Mega Drive", &exts),
+            sys(&roms, "megadriveh", "Mega Drive (Hacks)", &exts),
+        ];
+        let roots = Roots::under(&roms);
+        let ids = |name: &str| candidates(&roots, &systems, name).iter().map(|s| s.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids("Sonic.md"), ["genesis", "megadriveh"], "the folder that is there, and the hacks of their own");
+        assert_eq!(plan(&roots, &systems, "Sonic.md", None, None).unwrap().path(), roms.join("genesis/Sonic.md"));
+        std::fs::create_dir_all(roms.join("megadrive")).unwrap();
+        assert_eq!(ids("Sonic.md"), ["megadrive", "megadriveh"]);
+        assert_eq!(plan(&roots, &systems, "Sonic.md", None, None).unwrap().path(), roms.join("megadrive/Sonic.md"));
+        // A folder the phone names itself (a page of before 0.8) is still taken.
+        assert_eq!(plan(&roots, &systems, "Jp.md", Some("megadrive-japan"), None).unwrap().path(), roms.join("megadrive-japan/Jp.md"));
     }
 
     #[test]
@@ -1593,10 +1826,31 @@ mod tests {
         wait_for(|| env.leftovers().is_empty());
         assert!(!env.roms.join("gba/Open.gba").exists());
         assert!(TcpStream::connect(addr).is_err(), "nothing listens once the page is closed");
-        // The phone sees the connection end.
-        s.set_read_timeout(Some(crate::testutil::timeout(Duration::from_secs(2)))).unwrap();
-        let mut buf = [0u8; 16];
-        assert!(s.write_all(&[7u8; 300_000]).is_err() || s.read(&mut buf).map_or(true, |n| n == 0));
+        // The phone sees the connection end. The abort and the socket cut run side by side on the server, so the refusal
+        // of the cut upload may still reach the phone first (under load it sits in the buffer when we look): read
+        // whatever is already on its way up to the end (EOF or reset) within a deadline, but never a success.
+        let deadline = Instant::now() + crate::testutil::timeout(Duration::from_secs(5));
+        s.set_write_timeout(Some(crate::testutil::timeout(Duration::from_secs(5)))).unwrap();
+        // A failed write only says the phone is cut off; what was already answered is still read below.
+        let _ = s.write_all(&[7u8; 300_000]);
+        let mut said = Vec::new();
+        let ended = loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                break false;
+            }
+            s.set_read_timeout(Some(left)).unwrap();
+            let mut buf = [0u8; 1024];
+            match s.read(&mut buf) {
+                Ok(0) => break true,
+                Ok(n) => said.extend_from_slice(&buf[..n]),
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => break false,
+                Err(_) => break true,
+            }
+        };
+        assert!(ended, "the phone's connection still open after the page closed; read so far: {:?}", String::from_utf8_lossy(&said));
+        assert!(!said.starts_with(b"HTTP/1.1 200"), "a cut upload is never answered as added");
     }
 
     #[test]
@@ -1905,5 +2159,149 @@ mod tests {
             assert!(t0.elapsed() < crate::testutil::timeout(Duration::from_secs(5)), "timed out");
             std::thread::sleep(Duration::from_millis(20));
         }
+    }
+
+    // --- files in pieces (the page sends every file this way: Chrome on Android broke off a 1.62 GB disc sent whole) ---
+
+    fn start(env: &Env, query: &str, size: usize) -> (u16, serde_json::Value) {
+        let (status, body) = env.post(&format!("/{}/start?{query}&size={size}", env.token()), b"");
+        (status, serde_json::from_str(&body).unwrap_or(serde_json::Value::Null))
+    }
+
+    fn piece_id(env: &Env, query: &str, size: usize) -> String {
+        let (status, v) = start(env, query, size);
+        assert_eq!(status, 200, "{v}");
+        v["id"].as_str().unwrap().to_string()
+    }
+
+    fn part(env: &Env, id: &str, offset: usize, bytes: &[u8]) -> (u16, serde_json::Value) {
+        let (status, body) = env.post(&format!("/{}/part?id={id}&offset={offset}", env.token()), bytes);
+        (status, serde_json::from_str(&body).unwrap_or(serde_json::Value::Null))
+    }
+
+    #[test]
+    fn a_file_in_pieces_arrives_in_order_and_only_then_is_in_place() {
+        let env = Env::new(IDLE);
+        let id = piece_id(&env, "name=Big.gba", 12);
+        let st = env.server().status();
+        assert_eq!((st.files[0].total, st.files[0].state.clone()), (12, FileState::Receiving), "the Pocket shows it arriving");
+        assert_eq!(part(&env, &id, 0, b"abcd").1["received"], 4);
+        assert_eq!(env.server().status().files[0].done, 4);
+        let (status, v) = part(&env, &id, 8, b"ijkl");
+        assert_eq!((status, v["received"].as_u64(), v["code"].as_str()), (416, Some(4), Some("offset")), "a piece must start where the file stands");
+        assert_eq!(part(&env, &id, 0, b"abcd").0, 416, "the same piece twice is not written twice");
+        assert!(!env.roms.join("gba/Big.gba").exists(), "nothing in place before the last byte");
+        assert_eq!(part(&env, &id, 4, b"efgh").0, 200);
+        let (status, v) = part(&env, &id, 8, b"ijkl");
+        assert_eq!(status, 200, "{v}");
+        assert_eq!(v["path"], "roms/gba/Big.gba");
+        assert_eq!(std::fs::read(env.roms.join("gba/Big.gba")).unwrap(), b"abcdefghijkl");
+        let st = env.server().status();
+        assert_eq!((st.files[0].state.clone(), st.files[0].done, st.added), (FileState::Added, 12, 1));
+        assert!(env.leftovers().is_empty());
+        let (status, v) = part(&env, &id, 12, b"x");
+        assert_eq!((status, v["code"].as_str()), (404, Some("gone")));
+    }
+
+    #[test]
+    fn a_disc_sheet_in_pieces_is_read_before_it_is_kept() {
+        let env = Env::new(IDLE);
+        let bad = b"FILE \"../../psp/x.bin\" BINARY\n";
+        let id = piece_id(&env, "name=Evil.cue&system=psx&dir=Evil", bad.len());
+        let (status, v) = part(&env, &id, 0, bad);
+        assert_eq!((status, v["code"].as_str()), (403, Some("sheet_names")), "{v}");
+        assert!(!env.roms.join("psx/Evil/Evil.cue").exists());
+        assert!(!env.roms.join("psx/Evil").exists(), "the folder it made goes with it");
+        assert!(env.leftovers().is_empty());
+        let good = b"FILE \"Good.bin\" BINARY\n";
+        let id = piece_id(&env, "name=Good.cue&system=psx&dir=Good", good.len());
+        assert_eq!(part(&env, &id, 0, good).0, 200);
+        assert_eq!(std::fs::read(env.roms.join("psx/Good/Good.cue")).unwrap(), good);
+        assert_eq!(start(&env, "name=Big.cue&system=psx&dir=Big", (MAX_SHEET + 1) as usize).0, 413, "a sheet larger than any is refused at the start");
+    }
+
+    #[test]
+    fn a_file_in_pieces_keeps_the_rules_of_a_whole_one() {
+        let env = Env::new(IDLE);
+        std::fs::create_dir_all(env.roms.join("gba")).unwrap();
+        std::fs::write(env.roms.join("gba/Keep.gba"), b"old").unwrap();
+        assert_eq!(start(&env, "name=Keep.gba", 3).0, 409, "never over an existing file");
+        assert_eq!(start(&env, "name=Keep.gba&overwrite=1", 3).0, 409);
+        assert_eq!(start(&env, "name=Huge.gba", (CART + 1) as usize).0, 413);
+        assert_eq!(start(&env, "name=Game.srm", 3).0, 403);
+        assert_eq!(start(&env, "name=x.sh&system=ports", 3).0, 403);
+        let (status, body) = env.post(&format!("/{}/start?name=NoSize.gba", env.token()), b"");
+        assert!(status >= 400, "{body}");
+        // A program is refused also when its first bytes come in two pieces.
+        let id = piece_id(&env, "name=Prog.gba", 8);
+        assert_eq!(part(&env, &id, 0, b"\x7fE").0, 200);
+        assert_eq!(part(&env, &id, 2, b"LF\x02\x01\x01\x00").0, 403);
+        assert!(!env.roms.join("gba/Prog.gba").exists());
+        assert_eq!(std::fs::read(env.roms.join("gba/Keep.gba")).unwrap(), b"old");
+        assert!(env.leftovers().is_empty());
+        // Without the code: nothing.
+        assert_eq!(env.post("/wrongcode/start?name=x.gba&size=1", b"").0, 403);
+    }
+
+    #[test]
+    fn a_cancelled_file_keeps_nothing_and_its_row_says_so() {
+        let env = Env::new(IDLE);
+        let id = piece_id(&env, "name=Gone.gba", 8);
+        assert!(env.roms.join("gba").is_dir());
+        assert_eq!(part(&env, &id, 0, b"abcd").0, 200);
+        assert_eq!(env.post(&format!("/{}/cancel?id={id}", env.token()), b"").0, 200);
+        assert!(env.leftovers().is_empty());
+        assert!(!env.roms.join("gba").exists(), "the system folder it made goes");
+        assert!(matches!(env.server().status().files[0].state, FileState::Failed(_)));
+        assert_eq!(part(&env, &id, 4, b"efgh").0, 404);
+    }
+
+    #[test]
+    fn closing_the_page_between_pieces_keeps_nothing() {
+        let mut env = Env::new(IDLE);
+        let id = piece_id(&env, "name=Half.gba", 8);
+        assert_eq!(part(&env, &id, 0, b"abcd").0, 200);
+        assert_eq!(env.leftovers().len(), 1);
+        env.server = None;
+        wait_for(|| env.leftovers().is_empty());
+        assert!(!env.roms.join("gba/Half.gba").exists());
+        assert!(!env.roms.join("gba").exists());
+    }
+
+    #[test]
+    fn pieces_a_phone_reads_from_a_large_file_make_it_byte_for_byte() {
+        let env = Env::new(IDLE);
+        let data: Vec<u8> = (0..(20u32 << 20) + 12345).map(|i| (i.wrapping_mul(2_654_435_761) >> 11) as u8).collect();
+        let id = piece_id(&env, "name=Disc.iso&system=ps2", data.len());
+        let mut at = 0;
+        let last = loop {
+            let end = (at + files::PIECE as usize).min(data.len());
+            let (status, v) = part(&env, &id, at, &data[at..end]);
+            assert_eq!(status, 200, "{v}");
+            if v["path"].is_string() {
+                break v;
+            }
+            at = end;
+        };
+        assert_eq!(last["path"], "roms/ps2/Disc.iso");
+        assert!(std::fs::read(env.roms.join("ps2/Disc.iso")).unwrap() == data);
+    }
+
+    /// A whole piece sent again after its answer was lost is answered (the phone reads where the Pocket stands), never
+    /// cut off with a reset connection.
+    #[test]
+    fn a_whole_piece_at_the_wrong_place_is_answered_not_reset() {
+        let env = Env::new(IDLE);
+        let piece = vec![5u8; files::PIECE as usize];
+        let id = piece_id(&env, "name=Twice.iso&system=ps2", piece.len() * 2);
+        assert_eq!(part(&env, &id, 0, &piece).0, 200);
+        for _ in 0..3 {
+            let (status, v) = part(&env, &id, 0, &piece);
+            assert_eq!((status, v["received"].as_u64()), (416, Some(files::PIECE)));
+        }
+        let (status, v) = part(&env, "0000000000000000", 0, &piece);
+        assert_eq!((status, v["code"].as_str()), (404, Some("gone")));
+        assert_eq!(part(&env, &id, files::PIECE as usize, &piece).0, 200);
+        assert_eq!(std::fs::metadata(env.roms.join("ps2/Twice.iso")).unwrap().len(), 2 * files::PIECE);
     }
 }

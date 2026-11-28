@@ -37,6 +37,10 @@ fn the_package_name_is_the_same_in_the_manifest_the_java_classes_and_the_native_
         }
     }
     java_files(std::path::Path::new(&format!("{root}/android/java")), &mut others);
+    // Shizuku's binder interfaces and parcel (Android extras, docs/ANDROID-EXTRAS.md) keep their own package: it is part of
+    // Shizuku's protocol (the interface descriptor, the parcel's class name), not ours to rename.
+    let vendored = format!("{root}/android/java/moe/shizuku/");
+    others.retain(|p| !p.to_string_lossy().starts_with(&vendored));
     assert_eq!(others.len(), classes.len(), "Java files outside {folder}: {others:?}");
     let mangled = format!("Java_{}_", PACKAGE.replace('.', "_"));
     let mut natives = 0;

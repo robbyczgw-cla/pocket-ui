@@ -160,6 +160,22 @@ in-game progress you made in pocket-ui.
 
 **The R36S's own card:** since 0.7.0 there is a pocket-ui card for genuine R36S handhelds, as a beta, tested on an original R36S. It goes in TF1 and plays from your original card in TF2. Steps and download: [pocketui.xyz/install#r36s](https://pocketui.xyz/install#r36s).
 
+### Which one is for you?
+
+On an R36S, R36XX or similar 640×480 handheld, you can run pocket-ui in two ways: as **pocket-ui OS** on its own microSD card (built on ROCKNIX), or as **pocket-ui beta for dArkOS** launched from Ports on your existing card.
+
+| | pocket-ui OS (own card, ROCKNIX) | pocket-ui beta for dArkOS (from Ports) |
+|---|---|---|
+| **Getting started** | Flash a spare card, put it in TF1, and boot straight to the shelf. | Copy the port folder into `ports`. No flashing; dArkOS and your games stay untouched. |
+| **Games** | Reads your original or dArkOS card in TF2 as it is, without changing its layout. | Uses your existing dArkOS card directly (game folders stay read-only). |
+| **In-game picture** | Screen frames, in-game Picture options, the Pixel Path strip and achievement cards. | Software picture only: no screen frames, in-game Picture options, Pixel Path strip or achievement cards (volume, brightness, battery, save warnings and FPS still show). |
+| **Wi-Fi & clock** | Clock in pocket-ui. A genuine R36S has no built-in Wi-Fi and needs a USB adapter for online features. | Set Wi-Fi, clock and Bluetooth in dArkOS. When dArkOS is online, pocket-ui uses that Wi-Fi connection. |
+| **Updates** | Single update zip on your games card ([Updates](updates.md)); Wi-Fi updates need a USB adapter on a genuine R36S. | Own update channel when dArkOS is online, or a single update zip on `EASYROMS` ([Updates](updates.md)). |
+| **Going back** | Power off and put your old card back in TF1. | Choose **Back to EmulationStation** anytime, or delete the port folder from `ports`. |
+| **Boards & clones** | Beta for genuine R36S units; the R36XX uses the same card. Other clones aren't covered. Newer screens need a panel file, picked automatically from your original card in TF2 or copied by hand from the [panel table](other-handhelds.md#r36s-beta). | dArkOS handles its own hardware: runs on 640×480 R36S, R36XX, R36H and clones already running dArkOS (720×720 Plus, Max and Ultra models aren't supported). |
+
+Want the full pocket-ui? Use [the card](https://pocketui.xyz/install#r36s). Want to keep your dArkOS setup and just try it? Use [the beta from Ports](https://pocketui.xyz/install#darkos).
+
 ## Coming from Android
 
 Use a backup on your computer to copy your games and saves over. Access to internal storage depends on the

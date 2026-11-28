@@ -36,7 +36,7 @@ class FakeDevice:
     def idle(self): pass
 
     def snapshot(self):
-        return dict(volume=self.volume,executable_sha256='a'*64,topology=TOPOLOGY)
+        return dict(volume=self.volume,executable_sha256='a'*64,topology=TOPOLOGY,initial=dict(volume=self.volume))
 
     def set_volume(self,percent): self.volume=percent
 
@@ -44,9 +44,8 @@ class FakeDevice:
         if percent == self.abort_at: raise RuntimeError('physical input')
         # Hardware steps captured on the Plus, not inferred from the production DAC helper.
         line = {10:2,20:4,30:11,40:16,50:19,60:23,70:25,80:28,90:30,100:31}[percent]
-        dac = {10:44,20:44,30:45,40:48,50:50,60:53,70:55,80:58,90:60,100:63}[percent]
-        controls = dict(ON,**{'Line Out Playback Volume':str(line), 'DAC Playback Volume':str(dac)})
-        if self.old_curve and percent==50: controls['DAC Playback Volume']='31'
+        controls = dict(ON,**{'Line Out Playback Volume':str(line), 'DAC Playback Volume':'63'})
+        if self.old_curve and percent==50: controls['DAC Playback Volume']='50'
         soft = min(1,10**((60*math.log10(percent/100)-(-46.5+line*1.5))/20))
         row=check.gain_row(percent,controls,dict(softVolumes=[soft,soft]))
         row['pcm']='closed'
@@ -70,11 +69,18 @@ class VolumeCheckTests(unittest.TestCase):
         controls=dict(ON,**{'DAC Playback Volume':'50'})
         current=check.gain_row(50,controls,dict(softVolumes=[1,1]))
         self.assertAlmostEqual(current['measured_db'][0],-33.08)
-        self.assertTrue(current['passed'])
+        self.assertFalse(current['passed'])
+        unity = dict(ON,**{'DAC Playback Volume':'63'})
+        row = check.gain_row(50,unity,dict(softVolumes=[1,1]))
+        self.assertAlmostEqual(row['measured_db'][0],-18.0)
+        self.assertTrue(row['passed'])
         controls=dict(ON,**{'Line Out Playback Volume':'31', 'DAC Playback Volume':'63'})
         maximum=check.gain_row(100,controls,dict(softVolumes=[1,1]))
         self.assertAlmostEqual(maximum['measured_db'][0],0.0)
         self.assertTrue(maximum['passed'])
+        self.assertFalse(check.gain_row(100,controls,dict(softVolumes=[0.99,1]))['passed'])
+        with self.assertRaises(AssertionError):
+            check.gain_row(100,controls,dict(softVolumes=[1,1.01]))
 
     def test_unknown_topology_or_tlv_is_not_treated_as_h700(self):
         check.validate_topology(**TOPOLOGY)
@@ -89,6 +95,7 @@ class VolumeCheckTests(unittest.TestCase):
         self.assertEqual(result['status'],'pass')
         self.assertEqual(device.volume,75)
         self.assertTrue(device.restored)
+        self.assertEqual(result['initial']['volume'],75)
         check.verify(result,'a'*64)
 
     def test_curve_failure_and_interruption_both_restore(self):

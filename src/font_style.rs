@@ -154,7 +154,7 @@ impl FontStyle {
         static RETRO: OnceLock<Fitted> = OnceLock::new();
         static RETRO_DEPARTURE: OnceLock<Fitted> = OnceLock::new();
         match self {
-            FontStyle::Retro if retro_letters() == RetroLetters::Departure => Some(RETRO_DEPARTURE.get_or_init(|| {
+            FontStyle::Retro if effective_letters() == RetroLetters::Departure => Some(RETRO_DEPARTURE.get_or_init(|| {
                 // One face for titles and body text, on its 11-pixel grid like Pixelify's (`Alt::grid`), with its own
                 // digits and capitals: they tell apart without the LCD set (`Alt::lcd`). Its letters stand one font
                 // pixel apart instead of two (`Alt::tight`) and a little lower than Barlow's capitals: every letter
@@ -310,6 +310,13 @@ pub fn set_retro_letters(l: RetroLetters) {
 
 pub fn retro_letters() -> RetroLetters {
     RetroLetters::from_u8(load(&LETTERS, &THREAD_LETTERS))
+}
+
+/// The letters Retro paints with: `retro_letters`, but Departure Mono while the interface is Vietnamese (Pixelify has
+/// none of its stacked marks, Departure Mono all 146 letters: scripts/departure-vietnamese.py). Settings still shows and
+/// keeps the player's choice; it is back in any other language.
+pub fn effective_letters() -> RetroLetters {
+    if crate::i18n::current() == crate::i18n::Lang::Vi { RetroLetters::Departure } else { retro_letters() }
 }
 
 /// The style in use from the next glyph on (Settings, the start); every `Text` follows by itself.

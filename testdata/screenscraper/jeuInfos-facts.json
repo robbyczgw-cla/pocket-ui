@@ -1,0 +1,103 @@
+{
+  "header": {
+    "APIversion": "2.0",
+    "success": "true",
+    "error": ""
+  },
+  "response": {
+    "jeu": {
+      "id": "9001",
+      "noms": [
+        {
+          "region": "ss",
+          "text": "Farm Days"
+        }
+      ],
+      "synopsis": [
+        {
+          "langue": "en",
+          "text": "Run the old farm.\r\n\r\nPlant, harvest and raise a family. The &quot;best&quot; part: any way you want!"
+        },
+        {
+          "langue": "de",
+          "text": "Bewirtschafte den alten Hof.\r\nPflanze, ernte und gründe eine Familie."
+        },
+        {
+          "langue": "fr",
+          "text": "Reprends la vieille ferme."
+        },
+        {
+          "langue": "xx",
+          "text": "Not a language we speak."
+        }
+      ],
+      "genres": [
+        {
+          "id": "8",
+          "principale": "0",
+          "noms": [
+            {
+              "langue": "en",
+              "text": "Role Playing Game"
+            },
+            {
+              "langue": "de",
+              "text": "Rollenspiele"
+            }
+          ]
+        },
+        {
+          "id": "40",
+          "principale": "1",
+          "noms": [
+            {
+              "langue": "en",
+              "text": "Simulation"
+            },
+            {
+              "langue": "de",
+              "text": "Simulation"
+            },
+            {
+              "langue": "es",
+              "text": "Simulación"
+            }
+          ]
+        }
+      ],
+      "joueurs": {
+        "text": "1 - 4"
+      },
+      "note": {
+        "text": "18"
+      },
+      "developpeur": {
+        "id": "1",
+        "text": "Field Works"
+      },
+      "editeur": {
+        "id": "2",
+        "text": "Barn &amp; Co"
+      },
+      "dates": [
+        {
+          "region": "fr",
+          "text": "2004-03-26"
+        },
+        {
+          "region": "jp",
+          "text": "2003-04-18"
+        },
+        {
+          "region": "us",
+          "text": "2003-11-17"
+        },
+        {
+          "region": "eu",
+          "text": "2004-03-26"
+        }
+      ],
+      "medias": []
+    }
+  }
+}

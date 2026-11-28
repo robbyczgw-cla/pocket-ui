@@ -104,7 +104,10 @@ list; the skipped suites are built by the nightly run), runs all unit tests (wit
 layout matrices listed in `scripts/gate-parts.py` (`text_size`, `long_titles`, `nav_explorer`, `small_screen`, …)
 and the absolute CPU budgets (`BUDGET`: `launch_frames`, `shelf_moves`; they run alone and went red on an
 overloaded host in 4 trains of 3 days, none a real slowdown). The budgets never run in the merge gate, not even when their own
-file changes; the timing tier neither. The compile-first stage checks Brick and Android. `scripts/gate-parts.py` adds what the
+file changes; the timing tier neither. Since 25.11.2026 every host timing budget (`scripts/host-budgets.txt`: those suites and
+single tests such as `tv_glow`'s and `cabinet_art`'s cost ratios) is a warning in every tier, `GATE_FULL=1` and the release check
+too: `scripts/host-budgets.sh` runs them alone in the nightly run and NIGHTLY.md counts the red ones. A behaviour test that also
+times something stays in the gate. The compile-first stage checks Brick and Android. `scripts/gate-parts.py` adds what the
 change touches:
 
 `settings_open::settings_first_frame_draws_no_glyph_and_runs_no_pattern` runs in every ordinary merge gate.

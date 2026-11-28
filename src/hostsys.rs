@@ -326,10 +326,33 @@ const SCUMMVM_OPTS: &[(&str, &str)] = &[
 const TIC80_OPTS: &[(&str, &str)] = &[("tic80_pointer_device", "touchscreen")];
 
 /// ROCKNIX's start_pico8.sh runs `roms/pico-8/aarch64/pico8_64` when that folder exists, else `roms/pico-8/pico8_64`.
+/// An empty `aarch64` folder beside a `pico8_64` one level up counts as installed: [`pico8_tidy`] takes the empty folder
+/// away before the start, so start_pico8.sh finds the program (25.11.2026: the empty folder hid it, carts quietly went
+/// to FAKE-08). A folder with files but without the program keeps start_pico8.sh's reading: not installed.
 fn pico8_installed(roms: &Path) -> bool {
     let dir = roms.join("pico-8");
     let arch = dir.join("aarch64");
-    if arch.is_dir() { arch } else { dir }.join("pico8_64").is_file()
+    if arch.join("pico8_64").is_file() {
+        return true;
+    }
+    (!arch.is_dir() || dir_is_empty(&arch)) && dir.join("pico8_64").is_file()
+}
+
+fn dir_is_empty(dir: &Path) -> bool {
+    std::fs::read_dir(dir).is_ok_and(|mut d| d.next().is_none())
+}
+
+/// Before the official PICO-8 starts (start_pico8.sh): an empty `roms/pico-8/aarch64` that would send the script to a
+/// program that isn't there, while `pico8_64` sits one level up, is removed (only an empty folder: `remove_dir`).
+pub fn pico8_tidy(roms: &Path) {
+    let dir = roms.join("pico-8");
+    let arch = dir.join("aarch64");
+    if arch.is_dir() && dir_is_empty(&arch) && dir.join("pico8_64").is_file() {
+        match std::fs::remove_dir(&arch) {
+            Ok(()) => println!("pico-8: removed the empty {} so start_pico8.sh finds {}", arch.display(), dir.join("pico8_64").display()),
+            Err(e) => eprintln!("pico-8: {}: {e}", arch.display()),
+        }
+    }
 }
 
 /// Cores whose state size changes while a game runs, wherever pocket-ui routes them (the HOST_CORES systems such as
@@ -1052,12 +1075,20 @@ mod tests {
         std::fs::write(roms.join("pico-8/pico8_64"), b"x").unwrap();
         assert_eq!(route("pico-8", &bios), None, "the user's own PICO-8: ROCKNIX's start_pico8.sh, as before");
         assert_eq!(default_emulator("pico-8", &bios), None, "es_systems' default (pico-8 / pico8) applies");
+        // 25.11.2026: an empty aarch64 folder hid the program one level up, and carts quietly went to FAKE-08. It counts
+        // as installed now, and the start takes the empty folder away so start_pico8.sh finds the program (`pico8_tidy`).
         std::fs::create_dir_all(roms.join("pico-8/aarch64")).unwrap();
-        assert_eq!(
-            route("pico-8", &bios),
-            Some("fake08"),
-            "an aarch64 folder without the binary: start_pico8.sh would fail"
-        );
+        assert_eq!(route("pico-8", &bios), None, "an empty aarch64 folder doesn't hide pico8_64 one level up");
+        assert_eq!(default_emulator("pico-8", &bios), None);
+        pico8_tidy(&roms);
+        assert!(!roms.join("pico-8/aarch64").exists(), "the empty folder is gone before start_pico8.sh runs");
+        assert!(roms.join("pico-8/pico8_64").is_file(), "the program stays where it is");
+        // A folder with other files but no program: start_pico8.sh would fail there, so FAKE-08, and nothing is removed.
+        std::fs::create_dir_all(roms.join("pico-8/aarch64")).unwrap();
+        std::fs::write(roms.join("pico-8/aarch64/pico8.dat"), b"x").unwrap();
+        assert_eq!(route("pico-8", &bios), Some("fake08"), "an aarch64 folder with files but without the binary: start_pico8.sh would fail");
+        pico8_tidy(&roms);
+        assert!(roms.join("pico-8/aarch64/pico8.dat").is_file(), "a folder with files in it is never touched");
         std::fs::write(roms.join("pico-8/aarch64/pico8_64"), b"x").unwrap();
         assert_eq!(route("pico-8", &bios), None);
         // Other systems have no stand-in.

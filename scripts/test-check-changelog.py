@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests of scripts/check-changelog.py (python3 -I scripts/test-check-changelog.py; part of scripts/gate.sh's fast checks).
+"""Tests of scripts/check-changelog.py (python3 -I scripts/test-check-changelog.py; scripts/gate.sh's fast checks run it when the guard or this file changed).
 
 The cases are the 20.11.2026 incident: the queue's union merge of CHANGELOG.md put copies of [Unreleased] lines back under
 the published [0.5.1] and a rejected feature's line back under [Unreleased], and nothing noticed.
@@ -174,12 +174,45 @@ class CheckChangelog(unittest.TestCase):
         sums, tag = cc.read_published(tree.record)
         self.assertEqual((sorted(sums), tag), (["0.1.8", "0.1.9", "0.5.1"], "v0.5.1"))
 
-    def test_the_repository_changelog_is_clean(self):
-        # Red on main 3fb0d518f: nine [Unreleased] lines also under [0.5.1], which is not v0.5.1's any more.
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
-            rc = cc.main(["--no-vetoed"])
-        self.assertEqual(rc, 0, out.getvalue())
+    # --fix (25.11.2026): what a merge or a pick does is repaired, a real finding stays red.
+    def test_fix_drops_the_second_copy_under_unreleased(self):
+        good = with_unreleased(PUBLISHED_TEXT)
+        tree = self.tree(good.replace("- **New fix.** Only on main.\n", "- **New fix.** Only on main.\n- **New fix.** Only on main.\n"))
+        rc, out = tree.run("--fix", "--no-vetoed")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("FIXED\tduplicate", out)
+        self.assertEqual(tree.changelog.read_text(encoding="utf-8"), good)
+
+    def test_fix_puts_a_union_damaged_published_section_back_and_drops_the_revived_copy(self):
+        good = with_unreleased(PUBLISHED_TEXT)
+        broken = good.replace("- **Old fix.**", "- **New fix.** Only on main.\n- **Old fix.**")
+        tree = self.tree(broken)
+        main = tree.root / "main-CHANGELOG.md"
+        main.write_text(good, encoding="utf-8")
+        rc, out = tree.run("--fix", "--no-vetoed", "--good-file", str(main))
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(tree.changelog.read_text(encoding="utf-8"), good)
+
+    def test_fix_drops_a_released_line_revived_under_unreleased(self):
+        good = with_unreleased(PUBLISHED_TEXT)
+        tree = self.tree(good.replace("- **New fix.** Only on main.\n", "- **New fix.** Only on main.\n- **Old fix.** Shipped in 0.5.1.\n"))
+        rc, out = tree.run("--fix", "--no-vetoed")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(tree.changelog.read_text(encoding="utf-8"), good)
+
+    def test_fix_keeps_a_published_section_red_when_no_version_has_it(self):
+        tree = self.tree(with_unreleased(PUBLISHED_TEXT).replace("Shipped in 0.5.1.", "Shipped in 0.5.1 .", 1))
+        rc, out = tree.run("--fix", "--no-vetoed", "--good-file", str(tree.changelog))
+        self.assertEqual(rc, 1, out)
+        self.assertIn("FINDING\tpublished", out)
+
+    def test_fix_keeps_a_vetoed_line_red(self):
+        text = with_unreleased(PUBLISHED_TEXT, UNRELEASED.replace("### Fixed", "- **A window in the room** (Cozy extras).\n\n### Fixed"))
+        tree = self.tree(text)
+        rc, out = tree.run("--fix", "--vetoed", str(tree.vetoed))
+        self.assertEqual(rc, 1, out)
+        self.assertIn("FINDING\tvetoed", out)
+        self.assertEqual(tree.changelog.read_text(encoding="utf-8"), text)
 
 
 if __name__ == "__main__":

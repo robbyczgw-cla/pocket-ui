@@ -69,7 +69,8 @@ to white or other tints, **Anaglyph preset** outputs red/blue or red/cyan 3D, an
 (applies next launch).
 
 **Sega Saturn:** pocket-core requires `saturn_bios.bin`, `sega_101.bin` or `mpr-17933.bin` inside `roms/bios`; without
-one, Saturn games silently launch in ROCKNIX's standalone YabaSanshiro (which ships an HLE BIOS). Supports `.cue`, `.chd`
+one, Saturn games launch in ROCKNIX's standalone YabaSanshiro (which ships an HLE BIOS), and pocket-ui says so at the
+start ([below](#when-a-game-plays-on-another-emulator)). Supports `.cue`, `.chd`
 and `.iso`. Default controls on Mini V2: bottom = A, right = B, left = X, top = Y, L1 = C, R1 = Z, L2/R2 = L/R, left
 stick = D-pad (remappable under Pause → Controls). Note: in-game saves aren't shared with standalone YabaSanshiro yet.
 
@@ -110,8 +111,9 @@ states; save in-game or via START → Save (shared with standalone ScummVM).
 **PICO-8 and TIC-80:** `.p8`/`.p8.png` and `.tic` carts. On PICO-8, A = X and B = O; on TIC-80, touch acts as mouse.
 Neither core supports reliable save states (Quit saves no moment, though in-game high scores and cartdata save
 normally). Drop official Linux PICO-8 (`pico8_64`) into `roms/pico-8/aarch64` (or `roms/pico-8`) to run native PICO-8
-(pause menu shows Continue, Options, Quit) and unlock ROCKNIX's built-in "Splore" browser; without it, any cart
-pocket-core can't launch falls back to RetroArch's FAKE-08.
+(pause menu shows Continue, Options, Quit) and unlock ROCKNIX's built-in "Splore" browser. An empty `aarch64` folder
+next to `pico8_64` in `roms/pico-8` is removed at the start, so the program one level up is found. Without the official
+player, carts play with FAKE-08 (RetroArch's FAKE-08 for a cart pocket-core can't launch), and the start says so.
 
 Pause menu on pocket-core: Continue, Save, Load, Options and Save & quit (plus Achievements when signed in; START opens
 Quick settings; ScummVM, PICO-8 and TIC-80 show Quit since they lack save states). See [The pause menu](pause-menu.md).
@@ -175,6 +177,23 @@ Crashes *after* the first frame, or games that already have pocket-core save sta
 never automatically change emulators so your saved moments stay accessible. Updating pocket-ui clears older automatic fallbacks
 so previously failed games get a fresh shot. Missing BIOS errors never fall back either (RetroArch needs the same BIOS,
 except Saturn which defaults to standalone YabaSanshiro without a BIOS).
+
+### When a game plays on another emulator
+
+pocket-ui never switches emulators quietly. When the emulator you picked under [Runs on](options.md#runs-on), or the
+usual one, isn't available on this handheld, the game still starts with the next one and a short line says what plays
+instead, for example *"gpSP isn't available here, so this game plays with mGBA."* In pocket-core the line shows over the
+game's first seconds; for RetroArch and the standalone emulators it is a card on the shelf (once per session) that stays
+until you close it with A. It shows for:
+
+- a per-game or per-console pick whose emulator or core isn't installed, or pocket-core picked for a file type it doesn't open
+- Saturn without a Saturn BIOS (YabaSanshiro's built-in BIOS; the line also says that with a Saturn BIOS in `roms/bios` the game plays in pocket-core with the full pause menu)
+- PICO-8 carts without the official player (FAKE-08)
+- Game Boy Advance on H700 and RK3326 without pocket-ui's gpSP (mGBA)
+- a saved [Mode 7](options.md#mode-7) HD choice without bsnes-hd (Snes9x)
+
+The planned defaults stay quiet: *Jeanne d'Arc* on standalone PPSSPP, the TrimUI Brick/Smart Pro cores in the table above,
+and GBA games kept on mGBA for their mGBA save states.
 
 ### Game Boy Advance on H700
 
@@ -291,4 +310,30 @@ mapped to the left stick on stickless units ([Runs on › D-pad](options.md#runs
 
 Drop games into `roms/<folder>`, one folder per console. Folder names follow ROCKNIX's standard layout; check the
 subfolders already created under `roms` on your SD card for the full list.
+
+### One console, several folders
+
+Some consoles were sold under different names in different regions, and ROCKNIX and dArkOS give each name a folder of
+its own. pocket-ui shows each of these consoles as one shelf with the games of all its folders:
+
+| Console | Folders |
+|---|---|
+| Mega Drive / Genesis | `megadrive`, `genesis`, `megadrive-japan` |
+| SNES / Super Famicom | `snes`, `sfc` |
+| NES / Famicom | `nes`, `famicom`, `fc` |
+| PC Engine / TurboGrafx-16 | `pcengine`, `tg16`, `turbografx` (dArkOS) |
+| PC Engine CD / TurboGrafx-CD | `pcenginecd`, `tg16cd`, `turbografxcd` (dArkOS) |
+| Mega-CD / Sega CD | `segacd`, `megacd` |
+
+Nothing moves on your SD card. Each game keeps its saves, states, play time, favourite star, covers and notes, and it
+still starts with the emulator chosen for its folder (Runs on of a game in `genesis` shows the Genesis folder's choice).
+The hacks folders (`megadriveh`, `snesh`, `nesh`) and the 32X stay shelves of their own.
+
+The name on the shelf is yours to pick under **Settings › Look › Cozy extras** ([Cozy extras](settings.md#cozy-extras)).
+It starts as Genesis, SNES with the US console, TurboGrafx-16, NES and Sega CD in English with an American time zone,
+and as Mega Drive, SNES, PC Engine, NES and Mega-CD everywhere else. Famicom and Super Famicom show only when you pick
+them. The console pictures stay the same; the SNES (US console) puts every SNES game into the US console when it starts.
+
+Uploads over the [web companion](web-companion.md) and [from your phone](phone-upload.md) go into the main folder
+(`megadrive`, `snes`, `nes`, `pcengine`), or into the other one when only that is on your card.
 <!-- TODO: add a complete table of folder names and file types, generated from es_systems.cfg. -->

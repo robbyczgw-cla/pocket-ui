@@ -8,6 +8,10 @@
     scripts/check-changelog.py --restore X.Y.Z              network: put the public tag's section back, byte for byte
     scripts/check-changelog.py --record vX.Y.Z              network, after a release is published: record every released
                                                             section of that tag in scripts/changelog-published.txt
+    scripts/check-changelog.py --fix [--good-ref REF]...    offline repair of what merges and picks do: drops the copies of a
+                                                            duplicate line and puts a changed published section back from a
+                                                            git version whose section matches the record (default refs:
+                                                            origin/main, main, HEAD); then the checks; exit 0 when clean
 
 The checks (findings as `FINDING<TAB>kind<TAB>CHANGELOG.md:line<TAB>what`):
   published   a section listed in scripts/changelog-published.txt ([0.5.1] ...) must stay byte-equal to the public tag
@@ -19,6 +23,10 @@ The checks (findings as `FINDING<TAB>kind<TAB>CHANGELOG.md:line<TAB>what`):
               the last two `|`). The list is the
               --vetoed FILE, else $CHANGELOG_VETOED, else release-kit/VETOED.txt beside the repository's folder; none = skipped.
 
+--fix (25.11.2026, gate false reds): a duplicate or a revived published line is the merge's doing, not the author's; the queue
+runs --fix after its union (one queue commit) and tools/fast-checks.sh after a release pick, so only a vetoed line or a
+published section no git version can restore is still red.
+
 Why (20.11.2026): the merge queue unions CHANGELOG.md on conflicts. One train put nine old lines back under the
 published [0.5.1] (copies of [Unreleased] lines) and a rejected feature's line back under [Unreleased]; the gate was green.
 """
@@ -28,6 +36,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import urllib.request
 
@@ -137,6 +146,62 @@ def check(data, published, vetoed, label="CHANGELOG.md"):
     return findings
 
 
+def fix(data, published, good=()):
+    """(repaired bytes, [(kind, what)]): duplicate copies dropped, published sections put back from `good` (other versions of
+    the file, as bytes) where one of them has the recorded section. Vetoed lines and unrestorable sections stay as they are."""
+    done = []
+    parts = sections(data)
+    for name, _, body in parts:
+        if name not in published or digest(body) == published[name]:
+            continue
+        for other in good:
+            want = next((b for n, _, b in sections(other) if n == name and digest(b) == published[name]), None)
+            if want is not None:
+                data = data.replace(body, want, 1)
+                done.append(("published", f"[{name}] put back as published"))
+                break
+    # Duplicates, on the file with its published sections back. A line a published section has is history: every copy in an
+    # open section goes. Else the first copy stays ([Unreleased] is on top) and later ones go.
+    lines = data.splitlines(keepends=True)
+    section = None
+    owner = []  # section name per line (None before the first one)
+    for raw in lines:
+        m = HEADER.match(raw)
+        if m:
+            section = m.group(1).decode("utf-8", "replace")
+        owner.append(section)
+    history = {raw.decode("utf-8", "replace").rstrip() for raw, name in zip(lines, owner) if name in published}
+    seen, drop = set(), set()
+    for i, (raw, name) in enumerate(zip(lines, owner)):
+        text = raw.decode("utf-8", "replace").rstrip()
+        if name is None or name in published or not text.strip() or text.lstrip().startswith("#"):
+            continue
+        if text in history or text in seen:
+            drop.add(i)
+            done.append(("duplicate", f"[{name}] copy dropped: {text.strip()[:90]}"))
+        seen.add(text)
+    if drop:
+        data = b"".join(raw for i, raw in enumerate(lines) if i not in drop)
+    return data, done
+
+
+def git_versions(path, refs):
+    """The file at each of refs that exists, as bytes (path relative to its git work tree)."""
+    out = []
+    try:
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=path.parent, capture_output=True, text=True, timeout=30)
+        if top.returncode:
+            return out
+        rel = path.resolve().relative_to(Path(top.stdout.strip()).resolve()).as_posix()
+        for ref in refs:
+            p = subprocess.run(["git", "show", f"{ref}:{rel}"], cwd=path.parent, capture_output=True, timeout=30)
+            if not p.returncode:
+                out.append(p.stdout)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+    return out
+
+
 def fetch(tag):
     url = f"https://raw.githubusercontent.com/{PUBLIC_REPO}/{tag}/CHANGELOG.md"
     with urllib.request.urlopen(url, timeout=30) as response:
@@ -153,6 +218,10 @@ def main(argv=None):
     ap.add_argument("--restore", metavar="VERSION")
     ap.add_argument("--record", metavar="TAG")
     ap.add_argument("--from-file", help="with --record/--diff/--restore: read the tag's CHANGELOG from this file (offline)")
+    ap.add_argument("--fix", action="store_true", help="repair duplicates and published sections (offline), then check")
+    ap.add_argument("--good-ref", action="append", default=[], help="with --fix: a git ref whose file may restore a published "
+                    "section (repeatable; default origin/main, main, HEAD)")
+    ap.add_argument("--good-file", action="append", default=[], help="with --fix: a file that may restore a published section")
     args = ap.parse_args(argv)
     path = Path(args.changelog)
     try:
@@ -208,13 +277,21 @@ def main(argv=None):
         except (OSError, ValueError) as exc:
             print(f"check-changelog: vetoed list: {exc}", file=sys.stderr)
             return 2
+    if args.fix:
+        good = [Path(f).read_bytes() for f in args.good_file] + git_versions(path, args.good_ref or ["origin/main", "main", "HEAD"])
+        repaired, done = fix(data, published, good)
+        for kind, text in done:
+            print(f"FIXED\t{kind}\t{path.name}\t{text}")
+        if repaired != data:
+            path.write_bytes(repaired)
+            data = repaired
     findings = check(data, published, vetoed)
     for kind, number, text in findings:
         print(f"FINDING\t{kind}\t{path.name}:{number}\t{text}")
     veto_note = f"{len(vetoed)} vetoed patterns from {vetoed_path}" if vetoed_path else "vetoed patterns skipped (no list)"
     if findings:
         print(f"check-changelog: {len(findings)} findings in {path} ({len(published)} published sections, {veto_note}). "
-              "Duplicates: keep the [Unreleased] line, drop the copy; a changed published section: --restore X.Y.Z; "
+              "Duplicates and a changed published section: --fix repairs them offline (else --restore X.Y.Z); "
               "vetoed: take the line out.")
         return 1
     print(f"check-changelog: ok ({len(published)} published sections unchanged, no duplicate lines, {veto_note})")

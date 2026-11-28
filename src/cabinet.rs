@@ -129,6 +129,9 @@ pub enum ShelfKey {
     Rediscover,
     /// Index into the library's systems.
     System(usize),
+    /// A series' shelf while Home is by series (index into the App's series shelves, `app_series`): its games keep their
+    /// own consoles' cases.
+    Series(usize),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -224,14 +227,19 @@ impl Cabinet {
     /// The recent games first, then the favourites (standing grouped by case), then Curator's shelves in the order
     /// given (its own boxes, an open list, the pinned smart shelves and stickers), then one shelf per system; empty
     /// ones are left out.
-    pub fn build(recent: Vec<Case>, mut favorites: Vec<Case>, curator: Vec<(ShelfKey, Vec<Case>)>, systems: Vec<(usize, Vec<Case>)>) -> Cabinet {
+    pub fn build(recent: Vec<Case>, favorites: Vec<Case>, curator: Vec<(ShelfKey, Vec<Case>)>, systems: Vec<(usize, Vec<Case>)>) -> Cabinet {
+        Cabinet::build_keyed(recent, favorites, curator, systems.into_iter().map(|(s, cases)| (ShelfKey::System(s), cases)).collect())
+    }
+
+    /// `build` with the shelves under Curator's by key: the systems', or the series' while Home is by series.
+    pub fn build_keyed(recent: Vec<Case>, mut favorites: Vec<Case>, curator: Vec<(ShelfKey, Vec<Case>)>, rest: Vec<(ShelfKey, Vec<Case>)>) -> Cabinet {
         // Like on a real shelf, the small boxes stand together and the tall ones together (a stable sort keeps
         // their order within each kind).
         favorites.sort_by_key(|c| c.ff.rank());
         let shelves: Vec<Shelf> = std::iter::once((ShelfKey::Continue, recent))
             .chain(std::iter::once((ShelfKey::Favorites, favorites)))
             .chain(curator)
-            .chain(systems.into_iter().map(|(s, cases)| (ShelfKey::System(s), cases)))
+            .chain(rest)
             .filter(|(_, cases)| !cases.is_empty())
             .map(|(key, cases)| Shelf::new(key, cases))
             .collect();

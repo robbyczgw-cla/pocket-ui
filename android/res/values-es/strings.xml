@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android extras: the pause menu's service as Android's accessibility page describes it (PadWatch). -->
+<resources>
+    <string name="pad_watch_description">Abre el menú de pausa de pocket-ui sobre los juegos que pocket-ui inició en otras apps de emulador: HOME o SELECT + START. Solo lee qué app está delante y los botones del mando, nada más, y fuera de esos juegos deja pasar todos los botones.</string>
+</resources>

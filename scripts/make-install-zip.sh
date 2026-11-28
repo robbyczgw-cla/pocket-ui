@@ -9,6 +9,8 @@
 #     --bin-dir  take pocket-ui, pocket-core and pocket-splash from DIR instead of building them (must be that version)
 #     --out      output directory (default build/image, gitignored)
 #     --gba-core DIR pinned ARM64 gpSP build (cores, licence and corresponding source)
+#     --bsnes-hd DIR pinned ARM64 bsnes-hd build (scripts/build-bsnes-hd.sh: core, licences and corresponding source); needed when
+#                pocket-ui plays Mode 7 HD with its own bsnes-hd, which it then finds beside itself in cores/ (src/mode7_hd.rs)
 #     --ds-core  DIR pinned portable DSperate build (scripts/build-dsperate.sh: binary, licences, full source and recipe);
 #                needed when pocket-ui uses DSperate, which it then finds beside itself in cores/ (src/ds.rs)
 #     --hakux    DIR from `scripts/build-hakux-core.sh` (hakux_libretro.so, BUILD-INFO, licenses/): the package then carries the
@@ -27,6 +29,7 @@ VERSION=
 BIN_DIR=
 GBA_CORE_DIR=
 DS_CORE_DIR=
+BSNES_HD_DIR=
 HAKUX_DIR=
 OUT=$ROOT/build/image
 while [ $# -gt 0 ]; do
@@ -36,8 +39,9 @@ while [ $# -gt 0 ]; do
     --out) OUT=$2; shift ;;
     --gba-core) GBA_CORE_DIR=$2; shift ;;
     --ds-core) DS_CORE_DIR=$2; shift ;;
+    --bsnes-hd) BSNES_HD_DIR=$2; shift ;;
     --hakux) HAKUX_DIR=$2; shift ;;
-    -h | --help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,18p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -77,9 +81,14 @@ install -m 644 "$ROOT/deploy/pocket-splash.service" "$P/files/pocket-splash.serv
 sh "$ROOT/scripts/shipped-fonts.sh" "$P/files"
 [ -z "$GBA_CORE_DIR" ] || sh "$ROOT/scripts/gba-core-files.sh" "$GBA_CORE_DIR" "$P/files/cores"
 [ -z "$DS_CORE_DIR" ] || python3 -I "$ROOT/scripts/dsperate-files.py" "$DS_CORE_DIR" "$P/files/cores"
+[ -z "$BSNES_HD_DIR" ] || sh "$ROOT/scripts/bsnes-hd-files.sh" "$BSNES_HD_DIR" "$P/files/cores"
 # A pocket-ui with DSperate carries its verified core, licences and source (as release-channel.sh and the images do)
 if LC_ALL=C grep -a -q dsperate "$P/files/pocket-ui"; then
   python3 -I "$ROOT/scripts/dsperate-files.py" --check "$P/files/cores" || die "DSperate core, source and notices required: pass --ds-core BUILD_DIR"
+fi
+# A pocket-ui that finds bsnes-hd beside itself (src/mode7_hd.rs BUNDLED) carries the verified core, licences and source.
+if LC_ALL=C grep -a -q 'cores/bsnes_hd_beta_libretro.so' "$P/files/pocket-ui"; then
+  sh "$ROOT/scripts/bsnes-hd-files.sh" --check "$P/files/cores" || die "bsnes-hd core, source and licences required: pass --bsnes-hd BUILD_DIR (scripts/build-bsnes-hd.sh)"
 fi
 printf '%s\n' "$VERSION" >"$P/files/VERSION"
 (cd "$P/files" && sha256sum pocket-ui pocket-core pocket-splash portmaster-setup.sh run-pocket-ui.sh 10-pocket-ui.conf pocket-splash.service VERSION >SHA256SUMS

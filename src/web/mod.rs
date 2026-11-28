@@ -153,6 +153,9 @@ pub struct Shared {
     pub es_systems: PathBuf,
     /// A game is running: the server pauses everything but the smallest requests.
     pub game_running: AtomicBool,
+    /// Counts the games started while the server runs: a save sent in pieces that saw one start between two of its
+    /// pieces is not put in place (`saves::end_pieces`), as a game that starts during a whole upload ends it.
+    pub games_started: AtomicU64,
     pub now_playing: Mutex<Option<NowPlaying>>,
     pub prefs: Mutex<Prefs>,
     /// The code shown on the Pocket while "Pair a browser" is open.
@@ -191,6 +194,7 @@ impl Shared {
             data_dir,
             es_systems,
             game_running: AtomicBool::new(false),
+            games_started: AtomicU64::new(0),
             now_playing: Mutex::new(None),
             prefs: Mutex::new(prefs),
             pairing: Mutex::new(None),
@@ -296,3 +300,5 @@ pub(crate) fn hex(bytes: &[u8]) -> String {
 mod tests;
 #[cfg(test)]
 mod saves_tests;
+#[cfg(test)]
+mod pieces_tests;

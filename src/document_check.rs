@@ -356,7 +356,7 @@ pub fn check(listing: &Listing, host: &dyn Host, stop: &AtomicBool, progress: &m
             }
             Some(())
         };
-        game_check::check_system(&mut found, &files, &PHONE, info, paths, &mut blocked, &mut between)?;
+        game_check::check_system(&mut found, &files, &PHONE, info, paths, &game_check::Versions::default(), &mut blocked, &mut between)?;
         let bundled = host.bundled(id);
         for path in paths {
             let Some(game) = on_shelf.get(path.to_string_lossy().as_ref()) else { continue };

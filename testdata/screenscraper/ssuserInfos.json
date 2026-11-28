@@ -1,0 +1,14 @@
+{
+  "header": {"APIversion": "2.0", "dateTime": "2026-11-25 10:00:00", "commandRequested": "https://api.screenscraper.fr/api2/ssuserInfos.php?output=json", "success": "true", "error": ""},
+  "response": {
+    "serveurs": {"cpu1": "21", "cpu2": "17", "threadsmin": "2400", "nbscrapeurs": "180", "apiacces": "1450000"},
+    "ssuser": {
+      "id": "player", "numid": "123456", "niveau": "1", "contribution": "0",
+      "uploadsysteme": "0", "uploadinfos": "0", "romasso": "0", "uploadmedia": "0",
+      "maxthreads": "1", "maxdownloadspeed": "256",
+      "requeststoday": "12", "requestskotoday": "3",
+      "maxrequestspermin": "30", "maxrequestsperday": "20000", "maxrequestskoperday": "2000",
+      "visites": "4", "datedernierevisite": "2026-11-24 21:00:00", "favregion": "europe"
+    }
+  }
+}

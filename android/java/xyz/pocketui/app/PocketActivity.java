@@ -107,6 +107,8 @@ abstract class PocketBase extends NativeActivity {
         });
         if(android.os.Build.VERSION.SDK_INT>=33)getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,this::backRequested);
         immersive();
+        Awake.window(this); // the screen stays on while a download runs
+        UpdateInstaller.awake = on -> { if (on) Awake.begin(); else Awake.end(); };
     }
     /** Android's own status bar is on screen (not the immersive mode this launcher asks for): the launcher's clock stays out then. */
     @SuppressWarnings("deprecation") private static boolean statusBarShown(android.view.View view, android.view.WindowInsets insets) {
@@ -140,6 +142,9 @@ abstract class PocketBase extends NativeActivity {
         super.onWindowFocusChanged(focused); if (focused) immersive();
     }
     @Override public boolean dispatchKeyEvent(KeyEvent event){
+        // An F-key our pause menu meant for another emulator does nothing on the shelf (EmulatorKeys.strayEmulatorKey); the
+        // native views map no F-key either (app_android.rs, android/src/lib.rs).
+        if(EmulatorKeys.strayEmulatorKey(event.getKeyCode(),event.getDeviceId()))return true;
         // NativeActivity can finish on an unhandled physical Back before its legacy callback runs.
         // Consume both halves here; gestures still arrive through OnBackInvokedDispatcher.
         if(event.getKeyCode()==KeyEvent.KEYCODE_BACK){if(event.getAction()==KeyEvent.ACTION_DOWN&&event.getRepeatCount()==0)backRequested();return true;}
@@ -640,6 +645,8 @@ abstract class PocketBase extends NativeActivity {
     public String raDownload(String address, String destination, String userAgent) { return RaHttp.download(address, destination, userAgent); }
     /** RomM over HTTPS (`romm_net::AndroidNet`): one request, one answer; one file appended from its length. Worker threads only. */
     public String rommRequest(String method, String address, String token, String json, String userAgent) { return RommHttp.request(method, address, token, json, userAgent); }
+    /** "on"/"off" around a RomM game's download, https and plain http alike (`romm_net::AndroidNet::fetch`): the screen stays on (`Awake`). */
+    public String awakeHold(String on) { if ("on".equals(on)) Awake.begin(); else Awake.end(); return ""; }
     public String rommFetch(String address, String token, String destination, String stopFile, String size, String userAgent) { return RommHttp.fetch(address, token, destination, stopFile, size, userAgent); }
     /** Android's TLS trust store; redirects remain HTTPS; bounded responses and worker-only disk writes. */
     public String httpGet(String address, String destination, String maximum) throws Exception {
@@ -755,9 +762,18 @@ abstract class PocketBase extends NativeActivity {
         final Intent intent;
         try{intent=EmulatorIntents.createForPath(this,file,profile,pkg);}catch(Exception e){return String.valueOf(e.getMessage());}
         final int turn;
-        synchronized(handOver){if(!launching.compareAndSet(false,true))return "Already opening a game";turn=launchTurn;}
-        whenReleased(turn,()->{try{startActivity(intent);}catch(Exception e){android.util.Log.w(TAG,"launchApp: "+e);}finally{launching.set(false);}});
+        synchronized(handOver){if(!launching.compareAndSet(false,true))return "Already opening a game";turn=launchTurn;launchFailed=false;}
+        // The playing note (with a new launch id) before the start: a pause-menu press for the game before is stale from here on.
+        // Not started here is said on the shelf (`appStartFailed`), never only in the log (lead 27.11.2026).
+        whenReleased(turn,()->{try{if(!Extras.gameStarted(this,intent.getComponent()==null?null:intent.getComponent().getPackageName())){android.util.Log.w(TAG,"launchApp: storage refused the launch note, not started");appStartFailed("storage");return;}startActivity(intent);}catch(Exception e){Extras.gameEnded(this);android.util.Log.w(TAG,"launchApp: "+e);appStartFailed("open");}finally{launching.set(false);}});
         return "";
+    }
+    /** `launchApp`'s start failed after it said "": why, in a word for the handheld view (`android_handheld::app_start_failed`,
+     *  file `app-start-error`), which watches `launchFailed` after the start's scene and ends the start with that sentence. */
+    private void appStartFailed(String why){
+        try(java.io.FileOutputStream out=new java.io.FileOutputStream(new File(getFilesDir(),"app-start-error"))){out.write(why.getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+        catch(IOException|RuntimeException e){android.util.Log.w(TAG,"launchApp: why not kept: "+e);}
+        launchFailed=true;
     }
     /**
      * Check direct access or stage a game on a worker, then enter our own EGL player. URI identity owns its saves. `parts`: a disc sheet's files as
@@ -901,8 +917,8 @@ abstract class PocketBase extends NativeActivity {
         boolean pt=settings.contains("\"language\":\"pt\"");
         boolean fr=settings.contains("\"language\":\"fr\"");
         boolean it=settings.contains("\"language\":\"it\"");
-        // Korean and Chinese have no lines here yet: chosen, they are English (not the phone's language).
-        boolean chosen=de||es||pt||fr||it||settings.contains("\"language\":\"en\"")||settings.contains("\"language\":\"ko\"")||settings.contains("\"language\":\"zh\"")||settings.contains("\"german\":false");
+        // Korean, Chinese, Vietnamese and Japanese have no lines here yet: chosen, they are English (not the phone's language).
+        boolean chosen=de||es||pt||fr||it||settings.contains("\"language\":\"en\"")||settings.contains("\"language\":\"ko\"")||settings.contains("\"language\":\"zh\"")||settings.contains("\"language\":\"vi\"")||settings.contains("\"language\":\"ja\"")||settings.contains("\"german\":false");
         if(de||(!chosen&&system.equals("de")))return german;
         if(pt||(!chosen&&system.equals("pt")))return portuguese;
         if(fr||(!chosen&&system.equals("fr")))return french;
@@ -964,4 +980,7 @@ abstract class PocketBase extends NativeActivity {
         for (int key : stickKeys.releaseAll()) dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, key));
         super.onPause();
     }
+    // Android extras (Settings → System → Android extras, docs/ANDROID-EXTRAS.md; Extras.java): what the page shows, and its presses.
+    public String extrasStatus() { return Extras.status(this); }
+    public String extrasAction(String what, String arg) { return Extras.action(this, what, arg); }
 }

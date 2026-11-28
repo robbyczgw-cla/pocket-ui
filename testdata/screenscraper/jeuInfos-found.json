@@ -1,0 +1,31 @@
+{
+  "header": {"APIversion": "2.0", "dateTime": "2026-11-25 10:00:02", "commandRequested": "https://api.screenscraper.fr/api2/jeuInfos.php?output=json", "success": "true", "error": ""},
+  "response": {
+    "serveurs": {"cpu1": "22", "cpu2": "17", "threadsmin": "2410", "nbscrapeurs": "181", "apiacces": "1450010"},
+    "ssuser": {
+      "id": "player", "maxthreads": "1", "maxdownloadspeed": "256",
+      "requeststoday": "13", "requestskotoday": "3",
+      "maxrequestspermin": "30", "maxrequestsperday": "20000", "maxrequestskoperday": "2000"
+    },
+    "jeu": {
+      "id": "19512", "romid": "331234", "notgame": "false",
+      "noms": [{"region": "ss", "text": "Test Quest"}, {"region": "eu", "text": "Test Quest"}, {"region": "us", "text": "Test Quest Advance"}],
+      "regions": {"shortname": "eu"},
+      "systeme": {"id": "12", "text": "Game Boy Advance"},
+      "rom": {"id": "331234", "romfilename": "Test Quest (Europe).gba", "romsize": "4194304", "romcrc": "36C08112", "romregions": "eu"},
+      "medias": [
+        {"type": "ss", "parent": "jeu", "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=x&devpassword=y&softname=z&ssid=&sspassword=&systemeid=12&jeuid=19512&media=ss(wor)", "region": "wor", "crc": "0a1b2c3d", "md5": "", "sha1": "", "size": "12345", "format": "png"},
+        {"type": "sstitle", "parent": "jeu", "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?media=sstitle(wor)", "region": "wor", "crc": "", "md5": "", "sha1": "", "size": "9876", "format": "png"},
+        {"type": "box-2D", "parent": "jeu", "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?media=box-2D(us)", "region": "us", "crc": "", "md5": "", "sha1": "", "size": "345678", "format": "png"},
+        {"type": "box-2D", "parent": "jeu", "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?media=box-2D(eu)", "region": "eu", "crc": "", "md5": "", "sha1": "", "size": "345111", "format": "png"},
+        {"type": "box-2D-back", "parent": "jeu", "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?media=box-2D-back(eu)", "region": "eu", "crc": "", "md5": "", "sha1": "", "size": "301234", "format": "png"},
+        {"type": "box-2D-side", "parent": "jeu", "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?media=box-2D-side(us)", "region": "us", "crc": "", "md5": "", "sha1": "", "size": "40123", "format": "png"},
+        {"type": "box-texture", "parent": "jeu", "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?media=box-texture(jp)", "region": "jp", "crc": "", "md5": "", "sha1": "", "size": "2012345", "format": "png"},
+        {"type": "support-2D", "parent": "jeu", "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?media=support-2D(wor)", "region": "wor", "crc": "", "md5": "", "sha1": "", "size": "112233", "format": "png"},
+        {"type": "support-texture", "parent": "jeu", "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?media=support-texture(eu)", "region": "eu", "crc": "", "md5": "", "sha1": "", "size": "223344", "format": "png"},
+        {"type": "wheel", "parent": "jeu", "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?media=wheel(wor)", "region": "wor", "crc": "", "md5": "", "sha1": "", "size": "5555", "format": "png"},
+        {"type": "box-2D", "parent": "editeur", "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?media=logo", "region": "wor", "crc": "", "md5": "", "sha1": "", "size": "1", "format": "png"}
+      ]
+    }
+  }
+}

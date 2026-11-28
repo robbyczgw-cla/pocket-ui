@@ -43,6 +43,9 @@ pub mod library_meta;
 pub mod curator;
 pub mod civil_date;
 pub mod connections;
+/// Connections' index arranges the shelf by series with it (`series_shelf`, `series_facts`); the Mobile view shows none.
+pub mod series_facts;
+pub mod series_shelf;
 pub mod curator_page;
 pub mod cabinet;
 pub mod cabinet_art;
@@ -54,6 +57,8 @@ pub mod title_block;
 pub mod pause_head;
 /// The pause menu's pages as painted on Linux and in Android's player: one painter for both (`pause_page`).
 pub mod pause_page;
+/// The level bar the player shows for the device's volume keys, as Linux's (`osd`).
+pub mod osd;
 /// The Picture page's live preview (`preview`): its layout and painting, as Linux's.
 pub mod preview;
 /// The handhelds' pause menu for Android's player when the game came from the Handheld view (`pause_list`).
@@ -99,6 +104,8 @@ pub mod search;
 pub mod document_library;
 pub mod document_check;
 pub mod system_names;
+/// Consoles sold under regional names are one shelf, named as the player chooses (`region_pairs`).
+pub mod region_pairs;
 pub mod game_check;
 pub mod game_check_page;
 pub mod game_files;
@@ -189,12 +196,16 @@ pub mod play_route;
 pub mod android_first_start;
 /// The Android games: apps the player calls games, one list for both views (`launcher.json` `android_games`).
 pub mod android_games;
+/// Settings → System → Android extras: the ADB grant, Shizuku, root and the pause menu over other emulators (docs/ANDROID-EXTRAS.md).
+pub mod android_extras;
 #[cfg(target_os = "android")]
 pub mod android_core_run;
 pub mod status_corner;
 pub mod phone_corner;
 
 pub mod update_hint;
+/// The low-battery guard's decisions (`low_battery`): Android's player warns at 5 % and saves and closes at 2 %.
+pub mod low_battery;
 pub mod report_redact;
 pub mod report_phone;
 

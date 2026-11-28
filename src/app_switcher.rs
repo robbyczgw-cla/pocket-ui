@@ -36,7 +36,7 @@ impl App {
             .list
             .iter()
             .filter_map(|f| {
-                let s = self.systems.iter().position(|s| s.name == f.system)?;
+                let s = self.systems.iter().position(|s| pocket_ui::region_pairs::same_shelf(&s.name, &f.system))?;
                 let g = self.systems[s].games.iter().position(|g| g.path == f.path)?;
                 Some(Item::Game(s, g))
             })

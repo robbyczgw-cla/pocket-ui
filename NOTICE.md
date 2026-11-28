@@ -207,6 +207,16 @@ is cut from a CC0 photo: "A roll of beige masking tape partially unwound" by Man
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/); straightened, cut, recoloured cream and mirrored to
 repeat. The derived picture is CC0 1.0 as well. How it was made: [assets/media/tape/SOURCES.md](assets/media/tape/SOURCES.md).
 
+## Real box pictures examples
+
+The four examples on the Real box pictures card ("New in this version" 0.8.0, `assets/ss-samples/`, `features::SAMPLES`)
+are the real print art of Tobu Tobu Girl's 2017 cartridge release: its box spine, box back, cartridge label and manual
+page 5, cut and resized from the print files in Tangram Games' own download (https://tangramgames.itch.io/tobutobugirl).
+Box, label and manual art © 2017 Tangram Games, artwork by Lukas Erritsø Hansen,
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (the page's "Asset license"). The card names the game, the
+holder and the licence under the picture. Sources, hashes and cuts: [assets/ss-samples/SOURCES.md](assets/ss-samples/SOURCES.md);
+the licence text: `assets/ss-samples/CC-BY-4.0.txt`.
+
 ## System pictures
 
 ### Console colours (Game Boy Advance, Game Boy Color, Nintendo 64, GameCube)
@@ -302,13 +312,15 @@ described file by file in [assets/ui-art/SOURCES.md](assets/ui-art/SOURCES.md). 
 |---|---|---|---|
 | Barlow Medium, Barlow Condensed SemiBold (version 1.408) | `assets/fonts/`; compiled into the binaries (`src/text.rs`, `src/font_style.rs`) | SIL Open Font License 1.1 | Copyright 2017 The Barlow Project Authors ([source](https://github.com/jpt/barlow)), designer Jeremy Tribby. Licence text: `assets/fonts/OFL.txt` |
 | Pixelify Sans SemiBold and Regular | `assets/fonts/`; compiled into the binaries (`src/font_style.rs`), used by Settings → Theme → Font (Pixel) | SIL Open Font License 1.1 | Copyright 2021 The Pixelify Sans Project Authors ([source](https://github.com/eifetx/Pixelify-Sans)). Static Latin instances of the official variable fonts; the Pixelify Sans files are modified: the letters C and c (the original's read as O and o), Z and 5 are redrawn (`scripts/pixelify-glyphs.py`), advance widths and spacing unchanged, no Reserved Font Name is declared. Licence texts: `assets/fonts/OFL.txt` |
-| Departure Mono Regular (version 1.500) | `assets/fonts/DepartureMono-Regular.otf`; compiled into the binaries (`src/font_style.rs`), the Retro style's letters (Settings → Look → Style → Retro) | SIL Open Font License 1.1 | Copyright 2022–2024 Helena Zhang ([source](https://github.com/rektdeckard/departure-mono), release `DepartureMono-1.500.zip`). The release's OTF file unchanged; no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
+| Departure Mono Regular (version 1.500) | `assets/fonts/DepartureMono-Regular.otf`; compiled into the binaries (`src/font_style.rs`), the Retro style's letters (Settings → Look → Style → Retro) | SIL Open Font License 1.1 | Copyright 2022–2024 Helena Zhang ([source](https://github.com/rektdeckard/departure-mono), release `DepartureMono-1.500.zip`). The release's OTF file with the 76 Vietnamese letters it lacks added from its own pixels (`scripts/departure-vietnamese.py`, no original glyph changed); no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
 | Caveat Brush Regular | `assets/fonts/CaveatBrush-Regular.ttf`; compiled into the binaries (`src/tape_label.rs`), the handwriting on the label of a game without box art | SIL Open Font License 1.1 | Copyright 2015 Google Inc. ([source](https://github.com/googlefonts/caveat), designer Impallari Type; the file of google/fonts `ofl/caveatbrush`). Cut down to Latin with fonttools (U+0020-007E, U+00A0-017F, punctuation), hinting dropped, no glyph changed; no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
 | Titillium Web Regular, Bold | `store/test-catalog/src/fonts/`; packed into the test store's `type-titillium` package only, not compiled in | SIL Open Font License 1.1 | Copyright (c) 2009-2011 Accademia di Belle Arti di Urbino and students of MA course of Visual design. Licence text: `store/test-catalog/src/fonts/OFL.txt` (also inside the package as `Titillium-OFL.txt`) |
 | Galmuri11 Regular (version 2.40.4) | `assets/fonts/Galmuri11-KSX1001.ttf`; compiled into the binaries (`src/text_fallback.rs`), the Korean letters of the Retro style | SIL Open Font License 1.1 | Copyright (c) 2019-2025 Lee Minseo ([source](https://github.com/quiple/galmuri), release `Galmuri-v2.40.4.zip`). Cut down with fonttools to the 2,350 hangul syllables of KS X 1001, the compatibility jamo and a few marks (`scripts/korean-fonts.py`), hinting dropped, no glyph changed; no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
 | Noto Sans KR Regular (version 2.004) | `assets/fonts/NotoSansKR-Regular-KSX1001.otf`; compiled into the binaries (`src/text_fallback.rs`), the Korean letters of the Barlow style | SIL Open Font License 1.1 | Copyright 2014-2021 Adobe ([source](https://github.com/notofonts/noto-cjk), `Sans/SubsetOTF/KR`). Cut down the same way; no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
 | Fusion Pixel Font 12px proportional zh_hans (version 2026.11.10) | `assets/fonts/FusionPixel12-zh_hans-CJK.otf`; a file next to the programs (`src/text_fallback.rs`), the Chinese and Japanese letters of the Retro style | SIL Open Font License 1.1 | Copyright (c) 2022 TakWolf ([source](https://github.com/TakWolf/fusion-pixel-font), release `fusion-pixel-font-12px-proportional-otf-v2026.11.10.zip`); made from Ark Pixel Font (Copyright (c) 2021 TakWolf, OFL 1.1), Cubic 11 (OFL 1.1, with the M+ fonts' notices) and Galmuri (Copyright (c) 2019-2025 Lee Minseo, OFL 1.1). Cut down with fonttools to GB 2312's hanzi, JIS X 0208's kanji, the kana, CJK punctuation and the full-width forms (`scripts/cjk-fonts.py`), hinting dropped, no glyph changed; no Reserved Font Name is declared. Licence texts: `assets/fonts/OFL.txt` |
 | Noto Sans SC Regular (version 2.004) | `assets/fonts/NotoSansSC-Regular-CJK.otf`; a file next to the programs (`src/text_fallback.rs`), the Chinese and Japanese letters of the Barlow style | SIL Open Font License 1.1 | Copyright 2014-2021 Adobe ([source](https://github.com/notofonts/noto-cjk), `Sans/SubsetOTF/SC`). Cut down the same way; no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
+| Fusion Pixel Font 12px proportional ja (version 2026.11.10) | `assets/fonts/FusionPixel12-ja-CJK.otf`; a file next to the programs (`src/text_fallback.rs`), the Japanese letter forms of the Retro style | SIL Open Font License 1.1 | Copyright (c) 2022 TakWolf ([source](https://github.com/TakWolf/fusion-pixel-font)), made from Ark Pixel Font, Cubic 11 and Galmuri as above. Cut down with fonttools to JIS X 0208's kanji, the kana, CJK punctuation and the full-width forms (`scripts/cjk-fonts.py --ja`), no glyph changed; no Reserved Font Name is declared. Licence texts: `assets/fonts/OFL.txt` |
+| Noto Sans JP Regular (version 2.004) | `assets/fonts/NotoSansJP-Regular-CJK.otf`; a file next to the programs (`src/text_fallback.rs`), the Japanese letter forms of the Barlow style | SIL Open Font License 1.1 | Copyright 2014-2021 Adobe ([source](https://github.com/notofonts/noto-cjk), `Sans/SubsetOTF/JP`). Cut down the same way; no Reserved Font Name is declared. Licence text: `assets/fonts/OFL.txt` |
 | Noto Sans CJK SC Regular | Not shipped: pocket-ui uses the system's copy if present (ROCKNIX installs it at `/usr/share/fonts/truetype/noto-cjk/`), for Japanese, Chinese and Korean letters (`src/text_fallback.rs`) | SIL Open Font License 1.1 (ROCKNIX's package) | Nothing of it is in this repository or our binaries |
 | 8x8 bitmap glyphs (crate `font8x8` 0.3.1) | linked as a Rust crate | MIT | The crate says the glyph data comes from public-domain IBM VGA fonts |
 
@@ -442,6 +454,14 @@ The H700 GBA update includes gpSP (GPL-2.0-or-later), revision
 5819380c2ffb0900219d700a382ee68c464ebb99 from https://github.com/libretro/gpsp.
 The release's `cores/gpsp/` folder contains COPYING, the corresponding source, the ARM64 build recipe and the
 instruction-cache synchronization header used by that build. The emulator remains a separate dynamically loaded library.
+
+## Bundled bsnes-hd for Mode 7 HD
+
+The ROCKNIX packages and app updates include bsnes-hd by DerKoun (GPL-3.0), revision
+fc26b25ea236f0f877f0265d2a2c37dfd93dfde9 from https://github.com/DerKoun/bsnes-hd (the revision ROCKNIX 20261001
+builds), for Options > Picture > Mode 7 on cards whose system has no bsnes-hd of its own. Its Game Boy part comes from
+SameBoy by Lior Halphon (MIT). The release's `cores/bsnes-hd/` folder contains both licence texts, the corresponding
+source and the build recipe (`scripts/build-bsnes-hd.sh`). The emulator remains a separate dynamically loaded library.
 
 ## Controller mapping data
 

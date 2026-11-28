@@ -71,7 +71,7 @@ const CHOOSE_ROW: usize = RATING_ROW + 1;
 /// Its last row, for games whose pictures come from the collection: "Wrong pictures? Look up again" (`rom_id`).
 const LOOK_UP_ROW: usize = CHOOSE_ROW + 1;
 /// One press of up/down scrolls this far.
-const STEP: i32 = 2 * LINE;
+pub(crate) const STEP: i32 = 2 * LINE;
 
 pub(crate) use crate::game_card_model::paint_problem;
 
@@ -294,15 +294,29 @@ impl Card {
         self.row_at.borrow().get(i).is_some_and(|&(top, h)| self.view_h > 0 && top >= self.scroll && top + h <= self.scroll + self.view_h)
     }
 
-    /// Scrolls just enough to show row `i` whole.
+    /// Scrolls just enough to show row `i` whole. Going down, the view's top edge then stands on the top of a row, never
+    /// half way through one (0.8 check video on the Brick: "Versions" half under the card's head, faded); `paint`
+    /// leaves the fade off there, as nothing is cut.
     fn reveal(&mut self, i: usize) {
         let Some((top, h)) = self.row_at.borrow().get(i).copied() else { return };
         if top < self.scroll {
             self.scroll = top.max(0);
         } else if top + h > self.scroll + self.view_h {
             // Clear of the fade at the bottom edge where the card goes on (`paint`'s FADE), else to its end.
-            self.scroll = (top + h - self.view_h + 36).min(self.max_scroll.max(top + h - self.view_h));
+            let want = top + h - self.view_h + 36;
+            let limit = self.max_scroll.max(top + h - self.view_h);
+            // The first row from there on (row `i` at the latest) starts the view, while that leaves the card's end;
+            // near the end (a short card) the last row top that still shows row `i` whole.
+            let tops: Vec<i32> = self.row_at.borrow().iter().map(|&(t, _)| t).filter(|&t| t <= top && t <= limit).collect();
+            let edge = tops.iter().copied().filter(|&t| t >= want).min()
+                .or_else(|| tops.iter().copied().filter(|&t| t >= top + h - self.view_h).max());
+            self.scroll = edge.unwrap_or(want.min(limit));
         }
+    }
+
+    /// The view's top edge stands exactly on a row's top: nothing is cut there, so it doesn't fade.
+    fn top_on_a_row(&self) -> bool {
+        self.row_at.borrow().iter().any(|&(t, _)| t == self.scroll)
     }
 
     /// Whether row `j` follows row `i` with nothing to read between them (the card's rows do).
@@ -455,6 +469,22 @@ impl Card {
         }
         // The box: LEFT/RIGHT turn it over, up and down scroll its back, SELECT shows the page; the rest as on the page.
         if let (Mode::View, Some(bx)) = (&self.mode, self.boxed.as_mut()) {
+            // The real back zoomed (R2): the D-pad moves it, B or R2 leaves the zoom first; nothing else meanwhile.
+            if bx.zoomed() {
+                match b {
+                    Button::Left => bx.zoom_pan(-1, 0),
+                    Button::Right => bx.zoom_pan(1, 0),
+                    Button::Up => bx.zoom_pan(0, -1),
+                    Button::Down => bx.zoom_pan(0, 1),
+                    Button::South | Button::R2 => bx.zoom_toggle(),
+                    _ => {}
+                }
+                return Out::None;
+            }
+            if b == Button::R2 && bx.zoomable() {
+                bx.zoom_toggle();
+                return Out::None;
+            }
             match b {
                 Button::Right if self.data.surprise.is_some() => return Out::Another,
                 Button::Left | Button::Right => {
@@ -690,6 +720,7 @@ impl Card {
                 let n = self.data.album.as_ref().map_or(0, |a| a.photos.len());
                 self.boxed.as_ref().and_then(|b| b.album.as_ref()).map_or_else(Vec::new, |v| v.hints(n))
             }
+            Mode::View if self.boxed.as_ref().is_some_and(|b| b.zoomed()) => vec![("B", "Back"), ("D-PAD", "Move"), ("R2", "Zoom out")],
             Mode::View if self.boxed.is_some() => {
                 // Y (the status) and X (the note) work as on the page; their hints make room for the box's own, so the
                 // bar fits a 640 px screen.
@@ -705,6 +736,13 @@ impl Card {
                 }
                 if self.boxed.as_ref().is_some_and(|b| b.scrollable()) {
                     h.push(("L1 R1", "Scroll"));
+                }
+                // A real back (ScreenScraper's) at rest: R2 zooms it. The bar has four places: R2 takes those of SELECT and
+                // START (both still work), so it shows on every screen.
+                if self.boxed.as_ref().is_some_and(|b| b.zoomable()) {
+                    h.retain(|(k, _)| *k != "SELECT" && *k != "START");
+                    let at = h.iter().position(|(_, v)| *v == "Turn over").map_or(h.len(), |i| i + 1);
+                    h.insert(at, ("R2", "Zoom"));
                 }
                 // Down on the front opens the case (`album`). With photos in it, the bar's four places name it instead
                 // of START (which still works, as on the page): the photos are what the box has new to show.
@@ -807,7 +845,7 @@ impl Card {
             // Text running under an edge fades out there instead of being cut off mid-line.
             const FADE: i32 = 36;
             let down: Vec<u8> = (0..FADE).map(|k| (255 - k * 255 / FADE) as u8).collect();
-            if self.scroll > 0 {
+            if self.scroll > 0 && !self.top_on_a_row() {
                 body.shade_rows(0, 0, w, pal().void, &down);
             }
             if self.scroll < self.max_scroll {
@@ -1221,7 +1259,7 @@ impl Card {
 
         // About: the Wikipedia lead when there is one, else a sentence made of the facts.
         let about: Option<(String, Option<String>, u32)> = match &d.summary {
-            Summary::Wikipedia { text: t, .. } | Summary::Gamelist(t) | Summary::Romm(t) => Some((t.clone(), d.summary.note(), pal().chalk)),
+            Summary::Wikipedia { text: t, .. } | Summary::Gamelist(t) | Summary::Romm(t) | Summary::ScreenScraper(t) => Some((t.clone(), d.summary.note(), pal().chalk)),
             // This card is the second view (SELECT); a game with no article and no sentence has nothing to say here, the
             // info page and the box back say "No Wikipedia article for this game" (`Summary::note`).
             Summary::None => d.sentence.clone().map(|s| (s, None, pal().chalk)),
@@ -1281,7 +1319,8 @@ impl Card {
             (false, true) => Some("Facts: your EmulationStation gamelist"),
             (false, false) => None,
         };
-        if let Some(credit) = credit {
+        // ScreenScraper's facts name their source and licence in a line of their own (`screenscraper_facts`).
+        for credit in credit.into_iter().chain(d.from_screenscraper.then_some(crate::game_card_model::SCREENSCRAPER_CREDIT)) {
             let credit = text.fit(Face::Body, 21, credit, full_w);
             text.draw(c, Face::Body, 21, MARGIN, y, pal().dust, &credit);
             y += line_step();
@@ -1664,6 +1703,7 @@ mod tests {
             surprise: None,
             look_up: false,
             from_gamelist: false,
+            from_screenscraper: false,
             patch: None,
             broken: None,
             favorite: false,
@@ -1724,6 +1764,54 @@ mod tests {
         card.press(Button::Down);
         card.press(Button::R1);
         assert_eq!(card.focus, None);
+    }
+
+    /// 0.8 check video on the Brick (27.11.2026): Down through the card's rows left one half under the card's head,
+    /// faded ("Versions" over Stickers). On every panel size, down through all rows and back up: the focused row is whole
+    /// and no row stands half over the view's top edge.
+    #[test]
+    fn down_through_the_rows_never_leaves_one_half_under_the_head() {
+        // 640x480 is painted on its 1280x960 layout canvas (`paint` leaves the body no room on the raw panel). A short
+        // card too, whose rows end it: the view's end comes before a row's top there.
+        for ((w, h), long) in [(1024, 768), (1280, 720), (1240, 1080), (1280, 960)].into_iter().flat_map(|s| [(s, true), (s, false)]) {
+            let mut px = vec![0u32; (w * h) as usize];
+            let mut text = Text::new();
+            let mut d = data();
+            d.summary = Summary::Wikipedia { text: if long { "A long description. ".repeat(40) } else { "Short.".into() }, title: "Tetris".into() };
+            d.rows = vec![
+                CuratorRow { kind: RowKind::Echoes, title: "Versions".into(), line: "1 on the card".into() },
+                CuratorRow { kind: RowKind::Stickers, title: "Stickers".into(), line: "None yet. Press A to add one".into() },
+                CuratorRow { kind: RowKind::Echoes, title: "Game manual".into(), line: "The original, page by page".into() },
+                delete_row(),
+                hide_row(),
+            ];
+            let mut card = Card::new(d);
+            let mut paint = |card: &mut Card| card.paint(&mut Canvas::new(&mut px, w as u32, h as u32), &mut text, None, None);
+            paint(&mut card);
+            let check = |card: &Card, how: &str| {
+                let rows = card.row_at.borrow().clone();
+                for (j, &(t, rh)) in rows.iter().enumerate() {
+                    assert!(!(t < card.scroll && t + rh > card.scroll), "{w}x{h} {how}: row {j} {:?} half over the top edge at {}", (t, rh), card.scroll);
+                }
+                if let Some(i) = card.focus {
+                    assert!(card.row_visible(i), "{w}x{h} {how}: the focused row {i} is whole: {:?} at {} in {}", rows[i], card.scroll, card.view_h);
+                }
+            };
+            // Down scrolls until the rows are in view, then goes row by row.
+            for k in 0..40 {
+                if card.focus == Some(4) { break; }
+                card.press(Button::Down);
+                paint(&mut card);
+                if card.focus.is_some() { check(&card, &format!("down {k}")); }
+            }
+            assert_eq!(card.focus, Some(4), "{w}x{h}: Down reached the last row");
+            for k in 0..4 {
+                card.press(Button::Up);
+                paint(&mut card);
+                check(&card, &format!("up {k}"));
+            }
+            assert_eq!(card.focus, Some(0), "{w}x{h}: Up came back row by row");
+        }
     }
 
     fn delete_row() -> CuratorRow {
@@ -1822,6 +1910,34 @@ mod tests {
     }
 
     #[test]
+    fn on_a_real_back_r2_zooms_the_d_pad_moves_it_and_b_leaves_the_zoom_first() {
+        let mut card = Card::new(CardData { title: "A game".into(), ..Default::default() });
+        card.boxed = Some(crate::game_box::BoxView::on_real_back());
+        assert!(card.hints().contains(&("R2", "Zoom")), "{:?}", card.hints());
+        assert!(card.hints().len() <= 4, "the bar's four places hold it: {:?}", card.hints());
+        assert_eq!(card.press(Button::R2), Out::None);
+        assert!(card.boxed.as_ref().is_some_and(|b| b.zoomed()));
+        assert_eq!(card.hints(), vec![("B", "Back"), ("D-PAD", "Move"), ("R2", "Zoom out")]);
+        // The D-pad moves the zoomed back: it neither turns the box nor scrolls it.
+        assert_eq!(card.press(Button::Left), Out::None);
+        assert_eq!(card.press(Button::Down), Out::None);
+        assert!(card.boxed.as_ref().is_some_and(|b| b.back && b.zoomed()), "still the back, still zoomed");
+        // A plays nothing meanwhile; B leaves the zoom, not the card; B again leaves the card.
+        assert_eq!(card.press(Button::East), Out::None);
+        assert_eq!(card.press(Button::South), Out::None);
+        assert!(card.boxed.as_ref().is_some_and(|b| !b.zoomed()));
+        assert_eq!(card.press(Button::South), Out::Back);
+        // pocket-ui's own back has no zoom: R2 does nothing there and the bar does not offer it.
+        let mut own = Card::new(CardData { title: "A game".into(), ..Default::default() });
+        let mut plain_back = crate::game_box::BoxView::default();
+        plain_back.back = true;
+        own.boxed = Some(plain_back);
+        assert!(!own.hints().iter().any(|(k, _)| *k == "R2"));
+        own.press(Button::R2);
+        assert!(own.boxed.as_ref().is_some_and(|b| !b.zoomed()));
+    }
+
+    #[test]
     fn paging_the_box_back_leaves_its_link_and_the_painted_page_stays_put() {
         crate::motion::set_level(crate::settings::Motion::Off);
         let (w, h) = (1280, 960); // H700's logical canvas.
@@ -1830,7 +1946,7 @@ mod tests {
         let inputs = crate::game_box::Inputs {
             medium: crate::media::Medium::Keep,
             look: crate::cabinet_art::Look { color: 0x777777, band: 0x555555, plastic: 0x333333, tape: false },
-            front: None, game: None, cover: None, console: None, moving: &[],
+            front: None, game: None, cover: None, console: None, back: None, back_zoom: None, moving: &[],
         };
         let paint = |card: &mut Card, px: &mut [u32], text: &mut Text| {
             card.paint_box(&mut Canvas::new(px, w as u32, h as u32), text, &inputs, None);

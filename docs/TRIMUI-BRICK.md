@@ -175,6 +175,26 @@ GLES 3 where only GLES 2 is, doesn't start, with the reason in the log. The read
 reading the GPU's memory, which the CPU doesn't cache, not waiting for the GPU. Pack buffers (PBO, a frame later) were tried and dropped:
 mapping waited ~0 ms but reading the mapped buffer took 10.8 ms for PSP's 480×272 and 24 ms for 640×480, two to three times the plain read;
 a `glFinish` before the read added ~4 ms.
+**The direct way (the Brick's default since 2026-11-25, `POCKET_CORE_BRICK_DIRECT=0` turns it off; Smart Pro and Brick Pro read back).** The core's context is on PVR's Null WSI (three pages,
+`NULLWS_BUFFERS_COUNT=3`) instead of a pbuffer. The game starts the usual way (frames read back, the window, the switch-on and its shaders
+through the bridge); 30 frames in and with the switch-on over, pocket-core registers as `pocket-fb`'s native port (`pocket_port begin`, the
+bridge stops drawing) and from then on blits each frame from our framebuffer to the screen, fitted, with `overlay::Overlay` over it (the FPS
+line, badges, toasts, the volume bar), and swaps: nothing is read back. Photos, screenshots and save-state pictures read the one frame they
+need (`hw_snapshot` → `BrickGles::snapshot`). Pause gives the screen back with one frame read back into the window (the menu's picture and
+previews have it); Continue takes it again 10 frames later (`[app_id="pocket-native-port"] focus`); the end of the game sends `pocket_port
+end`. The GL state the blit and the overlay touch is put back for the core (`Kept`). Without a screen surface (a computer) it reads back as
+always. Measured on the Brick with an isolated bridge: Super Mario 64 33 → 55 fps, Chinatown Wars 56 → 57 fps, Virtua Tennis 2 unchanged
+(bound elsewhere). The picture is drawn with the Picture settings the bridge has for the game (`set_picture`, the bridge's renderer
+on the core's context).
+**N64 on the direct way (2026-11-26).** The old pictures and noise in the black frame around an N64 picture came from GLideN64, not
+from the GPU's timing or our drawing: a dump of the core's own framebuffer showed them with a `glFinish` after every frame, without our
+drawing, with a ring of framebuffers, and with a plain `glClear` for the core's `glClearBufferfv`. They went away with "Color buffer to
+RDRAM" Off (GLideN64 brings what it copied back into the N64's memory into pictures it makes anew) and GLideN64 not clearing the textures
+it makes for N64 pictures, which the PowerVR driver hands out with old contents: both handled (`core_options::BRICK_MUPEN64`,
+`brick_gles::tex_storage_2d`, `POCKET_CORE_BRICK_TEXZERO=0` turns the clearing off). In pocket-ui itself (Brick, screen on, 10 s
+windows of the player's pacing line): Super Mario 64 and Banjo-Kazooie 600 of 600 frames once running, worst frames 18 to 20 ms; Pause,
+the menu's picture, Continue, a state saved and loaded and Save & quit as usual. Hand starts of 30 s (`--bench 30`, the first 2 s of
+loading in it): Super Mario 64 32.8 fps read back, 44.7 on the direct way with the core's defaults, 52.0 with the card's.
 Test on a computer: `cargo test --features brick --test brick_gles` (a stub GLES core from C, Mesa as the GPU, the picture upright on the
 screen file). Only the device can say whether a second process may use the vendor's EGL while `pocket-fb --gl` holds the screen (on the
 copy it is the only one), and what the read-back costs on the GE8300.

@@ -166,7 +166,7 @@ cp "$P/VERSION" "$P/BUILD-INFO.txt"; { echo; cat "$CORES/CORES.txt"; } >>"$P/BUI
 for f in bin/pocket-ui bin/pocket-core bin/pocket-fb bin/brick-hw bin/brick-egl lib/libwayland-client.so.0 lib/libffi.so.8 msg/starting.png msg/missing.png msg/missing.raw msg/crashed.png msg/starting-wide.png msg/missing-wide.png msg/missing-wide.raw msg/crashed-wide.png es_systems.cfg asoundrc \
   hwroot/usr/bin/volume hwroot/usr/bin/pactl hwroot/usr/bin/brightness hwroot/usr/bin/systemctl hwroot/usr/bin/wifictl hwroot/usr/bin/timedatectl zoneinfo/UTC hwroot/usr/bin/grim cores/gambatte_libretro.so cores/mgba_libretro.so \
   cores/nestopia_libretro.so cores/snes9x_libretro.so cores/pcsx_rearmed_libretro.so cores/gpsp_libretro.so cores/fceumm_libretro.so cores/picodrive_libretro.so VERSION \
-  fonts/FusionPixel12-zh_hans-CJK.otf fonts/NotoSansSC-Regular-CJK.otf; do [ -s "$P/$f" ] || die "the card folder has no $f"; done
+  fonts/FusionPixel12-zh_hans-CJK.otf fonts/NotoSansSC-Regular-CJK.otf fonts/FusionPixel12-ja-CJK.otf fonts/NotoSansJP-Regular-CJK.otf; do [ -s "$P/$f" ] || die "the card folder has no $f"; done
 for f in .tmp_update/updater trimui/app/MainUI trimui/app/premainui.sh trimui/app/preload.sh pocket-ui/start.sh pocket-ui/app/start.sh pocket-ui/app/RELEASE \
   pocket-ui/app/bin/tailscale pocket-ui/app/bin/tailscaled pocket-ui/app/bin/curl pocket-ui/app/bin/dropbearmulti pocket-ui/app/bin/syncthing pocket-ui/app/hwroot/usr/bin/brick-ssh pocket-ui/app/hwroot/usr/bin/brick-syncthing \
   pocket-ui/app/hwroot/usr/bin/brick-tailscale pocket-ui/app/hwroot/usr/bin/tailscale; do [ -s "$CARD/$f" ] || die "no $f"; done

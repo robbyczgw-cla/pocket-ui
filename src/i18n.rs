@@ -50,6 +50,12 @@ pub enum Lang {
     /// Simplified Chinese: the interface's lines come from `zh.tsv`, its letters from the Chinese fonts pocket-ui ships
     /// as files (`text_fallback::cjk`); offered only where they are (`Lang::offered`).
     Zh,
+    /// Vietnamese: the interface's lines come from `vi.tsv`; Latin letters with stacked marks, in Barlow and in Retro's
+    /// Departure Mono (`scripts/departure-vietnamese.py`; Pixelify lacks them: Retro writes it in Departure Mono).
+    Vi,
+    /// Japanese: the interface's lines come from `ja.tsv`, its letters in their Japanese forms from the font files
+    /// pocket-ui ships (`text_fallback::cjk_ja`); offered only where they are.
+    Ja,
 }
 
 /// What differs by language besides the words. A new language is a line here, one in `Lang`, and its table.
@@ -73,7 +79,7 @@ struct Traits {
 }
 
 /// In the order of `Lang`.
-const TRAITS: [Traits; 8] = [
+const TRAITS: [Traits; 10] = [
     Traits { code: "en", name: "English", accept_language: "Accept-Language: en,de;q=0.5", qwertz: false, decimal: '.', complete: true, cjk_fonts: false },
     Traits { code: "de", name: "Deutsch", accept_language: "Accept-Language: de,en;q=0.8", qwertz: true, decimal: ',', complete: true, cjk_fonts: false },
     Traits { code: "es", name: "Español", accept_language: "Accept-Language: es,en;q=0.8", qwertz: false, decimal: ',', complete: true, cjk_fonts: false },
@@ -81,11 +87,13 @@ const TRAITS: [Traits; 8] = [
     Traits { code: "fr", name: "Français", accept_language: "Accept-Language: fr-FR,fr;q=0.9,en;q=0.7", qwertz: false, decimal: ',', complete: true, cjk_fonts: false },
     Traits { code: "it", name: "Italiano", accept_language: "Accept-Language: it,en;q=0.8", qwertz: false, decimal: ',', complete: true, cjk_fonts: false },
     Traits { code: "ko", name: "한국어", accept_language: "Accept-Language: ko-KR,ko;q=0.9,en;q=0.7", qwertz: false, decimal: '.', complete: true, cjk_fonts: false },
-    Traits { code: "zh", name: "简体中文", accept_language: "Accept-Language: zh-CN,zh;q=0.9,en;q=0.7", qwertz: false, decimal: '.', complete: false, cjk_fonts: true },
+    Traits { code: "zh", name: "简体中文", accept_language: "Accept-Language: zh-CN,zh;q=0.9,en;q=0.7", qwertz: false, decimal: '.', complete: true, cjk_fonts: true },
+    Traits { code: "vi", name: "Tiếng Việt", accept_language: "Accept-Language: vi-VN,vi;q=0.9,en;q=0.7", qwertz: false, decimal: ',', complete: true, cjk_fonts: false },
+    Traits { code: "ja", name: "日本語", accept_language: "Accept-Language: ja-JP,ja;q=0.9,en;q=0.7", qwertz: false, decimal: '.', complete: true, cjk_fonts: true },
 ];
 
 impl Lang {
-    pub const ALL: [Lang; 8] = [Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::Zh];
+    pub const ALL: [Lang; 10] = [Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::Zh, Lang::Vi, Lang::Ja];
 
     fn traits(self) -> &'static Traits {
         &TRAITS[self as usize]
@@ -127,7 +135,8 @@ impl Lang {
     /// Whether this handheld has the letters to paint it: Chinese needs the font files pocket-ui ships
     /// (`text_fallback::cjk_available`; a card or an app without them gets English, never lines of nothing).
     pub fn paintable(self) -> bool {
-        self.paintable_with(crate::text_fallback::cjk_available)
+        // Japanese needs its own pair besides the Chinese one.
+        self.paintable_with(|| if self == Lang::Ja { crate::text_fallback::cjk_ja_available() } else { crate::text_fallback::cjk_available() })
     }
 
     /// `paintable` with the question "are the Chinese font files there" given (asked only for a language that needs them).
@@ -185,6 +194,8 @@ impl Lang {
             Lang::It => (&ITALIAN, IT, "it.tsv"),
             Lang::Ko => (&KOREAN, KO, "ko.tsv"),
             Lang::Zh => (&CHINESE, ZH, "zh.tsv"),
+            Lang::Vi => (&VIETNAMESE, VI, "vi.tsv"),
+            Lang::Ja => (&JAPANESE, JA, "ja.tsv"),
         })
     }
 
@@ -192,6 +203,11 @@ impl Lang {
     /// says it (`es`, `es-419`); English for any other. Chinese is Simplified Chinese (`zh_CN`, `zh-Hans`, `zh_SG`, a bare
     /// `zh`): Taiwan's, Hong Kong's and Macau's Traditional Chinese (`zh_TW`, `zh-HK`, `zh-Hant`) start in English, not in
     /// letters their readers don't write.
+    /// Its code, as locales and ScreenScraper's texts name it ("de").
+    pub fn code(self) -> &'static str {
+        self.traits().code
+    }
+
     pub fn from_locale(locale: &str) -> Lang {
         let l = locale.trim().to_ascii_lowercase();
         let mut parts = l.split(['_', '-', '.', '@']);
@@ -276,7 +292,7 @@ thread_local! {
 }
 
 /// Switches the whole interface at once: the next frame is painted in it (no restart, nothing to reload).
-/// `POCKETUI_LANG` (`de`, `es`, `pt`, `fr`, `it`, `ko`, `zh` or `en`) overrides it, for snapshots and tests. On a thread with a language of its own
+/// `POCKETUI_LANG` (`de`, `es`, `pt`, `fr`, `it`, `ko`, `zh`, `vi`, `ja` or `en`) overrides it, for snapshots and tests. On a thread with a language of its own
 /// (`for_this_thread`) only that thread's language changes.
 pub fn set(lang: Lang) {
     let lang = std::env::var("POCKETUI_LANG").ok().map_or(lang, |l| Lang::from_locale(&l));
@@ -351,6 +367,14 @@ const KO: &str = concat!(include_str!("../assets/i18n/ko.tsv"), include_str!("..
 const ZH: &str = include_str!("../assets/i18n/zh.tsv");
 #[cfg(feature = "brick")]
 const ZH: &str = concat!(include_str!("../assets/i18n/zh.tsv"), include_str!("../assets/i18n/brick-zh.tsv"));
+#[cfg(not(feature = "brick"))]
+const VI: &str = include_str!("../assets/i18n/vi.tsv");
+#[cfg(feature = "brick")]
+const VI: &str = concat!(include_str!("../assets/i18n/vi.tsv"), include_str!("../assets/i18n/brick-vi.tsv"));
+#[cfg(not(feature = "brick"))]
+const JA: &str = include_str!("../assets/i18n/ja.tsv");
+#[cfg(feature = "brick")]
+const JA: &str = concat!(include_str!("../assets/i18n/ja.tsv"), include_str!("../assets/i18n/brick-ja.tsv"));
 
 /// FNV-1a: the keys are short, and SipHash's protection against crafted keys buys nothing here.
 #[derive(Default, Clone, Copy)]
@@ -802,6 +826,8 @@ static FRENCH: OnceLock<Table> = OnceLock::new();
 static ITALIAN: OnceLock<Table> = OnceLock::new();
 static KOREAN: OnceLock<Table> = OnceLock::new();
 static CHINESE: OnceLock<Table> = OnceLock::new();
+static VIETNAMESE: OnceLock<Table> = OnceLock::new();
+static JAPANESE: OnceLock<Table> = OnceLock::new();
 
 type NameSet = HashSet<Box<str>, BuildHasherDefault<Fnv>>;
 
@@ -1327,6 +1353,8 @@ mod tests {
                 .filter(|l| !l.trim().is_empty() && !l.starts_with('#') && !l.starts_with("re:"))
                 // Words the table translates where they are no name (the Lens's language filter, a Curator tag).
                 .filter(|l| !["English", "‹ English ›", "puzzle"].contains(l))
+                // In keep.txt for Italian, which says "standalone" too; the other languages translate "(standalone)".
+                .filter(|l| !(*l == "hakuX (standalone)" && file != "it.tsv"))
                 // In keep.txt because they read the same in German, not because they are names.
                 .filter(|l| !(file == "es.tsv" && (*l == "‹ Warm ›" || *l == "‹ Scanlines ›" || l.starts_with("Code "))))
                 .filter(|l| !(file == "pt.tsv" && (*l == "‹ Warm ›" || *l == "‹ Scanlines ›" || l.starts_with("Code "))))
@@ -1337,6 +1365,10 @@ mod tests {
                 .filter(|l| !(file == "ko.tsv" && (["Home", "Auto", "Max", "‹ Warm ›", "‹ Normal ›", "‹ Scanlines ›", "‹ Original ›", "Metroidvania"].contains(l) || l.starts_with("Code "))))
                 // Chinese too (主页, 自动, 最高), and Bluetooth is 蓝牙 in every Chinese menu.
                 .filter(|l| !(file == "zh.tsv" && (["Home", "Auto", "Max", "Bluetooth", "‹ Warm ›", "‹ Normal ›", "‹ Scanlines ›", "‹ Original ›", "Metroidvania"].contains(l) || l.starts_with("Code "))))
+                // Japanese too (ホーム, 自動, 最大).
+                .filter(|l| !(file == "ja.tsv" && (["Home", "Auto", "Max", "‹ Warm ›", "‹ Normal ›", "‹ Scanlines ›", "‹ Original ›", "Metroidvania"].contains(l) || l.starts_with("Code "))))
+                // Vietnamese says Auto and Max in its own words (Tự động, Tối đa).
+                .filter(|l| !(file == "vi.tsv" && (["Auto", "Max", "‹ Warm ›", "‹ Normal ›", "‹ Scanlines ›", "‹ Original ›"].contains(l) || l.starts_with("Code "))))
                 .filter_map(|name| t.translate(name).filter(|g| g != name).map(|g| format!("{name:?} -> {g:?}")))
                 .collect();
             assert!(changed.is_empty(), "{file}: {} names the table changes:\n{}", changed.len(), changed.join("\n"));
@@ -1383,12 +1415,13 @@ mod tests {
     #[test]
     fn each_language_writes_decimals_its_own_way() {
         let usage = |l: Lang| match l {
-            Lang::En | Lang::Ko | Lang::Zh => '.',
-            Lang::De | Lang::Es | Lang::Pt | Lang::Fr | Lang::It => ',',
+            Lang::En | Lang::Ko | Lang::Zh | Lang::Ja => '.',
+            Lang::De | Lang::Es | Lang::Pt | Lang::Fr | Lang::It | Lang::Vi => ',',
         };
         for lang in Lang::ALL {
             let Some(t) = lang.table() else { continue };
-            let line = t.translate("PS1 uses about 7% an hour, 2.3 W").unwrap_or_else(|| panic!("{lang:?}: the draw line is in the table"));
+            // A table still being translated may lack the line yet.
+            let Some(line) = t.translate("PS1 uses about 7% an hour, 2.3 W").or_else(|| lang.complete().then(|| panic!("{lang:?}: the draw line is in the table"))) else { continue };
             let want = format!("2{}3", usage(lang));
             assert!(line.contains(&want), "{lang:?}: {line:?} should have {want:?}");
         }
@@ -1619,14 +1652,18 @@ mod tests {
 
     #[test]
     fn the_row_walks_through_every_language_both_ways() {
-        // Chinese is still being translated: off the row, and a developer's Chinese leaves it for English or Korean.
-        assert_eq!(Lang::ALL.map(Lang::next), [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::En, Lang::En]);
-        assert_eq!(Lang::ALL.map(Lang::previous), [Lang::Ko, Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko]);
+        // The offered languages in a round (`Lang::row`); one still being translated leaves the row for its neighbours.
+        let row = Lang::row();
+        for (i, l) in row.iter().enumerate() {
+            assert_eq!(l.next(), row[(i + 1) % row.len()], "{l:?}");
+            assert_eq!(l.previous(), row[(i + row.len() - 1) % row.len()], "{l:?}");
+        }
+        assert_eq!(row[0], Lang::En);
         // With every language offered, the whole round.
         let all = Lang::ALL;
-        assert_eq!(all.map(|l| step_in(&all, l, true)), [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::Zh, Lang::En]);
-        assert_eq!(all.map(|l| step_in(&all, l, false)), [Lang::Zh, Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko]);
-        assert_eq!(Lang::ALL.map(Lang::name), ["English", "Deutsch", "Español", "Português (Brasil)", "Français", "Italiano", "한국어", "简体中文"]);
+        assert_eq!(all.map(|l| step_in(&all, l, true)), [Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::Zh, Lang::Vi, Lang::Ja, Lang::En]);
+        assert_eq!(all.map(|l| step_in(&all, l, false)), [Lang::Ja, Lang::En, Lang::De, Lang::Es, Lang::Pt, Lang::Fr, Lang::It, Lang::Ko, Lang::Zh, Lang::Vi]);
+        assert_eq!(Lang::ALL.map(Lang::name), ["English", "Deutsch", "Español", "Português (Brasil)", "Français", "Italiano", "한국어", "简体中文", "Tiếng Việt", "日本語"]);
         assert_eq!(serde_json::to_string(&Lang::Es).unwrap(), "\"es\"");
         assert_eq!(serde_json::to_string(&Lang::Pt).unwrap(), "\"pt\"");
         assert_eq!(serde_json::from_str::<Lang>("\"pt\"").unwrap(), Lang::Pt);
@@ -1667,7 +1704,8 @@ mod tests {
             let file = lang.source().unwrap().2;
             assert_eq!(files.contains(&file), lang.complete(), "{lang:?} ({file})");
         }
-        assert_eq!(files, ["de.tsv", "es.tsv", "pt.tsv", "fr.tsv", "it.tsv", "ko.tsv"]);
+        let order = ["de.tsv", "es.tsv", "pt.tsv", "fr.tsv", "it.tsv", "ko.tsv", "zh.tsv", "vi.tsv", "ja.tsv"];
+        assert_eq!(files, order.into_iter().filter(|f| Lang::ALL.into_iter().any(|l| l.complete() && l.source().is_some_and(|s| s.2 == *f))).collect::<Vec<_>>());
     }
 
     /// Lead 22.11.2026: a language still being translated (`complete: false`, Korean until it was) is not offered: not
@@ -1680,23 +1718,29 @@ mod tests {
         assert!(offered_if(false, "ko", false, Some("ko:/tmp/ko.tsv")) && !offered_if(false, "ko", false, Some("it:/tmp/it.tsv")));
         assert!(!offered_if(false, "ko", false, Some("ko")), "no file named");
         assert!(offered_if(true, "it", false, None));
-        // Every language but Chinese is complete and offered; Chinese is being translated.
-        assert!(Lang::ALL.iter().filter(|l| **l != Lang::Zh).all(|l| l.complete() && l.offered()));
-        assert!(!Lang::Zh.complete() && !Lang::Zh.offered());
-        assert_eq!(Lang::row(), Lang::ALL[..7]);
-        assert_eq!(Lang::from_system_locale("zh_CN"), Lang::En, "a Chinese phone starts in English until then");
+        // Offered exactly when complete (the fonts of Chinese and Japanese are there on the build computer); a system or
+        // phone in a language still being translated starts in English.
+        for lang in Lang::ALL {
+            assert_eq!(lang.offered(), lang.complete(), "{lang:?}");
+            let code = lang.traits().code;
+            assert_eq!(Lang::from_system_locale(code), if lang.complete() { lang } else { Lang::En }, "{lang:?}");
+        }
+        assert_eq!(Lang::row(), Lang::ALL.into_iter().filter(|l| l.complete()).collect::<Vec<_>>());
+        assert_eq!(Lang::from_locale("ja_JP.UTF-8"), Lang::Ja);
+        assert_eq!(Lang::from_locale("vi_VN.UTF-8"), Lang::Vi);
+        assert_eq!(Lang::from_system_locale("zh_TW"), Lang::En, "Traditional Chinese starts in English");
     }
 
     /// Korean is switched on (`complete`): offered on the row, a Korean system or phone starts in it, and the
     /// completeness checks hold it to every line (`shipped`).
-    /// Chinese is painted from font files on the card (`text_fallback::cjk`): where they are missing (a card or an
-    /// app built without them, a file deleted) it is neither offered nor kept, so a Chinese setting shows English, never
-    /// lines of nothing. Every other language needs no file.
+    /// Chinese and Japanese are painted from font files on the card (`text_fallback::cjk`, `cjk_ja`): where they are
+    /// missing (a card or an app built without them, a file deleted) they are neither offered nor kept, so such a
+    /// setting shows English, never lines of nothing. Every other language needs no file.
     #[test]
     fn chinese_needs_its_font_files_and_falls_back_to_english_without_them() {
-        assert!(Lang::Zh.paintable(), "assets/fonts has them on the build computer");
-        assert!(!Lang::Zh.paintable_with(|| false));
-        for lang in Lang::ALL.into_iter().filter(|l| *l != Lang::Zh) {
+        assert!(Lang::Zh.paintable() && Lang::Ja.paintable(), "assets/fonts has them on the build computer");
+        assert!(!Lang::Zh.paintable_with(|| false) && !Lang::Ja.paintable_with(|| false));
+        for lang in Lang::ALL.into_iter().filter(|l| !matches!(l, Lang::Zh | Lang::Ja)) {
             assert!(lang.paintable_with(|| panic!("{lang:?} asked for the Chinese fonts")), "{lang:?}");
         }
         let _zh = for_this_thread(Lang::En);
@@ -1718,7 +1762,6 @@ mod tests {
         assert_eq!(Lang::from_system(None, || Some("ko_KR".into())), Lang::Ko);
         assert_eq!(Lang::from_system_locale("ko"), Lang::Ko, "a Korean phone");
         assert_eq!(Lang::It.next(), Lang::Ko);
-        assert_eq!(Lang::Ko.next(), Lang::En);
         let _ko = for_this_thread(Lang::Ko);
         assert_eq!(current(), Lang::Ko);
         let mut tr = Cache::default();
@@ -1742,7 +1785,7 @@ mod tests {
         assert_eq!(Lang::from_system(None, || None), Lang::En, "a fresh install: no LANG, no system.language");
         assert_eq!(Lang::from_system(Some(""), || None), Lang::En);
         assert_eq!(Lang::from_system(Some("C.UTF-8"), || Some("de_DE".into())), Lang::En, "LANG comes first");
-        assert_eq!(Lang::from_system(Some("ja_JP.UTF-8"), || None), Lang::En);
+        assert_eq!(Lang::from_system(Some("th_TH.UTF-8"), || None), Lang::En);
         assert_eq!(Lang::from_system(None, || Some("nl_NL".into())), Lang::En);
         assert_eq!(Lang::from_system(None, || Some("es_ES".into())), Lang::Es);
         assert_eq!(Lang::from_system(Some("es_MX.UTF-8"), || None), Lang::Es);

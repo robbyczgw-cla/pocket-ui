@@ -25,7 +25,7 @@ Rows ending with **›** open a subpage (**A Open**); rows without **›** switc
 | **Controls** | Buttons, Controller setup, Test buttons, Haptics, LEDs. See [Controls](settings-sound.md#controls) |
 | **Playing** | On start, Continue where I quit, Console boot screen, Remind me where I was, Screen frames, Over the game, Zoom in the pause menu, Performance & fan, RetroAchievements. See [Playing](settings-playing.md#playing) |
 | **Games** | Add games, Box art & downloads, Game check, Systems on the shelf, Shelf space, Curator, Screenshots, From EmulationStation, Android games (Android only), RomM. See [Games](settings-playing.md#games) |
-| **System** | Back to EmulationStation (dArkOS only), Updates, Language, View (Android only), Sleep & power, Battery, Time, Storage, Backup & reset, Kids mode. See [System](settings-system.md#system) |
+| **System** | Back to EmulationStation (dArkOS only), Updates, Language, View (Android only), Home app (Android only), Android extras (Android only), Sleep & power, Battery, Time, Storage, Backup & reset, Run in background (Android only), Kids mode. See [System](settings-system.md#system) |
 | **Help & tools** | Manual, Tour, How you like to play, First-start setup, Tools, Report a problem, About. See [Help & tools](settings-system.md#help--tools) |
 
 On pocket-ui beta for dArkOS, some rows stay out of the way: Bluetooth, Remote access (SSH) and Time are configured in
@@ -53,7 +53,7 @@ press **L2** during first start.
 
 | Entry | What it holds |
 |---|---|
-| **Layout** | Pick Shelf, Easy, Split or Cabinet with a live preview of your own games. See [Choose a look](#choose-a-look) |
+| **Layout** | Pick Shelf, Easy, Split or Cabinet with a live preview of your own games, and the **Order** of your shelves: **By console** (default) or **By series**. See [Choose a look](#choose-a-look) and [Shelves by series](playing.md#shelves-by-series) |
 | **Appearance** | **Dark** (default), **Light** or **Automatic** (follows time of day). Switch with A or Left/Right. See [Appearance](#appearance) |
 | **Colours** | Colour palette across every screen: Warm, Indigo Cube, Grey Brick, Green X or Blue Station (Cocoa or Pea in Retro style). See [Colours and style](theme.md) |
 | **Style** | Crisp Barlow font, or **Retro** (pixel fonts, frames, icons, palettes and blip sounds; **Retro Pixelify** uses rounder pixel letters). See [Colours and style](theme.md#style) |
@@ -69,6 +69,11 @@ Settings → Look → **Layout** opens the same live preview from first start ("
 actual consoles and box art (or sample games on an empty card). Flip through the four looks with Left/Right to preview
 live behind Settings, press A to keep it, or B ("Cancel") to revert. See [Playing](playing.md#looks) for a breakdown of
 all four layouts.
+
+At the top right of the page, **Order** picks how Home lines up your games: **By console** (default) gives every console its own
+shelf; **By series** gives every game series its own, with all its games from every console in release order
+([Shelves by series](playing.md#shelves-by-series)). Press Up to reach it and Left/Right to switch; it is used at once,
+and B puts it back with the layout.
 
 ### Appearance
 
@@ -176,6 +181,10 @@ toggles (**Case sounds**) live under [Screen & sound](settings-sound.md#screen--
 | **Game connections** | Turns developer, publisher, series and genre on game cards and box backs into clickable links to matching games in your library ([Connections](library.md#connections)). Off displays them as plain text | On |
 | **Rediscover** | Surfaces games you played a year ago or haven't touched in ages inside Curator | On |
 | **GBA console** | Pick **Game Boy Advance** or **Game Boy Advance SP** across shelves, console pages and Cabinet (the SP flips open and loads cartridges into its bottom slot label-down). Persists across reboots without affecting games or emulators | Game Boy Advance |
+| **Mega Drive / Genesis** | Name the Sega console **Mega Drive** or **Genesis** on shelves, console pages and game cards. The games of all its folders (`megadrive`, `genesis`, `megadrive-japan`) share one shelf, and the Mega-CD follows the name (**Mega-CD** or **Sega CD**) ([One console, several folders](systems.md#one-console-several-folders)) | Mega Drive (Genesis in English with an American time zone) |
+| **SNES / Super Famicom** | **SNES**, **SNES (US console)** (every game goes into the US console at launch) or **Super Famicom**. The games of `snes` and `sfc` share one shelf | SNES (SNES (US console) in English with an American time zone) |
+| **NES / Famicom** | **NES** or **Famicom**. The games of `nes`, `famicom` and `fc` share one shelf | NES |
+| **PC Engine / TurboGrafx-16** | **PC Engine** or **TurboGrafx-16**. The games of `pcengine`, `tg16` and dArkOS's `turbografx` share one shelf, and the CD follows the name (**PC Engine CD** or **TurboGrafx-CD**) | PC Engine (TurboGrafx-16 in English with an American time zone) |
 
 #### Sealed new games
 

@@ -39,6 +39,35 @@ impl Theme {
     }
 }
 
+/// Settings › Look › Layout › Order: Home's shelves are the systems, or one shelf per game series (`series_shelf`) in
+/// Shelf, Split and Cabinet. Easy and Kids Mode keep their own order.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ShelfOrder {
+    #[default]
+    Console,
+    Series,
+}
+
+impl ShelfOrder {
+    pub const ALL: [ShelfOrder; 2] = [ShelfOrder::Console, ShelfOrder::Series];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            ShelfOrder::Console => "By console",
+            ShelfOrder::Series => "By series",
+        }
+    }
+
+    /// One line about the choice, beside its pills.
+    pub fn blurb(self) -> &'static str {
+        match self {
+            ShelfOrder::Console => "A shelf for each console.",
+            ShelfOrder::Series => "A shelf for each series, every console's games in release order.",
+        }
+    }
+}
+
 /// Settings > Look > Appearance.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "lowercase")]

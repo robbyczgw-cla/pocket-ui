@@ -805,8 +805,9 @@ mod tests {
             assert!(lang == Lang::En || said != line, "{lang:?} has the Android line");
             // The two ways the Linux line names in brackets ("phone, file sharing"), in this language's own words.
             let linux = tr_in(lang, "Or add your own: Settings › Games › Add games (phone, file sharing).");
-            let ways = linux.split_once('(').and_then(|(_, w)| w.split_once(')')).map(|(w, _)| w.to_string()).unwrap();
-            for way in ways.split(',').map(|w| w.trim().to_lowercase()) {
+            // Brackets and commas as the language writes them: （，、 in Chinese and Japanese.
+            let ways = linux.split_once(['(', '（']).and_then(|(_, w)| w.split_once([')', '）'])).map(|(w, _)| w.to_string()).unwrap();
+            for way in ways.split([',', '，', '、']).map(|w| w.trim().to_lowercase()) {
                 assert!(!said.to_lowercase().contains(&way), "{lang:?} promises {way}: {said}");
             }
         }

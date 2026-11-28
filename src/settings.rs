@@ -17,7 +17,7 @@ where
     Ok(serde_json::from_value(v).unwrap_or_default())
 }
 
-pub use crate::look_settings::{Appearance, Motion, Theme};
+pub use crate::look_settings::{Appearance, Motion, ShelfOrder, Theme};
 
 /// Settings > Look > Game start animation: Cozy plays the game's launch animation so that it reads (about a second, the
 /// pocket-core game's window waits for it) and slows the other transitions a little; Quick is the timings as designed,
@@ -116,6 +116,9 @@ impl Frames {
 pub struct Settings {
     #[serde(default, deserialize_with = "lenient")]
     pub theme: Theme,
+    /// Settings › Look › Layout › Order (`series_shelf`): by console when unset, and only By series is written.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "is_by_console")]
+    pub shelf_order: ShelfOrder,
     /// First-start setup has been completed or skipped.
     #[serde(default, deserialize_with = "lenient")]
     pub onboarded: bool,
@@ -200,6 +203,10 @@ pub struct Settings {
     /// in the list, or a colour this version does not know, stays as it was first made.
     #[serde(default, deserialize_with = "lenient")]
     pub console_colours: std::collections::BTreeMap<String, String>,
+    /// Settings → Look → Cozy extras: the name of a console sold under regional names, pair → name id (`region_pairs`),
+    /// e.g. `megadrive` → `genesis`. A pair not in the list has the name of the device's language and time zone.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub console_names: std::collections::BTreeMap<String, String>,
     /// Settings > Look > Motion; Full when unset.
     #[serde(default, deserialize_with = "lenient")]
     pub motion: Motion,
@@ -226,6 +233,22 @@ pub struct Settings {
     /// art only). Written only with `box_art_only`, so a settings.json from before it downloads as it always did.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
     pub art_off: bool,
+    /// Settings > Games > Box art & downloads > ScreenScraper: real spines, box backs and labels from ScreenScraper.fr
+    /// after the box art (`screenscraper`, docs/SCREENSCRAPER.md). Off when unset (and not written then).
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub screenscraper: bool,
+    /// Settings > Games > Box art & downloads > ScreenScraper > Real manuals: Off hides the Details row "Manual" and
+    /// fetches none (`app_manual`). On when unset (and not written then).
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub screenscraper_no_manuals: bool,
+    /// The three rows under ScreenScraper (`screenscraper::Show`, `Settings::screenscraper_show`): Real spines and Real
+    /// labels On, Real box backs Off when unset, so `false` is the usual for all three (and nothing is written then).
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub screenscraper_no_spines: bool,
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub screenscraper_no_labels: bool,
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "std::ops::Not::not")]
+    pub screenscraper_backs: bool,
     /// Settings → Look → Text size; Normal when unset (and not written then), so nothing changes for a
     /// settings.json from before it.
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "is_normal")]
@@ -285,6 +308,17 @@ fn retired_look(path: &Path) -> bool {
 
 fn is_off(l: &crate::over_game::Level) -> bool {
     *l == crate::over_game::Level::Off
+}
+
+fn is_by_console(o: &ShelfOrder) -> bool {
+    *o == ShelfOrder::Console
+}
+
+impl Settings {
+    /// Which of ScreenScraper's pictures are shown (the rows under ScreenScraper).
+    pub fn screenscraper_show(&self) -> crate::screenscraper::Show {
+        crate::screenscraper::Show { spines: !self.screenscraper_no_spines, labels: !self.screenscraper_no_labels, backs: self.screenscraper_backs, manuals: !self.screenscraper_no_manuals }
+    }
 }
 
 fn is_normal(t: &TextSize) -> bool {
@@ -487,6 +521,7 @@ mod tests {
     fn chosen() -> Settings {
         Settings {
             theme: Theme::Cabinet,
+            shelf_order: ShelfOrder::Series,
             onboarded: true,
             update_url: Some("https://example.test/update.json".into()),
             store_url: Some("file:///store/catalog.json".into()),
@@ -510,6 +545,7 @@ mod tests {
             retro_letters: crate::font_style::RetroLetters::Pixelify,
             gba_model: crate::system_art::GbaModel::Sp,
             console_colours: [("gba".to_string(), "pink".to_string())].into(),
+            console_names: [("megadrive".to_string(), "genesis".to_string())].into(),
             motion: Motion::Reduced,
             frames: Frames::Every,
             seen_version: Some("0.2.0".into()),
@@ -517,6 +553,11 @@ mod tests {
             language: Some(crate::i18n::Lang::De),
             box_art_only: true,
             art_off: false,
+            screenscraper: true,
+            screenscraper_no_manuals: true,
+            screenscraper_no_spines: false,
+            screenscraper_no_labels: true,
+            screenscraper_backs: true,
             text_size: TextSize::Large,
             over_game: crate::over_game::Level::Sensors,
             animations: Some(Animations::Quick),

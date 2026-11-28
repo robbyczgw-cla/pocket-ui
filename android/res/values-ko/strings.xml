@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android extras: the pause menu's service as Android's accessibility page describes it (PadWatch). -->
+<resources>
+    <string name="pad_watch_description">pocket-ui가 다른 에뮬레이터 앱에서 시작한 게임 위에 pocket-ui 일시정지 메뉴를 엽니다: HOME 또는 SELECT + START. 앞에 있는 앱과 패드 버튼만 읽고 그 외에는 아무것도 읽지 않으며, 그 게임 밖에서는 모든 버튼을 그대로 전달합니다.</string>
+</resources>

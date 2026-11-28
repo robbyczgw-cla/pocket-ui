@@ -54,12 +54,17 @@ device, Pixel Path, Screen frames and "Continue your last game" start Off.
 | **Pixel Path** | Off | On | Settings → Games → Curator ("Pixel Path in the pause menu") |
 | **Pixel Path over every game** | As it is | As it is | Settings → Playing → [Over the game](settings-playing.md#over-the-game) set to Pixel Path ([Pixel Path over the game](pause-menu.md#pixel-path-over-the-game)), enabling Pixel Path in the pause menu too; Off clears only the overlay |
 | **Lens & smart shelves** | Off | On | Settings → Games → Curator |
+| **Real box pictures** | As it is | As it is | Settings → Games → Box art & downloads → [ScreenScraper](extras.md#screenscraper) (Off until you switch it on). After updating to 0.8.0 this card lists the four kinds of picture with a real example each: A ticks one, START turns ScreenScraper on with the ones ticked, B (Not now) leaves it off |
+| **Shelves by series** | As it is | As it is | Settings → Look → Layout → Order ([Shelves by series](playing.md#shelves-by-series)): On sets By series, Off By console. After updating to 0.8.0, A tries it, B keeps the order |
 
 Info-only cards that follow: **Search and the letter jump**, **Console credits**, **Players**, **Run-ahead**, **Runs on**,
 **RetroAchievements**, **Sync**, **Tailscale**, **Tools**, **Cozy extras** (real cases, memory cards, stickers and other
 cozy touches, each toggled individually in Settings → Look → [Cozy extras](settings.md#cozy-extras)), **Performance & fan**
 and **Settings at once** (START jumps straight into settings rows with L1/R1 switching categories; see
 [Open Settings](settings.md#open-settings)).
+
+**Real box pictures** and **Shelves by series** are not among first start's "Choose for yourself" cards: first start
+already asks for them on its own steps (ScreenScraper under Box art, Order on the look step).
 
 Choosing **For a child** skips all of these: [Kids mode](kids-mode.md) manages its own setup and leaves your switches
 untouched.
@@ -71,6 +76,13 @@ never interrupting a game (if you boot straight into your last game, they wait u
 your pick and continue, or B to dismiss them. Try-it-out looks default to On (in 0.3.0, **Retro** offers "Try Retro" on A
 and switches Settings → Look → Style right away, while B leaves it untouched). **Settings at once** points out the new
 layout: START opens entries immediately, L1/R1 switch categories, and Tailscale, SSH and Sync live under Connections.
+In 0.8.0, **Real box pictures** introduces ScreenScraper and says what it sends: only while it is on, each game's
+checksum, size and file name go to screenscraper.fr, as a guest unless you sign in. You pick each kind of picture on its
+own: **Real spines**, **Real labels**, **Real box backs** and **Real manuals**, with a real example of the chosen one
+beside the list (from Tobu Tobu Girl, a free Game Boy game with a real cartridge release; its art © 2017 Tangram Games,
+CC BY 4.0). Spines, labels and manuals start ticked, box backs not. **A** ticks or unticks the chosen kind, **START**
+(Turn on) switches ScreenScraper on with the kinds ticked, **B** (Not now) leaves it off. Nothing is sent before START.
+The same four rows are under ScreenScraper in Settings. **Shelves by series** offers Order: By series with A.
 Once dismissed, the cards never reappear; everything stays in Settings. Updates without new feature cards (and brand-new
 first starts) skip this screen.
 

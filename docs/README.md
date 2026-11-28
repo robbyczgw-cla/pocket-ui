@@ -21,6 +21,14 @@ Start at [user/index.md](user/index.md).
 | [user/getting-started.md](user/getting-started.md) | Preparing the card, first start, Wi-Fi, adding games |
 | [user/other-handhelds.md](user/other-handhelds.md) | Other Retroid devices, SM8550, Anbernic H700 and the R36S |
 | [user/games-drive.md](user/games-drive.md) | RG28XX and RG35XX 2024 cards: copying games from a Mac or Windows PC |
+| [user/devices.md](user/devices.md) | The website's Devices pages: one short page per handheld (not in the manual on the device) |
+| [user/device-retroid-mini-v2.md](user/device-retroid-mini-v2.md) | Devices: Retroid Pocket Mini V2 |
+| [user/device-retroid.md](user/device-retroid.md) | Devices: Retroid Pocket 5, Flip 2, 6, Nova and Classic |
+| [user/device-odin-2.md](user/device-odin-2.md) | Devices: AYN Odin 2 family |
+| [user/device-anbernic-h700.md](user/device-anbernic-h700.md) | Devices: Anbernic H700 |
+| [user/device-r36s.md](user/device-r36s.md) | Devices: R36S and R36XX, the card and the pocket-ui beta for dArkOS |
+| [user/device-rk3566.md](user/device-rk3566.md) | Devices: RK3566 generic card |
+| [user/device-android.md](user/device-android.md) | Devices: pocket-ui for Android |
 | [user/copy-games.md](user/copy-games.md) | Copying games without Wi-Fi: the second card |
 | [user/how-to.md](user/how-to.md) | Short steps: update over Wi-Fi, a game that won't start, pair a controller, back up saves, sync with a second device |
 | [user/game-check.md](user/game-check.md) | Settings → Games → Game check: will your games start? |
@@ -44,7 +52,7 @@ Start at [user/index.md](user/index.md).
 | [user/bluetooth.md](user/bluetooth.md) | Settings → Connections → Bluetooth: pairing controllers, headphones and speakers, reconnecting, forgetting |
 | [user/continue.md](user/continue.md) | Continue: an open case means your moment is waiting and A goes straight back; how long each system takes, what can't continue |
 | [user/quick-settings.md](user/quick-settings.md) | Quick settings (HOME), the power menu, sleep, power off and low battery |
-| [user/language.md](user/language.md) | Settings → System → Language: English, German, Spanish, Brazilian Portuguese, French, Italian or Korean, what stays English |
+| [user/language.md](user/language.md) | Settings → System → Language: English, German, Spanish, Brazilian Portuguese, French, Italian, Korean, Simplified Chinese, Vietnamese or Japanese, what stays English |
 | [user/night-light.md](user/night-light.md) | Settings → Screen & sound → Night light: warmer, less blue colours in the evening, the schedule, the strength, how it fades and where it reaches |
 | [user/theme.md](user/theme.md) | Settings → Look → Colours and Font: the five colour sets and the three fonts |
 | [user/performance.md](user/performance.md) | Settings → Playing → Performance & fan: game defaults, the fan in the menus, Smooth fan, the readout |
@@ -115,6 +123,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [HOST.md](HOST.md) | Reference | pocket-core, our libretro host: how it works, systems, measurements |
 | [AUDIO-PATH.md](AUDIO-PATH.md) | Reference | Prepared sinc and NEON, H700 buffering, RetroArch comparisons and measurement limits |
 | [XBOX.md](XBOX.md) | Reference | Xbox through the hakuX core in RetroArch: start, appendconfig, pause menu, licence, device test (experimental) |
+| [STANDALONE-CONTROLS.md](STANDALONE-CONTROLS.md) | Reference | Where each standalone emulator keeps its button map, when ROCKNIX writes it, and when pocket-ui sets a stale one aside |
 | [BIG-EMULATORS.md](BIG-EMULATORS.md) | Reference | PlayStation 2, GameCube, Wii and 3DS through ARMSX2, Dolphin and Azahar: save slots, Options, measurements |
 | [FRAMES.md](FRAMES.md) | Reference | Screen frames (bezels) and frame packs |
 | [SYSTEM-CONTROLS.md](SYSTEM-CONTROLS.md) | Reference | Volume, brightness, colour temperature, quick settings, time zone |
@@ -156,6 +165,7 @@ Start at [DEVELOPING.md](DEVELOPING.md).
 | [WEB-COMPANION.md](WEB-COMPANION.md) | Reference | The web companion: threads and cost, where it listens, sign-in, CSRF, every endpoint, uploads, the threat model and its self-review |
 | [PHONE-UPLOAD.md](PHONE-UPLOAD.md) | Reference | "Send from your phone": the upload server that exists only while its page is open, its routes, limits and threat model |
 | [ROMM.md](ROMM.md) | Reference | RomM as a source of games: pairing by RomM's device flow, the server's list on the shelf, a game's download at its first start, Android's requests, the tests against a real RomM |
+| [SCREENSCRAPER.md](SCREENSCRAPER.md) | Reference | ScreenScraper as a source of box art and the box's other faces (prepared for 0.8, hidden without pocket-ui's developer id): the id's way into release builds, quotas and statuses, where the pictures go, the settings row's draft |
 | [VIRTUAL-DEVICE.md](VIRTUAL-DEVICE.md) | Reference | The Docker-based virtual Mini V2 |
 | [WIFI-BENCH.md](WIFI-BENCH.md) | Reference | The Wi-Fi bench: ROCKNIX's NetworkManager + iwd and the real pocket-ui against simulated radios and access points (mac80211_hwsim + hostapd), its scenarios and the first results |
 | [IDLE.md](IDLE.md) | Reference | Still menus: finite animation passes, input and timer scheduling, two-window presentation traces and repeatable idle measurements |

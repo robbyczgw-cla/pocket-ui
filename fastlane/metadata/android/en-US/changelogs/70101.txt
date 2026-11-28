@@ -1,0 +1,8 @@
+• Choose your own cover for any game
+• Korean menus; Korean, Japanese and Chinese game names drawn with pocket-ui's own fonts
+• .7z games play directly
+• Dolphin setup card before your first GameCube or Wii game
+• The pause menu shows your game
+• Nintendo DS: tap to swap screens
+• Square screens fit and follow the system's rotation
+• More real sounds, colourful spines, smoother shelves

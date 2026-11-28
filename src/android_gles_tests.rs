@@ -45,23 +45,46 @@ fn a_new_gles_scene_stays_visible_when_the_core_leaves_no_read_buffer() {
         let fbo = std::num::NonZeroU32::new(r.framebuffer.unwrap()() as u32).map(glow::NativeFramebuffer);
         gl.bind_framebuffer(glow::FRAMEBUFFER, fbo);
         gl.clear_color(0.25, 0.5, 0.75, 1.0);
-        gl.clear(glow::COLOR_BUFFER_BIT);
-        // A core's scene passes may leave arbitrary GL state behind. Its visible colour
-        // attachment still contains the picture when it no longer selects it for reads.
-        for selected in [glow::COLOR_ATTACHMENT0, glow::NONE, glow::COLOR_ATTACHMENT1] {
-            gl.read_buffer(selected);
-            assert_eq!(gl.get_error(), glow::NO_ERROR);
-            assert!(hw::video_refresh(usize::MAX as *const c_void, 8, 8));
-            let picture = core.capture().unwrap();
-            let error = gl.get_error();
-            assert_eq!(error, glow::NO_ERROR, "the frame must remain readable after a scene pass");
-            assert!(picture.to_rgb().chunks_exact(3).all(|p| p[0].abs_diff(64)<=1 && p[1].abs_diff(128)<=1 && p[2].abs_diff(191)<=1), "the new scene must retain its colours instead of becoming black");
-            assert_eq!(gl.get_parameter_i32(glow::READ_BUFFER), selected as i32, "the core keeps its own read-buffer state");
+        // A core's scene passes may leave arbitrary GL state behind. Both the
+        // shared path and the fallback still read the visible colour attachment.
+        for shared in [true, false] {
+            if !shared { core.use_cpu_capture(); }
+            assert_eq!(core.shared(), shared);
+            for selected in [glow::COLOR_ATTACHMENT0, glow::NONE, glow::COLOR_ATTACHMENT1] {
+                gl.clear(glow::COLOR_BUFFER_BIT);
+                gl.read_buffer(selected);
+                assert_eq!(gl.get_error(), glow::NO_ERROR);
+                assert!(hw::video_refresh(usize::MAX as *const c_void, 8, 8));
+                let picture = core.capture(core.picture().unwrap());
+                assert_eq!(gl.get_error(), glow::NO_ERROR, "the frame remains readable after a scene pass");
+                assert!(picture.to_rgb().chunks_exact(3).all(|p| p[0].abs_diff(64) <= 1 && p[1].abs_diff(128) <= 1 && p[2].abs_diff(191) <= 1));
+                assert_eq!(gl.get_parameter_i32(glow::READ_BUFFER), selected as i32, "the core keeps its own read-buffer state");
+            }
         }
     }
-    assert_eq!(hw::read_buffer_overrides(), 2, "only the two changed selections needed an override");
+    assert_eq!(hw::read_buffer_overrides(), 4, "two overrides per path");
     drop(core);
     hw::reset();
+}
+
+#[test]
+fn a_recreated_activity_context_is_never_used_to_activate_the_old_core() {
+    let _lock = EGL_TEST.lock().unwrap_or_else(|e| e.into_inner());
+    let context = || match crate::headless_gl::context() {
+        Ok(context) => Some(context),
+        Err(error) if std::env::var_os("POCKET_REQUIRE_GL").is_some() => panic!("no headless GLES: {error}"),
+        Err(_) => None,
+    };
+    let Some((_gl, original)) = context() else { return };
+    let core = hw::HwContext::for_test(8, 8, true);
+    assert!(core.try_core_current());
+    core.frontend_current();
+    let Some((_gl, replacement)) = context() else { return };
+    assert!(!core.try_core_current(), "the new Activity cannot re-enter the old share group");
+    assert!(!core.activate_for_cleanup(), "GL cleanup cannot run with the replacement context current");
+    drop(core); // No stale-window panic and no GL commands into the replacement context.
+    drop(replacement);
+    drop(original);
 }
 
 #[allow(dead_code)]

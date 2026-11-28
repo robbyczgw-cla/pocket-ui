@@ -160,6 +160,7 @@ pub fn save_dir(system: &str, rom: &Path) -> PathBuf {
 /// Whether A may go on with the TV's run: the game has nothing of its own yet, no battery save and no moment. The
 /// run's state carries the game's memory, a save among it, so it must never stand in for one the player has.
 pub fn may_continue(system: &str, rom: &Path) -> bool {
+    let system = crate::region_pairs::own_system(system, rom);
     let Some(stem) = rom.file_stem().and_then(|s| s.to_str()) else { return false };
     let dir = save_dir(system, rom);
     if crate::game_files::SAVE_EXTS.iter().any(|e| dir.join(format!("{stem}.{e}")).exists()) {

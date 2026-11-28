@@ -23,6 +23,54 @@ pub struct System {
     /// Every emulator and core es_systems.cfg lists for the system: what "Runs on" offers (`emu_choice`).
     pub emulators: Vec<crate::emu_choice::EsEmulator>,
     pub games: Vec<Game>,
+    /// The other folders of a console sold under regional names (`region_pairs`): `genesis` and `megadrive-japan` on the
+    /// Mega Drive's shelf. Their games are in `games`; each keeps its own system for its start, saves and pictures
+    /// (`System::for_game`). Empty for every other shelf.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parts: Vec<Part>,
+}
+
+/// A folder of a merged shelf with its own es_systems.cfg entry (`System::parts`).
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Part {
+    /// Its system id ("genesis").
+    pub name: String,
+    pub fullname: String,
+    /// Its folder and the folders of another card read as it (`foreign_folders`).
+    pub folders: Vec<PathBuf>,
+    pub emulator: Option<String>,
+    pub core: Option<String>,
+    pub emulators: Vec<crate::emu_choice::EsEmulator>,
+}
+
+impl System {
+    /// The part of a merged shelf that the game at `path` is in (`region_pairs`), if any.
+    pub fn part_for(&self, path: &Path) -> Option<&Part> {
+        self.parts.iter().filter(|p| p.folders.iter().any(|d| path.starts_with(d))).max_by_key(|p| p.folders.iter().filter(|d| path.starts_with(d)).map(|d| d.as_os_str().len()).max())
+    }
+
+    /// The system id of the game at `path`: its part's ("genesis"), else the shelf's.
+    pub fn own_id(&self, path: &Path) -> &str {
+        self.part_for(path).map_or(self.name.as_str(), |p| p.name.as_str())
+    }
+
+    /// The system the game at `path` starts as: on a merged shelf a game in another folder is that folder's system,
+    /// with its own emulators and default (`-P genesis`, what es_systems.cfg and Runs on say for it); otherwise the
+    /// shelf itself, not copied.
+    pub fn for_game(&self, path: &Path) -> std::borrow::Cow<'_, System> {
+        match self.part_for(path) {
+            None => std::borrow::Cow::Borrowed(self),
+            Some(p) => std::borrow::Cow::Owned(System {
+                name: p.name.clone(),
+                fullname: self.fullname.clone(),
+                emulator: p.emulator.clone(),
+                core: p.core.clone(),
+                emulators: p.emulators.clone(),
+                games: Vec::new(),
+                parts: Vec::new(),
+            }),
+        }
+    }
 }
 
 /// ROCKNIX entries that are apps rather than game systems; they belong in settings, not on the shelf.
@@ -76,7 +124,7 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
 
     // Folders of another card ("Game Boy Advance (GBA)", "Sega Genesis") that are a system's, read in place (`foreign_folders`).
     let foreign = foreign_by_system(es_systems);
-    let mut systems: Vec<System> = doc
+    let systems: Vec<(System, Vec<PathBuf>)> = doc
         .descendants()
         .filter(|n| n.has_tag_name("system"))
         .filter_map(|sys| {
@@ -124,8 +172,11 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
                 let data = gamelists.map(|g| crate::gamelist::system(g.data_dir, g.places, &name, &path));
                 for game in games.iter_mut().filter(|_| data.is_some() || numbered_titles) {
                     let without_number = numbered_titles.then(|| collection_title(&game.name)).flatten();
+                    // `display_name` already took a "0239 " off: the gamelist's name still counts for such a file.
+                    let numbered = without_number.is_some()
+                        || (numbered_titles && game.path.file_stem().and_then(|s| s.to_str()).is_some_and(crate::library_names::has_release_number));
                     let better = data.as_ref().and_then(|entries| entries.get(&game.path)).and_then(|e| {
-                        if without_number.is_some() { crate::gamelist::usable_name(&e.name, None) }
+                        if numbered { crate::gamelist::usable_name(&e.name, None) }
                         else { crate::gamelist::better_name(&game.name, &e.name) }
                     });
                     if let Some(better) = better {
@@ -173,7 +224,9 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
             for game in games.iter_mut().filter(|g| !from_list.contains(&g.path)) {
                 game.name = title_case(&game.name);
             }
-            (!games.is_empty()).then(|| System {
+            let mut folders = vec![path.clone()];
+            folders.extend(foreign.get(&name).into_iter().flatten().cloned());
+            (!games.is_empty()).then(|| (System {
                 // A few systems get pocket-ui's own name instead of ES's (`system_names::own_long`), in the player's language.
                 fullname: crate::system_names::own_long(&name).map(crate::i18n::tr)
                     .or_else(|| child_text(sys, "fullname")).unwrap_or_else(|| crate::document_library::system_name(&name)),
@@ -182,10 +235,12 @@ pub fn load_with(es_systems: &Path, gamelists: Option<&Gamelists>) -> Result<Vec
                 core,
                 emulators: crate::emu_choice::parse_emulators(sys),
                 games,
-            })
+                parts: Vec::new(),
+            }, folders))
         })
         .collect();
-    let mut systems = join_same_systems(systems);
+    let mut systems = join_same_systems(join_region_pairs(systems));
+    name_region_pairs(&mut systems);
     systems.sort_by_key(|s| s.fullname.to_lowercase());
     fs::check().map_err(|e| e.to_string())?;
     learn_names(&systems);
@@ -205,6 +260,49 @@ fn take_known_names(games: &mut [Game], known: &crate::rom_id::Names) {
             if crate::covers::normalize(&proper) != crate::covers::normalize(&game.name) {
                 game.name = proper;
             }
+        }
+    }
+}
+
+/// The folders of a console sold under regional names are one shelf (`region_pairs`): the games of `genesis` and
+/// `megadrive-japan` stand on the Mega Drive's, nothing moves on the card. The shelf is the main id's entry when the
+/// card has it (else the pair's first that has games), with its facts; every other entry of the pair becomes a part
+/// with its own (`System::parts`), so each game still starts, saves and finds its pictures as its folder's system.
+fn join_region_pairs(systems: Vec<(System, Vec<PathBuf>)>) -> Vec<System> {
+    let mut out: Vec<System> = Vec::with_capacity(systems.len());
+    // The shelf of each pair: the main id if it has games, else the one first in the pair's order.
+    let lead = |pair: &crate::region_pairs::Pair| pair.ids.iter().find(|id| systems.iter().any(|(s, _)| s.name == **id)).copied();
+    let leads: Vec<(&'static str, &'static str)> = crate::region_pairs::PAIRS.iter().filter_map(|p| Some((p.key, lead(p)?))).collect();
+    let mut later: Vec<(System, Vec<PathBuf>)> = Vec::new();
+    for (s, folders) in systems {
+        let is_part = crate::region_pairs::pair_of(&s.name).and_then(|p| leads.iter().find(|(k, _)| *k == p.key)).is_some_and(|(_, l)| *l != s.name);
+        if is_part {
+            later.push((s, folders));
+        } else {
+            out.push(s);
+        }
+    }
+    for (s, folders) in later {
+        let shelf = out.iter_mut().find(|o| crate::region_pairs::same_shelf(&o.name, &s.name) && crate::region_pairs::pair_of(&o.name).is_some()).expect("the pair's lead is in the list");
+        let have: std::collections::HashSet<PathBuf> = shelf.games.iter().map(|g| g.path.clone()).collect();
+        shelf.games.extend(s.games.into_iter().filter(|g| !have.contains(&g.path)));
+        match shelf.parts.iter_mut().find(|p| p.name == s.name) {
+            Some(p) => p.folders.extend(folders),
+            None => shelf.parts.push(Part { name: s.name, fullname: s.fullname, folders, emulator: s.emulator, core: s.core, emulators: s.emulators }),
+        }
+        shelf.games.sort_by_key(|g| g.name.to_lowercase());
+        let numbered = shelf.name == "snes";
+        tell_apart(&mut shelf.games, numbered);
+    }
+    out
+}
+
+/// A shelf of a console sold under regional names shows the name the player chose (Settings → Look → Cozy extras), or
+/// the one for the device's language and time zone (`region_pairs`), merged or not.
+pub fn name_region_pairs(systems: &mut [System]) {
+    for s in systems.iter_mut() {
+        if let Some(n) = crate::region_pairs::current(&s.name) {
+            s.fullname = n.long.to_string();
         }
     }
 }
@@ -289,6 +387,11 @@ pub fn card_folders(top: &Path, catalog: &[SysInfo]) -> Vec<(String, PathBuf)> {
 /// `library_cache::read`, and both call this; the names made from a file name elsewhere (`shelf_name`) learn their own.
 pub fn learn_names(systems: &[System]) {
     crate::i18n::learn_names(systems.iter().flat_map(|s| s.games.iter().map(|g| g.name.as_str())));
+    // And where the parts of merged shelves are: a cover or a state of a game in `genesis/` is looked for under its own
+    // system, whatever shelf id a caller passes (`region_pairs::own_system`).
+    for p in systems.iter().flat_map(|s| &s.parts) {
+        crate::region_pairs::learn(&p.name, &p.folders);
+    }
 }
 
 /// Takes the games the player hid (`library_meta`, "Hide from the shelf" on the card) out of `systems`, and a system
@@ -604,12 +707,17 @@ fn scan(dir: &Path, exts: &[String]) -> Vec<Game> {
 fn scan_into(dir: &Path, exts: &[String], broken: &mut Vec<BrokenDisc>) -> Vec<Game> {
     let (files, folders) = scan_entries(dir);
     let mut games = scan_files(files, exts, broken);
+    let nested = nested_references(&games);
     for sub in folders {
         let folder = sub.file_name().and_then(|n| n.to_str()).unwrap_or_default();
         if folder.starts_with('_') || computer_litter(folder) {
             continue;
         }
         let mut inside = scan_flat_into(&sub, exts, broken);
+        // A disc a sheet beside the folder names ("Game.m3u" with "Game/Disc 1.iso") is part of that game, as one next to
+        // the sheet is (night QA 27.11.2026: the playlist and both discs were on the shelf).
+        let lower = folder.to_lowercase();
+        inside.retain(|g| !g.path.file_name().and_then(|n| n.to_str()).is_some_and(|n| nested.contains(&format!("{lower}/{}", n.to_lowercase()))));
         let is_m3u = |g: &Game| g.path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("m3u"));
         let playlists: Vec<Game> = inside.iter().filter(|g| is_m3u(g)).cloned().collect();
         if playlists.len() == 1 {
@@ -666,7 +774,7 @@ fn scan_files(files: Vec<PathBuf>, exts: &[String], broken: &mut Vec<BrokenDisc>
     // A disc image that a sheet or playlist of the folder names is part of that game, not a game of its own
     // (RetroArch's playlist scan does the same): Twelve Snakes.cue + Twelve Snakes.iso is one entry, the .cue.
     let sheets = read_sheets(&games);
-    let referenced: std::collections::HashSet<String> = sheets.iter().flat_map(|(_, names)| names.iter().map(|n| n.to_lowercase())).collect();
+    let referenced: std::collections::HashSet<String> = sheets.iter().flat_map(|(_, names, _)| names.iter().map(|n| n.to_lowercase())).collect();
     games.retain(|g| !g.path.file_name().and_then(|n| n.to_str()).is_some_and(|n| referenced.contains(&n.to_lowercase())));
     // A cue or gdi sheet whose track file is missing can't start (finding #11 of the first-run test, 2026-10-24): it
     // is left out, and Add games names it (`look_at_folder`). A sheet that names nothing, or a file in a subfolder
@@ -678,7 +786,7 @@ fn scan_files(files: Vec<PathBuf>, exts: &[String], broken: &mut Vec<BrokenDisc>
     };
     let kind_of = |sheet: &Path| sheet.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
     let mut lost: std::collections::HashSet<String> = Default::default();
-    for (sheet, names) in &sheets {
+    for (sheet, names, _) in &sheets {
         if !matches!(kind_of(sheet).as_str(), "cue" | "gdi") {
             continue;
         }
@@ -689,8 +797,10 @@ fn scan_files(files: Vec<PathBuf>, exts: &[String], broken: &mut Vec<BrokenDisc>
         }
     }
     // A playlist none of whose discs can start (a file missing, or a sheet just found broken) can't start either.
-    for (sheet, names) in &sheets {
-        if kind_of(sheet) != "m3u" {
+    for (sheet, names, nested) in &sheets {
+        // A playlist with a disc that is there in a folder beside it (`nested_disc_here`) starts from that one, whatever is
+        // missing next to it (Sol's review of the night QA fix, 27.11.2026).
+        if kind_of(sheet) != "m3u" || *nested {
             continue;
         }
         let usable = |n: &String| here.contains(&n.to_lowercase()) && !lost.contains(&n.to_lowercase());
@@ -707,9 +817,10 @@ fn scan_files(files: Vec<PathBuf>, exts: &[String], broken: &mut Vec<BrokenDisc>
 const SHEET_MAX_BYTES: u64 = 1 << 20;
 
 /// The `.cue`, `.m3u` and `.gdi` sheets among `games`, each with the file names (no folder, as the sheet writes them)
-/// it points at, not counting a file that names itself. Only sheets that are in the list count: a system that does not
-/// list `.cue` keeps its `.bin`.
-fn read_sheets(games: &[Game]) -> Vec<(PathBuf, Vec<String>)> {
+/// it points at, not counting a file that names itself, and whether it names a disc that is there in a folder beside it
+/// (`nested_disc_here`). Only sheets that are
+/// in the list count: a system that does not list `.cue` keeps its `.bin`.
+fn read_sheets(games: &[Game]) -> Vec<(PathBuf, Vec<String>, bool)> {
     let mut out = Vec::new();
     for g in games {
         let Some(own) = g.path.file_name().and_then(|n| n.to_str()).map(str::to_lowercase) else { continue };
@@ -723,9 +834,53 @@ fn read_sheets(games: &[Game]) -> Vec<(PathBuf, Vec<String>)> {
             .into_iter()
             // Only files next to the sheet are in this folder's list.
             .map(|name| name.strip_prefix("./").map(str::to_string).unwrap_or(name))
-            .filter(|name| !name.contains(['/', '\\']) && name.to_lowercase() != own)
             .collect();
-        out.push((g.path.clone(), names));
+        let nested = names.iter().any(|name| nested_disc_here(&g.path, name));
+        let names = names.into_iter().filter(|name| !name.contains(['/', '\\']) && name.to_lowercase() != own).collect();
+        out.push((g.path.clone(), names, nested));
+    }
+    out
+}
+
+/// Whether `name` (as `sheet` writes it) is a file one folder down from the sheet that is there: "Game/Disc 1.iso", `\\`
+/// and `./` as written on Windows, the folder's and the file's letters in any case (a card that ignores case, a sheet
+/// written on Windows).
+fn nested_disc_here(sheet: &Path, name: &str) -> bool {
+    let name = name.replace('\\', "/");
+    let name = name.trim_start_matches("./");
+    let Some((folder, file)) = name.split_once('/') else { return false };
+    if folder.is_empty() || matches!(folder, "." | "..") || file.is_empty() || file.contains('/') {
+        return false;
+    }
+    let Some(dir) = sheet.parent() else { return false };
+    if dir.join(folder).join(file).is_file() {
+        return true;
+    }
+    let find = |dir: &Path, name: &str| -> Option<PathBuf> {
+        fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).find(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.eq_ignore_ascii_case(name)))
+    };
+    find(dir, folder).and_then(|sub| find(&sub, file)).is_some_and(|p| p.is_file())
+}
+
+/// The files one folder down that the sheets among `games` name ("Game/Disc 1.iso", `\\` and `./` as written on
+/// Windows), as "folder/file" in lower case. Deeper files aren't on the shelf (`scan` reads one level), so they don't count.
+fn nested_references(games: &[Game]) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    for g in games {
+        let kind = g.path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
+        if !matches!(kind.as_str(), "cue" | "m3u" | "gdi") || fs::metadata(&g.path).map_or(true, |m| m.len() > SHEET_MAX_BYTES) {
+            continue;
+        }
+        let Ok(bytes) = fs::read(&g.path) else { continue };
+        for name in sheet_references(&kind, &sheet_text(bytes)) {
+            let name = name.replace('\\', "/");
+            let name = name.trim_start_matches("./");
+            if let Some((folder, file)) = name.split_once('/') {
+                if !folder.is_empty() && !matches!(folder, "." | "..") && !file.is_empty() && !file.contains('/') {
+                    out.insert(format!("{folder}/{file}").to_lowercase());
+                }
+            }
+        }
     }
     out
 }
@@ -738,7 +893,7 @@ fn sheet_text(bytes: Vec<u8>) -> String {
 
 /// The files a disc sheet names: `FILE "x.bin" BINARY` lines of a cue sheet, the lines of an m3u playlist, the
 /// file column of a gdi.
-pub use crate::library_names::{display_name, name_extras, shelf_name, split_version, strip_inner_ext, title_case, SysInfo};
+pub use crate::library_names::{display_name, name_extras, shelf_name, split_version, strip_inner_ext, title_case, upload_folders, SysInfo};
 pub(crate) use crate::library_names::sheet_references;
 
 /// A stock SNES collection can start a file name with its four-digit position.
@@ -901,6 +1056,7 @@ mod tests {
             std::fs::write(snes.join(file), b"fixture").unwrap();
         }
         std::fs::write(other.join("0239 Another Game.sfc"), b"fixture").unwrap();
+        std::fs::write(other.join("2020 Super Baseball.sfc"), b"fixture").unwrap();
         std::fs::write(snes.join("gamelist.xml"), "<gameList><game><path>./0240 Reported Name.sfc</path><name>0240 Hand-picked title</name></game></gameList>").unwrap();
         let cfg = dir.join("es_systems.cfg");
         std::fs::write(&cfg, format!("<systemList><system><name>snes</name><path>{}</path><extension>.sfc</extension></system><system><name>nes</name><path>{}</path><extension>.sfc</extension></system></systemList>", snes.display(), other.display())).unwrap();
@@ -914,8 +1070,11 @@ mod tests {
         assert_eq!(title("snes", "2020.sfc"), "2020");
         assert_eq!(title("snes", "12345 Longer.sfc"), "12345 Longer");
         assert_eq!(title("snes", "123 Abbreviated.sfc"), "123 Abbreviated");
-        assert_eq!(title("snes", "0239-Other.sfc"), "0239-Other");
-        assert_eq!(title("nes", "0239 Another Game.sfc"), "0239 Another Game");
+        // Alex's SNES set glues the number on ("1572-Super Metroid"), and a 0 in front is no title anywhere
+        // (`library_names::strip_release_number`, 25.11.2026).
+        assert_eq!(title("snes", "0239-Other.sfc"), "Other");
+        assert_eq!(title("nes", "0239 Another Game.sfc"), "Another Game");
+        assert_eq!(title("nes", "2020 Super Baseball.sfc"), "2020 Super Baseball");
     }
 
     /// EmulationStation's gamelist.xml in a ROM folder: a cryptic file name gets the name it gives, a file name that
@@ -1253,6 +1412,41 @@ mod tests {
     }
 
     #[test]
+    fn a_playlist_hides_its_discs_in_a_folder_beside_it() {
+        // Night QA 27.11.2026 (Android, the same scan): "Game.m3u" naming "Game/Disc 1.iso" put the playlist and both
+        // discs on the shelf; with the discs next to it, one entry. Every way of writing the folder, every disc type.
+        let dir = TestDir::new("m3u-subfolder");
+        let put = |rel: &str, text: &str| {
+            let p = dir.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        };
+        put("Night QA Disc Switch.m3u", "Night QA Disc Switch/Disc 1.iso\r\n./night qa disc switch/DISC 2.ISO\n");
+        put("Night QA Disc Switch/Disc 1.iso", "x");
+        put("Night QA Disc Switch/Disc 2.iso", "x");
+        put("Windows.m3u", "Win Discs\\Win (Disc 1).cue\nWin Discs\\Win (Disc 2).chd\n");
+        put("Win Discs/Win (Disc 1).cue", "FILE \"Win (Disc 1).bin\" BINARY\n");
+        put("Win Discs/Win (Disc 1).bin", "x");
+        put("Win Discs/Win (Disc 2).chd", "x");
+        // A disc the playlist doesn't name stays a game; one two folders down was never on the shelf.
+        put("Extras/Bonus.iso", "x");
+        // A playlist with one disc in its folder and one beside it that is gone still starts from the first (Sol, 27.11.);
+        // one whose discs are all gone, in its folder and beside it, can't start and is named as broken.
+        put("Mixed.m3u", "Mixed/Disc 1.iso\nMixed Disc 2.iso\n");
+        put("Mixed/Disc 1.iso", "x");
+        put("Gone.m3u", "Gone/Disc 1.iso\nGone Disc 2.iso\n");
+        put("Gone/Other.iso", "x");
+        let types = exts(&["m3u", "cue", "bin", "chd", "iso"]);
+        let games = super::scan(&dir, &types);
+        let listed: Vec<String> = games.iter().map(|g| g.path.strip_prefix(&dir).unwrap().to_str().unwrap().to_string()).collect();
+        assert_eq!(listed, ["Extras/Bonus.iso", "Gone/Other.iso", "Mixed.m3u", "Night QA Disc Switch.m3u", "Windows.m3u"], "one entry per playlist");
+        assert_eq!(super::count_games("psx", &dir, &types), 5, "Add games counts the same");
+        let mut broken = Vec::new();
+        super::scan_into(&dir, &types, &mut broken);
+        assert_eq!(broken.iter().map(|b| b.sheet.file_name().unwrap().to_str().unwrap()).collect::<Vec<_>>(), ["Gone.m3u"]);
+    }
+
+    #[test]
     fn gdi_sheets_hide_their_tracks_and_a_sheet_the_system_does_not_list_hides_nothing() {
         let dir = disc_dir(
             "gdi",
@@ -1349,6 +1543,71 @@ mod tests {
         let systems = super::load(&cfg).unwrap();
         let paths: Vec<_> = systems[0].games.iter().map(|g| g.path.clone()).collect();
         assert_eq!(paths, [dir.join("pc/Doom")], "the folder once, started by DOSBox Pure, not also its zip");
+    }
+
+    /// Alex 25.11.2026: "saubere Namen, keine random Nummern". The scene sets' release numbers on his Retroid (GBA, NDS,
+    /// SNES), versions without a v and underscores leave the name; the file keeps its name (saves hang on it). No test
+    /// had a numbered scene name: the old tests only knew No-Intro names and the SNES set's "0239 Title".
+    #[test]
+    fn scene_release_numbers_versions_and_underscores_leave_the_shown_name() {
+        for (file, shown) in [
+            ("0902 - MegaMan & Bass (U)(Venom)", "MegaMan & Bass"),
+            ("1432 - Harvest Moon - Friends of Mineral Town (E)(GBA)", "Harvest Moon - Friends of Mineral Town"),
+            ("1128 - Anno 1701 - Dawn of Discovery (E)(FireX)", "Anno 1701 - Dawn of Discovery"),
+            ("0111 - Advance Wars - Dual Strike (E)(FCT)", "Advance Wars - Dual Strike"),
+            ("1572-Super Street Fighter 2 - The New Challengers (E)", "Super Street Fighter 2 - The New Challengers"),
+            ("3700-Super Star Wars - Return of the Jedi (E)", "Super Star Wars - Return of the Jedi"),
+            ("0310 NBA Jam (U)", "NBA Jam"),
+            ("1238-Eek! the Cat", "Eek! the Cat"),
+            ("0463 - Legend of Zelda, The - The Minish Cap (E)", "The Legend of Zelda - The Minish Cap"),
+            ("Pokemon Ash Gray 4.5.3", "Pokemon Ash Gray"),
+            ("Metroid Spooky Mission 1.2.1", "Metroid Spooky Mission"),
+            ("monomyth_v1_0", "monomyth"),
+            ("super_mario_bros (Hack)", "super mario bros"),
+            // Real titles with numbers stay as they are.
+            ("1942 (Japan, USA)", "1942"),
+            ("1943 - The Battle of Midway (USA)", "1943 - The Battle of Midway"),
+            ("1944 - The Loop Master (USA 000620)", "1944 - The Loop Master"),
+            ("2048 (World)", "2048"),
+            ("2020 Super Baseball (USA)", "2020 Super Baseball"),
+            ("2064 - Read Only Memories", "2064 - Read Only Memories"),
+            ("007 - GoldenEye (USA)", "007 - GoldenEye"),
+            ("007 - The World Is Not Enough (USA)", "007 - The World Is Not Enough"),
+            ("1080 Snowboarding (Japan, USA) (En,Ja)", "1080 Snowboarding"),
+            ("1080\u{b0} Snowboarding (USA)", "1080\u{b0} Snowboarding"),
+            ("1001 Spikes", "1001 Spikes"),
+            ("3D Tetris (USA)", "3D Tetris"),
+            ("4 in 1 (Europe)", "4 in 1"),
+            ("100 Bullets", "100 Bullets"),
+            ("12345 Longer", "12345 Longer"),
+            ("1990-1995 Collection", "1990-1995 Collection"),
+            ("0902", "0902"),
+            ("0902 - ", "0902 -"),
+            ("radicalred 4.1", "radicalred 4.1"),
+            ("Tekken 3", "Tekken 3"),
+            ("SLES_556.74", "SLES_556.74"),
+        ] {
+            assert_eq!(display_name(file), shown, "{file}");
+        }
+        assert_eq!(super::name_extras("Pokemon Ash Gray 4.5.3 (Hack)"), ["4.5.3", "(Hack)"]);
+        assert_eq!(super::shelf_name("1432 - Harvest Moon - Friends of Mineral Town (E)(GBA)"), "Harvest Moon - Friends of Mineral Town", "recents and history show the shelf's name");
+    }
+
+    /// A numbered scene file and a No-Intro file of one game in one folder: both show the bare title, told apart by their
+    /// tags, so the shelf has no number and still no two rows a player can't tell apart.
+    #[test]
+    fn a_numbered_scene_file_beside_its_no_intro_twin_is_told_apart_by_its_tags() {
+        let dir = TestDir::new("scene-twins");
+        let nds = dir.join("roms/nds");
+        std::fs::create_dir_all(&nds).unwrap();
+        for file in ["0479 - New Super Mario Bros. (E)(Supremacy).nds", "New Super Mario Bros. (Europe).nds", "0201 - Mario Kart DS (E)(Spliff).nds"] {
+            std::fs::write(nds.join(file), b"fixture").unwrap();
+        }
+        let cfg = dir.join("es_systems.cfg");
+        std::fs::write(&cfg, format!("<systemList><system><name>nds</name><path>{}</path><extension>.nds</extension></system></systemList>", nds.display())).unwrap();
+        let systems = super::load(&cfg).unwrap();
+        let names: Vec<&str> = systems[0].games.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(names, ["Mario Kart DS", "New Super Mario Bros. (E) (Supremacy)", "New Super Mario Bros. (Europe)"]);
     }
 
     #[test]
@@ -1663,3 +1922,7 @@ mod tests {
         assert_eq!(super::look_at_folder("pico-8", &pico, &exts).0, 3);
     }
 }
+
+#[cfg(test)]
+#[path = "region_pairs_tests.rs"]
+mod region_pairs_tests;

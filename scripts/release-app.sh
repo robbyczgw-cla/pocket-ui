@@ -12,6 +12,8 @@ TARGET=aarch64-unknown-linux-gnu
 
 cd "$ROOT"
 . "$ROOT/scripts/release-rustflags.sh"
+# ScreenScraper's developer id from this machine's file, if it has one (build.rs; never in the repository).
+. "$ROOT/scripts/screenscraper-env.sh"
 # The commit Report a problem names (src/report.rs); "-dirty" when the files differ from it.
 COMMIT=$(git -C "$ROOT" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 [ -z "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ] || COMMIT=$COMMIT-dirty

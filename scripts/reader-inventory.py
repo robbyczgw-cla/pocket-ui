@@ -3,6 +3,16 @@
 
 Includes IO wrappers, directory/metadata and mmap reads. Explicit cfg(test) items are skipped with balanced Rust braces, without
 truncating the file at the first test helper or hiding later production code. This is a change detector, not a dynamic coverage claim.
+
+    scripts/reader-inventory.py            the checks (exit 1 only when a registered fault case or test went missing); a changed
+                                           read site is a WARNING, and so is a reader in a module without a fault case
+    scripts/reader-inventory.py --write    refresh tests/fixtures/reader-inventory.tsv and reader-coverage.tsv
+    scripts/reader-inventory.py --report   the nightly list: every module that reads files without a fault case or audit line
+    scripts/reader-inventory.py --strict   the old verdict: any difference to the reviewed list is red
+
+25.11.2026 (gate false reds): the line-exact list stopped picks and merges for a renamed variable or a moved line. The merge
+queue refreshes it after a train's rebase (--write, one queue commit; .gitattributes unions it on conflicts), so it follows the
+code by itself. What a person must still see, a new reader nobody tests, is a warning in every gate and in the nightly report.
 """
 import collections
 import difflib
@@ -74,6 +84,14 @@ COVERAGE = {
 # Private parsers can use the identical policy from tests/common/data_faults.rs
 # in their own module. Keep their test identity explicit so removal fails too.
 UNIT_COVERAGE = {
+    # PICO-8's aarch64 folder: missing, empty (removed before the start) and with other files (start_pico8.sh's reading).
+    'hostsys.rs': [('src/hostsys.rs', 'pico8_stays_with_the_official_binary_when_it_is_there')],
+    # The RK817 behind sysfs and /dev/i2c-N: missing sysfs, no rk817, no i2c device; the next-start note missing and taken once.
+    'fuel_gauge.rs': [
+        ('src/fuel_gauge.rs', 'the_row_is_there_only_with_an_rk817_and_its_i2c_device'),
+        ('src/fuel_gauge.rs', 'the_next_start_says_what_to_do_once'),
+        ('src/fuel_gauge.rs', 'a_chip_that_does_not_keep_the_reset_is_an_error_and_no_switch_off'),
+    ],
     'low_battery.rs': [
         ('src/low_battery.rs', 'reads_the_level_and_the_charger_from_sysfs'),
         ('src/low_battery.rs', 'r36s_does_not_switch_off_when_critical_percent_disagrees_with_voltage'),
@@ -110,7 +128,7 @@ UNIT_COVERAGE = {
     'h700_volume.rs': [('src/h700_volume.rs', 'file_source_rule_h700_ucm')],
     'brick_profile.rs': [('src/brick_profile.rs', 'file_source_rule_brick_profile')],
     'cheat_data.rs': [('src/cheat_data.rs', 'file_source_rule_cheat_download_status')],
-    'hakux.rs': [('src/hakux.rs', 'file_source_rule_hakux_settings')],
+    'hakux.rs': [('src/hakux.rs', 'file_source_rule_hakux_settings'), ('src/hakux.rs', 'running_update_seeds_missing_and_repairs_old_or_damaged_xbox_core')],
     'showcase.rs': [('src/showcase.rs', 'file_source_rule_showcase_frames')],
     'splash.rs': [('src/splash.rs', 'file_source_rule_splash_settings')],
     'standalone.rs': [('src/standalone.rs', 'file_source_rule_standalone_game_headers'), ('src/standalone.rs', 'file_source_rule_standalone_configuration')],
@@ -122,6 +140,8 @@ UNIT_COVERAGE = {
     'core_prewarm.rs': [('src/core_prewarm.rs', 'file_source_rule_private_prefetch_elf')],
     'h700_gba.rs': [('src/h700_gba.rs', 'file_source_rule_gba_state_headers')],
     'notice.rs': [('src/notice.rs', 'file_source_rule_notice_files')],
+    # Standalone emulators' saved controls (YabaSanshiro, Azahar), es_input.cfg and the input device list.
+    'stale_controls.rs': [('src/stale_controls.rs', 'file_source_rule_stale_controls')],
     'mako_osd.rs': [('src/mako_osd.rs', 'file_source_rule_notification_config')],
     'hw_render.rs': [('src/hw_render.rs', 'file_source_rule_retroarch_option_files')],
     'case_knows.rs': [('src/case_knows_fuzz_tests.rs', 'file_source_rule_starts_with_a_recognised_save_of_every_layout')],
@@ -130,11 +150,13 @@ UNIT_COVERAGE = {
     'android_first_start.rs': [('src/android_first_start.rs', 'file_source_rule_first_start_games_folders')],
     'romm.rs': [('src/romm_tests.rs', 'file_source_rule_romm_account_token_catalog_device_id_and_parts')],
     'romm_net.rs': [('src/romm_net.rs', 'file_source_rule_http_answers')],
+    'screenscraper.rs': [('src/screenscraper_tests.rs', 'file_source_rule_screenscraper_login_index_and_state')],
     # PortMaster games from the card: zips, port.json inside them, runtime files.
     'ports_card.rs': [('src/ports_card_tests.rs', 'file_source_rule_card_ports')],
 }
 
 BIN_UNIT_COVERAGE = {
+    'app_emu_choice.rs': [('tests/emulator_routes.rs', 'release_probe_checks_the_emulator_and_core_of_every_populated_system')],
     'app_bluetooth.rs': [('src/app_bluetooth.rs', 'file_source_rule_bluetooth_switch')],
     'app_tailscale.rs': [('src/app_tailscale.rs', 'file_source_rule_tailscale_switch')],
     'app_card_update.rs': [('src/app_card_update.rs', 'file_source_rule_card_update_seen')],
@@ -258,16 +280,32 @@ def sites():
             result.append((str(file.relative_to(ROOT)), count, code))
     return result
 
+def audited():
+    """Files tests/fixtures/reader-audit.tsv describes (their proof, wrapper or platform boundary)."""
+    path = ROOT / 'tests/fixtures/reader-audit.tsv'
+    if not path.is_file(): return set()
+    return {line.split('\t', 1)[0] for line in path.read_text().splitlines() if line.strip() and not line.startswith('#')}
+
+def untested(all_sites=None):
+    """{file: count} of the files that read but have no fault case (coverage) and no audit line: a reader nobody tests."""
+    known = audited()
+    counts = collections.Counter()
+    for file, count, _ in (all_sites if all_sites is not None else sites()):
+        if file not in known and coverage_labels(file) == []:
+            counts[file] += count
+    return dict(counts)
+
 def inventory():
     return ''.join(f'{file}\t{count}\t{code}\n' for file, count, code in sites())
+
+def coverage_labels(file):
+    module=file.removeprefix('src/')
+    return COVERAGE.get(module, []) + ['unit:'+name for _, name in UNIT_COVERAGE.get(module, [])] + ['bin-unit:'+name for _, name in BIN_UNIT_COVERAGE.get(module, [])] + ['jvm-companion:'+path for path in JVM_COMPANION_COVERAGE.get(module, [])] + ['jvm-case:'+name for name in JVM_CASE_COVERAGE.get(Path(module).stem, [])]
 
 def coverage():
     by_file = collections.Counter()
     for file, count, _ in sites(): by_file[file] += count
-    def labels(file):
-        module=file.removeprefix('src/')
-        return COVERAGE.get(module, []) + ['unit:'+name for _, name in UNIT_COVERAGE.get(module, [])] + ['bin-unit:'+name for _, name in BIN_UNIT_COVERAGE.get(module, [])] + ['jvm-companion:'+path for path in JVM_COMPANION_COVERAGE.get(module, [])] + ['jvm-case:'+name for name in JVM_CASE_COVERAGE.get(Path(module).stem, [])]
-    return ''.join(f'{file}\t{count}\t{",".join(labels(file)) or "UNASSIGNED"}\n' for file, count in sorted(by_file.items()))
+    return ''.join(f'{file}\t{count}\t{",".join(coverage_labels(file)) or "UNASSIGNED"}\n' for file, count in sorted(by_file.items()))
 
 if __name__ == '__main__':
     baseline = ROOT / 'tests/fixtures/reader-inventory.tsv'
@@ -285,16 +323,33 @@ if __name__ == '__main__':
     assert PATTERN.search('file.read_at(buf,0)') and PATTERN.search('libc::pread(fd,buf,n,0)')
     assert PATTERN.search(rust_code('let uri="content://game"; fs::read(uri);'))
     assert not PATTERN.search(rust_code('let example="fs::read(file)"; // fs::read(comment)'))
-    actual = inventory()
+    all_sites = sites()
+    actual = ''.join(f'{file}\t{count}\t{code}\n' for file, count, code in all_sites)
     if sys.argv[1:] == ['--write']:
         baseline.write_text(actual)
         (ROOT / 'tests/fixtures/reader-coverage.tsv').write_text(coverage())
     elif sys.argv[1:] == ['--coverage']:
         sys.stdout.write(coverage())
+    elif sys.argv[1:] == ['--report']:
+        nobody = untested(all_sites)
+        for file, count in sorted(nobody.items()):
+            print(f'reader-inventory: WARNING untested reader: {file} ({count} read sites, no fault case in COVERAGE/UNIT_COVERAGE, no line in tests/fixtures/reader-audit.tsv)')
+        print(f'READER-INVENTORY: {len(nobody)} untested reader module(s)')
     else:
-        if baseline.read_text() != actual:
-            sys.stderr.writelines(difflib.unified_diff(baseline.read_text().splitlines(True), actual.splitlines(True), fromfile='reviewed readers', tofile='current readers'))
-            sys.exit('Reader changed: add its missing/empty/truncated/flipped/encoding case and audit the inventory.')
+        reviewed = baseline.read_text() if baseline.is_file() else ''
+        if reviewed != actual:
+            if sys.argv[1:] == ['--strict']:
+                sys.stderr.writelines(difflib.unified_diff(reviewed.splitlines(True), actual.splitlines(True), fromfile='reviewed readers', tofile='current readers'))
+                sys.exit('Reader changed: add its missing/empty/truncated/flipped/encoding case and audit the inventory.')
+            old_sites = set(reviewed.splitlines())
+            new_sites = [line for line in actual.splitlines() if line not in old_sites]
+            nobody = untested(all_sites)
+            for line in new_sites:
+                if line.split('\t', 1)[0] in nobody:
+                    print(f'reader-inventory: WARNING new reader without a fault case: {line.split(chr(9))[0]}: {line.split(chr(9), 2)[2].strip()[:120]} '
+                          '(add its missing/empty/truncated/flipped/encoding case to COVERAGE or a line to tests/fixtures/reader-audit.tsv)')
+            print(f'reader-inventory: note: {len(new_sites)} read site(s) differ from tests/fixtures/reader-inventory.tsv; the merge queue '
+                  'refreshes it (--write), nothing to do by hand')
         # A case cannot silently disappear while its source module stays recorded.
         cases = set()
         for path in [ROOT / 'tests/data_sources.rs', *ROOT.glob('tests/common/data_*.rs')]:

@@ -305,7 +305,7 @@ fn every_spine_of_the_systems_shelf_has_one_kind_of_name() {
                 assert!(!t.starts_with(long), "{size}: the long name {t} beside the short ones: {titles:?}");
             }
         }
-        for want in ["GBC", "GBA", "PS3", "3DS", "Master System", "Dreamcast", "Saturn", "Sega CD", "SNES"] {
+        for want in ["GBC", "GBA", "PS3", "3DS", "Master System", "Dreamcast", "Saturn", "Mega-CD", "SNES"] {
             assert!(titles.iter().any(|t| t == want), "{size}: no spine {want}: {titles:?}");
         }
     }

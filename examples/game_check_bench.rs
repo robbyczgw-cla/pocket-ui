@@ -20,7 +20,7 @@ fn input(es: &Path) -> Input {
     let catalog = library::all_systems(es).unwrap();
     let roms = library::roms_root(&catalog).unwrap();
     let shelf = library::load(es).unwrap().into_iter().map(|s| (s.name.clone(), s.games.into_iter().map(|g| g.path).collect())).collect();
-    Input { catalog, shelf, bios_dir: roms.join("bios"), roms, h700: true }
+    Input { catalog, shelf, bios_dir: roms.join("bios"), roms, h700: true, versions: Default::default() }
 }
 
 fn main() {

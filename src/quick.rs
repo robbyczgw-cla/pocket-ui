@@ -678,6 +678,9 @@ impl Sys {
         let next = step(v);
         self.hw.set_brightness(next);
         self.levels.brightness = Some((next, now));
+        // The level stays known after this press's 1.5 s (as the volume's read-back): the next press steps from here.
+        self.view.brightness = Some(next);
+        self.polled.lock().unwrap().brightness = Some(next);
         Some(next)
     }
 
@@ -784,15 +787,26 @@ impl Sys {
             self.spawn("volume", move || {
                 let next = step(hw.volume().unwrap_or(50));
                 hw.set_volume(next);
+                // Where it really went (Android has steps of its own), as after a known step below.
+                let after = hw.volume().or(Some(next));
                 let mut p = polled.lock().unwrap();
-                p.volume = Some(next);
+                p.volume = after;
                 p.seq += 1;
             });
             return None;
         };
         let next = step(v);
         self.levels.volume = Some((next, now));
-        self.spawn("volume", move || hw.set_volume(next));
+        self.spawn("volume", move || {
+            hw.set_volume(next);
+            // Where the volume now stands, read back: the next press steps from there once this one's 1.5 s are over. The
+            // view was the level of the last look before (Android's handheld view looks only when a page opens), so a press
+            // a moment later stepped from that old level again: Vol+ did nothing, Vol- went two of Android's steps (26.11.).
+            let after = hw.volume().or(Some(next));
+            let mut p = polled.lock().unwrap();
+            p.volume = after;
+            p.seq += 1;
+        });
         Some(next)
     }
 
@@ -1756,6 +1770,15 @@ impl Sys {
         self.view = self.polled.lock().unwrap().clone();
     }
 
+    /// The volume was moved outside this app (Android's player, whose volume keys step Android's media volume): what is
+    /// known here is old, so the next key reads it again on the worker and steps from there (`step_volume`). Else Vol+
+    /// after a game could step from the level before it, down.
+    pub fn volume_changed_elsewhere(&mut self) {
+        self.levels.volume = None;
+        self.view.volume = None;
+        self.polled.lock().unwrap().volume = None;
+    }
+
     /// Settings shows the Brightness or Volume row: one background look at the levels when the last is older than the
     /// panel's refresh, so a level changed elsewhere (the keys, Android) shows; its answer repaints (`tick`).
     pub fn watch_levels(&mut self, now: Instant) {
@@ -2203,6 +2226,52 @@ mod tests {
         }
         assert_eq!(hw.volume(), Some(0));
         assert_eq!(s.osd.as_ref().unwrap().data.value, "Muted");
+    }
+
+    /// Presses a moment apart (more than the 1.5 s a press's own level is trusted) each step from where the volume stands:
+    /// the view used to keep the level of the last look, so on Android's handheld view a second Vol+ did nothing and a Vol-
+    /// went two steps down.
+    #[test]
+    fn volume_keys_a_moment_apart_each_step_from_where_the_volume_stands() {
+        let (mut s, hw) = sys();
+        let start = hw.volume().unwrap();
+        let mut now = Instant::now();
+        for press in 1..=3u8 {
+            tap(&mut s, Button::VolUp, &SHELF, now);
+            s.take_polled();
+            assert_eq!(hw.volume(), Some(start + 5 * press), "Vol+ number {press}");
+            now += Duration::from_secs(2);
+        }
+        tap(&mut s, Button::VolDown, &SHELF, now);
+        s.take_polled();
+        assert_eq!(hw.volume(), Some(start + 10), "one Vol- is one step down");
+        // START + Vol, the brightness, the same way.
+        let bright = hw.brightness().unwrap();
+        for press in 1..=2u8 {
+            now += Duration::from_secs(2);
+            key(&mut s, Button::Start, true, &SHELF, now);
+            tap(&mut s, Button::VolDown, &SHELF, now);
+            key(&mut s, Button::Start, false, &SHELF, now);
+            s.take_polled();
+            assert_eq!(hw.brightness(), Some(bright - 5 * press), "START + Vol- number {press}");
+        }
+    }
+
+    /// Android: the player moved the media volume up (its own keys) while the shelf knew the old level; back on the shelf
+    /// Vol+ must go up from where the volume is now, not from the old level (that was quieter).
+    #[test]
+    fn a_volume_key_after_the_volume_moved_elsewhere_steps_from_where_it_is() {
+        let (mut s, hw) = sys();
+        let now = Instant::now();
+        tap(&mut s, Button::VolUp, &SHELF, now);
+        s.take_polled();
+        let shelf_saw = hw.volume().unwrap();
+        hw.set_volume(shelf_saw + 30);
+        s.volume_changed_elsewhere();
+        let later = now + Duration::from_secs(60);
+        tap(&mut s, Button::VolUp, &SHELF, later);
+        s.take_polled();
+        assert_eq!(hw.volume(), Some(shelf_saw + 35), "Vol+ after the game went up from the game's level");
     }
 
     #[test]

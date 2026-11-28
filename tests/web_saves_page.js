@@ -32,7 +32,7 @@ function run(data) {
     toast: () => {},
     dropZone: (text) => new El("div", { class: "drop" }, [text]),
     fileRow: () => ({ el: new El("div"), state: new El("span"), bar: new El("progress") }),
-    uploadXhr: async () => ({ ok: true, body: {} }),
+    uploadPieces: async () => ({ ok: true, body: {} }),
     confirm: () => true,
   };
   vm.createContext(ctx);

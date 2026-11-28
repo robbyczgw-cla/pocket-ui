@@ -89,6 +89,25 @@ pub struct Row {
     pub enabled: bool,
 }
 
+/// Load's last stop, after the slots and the kept moments: the game from its start (Linux's `QuickMenu::at_restart`,
+/// pocket-core's `start_over`). The same words as Linux's: the value beside Load and in the empty window, the line
+/// under it, and what shows over the game after it.
+pub const FROM_START: &str = "From the start";
+pub const FROM_START_NOTE: &str = "Starts over · Quit replaces it";
+pub const FROM_START_DONE: &str = "From the start. Save & quit replaces the waiting moment";
+
+/// One step of Load's value, as Linux's Load steps (`load_stops`): through the `places` (the slots, then the kept
+/// moments), then From the start, round. `at` is the place the slot cursor is on, `start` whether Load is on From the
+/// start. While Load is on From the start the cursor keeps its place, so Save stays on its slot (Linux keeps Save's
+/// slot and Load's stop apart).
+pub fn step_load(at: usize, start: bool, places: usize, back: bool) -> (usize, bool) {
+    let places = places.max(1);
+    let stops = places + 1;
+    let now = if start { places } else { at.min(places - 1) };
+    let next = if back { (now + stops - 1) % stops } else { (now + 1) % stops };
+    if next == places { (at, true) } else { (next, false) }
+}
+
 /// Linux's slot blocks under the picture (`app_save_media`'s `ROW_BLOCK`, `ROW_GAP`).
 pub const ROW_BLOCK: i32 = 30;
 pub const ROW_GAP: i32 = 12;
@@ -107,3 +126,67 @@ pub fn earlier_note(then: Option<u64>, now: u64) -> String {
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Load's value goes through the slots and the kept moments, then From the start, and round both ways (Linux's
+    /// Load). Save's slot stays where it was while Load is on From the start.
+    #[test]
+    fn load_steps_to_from_the_start_after_the_slots_and_round() {
+        // 4 slots and one kept moment: places 0..=4, then From the start.
+        let mut at = (0, false);
+        let mut seen = vec![];
+        for _ in 0..7 {
+            at = step_load(at.0, at.1, 5, false);
+            seen.push(at);
+        }
+        assert_eq!(seen, [(1, false), (2, false), (3, false), (4, false), (4, true), (0, false), (1, false)]);
+        // Back from the first slot: From the start, then the last place.
+        assert_eq!(step_load(0, false, 5, true), (0, true));
+        assert_eq!(step_load(2, true, 5, true), (4, false));
+        // While on From the start the cursor keeps the slot Save is on.
+        assert_eq!(step_load(2, false, 3, false), (2, true));
+        // A single place still has its From the start.
+        assert_eq!(step_load(0, false, 1, false), (0, true));
+        assert_eq!(step_load(0, true, 1, false), (0, false));
+    }
+
+    /// The words are Linux's, so every language has them already (`assets/i18n`).
+    #[test]
+    fn from_the_start_says_what_linux_says() {
+        let linux = include_str!("main.rs");
+        let core = include_str!("bin/pocket_core.rs");
+        assert!(linux.contains(&format!("\"{FROM_START}\"")) && linux.contains(&format!("\"{FROM_START_NOTE}\"")));
+        assert!(core.contains(&format!("\"{FROM_START_DONE}\"")));
+        let de = include_str!("../assets/i18n/de.tsv");
+        for line in [FROM_START, FROM_START_NOTE, FROM_START_DONE] {
+            assert!(de.lines().any(|l| l.split('\t').next() == Some(line)), "no German line for {line:?}");
+        }
+    }
+
+    /// Android's player (a game from the Handheld view) has Load's last stop: L/R and Left/Right reach it on Load, the
+    /// row and the window show "From the start", and A (or a tap on the row) starts the game again as pocket-core does:
+    /// the console's reset with the cartridge clock kept, achievements waiting again, rewind's history gone, no Before
+    /// load. Not in Hardcore. The player runs only on Android, so its source is checked here.
+    #[test]
+    fn android_pause_menu_has_from_the_start_on_load() {
+        let p = include_str!("../android/src/player.rs");
+        assert!(p.contains("pause_list::step_load(self.slot, self.from_start, self.places(), back)"), "Load must step to From the start");
+        assert!(p.contains("Item::Load if self.at_start() => row(item, item.label(), Some(pause_list::FROM_START.into())"), "Load's row must show From the start");
+        assert!(p.contains("empty: pause_list::FROM_START, note"), "the window must say From the start");
+        let action = p.split("fn activate_list(&mut self)").nth(1).unwrap().split("let legacy").next().unwrap();
+        assert!(action.contains("self.at_start()") && action.contains("self.start_over()") && action.contains("FROM_START_DONE"), "A on From the start must start over");
+        let start = p.split("fn start_over(&mut self)").nth(1).unwrap().split("\n    fn ").next().unwrap();
+        for (call, why) in [("self.core.restart()", "the console's reset, keeping the cartridge clock"), ("ra.reset()", "achievements wait again"), ("self.speed.forget()", "rewind forgets the old timeline")] {
+            assert!(start.contains(call), "From the start: {why}");
+        }
+        assert!(!start.contains("undo"), "From the start writes no Before load (Linux's start_over)");
+        let at = p.split("fn at_start(&self)").nth(1).unwrap().split("\n    }").next().unwrap();
+        assert!(at.contains("!self.hardcore()"), "no From the start in Hardcore");
+        // A tap on the row goes back to the game: the touch says so, so Java draws continuously again.
+        let tap = p.split("fn touch(&mut self").nth(1).unwrap().split("if self.paused && self.menu == Menu::Zoom").next().unwrap();
+        assert!(tap.contains("self.activate_list();") && tap.trim_end().ends_with("return !self.paused;\n        }"), "a tap back to the game must restart the drawing");
+    }
+}

@@ -119,7 +119,7 @@ impl App {
     /// `system` makes, cold and after the idle look-ahead. Prints `infos-warm games=<n> cold=<n> warmed=<n>`.
     pub(crate) fn infos_warm_check(&mut self, system: &str) {
         self.shelf_snapshot("");
-        let Some(s) = self.systems.iter().position(|x| x.name == system) else {
+        let Some(s) = self.systems.iter().position(|x| pocket_ui::region_pairs::same_shelf(&x.name, &system)) else {
             println!("infos-warm no system {system}");
             return;
         };
@@ -168,6 +168,7 @@ impl App {
 
     /// Builds the card of a game and starts loading its description if it isn't on the card yet.
     pub(crate) fn show_card(&mut self, item: Item, system: String, name: String, path: PathBuf) {
+        let facts_of = (system.clone(), path.clone());
         let mut open = self.build_card(item, system, name, path);
         // The Split and Big looks show the info page (`game_info`); Shelf and Cabinet the box (`game_box`)
         // unless SELECT chose the page last time.
@@ -180,6 +181,8 @@ impl App {
             pocket_ui::ui_sound::played();
         }
         self.card = Some(open);
+        // What ScreenScraper says of the game, for what the card lacks: read on a thread (`app_screenscraper`).
+        self.screenscraper_card_facts(&facts_of.0, &facts_of.1);
     }
 
     /// Back to the box from the card's page, when the player turned to the page from the box (`Card::from_box`): the
@@ -258,6 +261,10 @@ impl App {
         let Some(open) = self.card.as_mut().filter(|o| o.article.as_deref() == Some(title.as_str())) else {
             return;
         };
+        // ScreenScraper's text in the player's language came first (`screenscraper_facts::fill_card`): it stays.
+        if matches!(open.card.data.summary, Summary::ScreenScraper(_)) {
+            return;
+        }
         open.card.data.summary = match text {
             Ok(text) => Summary::Wikipedia { text, title },
             Err(why) => Summary::Unavailable(why),
@@ -273,6 +280,7 @@ impl App {
             .into_iter()
             .chain(self.curator_card_rows(path))
             .chain(self.card_screenshots_row(system, path))
+            .chain(self.game_card_manual_row(system, path))
             .chain(self.card_crate_row(path))
             .chain(self.card_dolphin_row(system, path))
             .chain(self.card_cover_rows(system, path))
@@ -281,6 +289,8 @@ impl App {
     }
 
     fn card_data(&mut self, system: &str, name: &str, path: &Path, info: Option<&GameInfo>) -> CardData {
+        // Which games of the system have a real manual: read once on a thread, the row comes with it (`app_manual`).
+        self.game_manual_listing(system);
         let meta = self.library.get(path);
         let played = self.recents.list.iter().find(|r| r.path == path).map(|r| (r.last_played, r.play_secs));
         let mut data = CardData {
@@ -320,6 +330,7 @@ impl App {
             look_up: pocket_ui::covers::playlist(system).is_some(),
             // `gamelist::fill_card` sets it (`show_card`).
             from_gamelist: false,
+            from_screenscraper: false,
             // A phone game's keys are no console's: which button is OK and which are the soft keys.
             keys: (system == "j2me").then_some(pocket_ui::j2me_keys::CARD_LINE),
             // A patch next to the game (a few file checks, no reading): pocket-core applies it at the start (`softpatch`).
@@ -720,6 +731,19 @@ impl App {
             // A sticker landing on the case or lifting off it (`sticker_press`): the front without it under it.
             let moving = front.as_ref().and_then(|f| self.sticker_moving(medium, f, case_h));
             let big = self.sealed_cover(item, c.w, c.h);
+            // The box's real back, read on the picture thread at the screen's size (`game_box` fits it to its view once).
+            let back = self.item_rom(item).and_then(|(system, rom)| self.real_back(&system, &rom, c.w, c.h));
+            // `POCKETUI_SNAPSHOT_BACK_ZOOM=<x>,<y>`: a snapshot of the real back zoomed there (parts of its width and height).
+            if back.is_some() {
+                if let Some((x, y)) = std::env::var("POCKETUI_SNAPSHOT_BACK_ZOOM").ok().and_then(|v| v.split_once(',').and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?)))) {
+                    if let Some(b) = self.card.as_mut().and_then(|o| o.card.boxed.as_mut()).filter(|b| b.back) {
+                        b.set_zoom((x, y));
+                    }
+                }
+            }
+            // Zoomed (R2 on it): the same back larger, read on the picture thread only now (`game_box::paint_zoom`).
+            let zoomed = self.card.as_ref().and_then(|o| o.card.boxed.as_ref()).is_some_and(|b| b.zoomed());
+            let back_zoom = if zoomed && back.is_some() { self.item_rom(item).and_then(|(system, rom)| self.real_back(&system, &rom, 2 * c.w, 2 * c.h)) } else { None };
             let console = self.item_rom(item).and_then(|(system, _)| pocket_ui::system_art::get(&system));
             // A sealed game's back is in its film as well (`app_shrink_wrap`).
             let sealed = self.item_rom(item).filter(|(_, rom)| self.sealed(rom)).map(|(_, rom)| super::app_case_stickers::seed(&rom));
@@ -730,7 +754,7 @@ impl App {
             }
             let shown = moving.as_ref().map_or(front.as_deref(), |m| Some(&*m.base));
             let stickers: Vec<_> = moving.iter().flat_map(|m| m.stickers.iter()).map(|(pic, at, pose)| pocket_ui::sticker_press::Moving { pic, at: *at, pose: *pose }).collect();
-            let inputs = pocket_ui::game_box::Inputs { medium, look, front: shown, game: game.as_deref(), cover: big.as_deref(), console, moving: &stickers };
+            let inputs = pocket_ui::game_box::Inputs { medium, look, front: shown, game: game.as_deref(), cover: big.as_deref(), console, back: back.as_deref(), back_zoom: back_zoom.as_deref(), moving: &stickers };
             open.card.paint_box(c, &mut self.text, &inputs, corner);
             self.paint_card_toast(c);
             return;

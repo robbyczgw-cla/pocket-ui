@@ -43,6 +43,7 @@ impl App {
                 Screen::Curator | Screen::Shelf(_) | Screen::Sticker(_) | Screen::LensResults | Screen::Rediscover => "curator",
                 Screen::Connection => "connection",
                 Screen::Crate => "crate",
+                Screen::Series(_) => "series",
             }
         };
         let file = |p: &std::path::Path| p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -60,6 +61,7 @@ impl App {
             Some(Item::Search) => "search".into(),
             Some(Item::JustPlay) => "just-play".into(),
             Some(Item::Crate) => "crate".into(),
+            Some(Item::Series(i)) => format!("series:{i}"),
             Some(Item::Curator | Item::Lens | Item::SmartShelf(_) | Item::Sticker(_) | Item::History | Item::Review(_) | Item::Rediscover) => "curator".into(),
             None => "-".into(),
         };

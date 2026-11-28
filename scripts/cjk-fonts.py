@@ -10,6 +10,12 @@ assets/fonts/FusionPixel12-zh_hans-CJK.otf and NotoSansSC-Regular-CJK.otf with t
 EUC-CN can write: Simplified Chinese, the interface's and nearly every Chinese game name's), the 6,355 kanji of
 JIS X 0208 (a Japanese game's name), the kana, CJK punctuation and the full-width forms; hinting and layout features
 dropped, no glyph changed. Both files are read from the card (`text_fallback::shipped_dir`), not compiled in.
+
+    python3 scripts/cjk-fonts.py --ja fusion-pixel-12px-proportional-ja.otf NotoSansJP-Regular.otf
+
+The Japanese pair (the same release's ja file, noto-cjk Sans/SubsetOTF/JP/NotoSansJP-Regular.otf): Japanese letter forms
+for the Japanese interface (`text_fallback::cjk`), cut to JIS X 0208's kanji, the kana, CJK punctuation and the
+full-width forms: assets/fonts/FusionPixel12-ja-CJK.otf and NotoSansJP-Regular-CJK.otf.
 """
 import os
 import subprocess
@@ -41,10 +47,22 @@ def unicodes():
     return ",".join("U+%04X" % u for u in sorted(s))
 
 
+def japanese():
+    """JIS X 0208's kanji, the kana, CJK punctuation and the full-width forms: what a Japanese interface paints."""
+    s = euc("euc_jp", range(0xB0, 0xF5))
+    s |= set(range(0x3000, 0x3040)) | set(range(0x3041, 0x3097)) | set(range(0x3099, 0x3100)) | set(range(0x30A0, 0x3100))
+    s |= set(range(0xFF01, 0xFF5F)) | set(range(0xFFE0, 0xFFE7))
+    return ",".join("U+%04X" % u for u in sorted(s))
+
+
 def main():
     root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "fonts")
-    for src, out in zip(sys.argv[1:3], ["FusionPixel12-zh_hans-CJK.otf", "NotoSansSC-Regular-CJK.otf"]):
-        subprocess.run(["pyftsubset", src, "--unicodes=" + unicodes(), "--no-hinting", "--layout-features=", "--name-IDs=*", "--notdef-outline", "--output-file=" + os.path.join(root, out)], check=True)
+    args = sys.argv[1:]
+    ja = args[:1] == ["--ja"]
+    srcs = args[1:3] if ja else args[0:2]
+    outs = ["FusionPixel12-ja-CJK.otf", "NotoSansJP-Regular-CJK.otf"] if ja else ["FusionPixel12-zh_hans-CJK.otf", "NotoSansSC-Regular-CJK.otf"]
+    for src, out in zip(srcs, outs):
+        subprocess.run(["pyftsubset", src, "--unicodes=" + (japanese() if ja else unicodes()), "--no-hinting", "--layout-features=", "--name-IDs=*", "--notdef-outline", "--output-file=" + os.path.join(root, out)], check=True)
 
 
 if __name__ == "__main__":

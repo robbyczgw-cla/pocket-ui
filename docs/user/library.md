@@ -17,7 +17,7 @@ why and tells you to recopy it (scrolling cleanly even with Large text or long t
 
 | Button | On the card |
 |---|---|
-| A | Play the game, or open any highlighted row under "Your game" (save conflict, Echoes, Versions, Stickers, Screenshots, Delete from the card, Hide from the shelf). |
+| A | Play the game, or open any highlighted row under "Your game" (save conflict, Echoes, Versions, Stickers, Screenshots, Game manual, Delete from the card, Hide from the shelf). |
 | B | Return to the shelf at the same game. |
 | Y | Set play status, [My rating](#my-rating), [Wrong game? Choose another](#wrong-game-choose-another) or [Wrong pictures? Look up again](#wrong-pictures-look-up-again). |
 | X | Write or edit your personal note. |
@@ -57,13 +57,16 @@ In **Shelf** and **Cabinet**, pressing X lifts the game's actual box onto the sc
 for SNES), PS1/Saturn jewel case, colour-coded PS2/GameCube/Wii/Xbox DVD case, Mega Drive clamshell, PSP UMD case, DS
 case, or pocket-ui's signature case. As it opens, the cartridge, card or disc slides partway out at true scale while
 artwork finishes loading asynchronously. Without cover art, cartridge labels display the game title in its original
-language.
+language. With [ScreenScraper](extras.md#screenscraper) on, the cartridge carries its real label (in the box and on its
+way into the console; Mega Drive and DS keep the cover's art), and with **Real box backs** on, flipping the box shows its
+real back first, with the description and facts below it.
 
 | Button | On the box |
 |---|---|
 | D-pad Left / Right | Flip the box between front and back *(on a [Just Play](curator.md#just-play) card, Right rolls a new pick and Left flips)*. |
 | D-pad Down (front) | With [Photos of big moments](#photos-of-big-moments) On, opens the case to browse your milestone photos (the hint bar shows **Photos** in place of START when photos exist). |
 | D-pad Up / Down, L1 / R1 | Scroll the back of the box; Down also steps into linked developer, publisher, series and genre pills. |
+| R2 | On a real box back: zoom in to read it. The D-pad moves around; B or R2 zooms back out. |
 | A | Play the game, or follow a highlighted fact into [Connections](#connections). |
 | B, Y, X | Back, status & rating, personal note. |
 | START | Open [This game](options.md#this-game). |
@@ -188,6 +191,8 @@ or more entries. Links only appear when you actually own another matching game. 
 - **Echoes**, **Versions** and **Stickers:** Curator rows (each toggleable under Settings → Games → Curator).
 - **Screenshots (N):** appears once you've snapped screenshots with HOME + A ("Newest: Today"); press A for this game's
   [gallery](playing.md#looking-at-your-screenshots).
+- **Game manual:** appears for games [ScreenScraper](extras.md#screenscraper) has the original manual of; press A to read
+  it page by page (L1/R1 turn the page, A zooms in; on a touch screen swipe sideways or tap the right or left half).
 - **Description:** opening summary from English Wikipedia (or your [gamelist](library-files.md#your-gamelists) / offline
   facts fallback).
 - **More by … / Other games in …:** only games **you actually own**, never a store.

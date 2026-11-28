@@ -91,6 +91,13 @@ pub unsafe extern "C" fn eglGetProcAddress(name: *const std::ffi::c_char) -> *co
     pocket_ui::brick_gles::get_proc_address(name)
 }
 
+/// The Brick: the cores' `glTexStorage2D` (`brick_gles::tex_storage_2d`: GLideN64's new pictures start black).
+#[cfg(feature = "brick")]
+#[no_mangle]
+pub unsafe extern "C" fn glTexStorage2D(target: u32, levels: i32, internal: u32, width: i32, height: i32) {
+    pocket_ui::brick_gles::tex_storage_2d(target, levels, internal, width, height)
+}
+
 /// pocket-ui's data directory: the pause menu writes the per-console/per-game settings here.
 const DATA_DIR: &str = "/storage/.config/pocket-ui";
 
@@ -301,7 +308,7 @@ struct App {
     album: Option<pocket_ui::album::Camera>,
     /// While the camera reads this game: a copy of the picture every 2 s, the last few, so a moment's photo shows the game
     /// from before its save menu opened.
-    album_ring: std::collections::VecDeque<(Instant, Frame)>,
+    album_ring: std::collections::VecDeque<(Instant, Kept)>,
     /// Settings → Screen & sound → Photos of big moments → Also in play, read at the start (`album::moment_in_play`): Off by default.
     album_moment: bool,
     /// `/storage/roms/savestates/<system>/<game>`, the start of every state file (see `slots`).
@@ -540,7 +547,7 @@ impl App {
 
     fn draw(&mut self) {
         self.quiet_picture = self.hud.quiet();
-        #[cfg(feature = "brick")] if self.soft.is_some() && self.last_frame.is_some() { self.sync_brick_picture(); self.picture_out(DrawPath::Soft); self.brick_crt(); } #[cfg(feature = "brick")] if let (Some(soft), Some(frame)) = (self.soft.as_mut(), self.last_frame.as_ref()) { soft.set_look(&self.hud.look); let over = (!self.brick_picture.on).then(|| self.hud.texts()); self.view = soft.show(frame, over.as_ref()); pocket_ui::fast_switch::first_frame(); self.sync_brick_hud(); return; }
+        #[cfg(feature = "brick")] self.sync_brick_direct(); #[cfg(feature = "brick")] if self.brick_gles.as_ref().is_some_and(|h| h.direct()) { self.brick_direct_show(); return; } #[cfg(feature = "brick")] if self.soft.is_some() && self.last_frame.is_some() { self.sync_brick_picture(); self.picture_out(DrawPath::Soft); self.brick_crt(); } #[cfg(feature = "brick")] if let (Some(soft), Some(frame)) = (self.soft.as_mut(), self.last_frame.as_ref()) { soft.set_look(&self.hud.look); let over = (!self.brick_picture.on).then(|| self.hud.texts()); self.view = soft.show(frame, over.as_ref()); pocket_ui::fast_switch::first_frame(); self.sync_brick_hud(); return; }
         let switch = self.switch_on_at();
         let (Some(window), Some(gfx)) = (&self.window, &mut self.gfx) else { return };
         let size = window.inner_size();
@@ -864,6 +871,10 @@ impl App {
             let skip = ff.is_some() && self.gfx.as_ref().is_some_and(|g| g.hw.is_none());
             // The CPU time of an ordinary refresh, for the exit report's baseline (`RunAhead::note_plain`).
             let plain_c0 = (ff.is_none() && !ran_ahead && runs > 0).then(pocket_ui::run_ahead::thread_cpu_ms);
+            #[cfg(feature = "brick")]
+            if let Some(h) = self.brick_gles.as_mut() {
+                h.before_run();
+            }
             let run_t0 = Instant::now();
             for i in (0..runs).take_while(|_| !ran_ahead) {
                 // "As fast as possible" stops at its time budget: the frame expected to be the last one is shown.
@@ -962,7 +973,7 @@ impl App {
         }
         pocket_ui::mark!("core-upload-end", "frame={}", self.stats.emulated);
         let new_picture = frame.is_some();
-        self.hw_frame(av.is_some()); #[cfg(feature = "brick")] let frame = match self.brick_gles.as_mut().and_then(|h| h.frame((self.core.av.geometry.max_width, self.core.av.geometry.max_height))) { Some(f) => { if let Some(n) = self.resume_in.as_mut() { *n = n.saturating_sub(1); } Some(f) } None => frame };
+        self.hw_frame(av.is_some()); #[cfg(feature = "brick")] let frame = match self.brick_gles.as_mut().and_then(|h| { h.hold_off(self.dark || self.hold || self.crt_on); h.frame((self.core.av.geometry.max_width, self.core.av.geometry.max_height)) }) { Some(f) => { if let Some(n) = self.resume_in.as_mut() { *n = n.saturating_sub(1); } Some(f) } None => frame };
         if frame.is_some() {
             self.last_frame = frame;
         }
@@ -1104,7 +1115,7 @@ impl App {
     }
 
     /// Save-state preview of a hardware-rendered core, read back from the renderer's texture.
-    fn hw_snapshot(&self) -> Option<Frame> {
+    fn hw_snapshot(&self) -> Option<Frame> { #[cfg(feature = "brick")] if let Some(f) = self.brick_gles.as_ref().and_then(|h| h.snapshot()) { return Some(f); }
         let Some(Gfx { surface, context, video, hw: Some(hw), .. }) = self.gfx.as_ref() else { return None };
         context.make_current(surface).ok()?;
         let frame = video.read_frame();
@@ -1885,8 +1896,12 @@ impl App {
     /// A copy of the picture every 2 s, the last few, for the moment's photo (`album_picture`).
     fn album_keep(&mut self, now: Instant) {
         if self.album_ring.back().is_none_or(|(t, _)| now.duration_since(*t) >= Duration::from_secs(2)) {
-            if let Some(f) = self.last_frame.clone() {
-                self.album_ring.push_back((now, f));
+            #[cfg(feature = "brick")]
+            let gpu = self.brick_gles.as_mut().and_then(|h| h.keep()).map(Kept::Gpu);
+            #[cfg(not(feature = "brick"))]
+            let gpu = None;
+            if let Some(k) = gpu.or_else(|| self.last_frame.clone().map(Kept::Frame)) {
+                self.album_ring.push_back((now, k));
                 while self.album_ring.len() > 5 {
                     self.album_ring.pop_front();
                 }
@@ -1898,7 +1913,16 @@ impl App {
     /// kept, else the picture now (a 3D core's is read back from the GPU).
     fn album_picture(&self, now: Instant) -> Option<pocket_ui::album::Picture> {
         let kept = self.album_ring.iter().rev().find(|(t, _)| now.duration_since(*t) >= Duration::from_secs(4)).or(self.album_ring.front());
-        kept.map(|(_, f)| f.clone()).or_else(|| self.last_frame.clone()).or_else(|| self.hw_snapshot()).map(pocket_ui::album::Picture::Frame)
+        kept.and_then(|(_, k)| self.kept_frame(k)).or_else(|| self.last_frame.clone()).or_else(|| self.hw_snapshot()).map(pocket_ui::album::Picture::Frame)
+    }
+
+    /// A kept picture as a frame (one copied on the GPU, the Brick's direct way, read back now).
+    fn kept_frame(&self, k: &Kept) -> Option<Frame> {
+        match k {
+            Kept::Frame(f) => Some(f.clone()),
+            #[cfg(feature = "brick")]
+            Kept::Gpu(slot) => self.brick_gles.as_ref()?.kept(*slot),
+        }
     }
 
     /// The game ends (or sleeps): the camera compares the save written now and keeps its photo before the process goes.
@@ -1964,6 +1988,12 @@ impl App {
         let settings = GameSettings::load(&data_dir(), &self.video_src.0, &self.video_src.1);
         self.mapping = Mapping::from_values(&self.video_src.0, &settings.values);
         let mut saved = core_options::saved_from(&settings.values);
+        // Options → Picture → Widescreen (`dc_widescreen`) stays over RetroArch's values here too, as at the start: a
+        // reload (Restore defaults) never brings back an imported widescreen switch the row turned off.
+        let core = std::env::args().nth(1).map(|p| core_options::core_id(Path::new(&p))).unwrap_or_default();
+        let (_, ws) = pocket_ui::dc_widescreen::for_start(&self.video_src.0, &core, settings.values.get(pocket_ui::dc_widescreen::KEY).map(String::as_str));
+        saved.retain(|(k, _)| !ws.iter().any(|(w, _)| w == k));
+        saved.splice(0..0, ws.into_iter().map(|(k, v)| (k.to_string(), v)));
         let above: Vec<(&str, &str)> = saved.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
         let ra = retroarch_beneath(&self.ra_options, &above);
         saved.extend(ra);
@@ -2023,7 +2053,7 @@ impl App {
                     self.hold = false;
                     self.crt_on = false;
                     self.paused = true;
-                    self.paused_at = Some(Instant::now());
+                    self.paused_at = Some(Instant::now()); #[cfg(feature = "brick")] self.brick_release();
                     self.timeline.stop();
                     // No more frames from here: pocket-ui may cover us now (`fast_switch::PAUSED`).
                     pocket_ui::fast_switch::announce_paused();
@@ -2046,7 +2076,7 @@ impl App {
                 CoreCommand::Resume if self.pause_wait => self.pause_wait = false,
                 CoreCommand::Resume if self.paused => {
                     self.paused = false;
-                    self.paused_at = None;
+                    self.paused_at = None; #[cfg(feature = "brick")] if let Some(h) = self.brick_gles.as_mut() { h.resumed(); }
                     self.after_pause();
                     println!("play resumed");
                 }
@@ -2651,7 +2681,8 @@ fn main_thread_state() -> char {
 fn watch_load() -> LoadWatch {
     let started = Instant::now();
     let (stop, rx) = std::sync::mpsc::channel::<()>();
-    let thread = std::thread::Builder::new().name("load-watch".into()).spawn(move || {
+    // Running before the core's dlopen holds the loader's lock (`startup::spawn_ready`).
+    let thread = pocket_ui::startup::spawn_ready("load-watch", move || {
         let mut next = Duration::from_secs(3);
         while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = rx.recv_timeout(next.saturating_sub(started.elapsed())) {
             let (asked, card) = proc_io();
@@ -2877,6 +2908,12 @@ fn main() {
     if let Some((mode, start)) = &mode7 {
         pocket_ui::mode7_hd::place(start, &mut options);
         println!("mode 7: {mode} ({} core options)", start.len());
+    }
+    // Options → Picture → Widescreen (Dreamcast, `dc_widescreen`): Flycast's patches or hack, over any other source.
+    let (dc_ws_mode, dc_ws) = pocket_ui::dc_widescreen::for_start(&system, &core_options::core_id(core_so), settings.values.get(pocket_ui::dc_widescreen::KEY).map(String::as_str));
+    if !dc_ws.is_empty() {
+        pocket_ui::dc_widescreen::place(&dc_ws, &mut options);
+        println!("widescreen: {dc_ws_mode}");
     }
     let ra = retroarch_beneath(&ra_options, &options);
     options.extend(ra.iter().map(|(k, v)| (k.as_str(), v.as_str())));
@@ -3161,6 +3198,10 @@ fn main() {
     if let Some(file) = boot_missing {
         app.hud.note(pocket_ui::boot_screen::missing_note(file));
     }
+    // pocket-ui's word that this game plays with something else than chosen or usual (`swap_note`): never a quiet swap.
+    if let Some(swap) = std::env::var(pocket_ui::swap_note::ENV).ok().filter(|s| !s.trim().is_empty()) {
+        app.hud.note(swap);
+    }
     app.write_snapshot();
     app.core.take_snapshot_dirty();
     // Multi-disc games: the discs for the pause menu's Disc row, known once the game is loaded (`publish_discs`).
@@ -3288,6 +3329,14 @@ impl App {
     fn preview_soft(&mut self, w: u32, h: u32, seq: u32) {
         let t0 = Instant::now();
         let (sw, sh) = if self.view.0 > 0 { self.view } else { pocket_ui::device::current().screen() };
+        if let Some((rgba, _)) = self.brick_direct_shot(sw, sh) {
+            let (crop, overview) = pocket_ui::preview::from_screen(&rgba, sw, sh, w, h);
+            if let Err(e) = pocket_ui::preview::write(Path::new(pocket_ui::preview::FILE), seq, &[&crop, &overview]) {
+                eprintln!("preview: {e}");
+            }
+            println!("preview {seq}: {w}x{h} by the direct way's renderer in {:.1} ms", t0.elapsed().as_secs_f32() * 1000.0);
+            return;
+        }
         if self.brick_picture.on && self.last_frame.is_some() {
             self.sync_brick_picture();
             if self.brick_picture.on && pocket_ui::brick_picture::send_preview(seq, (sw, sh), (w, h)) {
@@ -3312,6 +3361,17 @@ impl App {
     fn write_shot_soft(&mut self, seq: u32) {
         let t0 = Instant::now();
         let (sw, sh) = if self.view.0 > 0 { self.view } else { pocket_ui::device::current().screen() };
+        // The direct way's renderer has the game's picture (the bridge's stopped at the screen's hand-over): it draws it, as the bridge would.
+        if let Some((rgba, game)) = self.brick_direct_shot(sw, sh) {
+            let shot = pocket_ui::preview::shot_from_screen(&rgba, sw, sh);
+            let game = game.map(pocket_ui::preview::game_rect_image);
+            let images: Vec<&pocket_ui::preview::Pixels> = game.iter().chain(std::iter::once(&shot)).collect();
+            if let Err(e) = pocket_ui::preview::write(Path::new(pocket_ui::preview::SHOT_FILE), seq, &images) {
+                eprintln!("shot: {e}");
+            }
+            println!("menu shot {seq}: {sw}x{sh} by the direct way's renderer in {:.1} ms", t0.elapsed().as_secs_f32() * 1000.0);
+            return;
+        }
         // With the GPU's picture path the bridge draws the background with the shaders and the frame (a Picture choice just made shows
         // behind the menu at once); the settings go out first.
         if self.brick_picture.on && self.last_frame.is_some() {
@@ -3354,6 +3414,9 @@ struct BrickPicture {
     hud_sent: [String; 4],
     /// The first picture is out: the first-game note was asked for (ROCKNIX asks after its first swap, which the Brick never reaches).
     first_shown: bool,
+    /// Counts the changes of `values` (`changed`, `reload`); the direct way's renderer took the settings at this count, aspect and turn.
+    generation: u64,
+    direct_sent: Option<(u32, u32, u64)>,
 }
 
 #[cfg(feature = "brick")]
@@ -3362,6 +3425,7 @@ impl BrickPicture {
         if let Some(v) = self.values.as_mut().filter(|v| v.contains_key(key)) {
             v.insert(key.to_string(), value.to_string());
             self.stale = true;
+            self.generation += 1;
             println!("brick picture: {key} = {value}");
         }
     }
@@ -3369,6 +3433,7 @@ impl BrickPicture {
     fn reload(&mut self) {
         self.values = None;
         self.stale = true;
+        self.generation += 1;
     }
 }
 
@@ -3412,11 +3477,10 @@ impl App {
         if bp.sent == Some((aspect.to_bits(), turns)) && !bp.stale {
             return;
         }
-        let kids = pocket_ui::kids::Config::load(&data_dir()).on;
-        let values = bp.values.get_or_insert_with(|| pocket_ui::brick_picture::values(&data_dir(), &self.video_src.0, &self.video_src.1, kids)).clone();
-        let request = pocket_ui::brick_picture::Request { system: self.video_src.0.clone(), aspect, turns, frames_dir: data_dir().join("frames"), values };
         bp.sent = Some((aspect.to_bits(), turns));
         bp.stale = false;
+        let request = self.brick_request(aspect, turns);
+        let bp = &mut self.brick_picture;
         let took = pocket_ui::brick_picture::send(&request);
         if let Some(soft) = self.soft.as_mut() {
             soft.set_native(took);
@@ -3425,6 +3489,39 @@ impl App {
             println!("brick picture: the bridge took no settings, back to the CPU copy");
             bp.on = false;
         }
+    }
+
+    /// The Picture settings of this game as the bridge's renderer reads them (`brick_picture::Request`), read once.
+    fn brick_request(&mut self, aspect: f32, turns: u32) -> pocket_ui::brick_picture::Request {
+        let (system, rom) = (&self.video_src.0, &self.video_src.1);
+        let values = self.brick_picture.values.get_or_insert_with(|| pocket_ui::brick_picture::values(&data_dir(), system, rom, pocket_ui::kids::Config::load(&data_dir()).on)).clone();
+        pocket_ui::brick_picture::Request { system: system.clone(), aspect, turns, frames_dir: data_dir().join("frames"), values }
+    }
+
+    /// The direct way (`brick_gles`) draws with the bridge's renderer inside pocket-core: the same settings as the bridge, given again
+    /// whenever they, the aspect or the turn changed.
+    fn sync_brick_direct(&mut self) {
+        if !self.brick_gles.as_ref().is_some_and(|h| h.direct_way()) {
+            return;
+        }
+        let aspect = Self::display_aspect(&self.core, &self.video_src.0);
+        let turns = self.rotate_override.unwrap_or_else(|| self.core.rotation());
+        let key = (aspect.to_bits(), turns, self.brick_picture.generation);
+        if self.brick_picture.direct_sent == Some(key) {
+            return;
+        }
+        let request = self.brick_request(aspect, turns);
+        if let Some(h) = self.brick_gles.as_mut() {
+            h.set_picture(&request);
+        }
+        self.brick_picture.direct_sent = Some(key);
+    }
+
+    /// The pause menu's picture or the Picture page's preview by the direct way's renderer (`BrickGles::shot`), the settings as the
+    /// menu has them now. None before the direct way had a frame (the bridge's renderer has the picture then).
+    fn brick_direct_shot(&mut self, w: u32, h: u32) -> Option<(Vec<u8>, Option<pocket_ui::preview::GameRect>)> {
+        self.sync_brick_direct();
+        self.brick_gles.as_mut()?.shot(w, h)
     }
 }
 
@@ -3447,3 +3544,30 @@ mod core_contract;
 #[cfg(all(test, feature = "brick"))]
 #[path = "pocket_core/ritual_render.rs"]
 mod ritual_render;
+
+#[cfg(feature = "brick")]
+impl App {
+    /// The direct way (`brick_gles::Direct`): the pause menu takes the screen; the frame on show goes into the game's window first, read back
+    /// once, so the bridge, the menu's picture and the previews have it.
+    fn brick_release(&mut self) {
+        let Some(frame) = self.brick_gles.as_mut().and_then(|h| h.release()) else { return };
+        self.last_frame = Some(frame);
+        self.draw();
+    }
+
+    /// The direct way with the screen taken: the frame on it with the overlay, swapped under the stall guard like the GL path's swap.
+    /// No picture in pocket-core's own hands meanwhile (`last_frame`): what needs one reads it (`hw_snapshot`).
+    fn brick_direct_show(&mut self) {
+        self.last_frame = None;
+        let (Some(h), hud) = (self.brick_gles.as_mut(), &mut self.hud) else { return };
+        PROGRESS.display(|| h.show(hud));
+    }
+}
+
+/// A picture kept for a moment's photo (`album_keep`): the frame, or on the Brick's direct way a copy on the GPU (`BrickGles::keep`),
+/// read back only when the photo is taken.
+enum Kept {
+    Frame(Frame),
+    #[cfg(feature = "brick")]
+    Gpu(usize),
+}

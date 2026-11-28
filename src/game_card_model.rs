@@ -44,6 +44,9 @@ pub enum Summary {
     Gamelist(String),
     /// RomM's description of a game of the paired server (`romm`), when the gamelist has none: shown as the gamelist's is.
     Romm(String),
+    /// ScreenScraper's description in the interface's language, else its English one (`screenscraper_facts::fill_card`):
+    /// before Wikipedia's and RomM's, after the player's own gamelist.
+    ScreenScraper(String),
 }
 
 impl Summary {
@@ -61,6 +64,7 @@ impl Summary {
             Summary::Wikipedia { title, .. } => format!("Text: Wikipedia, “{title}”, CC BY-SA 4.0"),
             Summary::Gamelist(_) => "From your EmulationStation gamelist".into(),
             Summary::Romm(_) => "From your RomM server".into(),
+            Summary::ScreenScraper(_) => "Text: ScreenScraper.fr, CC BY-NC-SA 4.0".into(),
             Summary::Loading => "Loading the description from Wikipedia…".into(),
             Summary::None => "No Wikipedia article for this game".into(),
             Summary::Unavailable(why) => match why.as_str() {
@@ -73,6 +77,10 @@ impl Summary {
         })
     }
 }
+
+/// The credit line under facts from ScreenScraper (`screenscraper::CREDIT`, the same line): here so the box and the
+/// card name it in every module set, the Mobile view's too.
+pub const SCREENSCRAPER_CREDIT: &str = "Data and media: ScreenScraper.fr (CC BY-NC-SA 4.0)";
 
 /// A game of the library shown under "More by" or "Other games in".
 #[derive(Clone, Debug, PartialEq)]
@@ -149,6 +157,8 @@ pub struct CardData {
     /// Some of the facts above (year, players, Developer, Publisher, Genre, the rating line) come from the player's
     /// EmulationStation gamelist (`gamelist::fill_card`): the card says so under them.
     pub from_gamelist: bool,
+    /// Some of the facts above come from ScreenScraper (`screenscraper_facts::fill_card`): the card names it under them.
+    pub from_screenscraper: bool,
     /// A phone game: which buttons are its keys, one line (`j2me_keys::CARD_LINE`).
     pub keys: Option<&'static str>,
     /// The patch next to the game that pocket-core applies when it starts it ("Game (USA).ips", `softpatch`).
@@ -217,7 +227,7 @@ impl CardData {
         if self.listed_as.as_deref().is_some_and(|l| !crate::latinise::shows(l)) {
             self.listed_as = None;
         }
-        if let Summary::Gamelist(text) = &self.summary {
+        if let Summary::Gamelist(text) | Summary::ScreenScraper(text) = &self.summary {
             if !crate::latinise::readable(text) {
                 self.summary = Summary::None;
             }
@@ -279,6 +289,8 @@ pub enum RowKind {
     SaveVersions,
     /// "Screenshots (3)": the game's own, after Curator's rows (`app_gallery`).
     Screenshots,
+    /// "Manual": the game's real manual from ScreenScraper (`app_manual`), only for a game it lists one for.
+    Manual,
     /// "Into the crate": Shelf space's, while the game is on the shelf (`app_crate`), before Delete.
     Crate,
     /// "Setting up Dolphin": Android, a GameCube or Wii game that plays in the Dolphin app (`rescue::DialogKind::Dolphin`).

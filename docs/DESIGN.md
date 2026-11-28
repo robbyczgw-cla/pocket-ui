@@ -176,6 +176,8 @@ notes beside larger text. Section headings on a page are Title 37 (the console p
 The name of the selected game beside or under its cover (Shelf, Cabinet, Split, Easy) is shown whole. A name with
 a subtitle ("The Legend of Zelda - Ocarina of Time", at the first " - " or ": ") is a big main title and a smaller
 line under it without the dash ("Ocarina of Time", seven tenths of the size); a name that fits one line stays as it is.
+A short number at the end (digits or a Roman numeral, "3", "64", "VI") never stands alone on the last line: the word
+before it goes down with it ("Super Mario" over "Bros. 3", `title_block::bind_number`).
 At most three lines in all (the Cabinet two: its title and the meta row are all the room above the showcase has, so
 the subtitle takes the meta row and the meta line follows it); only when they do not hold it, the type goes a step
 smaller (five sixths, down to 55 % of the size), and only then the last line ends in "…". The lines under the name
@@ -756,7 +758,9 @@ Shelf look (`Medium::of`):
   of public-domain / CC0 photos (a CD jewel case, a DVD case, Evan Amos's Wii case; Commons has none of a GameCube,
   Xbox, PSP, DS or 3DS case, so those are the DVD and Wii case fitted to their own size and plastic), at twice the
   template size (`Template::res`), the cover's and title's places one flat grey (`case/<kind>.json`). A cover of
-  another shape (a DS cover, a European Saturn cover) is fitted whole, never cut. The cardboard boxes, the Mega Drive's
+  another shape (a European Saturn cover) is fitted whole, never cut; a DS or 3DS case's nearly square box art may lose up
+  to `cabinet_art::CASE_TRIM` of its longer side (its scan's margin) and the rest of the insert takes the cover's own
+  edge colour (`cover_fit_case`; the lead's review 26.11.2026: thick grey bars above and below). The cardboard boxes, the Mega Drive's
   and the Master System's cases are still drawn (`draw_media.py`). The table is printed by
   `assets/media/case/tools/table.py`.
 - **What is inside** (`media::Game`, `assets/media/game/<kind>.png`): every cartridge and game card is made from a
@@ -773,6 +777,25 @@ Shelf look (`Medium::of`):
   (`label_title`: smaller, up to three lines, without the subtitle, only then "…"). Discs and UMDs are printed (below);
   the memory card of the digital systems is still drawn. The table in `src/media.rs` is printed by
   `assets/media/game/tools/table.py`.
+- **The game's own label** (0.8, `src/real_label.rs`, `media::game_pic_labelled`, `media::disc_pic_labelled`): where
+  ScreenScraper's run has brought the game's label ([SCREENSCRAPER.md](SCREENSCRAPER.md): the flat label scan,
+  `support-texture`, else the photo of the whole cartridge, `support-2D`, its label cut where the template has it; for a
+  disc its photo, else its scan), the cartridge, card or disc carries the real label in place of the cover's art, in the
+  game box, on the way into the console (the rig maps the whole picture onto its slot, so the label lies in the
+  slot's perspective: on the Mega Drive's front as it goes in from above, on the NES cartridge's top as it lies flat)
+  and wherever else the medium is drawn. It keeps its own full colours (owner 26.11.2026: a muted, posterised label
+  looked paler than the cover's art it replaced) and is made `media::LABEL_DETAIL` times finer than the template, so it
+  is scaled down to the screen sharp, from the picture itself. A label shaped like its place within `real_label::CUT_UP_TO` fills it edge to edge, its middle cut to the place;
+  one further off (a Genesis label on the Mega Drive's wide recess) is printed whole in the middle on its own edge
+  colour, never stretched. A disc's face is cut by the disc's own circles: the print between its hub and its rim, the
+  hole and the clear hub as the template has them, no title written on it. The UMD's paper label and the memory card
+  keep their art, and so do the Mega Drive's cartridge and the DS and 3DS cards (owner 26.11.2026, from a comparison
+  of six systems: the tall Genesis label sat small in the wide recess, the DS card's real label is white with a small
+  logo; both looked plainer than the cover's art). Disc systems have no ScreenScraper lookup yet (no No-Intro checksum; a serial or name lookup is planned), so a disc is printed from its file only where a `support-2D` or `support-texture` is on the card. Made on the `real-labels` thread the first time a frame asks (`real_label::Labels`), sampled straight at the size it
+  is used at (a huge picture costs no more memory than its label); a frame is asked for when it is there
+  (`UserEvent::RealLabel`). The cover stands in until then, a game without one is looked for again after
+  `real_label::MISSING_AGAIN`, at most `real_label::KEEP` labels stay made, and a ScreenScraper run that brought pictures
+  makes them again (`covers_changed`).
 - **Printed discs** (0.1.5, `media::DiscKind`, `media::disc_pic`, `assets/media/disc/<kind>.png`): a disc or a UMD shows
   its label side printed like a real one. Each system has its own disc template, a PixelLab `image-to-pixelart`
   conversion of a public-domain photo of a disc (`assets/media/disc/SOURCES.md`; the libretro collection has no disc
@@ -978,7 +1001,18 @@ Three rows of Settings → Look → Cozy extras, all on from the start, Shelf lo
   (`case_height` makes the case smaller where both would not fit across the screen, a SNES box on 640 × 480). The
   frames of the backs (and, while the case's front is not made yet, the cardboard box's front) are PixelLab pixel art
   (`assets/media/back`, `tools/` there), nine-slice at a whole number of screen pixels a template pixel; the back's
-  paper is the cover's colour, deep, with white type; missing pictures and text get their own plain places.
+  paper is the cover's colour, deep, with white type; missing pictures and text get their own plain places. Where
+  ScreenScraper's run has brought the box's real back (`box-2D-back`, `App::real_back`, read on the picture thread) and
+  Real box backs is On (Off unless switched, so pocket-ui's own back with the player's progress stays the usual),
+  turning the box over shows it first, under the title band, across the back's width and at most
+  `game_box::REAL_BACK_VIEWS` views tall (scaled once, `BoxView::back_scaled`; the lead's review 26.11.2026: whole in the
+  view it was small); its top at rest, the rest of it, the pictures, the description and the facts as the back scrolls. Without
+  one the back is as before. R2 zooms a real back (owner 26.11.2026: too small to read on a small handheld;
+  `BoxView::zoom_toggle`, `paint_zoom`): it fills the room between the top line and the hints at about twice the
+  screen's fit, read on the picture thread from the file itself only then (`Inputs::back_zoom`) and scaled by whole
+  source pixels, so it is sharp; until it is read, the back at rest stands in at twice its size. The D-pad moves the
+  view by `ZOOM_STEP` of the picture, never past its edges; B or R2 leaves the zoom first (B again leaves the box).
+  The hints say B Back, D-PAD Move, R2 Zoom out; at rest, R2 Zoom takes the places of SELECT and START in the bar's four (both still work).
 - **Sealed new games** (Settings → Look → Cozy extras → Sealed new games, `src/shrink_wrap.rs`, `app_shrink_wrap.rs`;
   on): a game never played (no time, sessions or status in `library.json`, not in the recent games, never torn open)
   stands in the shop's clear film on the Shelf, the Cabinet, Easy, Split's box art, the card's cover and the box's front

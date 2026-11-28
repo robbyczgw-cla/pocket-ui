@@ -348,7 +348,7 @@ impl App {
         if let Some(rom) = self.gallery.rom.as_ref() {
             return Some(rom.clone());
         }
-        let sys = self.systems.iter().find(|s| s.name == shot.system)?;
+        let sys = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &shot.system))?;
         sys.games.iter().find(|g| screenshot::clean(&stem_of(&g.path)) == shot.game).map(|g| g.path.clone())
     }
 
@@ -815,7 +815,7 @@ impl App {
     fn gallery_made_up_games(&self) -> Vec<(usize, usize, (u32, u32))> {
         let mut out = Vec::new();
         for (id, size) in [("gba", (240, 160)), ("gb", (160, 144)), ("snes", (256, 224)), ("ps2", (640, 448))] {
-            if let Some(s) = self.systems.iter().position(|s| s.name == id) {
+            if let Some(s) = self.systems.iter().position(|s| pocket_ui::region_pairs::same_shelf(&s.name, &id)) {
                 if !self.systems[s].games.is_empty() {
                     out.push((s, 0, size));
                 }

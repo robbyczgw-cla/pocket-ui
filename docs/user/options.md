@@ -8,7 +8,7 @@ launching it? Press START on its card for [This game](#this-game).
 
 | Entry | What it holds |
 |---|---|
-| **Picture** | Scaling, visual look, screen frame, orientation, 3D resolution and Mode 7, with a live preview. |
+| **Picture** | Scaling, visual look, screen frame, orientation, 3D resolution, Mode 7 and Dreamcast widescreen, with a live preview. |
 | **Emulator** | Core-specific tweaks like colour palettes or sprite limits (shown when the core offers them). |
 | **Controls** | Per-button mapping, stick/D-pad swaps, DS stylus/layout actions and Hold to toggle. |
 | **Cheats** | Libretro cheat database plus your own `.cht` files (one-time Wi-Fi download on TrimUI). See [Cheats](options-cheats.md). |
@@ -95,6 +95,8 @@ your hardware.
 
   *(Other Android chips, H700, RK3566 and RK3326 omit this row, since H700/Rockchip use ROCKNIX's emulators for N64/PSP/Dreamcast
   and PS1 Enhanced Resolution stays under [Emulator](#emulator).)*
+- The TrimUI Brick has no Resolution row either: N64 starts at its own 320×240 there, for full speed. For a sharper 640×480 picture
+  set **Native Resolution Factor** to 2x under [Emulator](#emulator) (busy scenes run slower).
 - PS1 defaults to Original because 2x (Enhanced Resolution) can black out pause menus in a few titles (like Crash
   Bandicoot 2).
 - When this row is present, the duplicate resolution switch under Emulator is hidden to keep one clear place.
@@ -111,9 +113,27 @@ SNES's rotating/tilting Mode 7 floors in *Super Mario Kart*, *F-Zero*, *Pilotwin
   Pocket 6, Odin 2 family; omitted on 4:3/square screens like Mini V2). Menus stay 4:3, and sprites near screen edges
   may pop in slightly since the original game never drew off-screen.
 - pocket-ui for Android offers Original and HD (its bsnes core supports HD without widescreen).
-- On pocket-ui OS, HD / HD widescreen run on bundled **bsnes-hd** instead of Snes9x (slightly warmer CPU; in-game saves
-  carry over, while Continue states from the other core stay separate so the game starts fresh once).
+- On pocket-ui OS, HD / HD widescreen run on **bsnes-hd** instead of Snes9x (slightly warmer CPU; in-game saves
+  carry over, while Continue states from the other core stay separate so the game starts fresh once). pocket-ui brings
+  its own bsnes-hd for cards whose system has none; if it is still missing, the game plays Original on Snes9x and says so.
 - **Takes effect on next launch**, saved per console or per game via [Keep for](#keep-for) → This game.
+
+### Widescreen
+
+Dreamcast games, wherever pocket-ui plays them with Flycast (pocket-ui OS, pocket-ui beta for dArkOS and pocket-ui for
+Android; on pocket-ui OS the H700 and the other small-chip handhelds keep the Dreamcast on the system's own emulator).
+Shows more of the game at the sides, in 16:9:
+
+- **Off** (default): the console's own 4:3.
+- **Patch:** Flycast's widescreen patch for the game, made for that game and clean. Many well-known games have one
+  (*Sonic Adventure*, *Crazy Taxi*, *Soulcalibur* and more); a game without one stays 4:3.
+- **Hack:** every 3D game draws wider. Works everywhere, but the revealed sides can show gaps, missing walls or
+  objects popping in; menus and 2D screens stay 4:3 in the middle.
+- The picture takes the 16:9 shape by itself (with the Dreamcast's starting scaling, Aspect). On a 4:3 or nearly square
+  screen like the Mini V2's it gets black bars above and below instead.
+- Vertical arcade-style games stay as they are.
+- **Takes effect on next launch**, saved per console or per game via [Keep for](#keep-for) → This game. The Emulator
+  page's own widescreen switches are hidden to keep one clear place.
 
 ### Starting values per console
 
@@ -251,6 +271,9 @@ or A; starts on **This console** if the console already has custom settings, els
 
 ## Runs on
 
+On ROCKNIX, if an emulator or its core is missing, the game stays on the shelf and tells you what to install.
+You can choose a different emulator here.
+
 Choose which emulator runs a game or console, opened via **START** on a console page, START on a game card → **Runs on**,
 or Pause → Options → **Runs on** (or Pause → **Options** on RetroArch/standalone; use card START for PS2/GameCube/Wii/3DS).
 
@@ -263,6 +286,10 @@ followed by pocket-core and every working ROCKNIX emulator for that console:
 - **Standalone:** ARMSX2, Dolphin and Azahar keep pocket-ui Save/Load/Options/Continue; others use in-game saving only.
 
 Save states never cross emulators; switching emulators boots from your in-game save.
+
+The choice is stored as ROCKNIX's `<console>.emulator` and `<console>.core` lines in `system.cfg`, so ROCKNIX's own menu
+sees it too. If you edit those lines by hand (over Samba or SSH) while pocket-ui runs, it uses them after **Restart
+pocket-ui** (hold SELECT + START on the shelf); a choice made here or in ROCKNIX's own menu counts at once.
 
 When RetroArch is picked, extra rows appear (applied on next launch): **Aspect ratio** (Core provided, 4:3, 3:2, 16:9,
 Square pixels, Full screen), **Integer scaling**, **Smoothing**, **Shader** (None plus curated ROCKNIX CRT/LCD presets
@@ -282,7 +309,7 @@ Press **START** on any game card or box to configure it right from the shelf bef
 
 | Row | What it holds |
 |---|---|
-| **Screen scaling**, **Look** (Sharpness & Effect under Custom), **Screen frame** (+ colour/finish), **Screen orientation**, **Resolution** (N64/PSP/Dreamcast/PS1), **Mode 7** (SNES) | All [Picture](#picture) settings (previewed once in-game). |
+| **Screen scaling**, **Look** (Sharpness & Effect under Custom), **Screen frame** (+ colour/finish), **Screen orientation**, **Resolution** (N64/PSP/Dreamcast/PS1), **Mode 7** (SNES), **Widescreen** (Dreamcast) | All [Picture](#picture) settings (previewed once in-game). |
 | **Fast-forward speed**, **Rewind**, **Earlier states**, **Over the game**, **Rumble**, **Performance**, **Fan**, **Run-ahead** | Same rows as [Speed, rumble, fan](#speed-rumble-fan). |
 | **Save state**, **Load state**, **Change slot**, **Fast-forward**, **Rewind**, **Screenshot**, **Over the game**, **Zoom** | All [Shortcuts](#shortcuts). |
 | **Controls** | Button remapping and stick/D-pad options ([Controls](#controls)). |

@@ -144,6 +144,11 @@ fn mode7_core<'a>(system: &str, path: Option<&Path>, usual: &'a str) -> &'a str 
 
 /// The launch's choice from `inputs` and system.cfg's cached choices (`emu_choice::cached`).
 pub(crate) fn resolve_with(sys: &System, path: Option<&Path>, i: Inputs<'_>) -> Resolved {
+    resolve_noting_with(sys, path, i).0
+}
+
+/// [`resolve_with`], and the saved choice it had to pass over (`emu_choice::dropped_choice`): the start says so (`swap_note`).
+pub(crate) fn resolve_noting_with(sys: &System, path: Option<&Path>, i: Inputs<'_>) -> (Resolved, Option<emu_choice::Dropped>) {
     let ctx = emu_choice::Ctx {
         system: &sys.name,
         emulators: &sys.emulators,
@@ -154,12 +159,94 @@ pub(crate) fn resolve_with(sys: &System, path: Option<&Path>, i: Inputs<'_>) -> 
         default_override: i.default_override,
     };
     let file = path.and_then(|p| p.file_name()).and_then(|n| n.to_str());
-    emu_choice::resolve(&ctx, &emu_choice::cached(), file)
+    let cfg = emu_choice::cached();
+    (emu_choice::resolve(&ctx, &cfg, file), emu_choice::dropped_choice(&ctx, &cfg, file))
+}
+
+/// The same external-player check is used by launch preparation and the release probe.
+#[cfg(target_os = "linux")]
+pub(crate) fn rocknix_problem(runner: &Runner, system: &str) -> Option<String> {
+    use pocket_ui::{device, hakux};
+    if system == "xbox" && !hakux::supported(device::current()) {
+        return Some("Xbox games need a stronger handheld, like the Retroid Pocket 5 or Mini V2.".into());
+    }
+    if runner.emulator == "hakux" && !hakux::installed() {
+        return Some("hakuX is missing. Install a pocket-ui update to play Xbox games.".into());
+    }
+    if !runner.is_pocket_core() && runner.emulator != "hakux"
+        && Path::new("/usr/bin/runemu.sh").is_file() && !device::darkos_port()
+        && !emu_choice::rocknix_external_ready(runner, system, |p| p.is_file())
+    {
+        let emulator = emu_choice::label(runner, &[]);
+        return Some(format!("{emulator} is missing. Update your system or choose another emulator under Runs on."));
+    }
+    None
+}
+
+/// Read-only release probe. One game per populated system goes through the same resolver as the shelf.
+/// Compare the entire map so newly offered or silently dropped systems fail alongside changed routes.
+#[cfg(target_os = "linux")]
+pub(crate) fn route_check(expected: Option<&str>) -> Result<(), String> {
+    use std::collections::BTreeMap;
+    use std::io::Read;
+    type Routes = BTreeMap<String, [String; 3]>;
+    let es = std::env::var_os("POCKETUI_ES_SYSTEMS").unwrap_or_else(|| "/storage/.config/emulationstation/es_systems.cfg".into());
+    let data = std::env::var_os("POCKETUI_DATA").unwrap_or_else(|| "/storage/.config/pocket-ui".into());
+    let systems = pocket_ui::library::load(Path::new(&es))?;
+    let fallback = pocket_ui::fallback::Fallback::load(Path::new(&data));
+    let host = Path::new(host_bin()).is_file();
+    // A merged shelf (`region_pairs`) answers for each of its folders, under its own id, as when they were shelves of their own.
+    let each: Vec<(std::borrow::Cow<'_, System>, &Path)> = systems.iter().flat_map(|sys| {
+        let first = sys.games.iter().find(|g| sys.part_for(&g.path).is_none()).map(|g| (std::borrow::Cow::Borrowed(sys), g.path.as_path()));
+        let parts = sys.parts.iter().filter_map(move |p| sys.games.iter().find(|g| sys.part_for(&g.path).is_some_and(|q| q.name == p.name)).map(|g| (sys.for_game(&g.path), g.path.as_path())));
+        first.into_iter().chain(parts)
+    }).collect();
+    let actual: Routes = each.iter().filter_map(|(sys, path)| {
+        let (sys, path) = (sys.as_ref(), *path);
+        let inputs = inputs_for(sys, Some(path), host, fallback.contains(path));
+        let runner = resolve_with(sys, Some(path), inputs).runner;
+        let Runner { emulator, core } = &runner;
+        let state = if sys.name == "xbox" && !pocket_ui::hakux::supported(pocket_ui::device::current()) {
+            "unsupported"
+        } else if rocknix_problem(&runner, &sys.name).is_some()
+            || (runner.is_pocket_core() && !pocket_ui::store::core_path(core).is_file()) {
+            "missing"
+        } else {
+            "ready"
+        };
+        Some((sys.name.clone(), [emulator.clone(), core.clone(), state.into()]))
+    }).collect();
+    if actual.is_empty() { return Err("no test games were found on this device".into()); }
+    println!("{}", serde_json::to_string_pretty(&actual).map_err(|e| e.to_string())?);
+    if let Some(file) = expected {
+        let mut text = String::new();
+        if file == "-" {
+            std::io::stdin().read_to_string(&mut text).map_err(|e| e.to_string())?;
+        } else {
+            text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+        }
+        let want: Routes = serde_json::from_str(&text).map_err(|e| format!("expected emulator routes: {e}"))?;
+        compare_routes(&want, &actual)?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn compare_routes(
+    expected: &std::collections::BTreeMap<String, [String; 3]>,
+    actual: &std::collections::BTreeMap<String, [String; 3]>,
+) -> Result<(), String> {
+    let keys: std::collections::BTreeSet<_> = expected.keys().chain(actual.keys()).collect();
+    let changes: Vec<_> = keys.into_iter().filter_map(|system| {
+        let (want, got) = (expected.get(system), actual.get(system));
+        (want != got).then(|| format!("{system}: expected {want:?}, got {got:?}"))
+    }).collect();
+    if changes.is_empty() { Ok(()) } else { Err(changes.join("\n")) }
 }
 
 impl App {
     pub(crate) fn core_for_path(&self, system: &str, path: &Path) -> String {
-        self.systems.iter().find(|s| s.name == system)
+        self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, system))
             .map(|s| self.route(s, Some(path), Path::new(host_bin()).exists()).1).unwrap_or_default()
     }
     /// `inputs_for` with the phone's own ways first (Android's handheld view, `app_runs_on_android`) and this game's
@@ -174,6 +261,9 @@ impl App {
     /// The emulator and core `sys`'s game at `path` (None: the system as a whole) starts with, and why: the game's
     /// choice, the console's, or the default (`emu_choice::resolve`). `host_bin`: pocket-core is installed.
     pub(crate) fn resolve_runner(&self, sys: &System, path: Option<&Path>, host_bin: bool) -> Resolved {
+        // A game in another folder of a merged shelf (`genesis/` on the Mega Drive's) starts as that folder's system.
+        let own = path.map(|p| sys.for_game(p));
+        let sys = own.as_deref().unwrap_or(sys);
         // An Android game (Android's handheld view) is its app: Android starts it, nothing to choose (`app_android_games`).
         if sys.name == pocket_ui::android_games::SYSTEM_ID && pocket_ui::device::android_profile() {
             return Resolved { runner: Runner::new(pocket_ui::android_games::EMULATOR, ""), from: emu_choice::From::Default };
@@ -185,14 +275,31 @@ impl App {
         resolve_with(sys, path, self.runner_inputs(sys, path, host_bin))
     }
 
+    /// [`Self::resolve_runner`] for a start, with the saved choice it passed over (`swap_note`). Android's own ways
+    /// (`phone_resolve`, an Android game) decide there and have nothing to pass over.
+    pub(crate) fn resolve_noting(&self, sys: &System, path: &Path, host_bin: bool) -> (Resolved, Option<emu_choice::Dropped>) {
+        let own = sys.for_game(path);
+        let sys = own.as_ref();
+        let android = (sys.name == pocket_ui::android_games::SYSTEM_ID && pocket_ui::device::android_profile()) || pocket_ui::play_route::phone().is_some();
+        if android {
+            return (self.resolve_runner(sys, Some(path), host_bin), None);
+        }
+        resolve_noting_with(sys, Some(path), self.runner_inputs(sys, Some(path), host_bin))
+    }
+
     /// Whether pocket-core can play `path` of `sys` (its host and core), whatever plays it now: the picture, extras and
     /// controls of "This game" are for it.
     pub(crate) fn emu_hostable(&self, sys: &System, path: &Path) -> bool {
+        let own = sys.for_game(path);
+        let sys = own.as_ref();
         self.runner_inputs(sys, Some(path), true).pocket_core.is_some()
     }
 
     fn emu_subject(&self, system: &str, game: Option<(&str, &Path)>, host_bin: bool) -> Option<Subject> {
-        let sys = self.systems.iter().find(|s| s.name == system)?;
+        let sys = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, system))?;
+        // A game's Runs on is its folder's system's (`genesis` on the merged Mega Drive shelf).
+        let own = game.map(|(_, p)| sys.for_game(p));
+        let sys = own.as_deref().unwrap_or(sys);
         let i = self.runner_inputs(sys, game.map(|(_, p)| p), host_bin);
         let phone = pocket_ui::play_route::phone();
         Some(Subject {
@@ -217,7 +324,10 @@ impl App {
         let Some(subject) = self.emu_subject(system, game, host_bin) else {
             return false;
         };
-        let sys = self.systems.iter().find(|s| s.name == system);
+        // A game in another folder of a merged shelf is its folder's system on this page (`emu_subject`).
+        let own = subject.system.clone();
+        let system = own.as_str();
+        let sys = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, system));
         let (cfg, shipped, on_phone) = match (pocket_ui::play_route::phone(), sys) {
             // Android: the choices of launcher.json in system.cfg's words; no ROCKNIX file to read.
             (Some(_), Some(sys)) => (self.phone_cfg(sys, None), Cfg::default(), true),
@@ -229,7 +339,11 @@ impl App {
                 // Our player where its core is on the phone; every app in the list is installed.
                 !r.is_pocket_core() || own_ready
             } else {
-                emu_choice::installed(r, system, |p| p.exists())
+                if Path::new("/usr/bin/runemu.sh").is_file() && !pocket_ui::device::darkos_port() {
+                    emu_choice::rocknix_external_ready(r, system, |p| p.is_file())
+                } else {
+                    emu_choice::installed(r, system, |p| p.exists())
+                }
             }
         });
         emu_choice::find_shaders_in_background();
@@ -371,11 +485,8 @@ impl App {
     /// The console page under the page says what runs the system now.
     fn emu_choice_refresh_console(&mut self) {
         let Some(s) = self.console.as_ref().map(|o| o.system) else { return };
-        let runs_on = self.systems.get(s).map(|sys| {
-            let r = self.resolve_runner(sys, None, Path::new(host_bin()).exists()).runner;
-            pocket_ui::consoles::runner_text(&r.emulator, &r.core)
-        });
-        if let (Some(open), Some(runs_on)) = (self.console.as_mut(), runs_on) {
+        let runs_on = self.system_runs_on(s);
+        if let Some(open) = self.console.as_mut() {
             open.page.data.runs_on = runs_on;
         }
     }
@@ -431,7 +542,7 @@ impl App {
                 game = Some(p.to_string());
             }
         }
-        let Some(sys) = self.systems.iter().find(|s| s.name == system) else {
+        let Some(sys) = self.systems.iter().find(|s| pocket_ui::region_pairs::same_shelf(&s.name, &system)) else {
             eprintln!("emu:{system}: no such system in the library");
             return false;
         };
@@ -676,7 +787,7 @@ mod tests {
     /// every 7z stayed with RetroArch.
     #[test]
     fn a_7z_game_is_pocket_cores_as_a_zip_is() {
-        let system = |name: &str| System { name: name.into(), fullname: String::new(), emulator: None, core: None, emulators: Vec::new(), games: Vec::new() };
+        let system = |name: &str| System { name: name.into(), fullname: String::new(), emulator: None, core: None, emulators: Vec::new(), games: Vec::new(), parts: Vec::new() };
         for (sys, game) in [("gba", "Pocket Demo (World).7z"), ("gba", "Pocket Demo (World).zip"), ("gba", "Pocket Demo (World).gba"), ("nds", "Pocket Demo.7z"), ("snes", "Pocket Demo.7Z")] {
             assert!(inputs_for(&system(sys), Some(Path::new(game)), true, false).file_ok, "{sys} {game}");
         }

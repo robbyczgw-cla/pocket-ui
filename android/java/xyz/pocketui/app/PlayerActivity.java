@@ -41,7 +41,7 @@ public final class PlayerActivity extends Activity {
         final boolean connected=!now.isEmpty();
         orientFor(connected);
         sendRoster();
-        surface.queueEvent(()->nativeControllers(connected,interrupted));surface.requestRender();
+        queuePlayer(()->nativeControllers(connected,interrupted));surface.requestRender();
     }
     /** One line a gamepad (`id, descriptor, name, vendor, product`, tab-separated): who is which player is Rust's business (`android_pads`). */
     static String rosterLine(android.view.InputDevice d){
@@ -56,7 +56,7 @@ public final class PlayerActivity extends Activity {
         StringBuilder text=new StringBuilder();
         for(int id:new java.util.TreeSet<>(gamepads)){android.view.InputDevice d=android.view.InputDevice.getDevice(id);if(d!=null)text.append(rosterLine(d)).append('\n');}
         rosterText=text.toString();
-        surface.queueEvent(()->nativeRoster(rosterText));
+        queuePlayer(()->nativeRoster(rosterText));
     };
     private void sendRoster(){rosterHandler.removeCallbacks(rosterJob);rosterHandler.postDelayed(rosterJob,250);}
     private native void nativeRoster(String roster);
@@ -68,6 +68,7 @@ public final class PlayerActivity extends Activity {
         if(wanted!=orientation){orientation=wanted;setRequestedOrientation(wanted);}
     }
     private native void nativeZoom(float factor);
+    private native boolean nativeVolumeKey(boolean up);
     private volatile int safeLeft,safeTop,safeRight,safeBottom,holeLeft,holeTop,holeRight,holeBottom;
     private native String nativeCreate(String core,String rom,String system,String key,String title);
     private native String nativeTranslate(String text);
@@ -76,7 +77,49 @@ public final class PlayerActivity extends Activity {
     private native boolean nativeAnalog(float x,float y,float rx,float ry,float hatX,float hatY,float lt,float rt,int device);
     private native boolean nativeTouch(int id,float x,float y,int phase);
     private native void nativeSuspend();
-    private native void nativeForeground();
+    private native void nativeQuietAudio();
+    private native boolean nativeForeground(boolean screenWasOff);
+    private final java.util.concurrent.atomic.AtomicInteger foregroundRequest = new java.util.concurrent.atomic.AtomicInteger();
+    private boolean deferredSuspend; // GL thread only
+    private boolean hasCurrentContext() {
+        return !android.opengl.EGL14.EGL_NO_CONTEXT.equals(android.opengl.EGL14.eglGetCurrentContext());
+    }
+    private void queuePlayer(Runnable event) {
+        surface.queueEvent(() -> {
+            if (ready && hasCurrentContext()) event.run();
+        });
+    }
+    private void queueSuspend() {
+        surface.queueEvent(() -> {
+            if (!ready) return;
+            if (hasCurrentContext()) nativeSuspend();
+            else {
+                deferredSuspend = true;
+                nativeQuietAudio();
+            }
+        });
+    }
+    private void leaveLostContext() {
+        ready = false;
+        android.util.Log.w("PocketMvp", "player: EGL context replaced; returning to the shelf");
+        runOnUiThread(() -> {
+            finish();
+            // The old core may still have an emulation thread with invalid GL
+            // state. This Activity is alone in the :player process.
+            android.os.Process.killProcess(android.os.Process.myPid());
+        });
+    }
+    /** The screen went off while the game was in front (onPause saw it): waking goes on with the game (`android_wake`). */
+    private boolean screenWentOff;
+    /** Waking goes straight back into the game over a lock screen without PIN, pattern or password, as pocket-ui OS wakes
+     *  into it; a secured one stays as Android has it. Asked again before each sleep (the lock may have changed). */
+    private void wakeIntoGame(){
+        android.app.KeyguardManager keyguard=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
+        boolean open=keyguard!=null&&!keyguard.isKeyguardSecure();
+        if(android.os.Build.VERSION.SDK_INT>=27)setShowWhenLocked(open);
+        else if(open)getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
+        else getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
+    }
     /** Open in :player itself: fd numbers belong to a process and Activity intents cannot carry file descriptors. */
     private android.os.ParcelFileDescriptor gameDocument;
     public String gameDocumentFd(){
@@ -108,6 +151,19 @@ public final class PlayerActivity extends Activity {
             return "";
         }catch(java.io.IOException error){return error.toString();}
     }
+    /** The low-battery guard's reading (`player_battery.rs`, `low_battery::parse_android`): "percent,plugged" from Android's
+     *  sticky battery broadcast (no receiver stays registered); "-1,0" without a battery. Any thread. */
+    public String batteryLevel(){
+        android.content.Intent battery=registerReceiver(null,new android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED));
+        if(battery==null||!battery.getBooleanExtra(android.os.BatteryManager.EXTRA_PRESENT,true))return "-1,0";
+        int level=battery.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL,-1),scale=battery.getIntExtra(android.os.BatteryManager.EXTRA_SCALE,-1);
+        if(level<0||scale<=0)return "-1,0";
+        return Math.min(100,level*100/scale)+","+(battery.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED,0)!=0?1:0);
+    }
+    /** One more frame, from any thread: a paused game draws only when asked (the battery guard's news). */
+    public String wakeFrame(){GLSurfaceView s=surface;if(s!=null)s.requestRender();return "";}
+    /** The game came from the Handheld view (its pause menu is the handhelds', `pause_menu` in the launch's settings). */
+    private boolean fromHandheld(){try{return "handheld".equals(new org.json.JSONObject(playerSettings()).optString("pause_menu"));}catch(org.json.JSONException e){return false;}}
     public String batterySaver(){return Boolean.toString(((android.os.PowerManager)getSystemService(POWER_SERVICE)).isPowerSaveMode());}
     public String fontScale(){return Float.toString(getResources().getConfiguration().fontScale);}
     public String playerSettings(){String value=getIntent().getStringExtra("settings");return value==null?"":value;}
@@ -133,6 +189,10 @@ public final class PlayerActivity extends Activity {
     /** Game rumble (`rumble.rs`, Android's backend): `target` is a controller's InputDevice id or "motor" (the handheld's own);
      *  `magnitude` 0..65535 (0 stops), `ms` the one-shot's length the worker renews. "" when it went to a vibrator. */
     public String rumble(String target,String magnitude,String ms){return Rumble.play(this,target,Integer.parseInt(magnitude),Long.parseLong(ms));}
+    /** The media volume for the volume keys' level bar (`volume_steps`): "index,max,muted", the device's own steps. */
+    public String volumeLevels(){AudioManager a=(AudioManager)getSystemService(AUDIO_SERVICE);return a.getStreamVolume(AudioManager.STREAM_MUSIC)+","+a.getStreamMaxVolume(AudioManager.STREAM_MUSIC)+","+a.isStreamMute(AudioManager.STREAM_MUSIC);}
+    /** A step of the media volume, without Android's panel: pocket-ui's level bar shows it (`nativeVolumeKey`). */
+    public String setVolumeIndex(String index){try{AudioManager a=(AudioManager)getSystemService(AUDIO_SERVICE);a.setStreamVolume(AudioManager.STREAM_MUSIC,Math.max(0,Math.min(a.getStreamMaxVolume(AudioManager.STREAM_MUSIC),Integer.parseInt(index.trim()))),0);return "";}catch(RuntimeException e){return "Volume not changed: "+e.getMessage();}}
     public String volumeState(){AudioManager a=(AudioManager)getSystemService(AUDIO_SERVICE);int max=a.getStreamMaxVolume(AudioManager.STREAM_MUSIC);return (max==0?0:a.getStreamVolume(AudioManager.STREAM_MUSIC)*100/max)+","+a.isStreamMute(AudioManager.STREAM_MUSIC);}
     @Override protected void onCreate(Bundle saved) {
         ShippedFonts.install(this); // as PocketBase: before the native code
@@ -140,6 +200,7 @@ public final class PlayerActivity extends Activity {
         diagnosticInput=getIntent().getBooleanExtra("diagnosticInput",false);
         orientFor("true".equals(hasGamepad()));
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        wakeIntoGame();
         if(android.os.Build.VERSION.SDK_INT>=28){android.view.WindowManager.LayoutParams attrs=getWindow().getAttributes();attrs.layoutInDisplayCutoutMode=android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;getWindow().setAttributes(attrs);}
         // The handheld view's brightness row holds in the game it starts (extra set by launchPath); Android's own is the default.
         int shelfBrightness=getIntent().getIntExtra("brightness",-1);
@@ -149,9 +210,16 @@ public final class PlayerActivity extends Activity {
         surface=new GLSurfaceView(this); surface.setEGLContextClientVersion(3); surface.setPreserveEGLContextOnPause(true);
         surface.setRenderer(new GLSurfaceView.Renderer() {
             public void onSurfaceCreated(GL10 unused,EGLConfig config) {
+                if (ready) {
+                    leaveLostContext();
+                    return;
+                }
                 String error=nativeCreate(getIntent().getStringExtra("core"),getIntent().getStringExtra("rom"),getIntent().getStringExtra("system"),getIntent().getStringExtra("key"),getIntent().getStringExtra("title"));
                 ready=error.isEmpty();
                 if(ready)nativeRoster(rosterText);
+                // A game from the Handheld view: no Android dialog; the shelf says why in its own notice (nativeCreate left it).
+                // Couldn't it be left (a full or broken app folder), the dialog stays: the shelf would have nothing to say.
+                if (!ready && fromHandheld() && new java.io.File(getFilesDir(),"player-start-error").isFile()) { runOnUiThread(() -> finish()); return; }
                 if (!ready) runOnUiThread(() -> {
                     if(isFinishing()||isDestroyed())return;
                     startError=new AlertDialog.Builder(PlayerActivity.this).setTitle(nativeTranslate("Game couldn't start")).setMessage(error).setPositiveButton("OK",(d,w)->finish()).setOnCancelListener(d->finish()).create();
@@ -162,6 +230,14 @@ public final class PlayerActivity extends Activity {
             public void onSurfaceChanged(GL10 unused,int width,int height) { }
             public void onDrawFrame(GL10 unused) {
                 if (!ready) return;
+                if (deferredSuspend) {
+                    deferredSuspend = false;
+                    nativeSuspend();
+                }
+                int foreground = foregroundRequest.getAndSet(0);
+                if (foreground != 0 && nativeForeground(foreground == 2)) {
+                    surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
+                }
                 int state=nativeFrame(surface.getWidth(),surface.getHeight(),getResources().getDisplayMetrics().density,getResources().getConfiguration().fontScale,safeLeft,safeTop,safeRight,safeBottom,holeLeft,holeTop,holeRight,holeBottom);
                 paused=state==1||state==3;
                 if (state==2) {ready=false;runOnUiThread(()->finish());}
@@ -170,17 +246,17 @@ public final class PlayerActivity extends Activity {
             }
         });
         pinch=new android.view.ScaleGestureDetector(this,new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener(){
-            @Override public boolean onScaleBegin(android.view.ScaleGestureDetector detector){if(!paused)return false;surface.queueEvent(()->nativeZoom(1));surface.requestRender();return true;}
-            @Override public boolean onScale(android.view.ScaleGestureDetector detector){final float factor=detector.getScaleFactor();surface.queueEvent(()->nativeZoom(factor));surface.requestRender();return true;}
+            @Override public boolean onScaleBegin(android.view.ScaleGestureDetector detector){if(!paused)return false;queuePlayer(()->nativeZoom(1));surface.requestRender();return true;}
+            @Override public boolean onScale(android.view.ScaleGestureDetector detector){final float factor=detector.getScaleFactor();queuePlayer(()->nativeZoom(factor));surface.requestRender();return true;}
         });
         surface.setOnTouchListener((view,event)->{
             if(paused){pinch.onTouchEvent(event);if(pinch.isInProgress())return true;}
             int action=event.getActionMasked();
-            if(action==MotionEvent.ACTION_CANCEL) {surface.queueEvent(()->nativeTouch(-1,0,0,3));}
+            if(action==MotionEvent.ACTION_CANCEL) {queuePlayer(()->nativeTouch(-1,0,0,3));}
             else if(action==MotionEvent.ACTION_MOVE) {
-                for(int i=0;i<event.getPointerCount();i++){final int id=event.getPointerId(i);final float x=event.getX(i),y=event.getY(i);surface.queueEvent(()->{if(nativeTouch(id,x,y,1))surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);});}
+                for(int i=0;i<event.getPointerCount();i++){final int id=event.getPointerId(i);final float x=event.getX(i),y=event.getY(i);queuePlayer(()->{if(nativeTouch(id,x,y,1))surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);});}
             } else {int i=event.getActionIndex();final int id=event.getPointerId(i);final float x=event.getX(i),y=event.getY(i);final int phase=(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_POINTER_UP)?2:0;
-                surface.queueEvent(()->{if(nativeTouch(id,x,y,phase))surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);});}
+                queuePlayer(()->{if(nativeTouch(id,x,y,phase))surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);});}
             surface.requestRender();return true;
         });
         if(android.os.Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
@@ -204,15 +280,27 @@ public final class PlayerActivity extends Activity {
         if(focused)immersive();}
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         int key=event.getKeyCode();
+        // An F-key our pause menu meant for another emulator never reaches the game here (EmulatorKeys.strayEmulatorKey).
+        if(EmulatorKeys.strayEmulatorKey(key,event.getDeviceId()))return true;
         if(closeStartError(key,event))return true;
-        if(key==KeyEvent.KEYCODE_VOLUME_UP||key==KeyEvent.KEYCODE_VOLUME_DOWN)return super.dispatchKeyEvent(event);
+        // The volume keys step the media volume with pocket-ui's level bar over the game, as on Linux; Android's panel stays
+        // away. Held, they repeat as Android repeats them. Should the game not answer (no levels), Android's own handling.
+        if(key==KeyEvent.KEYCODE_VOLUME_UP||key==KeyEvent.KEYCODE_VOLUME_DOWN){
+            // A device whose media volume is fixed or has no steps (or a game not up yet): Android's own handling.
+            AudioManager audio=(AudioManager)getSystemService(AUDIO_SERVICE);
+            if(!ready||audio.isVolumeFixed()||audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)<=0)return super.dispatchKeyEvent(event);
+            if(event.getAction()==KeyEvent.ACTION_DOWN){final boolean up=key==KeyEvent.KEYCODE_VOLUME_UP;
+                // The bar goes after osd::SHOW_FOR from when the GL thread showed it; a paused game draws only when asked.
+                queuePlayer(()->{if(nativeVolumeKey(up))surface.postDelayed(surface::requestRender,1500);});surface.requestRender();}
+            return true;
+        }
         if(event.getRepeatCount()>0&&event.getAction()==KeyEvent.ACTION_DOWN&&!(key>=KeyEvent.KEYCODE_DPAD_UP&&key<=KeyEvent.KEYCODE_DPAD_RIGHT))return true;
         final boolean down=event.getAction()==KeyEvent.ACTION_DOWN;
         final int sources=event.getSource()|(event.getDevice()==null?0:event.getDevice().getSources());
         final boolean controller=(sources&android.view.InputDevice.SOURCE_GAMEPAD)==android.view.InputDevice.SOURCE_GAMEPAD || (sources&android.view.InputDevice.SOURCE_JOYSTICK)==android.view.InputDevice.SOURCE_JOYSTICK;
         final int device=event.getDeviceId(),scanCode=event.getScanCode();
         if(diagnosticInput&&controller)android.util.Log.i("PocketInput","key code="+key+" scan="+event.getScanCode()+" down="+down+" device="+device+" name="+(event.getDevice()==null?"":event.getDevice().getName()));
-        surface.queueEvent(()->{if(nativeKey(key,down,controller,device))surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);});surface.requestRender();return true;
+        queuePlayer(()->{if(nativeKey(key,down,controller,device))surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);});surface.requestRender();return true;
     }
     private float axis(MotionEvent event,int axis){
         android.view.InputDevice device=event.getDevice();
@@ -227,7 +315,7 @@ public final class PlayerActivity extends Activity {
             final int device=event.getDeviceId();
             if(diagnosticInput&&(lt>0||rt>0||lastTriggers))android.util.Log.i("PocketInput","triggers lt="+lt+" rt="+rt+" device="+device);
             lastTriggers=lt>0||rt>0;
-            surface.queueEvent(()->{if(nativeAnalog(x,y,rx,ry,hx,hy,lt,rt,device))surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);});surface.requestRender();return true;
+            queuePlayer(()->{if(nativeAnalog(x,y,rx,ry,hx,hy,lt,rt,device))surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);});surface.requestRender();return true;
         }
         return super.onGenericMotionEvent(event);
     }
@@ -239,15 +327,22 @@ public final class PlayerActivity extends Activity {
     }
     private void backRequested(){
         if(startError!=null){startError.dismiss();finish();return;}
-        android.util.Log.i("PocketMvp","player system back");surface.queueEvent(()->{if(nativeKey(KeyEvent.KEYCODE_BACK,true,false,-1))surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);});surface.requestRender();
+        android.util.Log.i("PocketMvp","player system back");queuePlayer(()->{if(nativeKey(KeyEvent.KEYCODE_BACK,true,false,-1))surface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);});surface.requestRender();
     }
     @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);surface.requestApplyInsets();surface.requestRender();}
-    @Override protected void onResume(){super.onResume();surface.onResume();immersive();
-        inputs.registerInputDeviceListener(inputListener,null);surface.queueEvent(()->nativeForeground());controllersChanged(false);
+    @Override protected void onResume(){super.onResume();
+        final boolean wake=screenWentOff;screenWentOff=false;
+        foregroundRequest.set(wake ? 2 : 1);
+        surface.onResume();immersive();
+        inputs.registerInputDeviceListener(inputListener,null);surface.requestRender();
+        // Woken over a plain lock screen: it goes, so leaving the game later lands on the shelf, not on the lock screen.
+        if(wake){android.app.KeyguardManager keyguard=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);if(keyguard!=null&&keyguard.isKeyguardLocked()&&!keyguard.isKeyguardSecure())keyguard.requestDismissKeyguard(this,null);}controllersChanged(false);
         AudioManager audio=(AudioManager)getSystemService(AUDIO_SERVICE);
-        focus=new android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(new android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_GAME).setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).build()).setOnAudioFocusChangeListener(change->{if(change<0){surface.queueEvent(()->nativeSuspend());surface.requestRender();}}).build();audio.requestAudioFocus(focus);
+        focus=new android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(new android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_GAME).setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).build()).setOnAudioFocusChangeListener(change->{if(change<0){queueSuspend();surface.requestRender();}}).build();audio.requestAudioFocus(focus);
     }
     @Override protected void onPause(){inputs.unregisterInputDeviceListener(inputListener);
+        screenWentOff=!((android.os.PowerManager)getSystemService(POWER_SERVICE)).isInteractive();
+        if(screenWentOff){wakeIntoGame();android.util.Log.i("PocketMvp","player: the screen went off");}
         // GLSurfaceView.onPause waits for the GL thread: the queued save completes before its context is parked.
-        surface.queueEvent(()->nativeSuspend());surface.onPause();if(focus!=null)((AudioManager)getSystemService(AUDIO_SERVICE)).abandonAudioFocusRequest(focus);super.onPause();}
+        queueSuspend();surface.onPause();if(focus!=null)((AudioManager)getSystemService(AUDIO_SERVICE)).abandonAudioFocusRequest(focus);super.onPause();}
 }

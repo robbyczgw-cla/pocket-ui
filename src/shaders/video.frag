@@ -12,6 +12,8 @@ precision highp float;
 uniform mediump sampler2D tex;
 uniform vec2 src;     // source size in texels
 uniform vec2 scale;   // output pixels per source texel, per axis
+uniform vec2 active_uv; // visible fraction of the backing texture on each axis
+uniform int flip_y;   // shared framebuffer with a bottom-left origin
 uniform int swizzle;  // 1: texture holds XRGB8888 uploaded as RGBA, so bytes are B, G, R
 uniform float lines;  // scanlines (EFFECT 2, 3): src.y, or the console's lines for a 3D core rendering above them
 in vec2 v;
@@ -23,6 +25,20 @@ out vec4 o;
 #ifndef SHARPNESS
 #define SHARPNESS 0
 #endif
+
+vec3 sample_rgb(vec2 uv, float lod) {
+    if (flip_y == 1) uv.y = 1.0 - uv.y;
+    if (any(lessThan(active_uv, vec2(1.0)))) {
+        vec2 half_texel = 0.5 / src;
+        uv = clamp(uv, half_texel, 1.0 - half_texel) * active_uv;
+    }
+    return textureLod(tex, uv, lod).rgb;
+}
+
+vec3 fetch_rgb(ivec2 p) {
+    if (flip_y == 1) p.y = int(src.y) - 1 - p.y;
+    return texelFetch(tex, p, 0).rgb;
+}
 
 vec3 sw(vec3 c) { return swizzle == 1 ? c.bgr : c; }
 // Linear light with gamma 2 (a square and a square root: cheap, and within a few per cent of the panel's 2.2 for
@@ -44,16 +60,16 @@ vec3 base() {
     vec2 i = floor(p);
     vec2 w = crisp_w(p - i, scale);
     ivec2 a = ivec2(i), m = ivec2(src) - 1;
-    vec3 c00 = texelFetch(tex, clamp(a, ivec2(0), m), 0).rgb;
-    vec3 c10 = texelFetch(tex, clamp(a + ivec2(1, 0), ivec2(0), m), 0).rgb;
-    vec3 c01 = texelFetch(tex, clamp(a + ivec2(0, 1), ivec2(0), m), 0).rgb;
-    vec3 c11 = texelFetch(tex, clamp(a + ivec2(1, 1), ivec2(0), m), 0).rgb;
+    vec3 c00 = fetch_rgb(clamp(a, ivec2(0), m));
+    vec3 c10 = fetch_rgb(clamp(a + ivec2(1, 0), ivec2(0), m));
+    vec3 c01 = fetch_rgb(clamp(a + ivec2(0, 1), ivec2(0), m));
+    vec3 c11 = fetch_rgb(clamp(a + ivec2(1, 1), ivec2(0), m));
     vec3 top = mix(lin(c00), lin(c10), w.x);
     vec3 bot = mix(lin(c01), lin(c11), w.x);
     return sw(enc(mix(top, bot, w.y)));
 #else
     // Level 0: the Soft glow's texture has mipmaps, which a plain lookup would pick when the picture is shrunk.
-    return sw(textureLod(tex, v, 0.0).rgb);
+    return sw(sample_rgb(v, 0.0));
 #endif
 }
 #endif
@@ -97,7 +113,7 @@ vec3 beam(vec3 e, float d, float h) {
 vec3 soft_glow() {
     vec3 c = lin(base());
     float lod = max(log2(src.y / SOFT_GLOW_LINES), 0.0);
-    vec3 b = lin(sw(textureLod(tex, v, lod).rgb));
+    vec3 b = lin(sw(sample_rgb(v, lod)));
     return enc(c + SOFT_GLOW_GAIN * max(b - c, 0.0) * b);
 }
 #endif
@@ -117,7 +133,7 @@ vec3 smooth_pixels() {
     vec2 p = v * src;
     vec2 f = fract(p);
     ivec2 a = ivec2(p), m = ivec2(src) - 1;
-#define NB(dx, dy) sw(texelFetch(tex, clamp(a + ivec2(dx, dy), ivec2(0), m), 0).rgb)
+#define NB(dx, dy) sw(fetch_rgb(clamp(a + ivec2(dx, dy), ivec2(0), m)))
     vec3 pc = NB(0, 0);
     vec3 n = NB(0, -1), e = NB(1, 0), s = NB(0, 1), w = NB(-1, 0);
     vec3 nw = NB(-1, -1), ne = NB(1, -1), sw_ = NB(-1, 1), se = NB(1, 1);
@@ -175,8 +191,8 @@ void main() {
     x = xi + 0.5 + crisp_w(vec2(xp - xi), scale).x;
 #endif
     float u = x / src.x;
-    vec3 e0 = k0 < 0.0 ? vec3(0.0) : sw(textureLod(tex, vec2(u, (k0 + 0.5) / lines), 0.0).rgb);
-    vec3 e1 = k0 + 1.0 >= lines ? vec3(0.0) : sw(textureLod(tex, vec2(u, (k0 + 1.5) / lines), 0.0).rgb);
+    vec3 e0 = k0 < 0.0 ? vec3(0.0) : sw(sample_rgb(vec2(u, (k0 + 0.5) / lines), 0.0));
+    vec3 e1 = k0 + 1.0 >= lines ? vec3(0.0) : sw(sample_rgb(vec2(u, (k0 + 1.5) / lines), 0.0));
     vec3 c0 = lin(e0), c1 = lin(e1);
     vec3 lit = c0 * beam(e0, d0, h) + c1 * beam(e1, d0 - 1.0, h);
     vec3 c = mix(d0 < 0.5 ? c0 : c1, lit, smoothstep(SCAN_FADE_LO, SCAN_FADE_HI, px));
@@ -184,7 +200,7 @@ void main() {
     // Glow: a little of a blurred picture: the mip level about HALO_LINES texels tall, each of its texels 1/28 of
     // the picture's height (8 lines of a SNES picture).
     float lod = max(log2(src.y / HALO_LINES), 0.0);
-    c = mix(c, lin(sw(textureLod(tex, v, lod).rgb)), HALO);
+    c = mix(c, lin(sw(sample_rgb(v, lod))), HALO);
     // Mask: magenta and green columns, two output pixels a pair (0.16 mm: beyond the eye at arm's length, and in
     // step with an OLED's subpixels where they come in pairs); a white pair averages white.
     float g = 1.0 / (1.0 - 0.5 * MASK);
